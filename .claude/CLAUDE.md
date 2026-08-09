@@ -58,6 +58,11 @@ Next.js 16 App Router (Turbopack) + React 19 + TS strict · Tailwind v4 (CSS-fir
 `--font-mono`, so `font-mono` is the real Plex Mono, not the system fallback) · Radix UI (the `radix-ui` package)
 as the dropdown base · **no shadcn, and no copying prebuilt components from anywhere**
 
+`@vercel/analytics` — `<Analytics />` จาก `@vercel/analytics/next` วางไว้ท้าย `<body>` ใน
+`app/layout.tsx` ที่เดียว (อย่าใส่ซ้ำใน layout ของ `/desk` หรือ `/m` เดี๋ยวนับซ้ำ) · เงียบตอน dev
+เก็บสถิติจริงเมื่อ deploy บน Vercel และเปิด Analytics ในโปรเจกต์แล้วเท่านั้น · beacon ยิงไป
+`/_vercel/insights/*` โดเมนเดียวกัน `proxy.ts` ไม่ได้ครอบพาธนี้จึงไม่ต้องแก้ matcher
+
 ## Auth — Google OAuth → NCAC (built 9 Aug 2026)
 
 ```

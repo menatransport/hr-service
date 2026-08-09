@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Thai } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const plexThai = IBM_Plex_Sans_Thai({
@@ -54,6 +55,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         {children}
+        {/* สถิติการเข้าหน้าเว็บของ Vercel — เงียบสนิทตอน dev, เก็บจริงเมื่อ deploy บน Vercel
+            สคริปต์และ beacon อยู่ใต้ `/_vercel/insights/*` ของโดเมนเดียวกัน ซึ่ง `proxy.ts`
+            ไม่ได้ครอบไว้ (matcher มีแค่ `/desk` กับ `/api`) จึงไม่โดนด่านล็อกอิน */}
+        <Analytics />
       </body>
     </html>
   );
