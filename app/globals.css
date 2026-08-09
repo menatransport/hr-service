@@ -1,0 +1,679 @@
+@import "tailwindcss";
+/**
+ * SweetAlert2 — โครงและแอนิเมชันของกล่องแจ้งเตือน ส่วน **สีและตัวอักษรถูกเขียนทับ
+ * ทั้งหมด** ในบล็อก `.swal2-*` ท้ายไฟล์นี้ (นำเข้าไว้บนสุดเพื่อให้ทับได้ด้วยลำดับ)
+ */
+@import "sweetalert2/dist/sweetalert2.css";
+
+@plugin "daisyui" {
+  themes: false;
+  logs: false;
+}
+
+/* --------------------------------------------------------------------------
+   Theme "hrs" — ported 1:1 from `HR System.dc.html`
+   --acc #0f766e · --ink #15201d · --mut #65756f · --line #e2e6e3
+   --canvas #eef0ed · --soft color-mix(acc 11%, #fff) · --r 12px
+   -------------------------------------------------------------------------- */
+@plugin "daisyui/theme" {
+  name: "hrs";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f7f6;
+  --color-base-300: #e2e6e3;
+  --color-base-content: #15201d;
+
+  --color-primary: #0f766e;
+  --color-primary-content: #ffffff;
+  --color-secondary: #15201d;
+  --color-secondary-content: #ffffff;
+  --color-accent: #c2410c;
+  --color-accent-content: #ffffff;
+  --color-neutral: #15201d;
+  --color-neutral-content: #ffffff;
+
+  --color-info: #2a6fd6;
+  --color-info-content: #ffffff;
+  --color-success: #0f766e;
+  --color-success-content: #ffffff;
+  --color-warning: #a35a08;
+  --color-warning-content: #ffffff;
+  --color-error: #b3261e;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Theme "hrs-dark" — same structure, dark surfaces. Only reachable through the
+   topbar toggle; `hrs` stays the default so the design doc renders 1:1.
+   -------------------------------------------------------------------------- */
+@plugin "daisyui/theme" {
+  name: "hrs-dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: dark;
+
+  --color-base-100: #161c1b;
+  --color-base-200: #1e2524;
+  --color-base-300: #2b3432;
+  --color-base-content: #e6ebe9;
+
+  --color-primary: #14b8a6;
+  --color-primary-content: #04211e;
+  --color-secondary: #e6ebe9;
+  --color-secondary-content: #0f1413;
+  --color-accent: #f0a35e;
+  --color-accent-content: #20120a;
+  --color-neutral: #e6ebe9;
+  --color-neutral-content: #0f1413;
+
+  --color-info: #6aa8f0;
+  --color-info-content: #04101f;
+  --color-success: #14b8a6;
+  --color-success-content: #04211e;
+  --color-warning: #e0913f;
+  --color-warning-content: #1d1207;
+  --color-error: #ff7a70;
+  --color-error-content: #2a0a08;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: var(--font-plex-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* raw design tokens — use these when a daisyUI semantic slot does not fit */
+  --color-ink: #15201d;
+  --color-ink-content: #ffffff;
+  --color-mut: #65756f;
+  --color-line: #e2e6e3;
+  --color-canvas: #eef0ed;
+  --color-soft: color-mix(in oklab, #0f766e 11%, #fff);
+  --color-alert: #b3261e;
+  --color-sla: #c2410c;
+
+  /* neutral placeholders (avatar / thumbnail) straight from the design doc */
+  --color-ph-avatar: #dfe6e3;
+  --color-ph-thumb: #eaeeec;
+
+  /* เส้นกริดพื้นหลังของหน้า login (ดู `.login-grid`) */
+  --color-grid-line: color-mix(in oklab, #0f766e 22%, #e2e6e3);
+
+  /**
+   * พื้นขาวใต้โลโก้ของแบรนด์ภายนอก (โลโก้ G ของ Google, โลโก้บริษัทบนหน้า login)
+   * คงเป็น #fff ทั้งสองธีม **โดยตั้งใจ** ไม่ใช่ลืมเติมค่ามืด — โลโก้สี่สีของ Google
+   * ต้องอยู่บนพื้นขาวตามข้อกำหนดแบรนด์ และโลโก้ Mena เป็นเขียว/แดงเข้มซึ่งจมหาย
+   * ถ้าวางบนพื้นมืด (ห้ามใช้ `ink-content` แทน เพราะตัวนั้นพลิกเป็นสีเข้มในธีมมืด)
+   */
+  --color-g-chip: #ffffff;
+
+  /* case-volume chart — validated 2-slot categorical pair, see the component */
+  --color-series-a: #a35a08;
+  --color-series-b: #0d9488;
+
+  /**
+   * case-status chips (สถานะเคส swatch in the design doc)
+   *
+   * `st-new` เอียงไปทางฟ้าของ `--color-info` มากกว่า swatch เดิมที่เป็นเทาอมฟ้า
+   * โดยตั้งใจ — เดิม “เปิดคำร้อง” กับ “ปิดคำร้องแล้ว” เป็นเทาเกือบเท่ากัน
+   * ทำให้แถวที่ยังไม่มีใครรับจมหายไปในตาราง
+   */
+  --color-st-new: #e8eefb;
+  --color-st-new-ink: #2f5aa8;
+  --color-st-wait: #fdf3e3;
+  --color-st-wait-ink: #a35a08;
+  --color-st-live: color-mix(in oklab, #0f766e 11%, #fff);
+  --color-st-live-ink: #0f766e;
+  --color-st-done: #eef1f0;
+  --color-st-done-ink: #65756f;
+
+  --animate-rise: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  /* หน้า login — ชุด entrance ที่เล่นไล่กัน (ดู `components/login/`) */
+  --animate-card-in: card-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop-in: pop-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-lift-in: lift-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade-in: fade-in 0.28s ease-out both;
+  --animate-nudge: nudge 0.26s ease-out both;
+  --animate-sweep: sweep 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/**
+ * Dark values for the raw tokens above. Unlayered on purpose — Tailwind emits
+ * `@theme` inside `@layer theme`, so this block always wins without `!`.
+ */
+[data-theme="hrs-dark"] {
+  --color-ink: #e6ebe9;
+  --color-ink-content: #0f1413;
+  --color-mut: #94a39e;
+  --color-line: #2b3432;
+  --color-canvas: #0e1312;
+  --color-soft: color-mix(in oklab, #14b8a6 15%, #161c1b);
+  --color-alert: #ff7a70;
+  --color-sla: #f0a35e;
+
+  --color-ph-avatar: #2a3432;
+  --color-ph-thumb: #232b2a;
+
+  --color-grid-line: color-mix(in oklab, #14b8a6 22%, #2b3432);
+
+  --color-series-a: #e0913f;
+  --color-series-b: #2fc7b4;
+
+  --color-st-new: #1c2735;
+  --color-st-new-ink: #8ab4f0;
+  --color-st-wait: #33270f;
+  --color-st-wait-ink: #e5aa55;
+  --color-st-live: color-mix(in oklab, #14b8a6 16%, #161c1b);
+  --color-st-live-ink: #2dd4bf;
+  --color-st-done: #232a29;
+  --color-st-done-ink: #94a39e;
+
+  /* คงขาวโดยตั้งใจ — เหตุผลอยู่ที่ประกาศใน `@theme` ด้านบน */
+  --color-g-chip: #ffffff;
+
+  color-scheme: dark;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------- keyframes ของหน้า login */
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes lift-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* สะกิดครั้งเดียวตอน error — ไม่ใช่สั่นรัว เพราะเป็นเรื่องที่ผู้ใช้แก้เองได้ */
+@keyframes nudge {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  55% {
+    transform: translateX(4px);
+  }
+  80% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* แถบ indeterminate ของ progress ตอนกำลังเชื่อมต่อ Google */
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
+/**
+ * บัตรหล่นลงมาแล้วแกว่งเข้าที่ — ท่าเข้าฉากของสิ่งที่ห้อยอยู่กับสายคล้อง
+ * แกว่งเกินศูนย์สองจังหวะแล้วนิ่ง ไม่ใช่ค่อย ๆ ไหลลงมาแบบกล่องทั่วไป
+ */
+@keyframes badge-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) rotate(-5deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(0) rotate(2.6deg);
+  }
+  80% {
+    transform: rotate(-1.2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* แสงกวาดผ่านแถบหัวบัตร — กวาดรอบเดียวตอนเข้าฉาก แล้วจอดนิ่งนอกจอ */
+@keyframes shine {
+  from {
+    transform: translateX(-160%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(340%) skewX(-18deg);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    letter-spacing: -0.003em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* one consistent focus ring across every interactive element */
+  :where(a, button, [role="button"], input, textarea, select, summary):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-field);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/**
+ * Theme toggle icon — which glyph shows is driven by the root attribute, not by
+ * React state, so the server and client markup stay identical (no hydration
+ * mismatch and no first-paint flip after the inline theme script runs).
+ */
+.theme-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity 0.25s ease,
+    transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.theme-icon-moon {
+  opacity: 0;
+  transform: rotate(-80deg) scale(0.5);
+}
+
+[data-theme="hrs-dark"] .theme-icon-sun {
+  opacity: 0;
+  transform: rotate(80deg) scale(0.5);
+}
+
+[data-theme="hrs-dark"] .theme-icon-moon {
+  opacity: 1;
+  transform: none;
+}
+
+/* ข้อความคู่กับไอคอน — โชว์ทีละอันด้วยเงื่อนไขเดียวกัน */
+.theme-label-dark,
+[data-theme="hrs-dark"] .theme-label-light {
+  display: none;
+}
+
+[data-theme="hrs-dark"] .theme-label-dark {
+  display: inline;
+}
+
+/**
+ * Dropdown ของ `components/ui/field.tsx` (Radix Select)
+ *
+ * จอเล็กดึงรายการลงไปเป็น bottom sheet เต็มความกว้าง พร้อมฉากหลังจาง
+ *
+ * Radix ห่อ content ไว้ในกล่องของตัวเองที่เราแตะ className ไม่ถึง และกล่องนั้นมี
+ * `transform` — จึงกลายเป็น containing block ทำให้ลูกที่เป็น `fixed` ใช้ไม่ได้
+ * เลือกด้วย `:has()` เป็นทางเดียวที่คุมกล่องนั้นได้ และต้อง `!important`
+ * เพราะ Radix เขียนตำแหน่งเป็น inline style
+ *
+ * (ส่วน z-index ไม่ได้อยู่ที่นี่ — ดูคลาส `z-60` ใน field.tsx)
+ */
+@media (width < 40rem) {
+  [data-radix-popper-content-wrapper]:has(> [data-hrs-dropdown]) {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    min-width: 100% !important;
+    transform: none !important;
+  }
+
+  [data-radix-popper-content-wrapper]:has(> [data-hrs-dropdown])::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: color-mix(in oklab, var(--color-ink) 40%, transparent);
+    pointer-events: none;
+  }
+}
+
+/**
+ * บัตรที่ห้อยกับสายคล้อง
+ *
+ * แกว่งเฉพาะตอนหล่นลงมาเข้าที่ แล้ว **นิ่งสนิท** — ไม่มี animation วนค้าง
+ * จุดหมุนอยู่ขอบบนตรงกลาง คือจุดที่สายคล้องหนีบไว้
+ */
+.badge-hang {
+  transform-origin: 50% 0;
+  animation: badge-in 0.66s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/**
+ * แสงกวาดบนแถบหัวบัตร — กวาดรอบเดียวจบ ไม่วนซ้ำ (หน้านิ่งหลังโหลดเสร็จ)
+ * ตัวกวาดเอียงและกว้างกว่าแถบ จึงต้องให้พ่อ clip ให้
+ */
+.badge-shine {
+  animation: shine 1.5s ease-in-out 0.55s both;
+}
+
+/**
+ * ลายพื้นหลังของหน้า login — กริดจางที่ไล่หายลงมาจากขอบบน
+ *
+ * ดัดแปลงจาก uiverse.io/Gautammsharma/perfect-insect-42 (MIT) — คงโครงเดิมไว้
+ * ทั้งช่อง 20×30px และ mask `ellipse 70% 60% at 50% 0%` เปลี่ยนแค่สีเส้น จาก
+ * เทาอมฟ้า `#e2e8f0` มาผสมเขียวของแบรนด์ลงไป จึงพลิกตามธีมมืดได้เองด้วย
+ */
+.login-grid {
+  background-image:
+    linear-gradient(to right, var(--color-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid-line) 1px, transparent 1px);
+  background-size: 20px 30px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+}
+
+/**
+ * ข้อยกเว้นของ `prefers-reduced-motion` เฉพาะหน้า login
+ *
+ * กฎรวมใน `@layer base` ตัด `animation-duration` ทุกตัวเหลือ 0.01ms ซึ่งถูกต้อง
+ * สำหรับ animation ตกแต่ง แต่ spinner กับแถบ progress เป็น **feedback ว่าระบบยัง
+ * ทำงานอยู่** ถ้าหายไปผู้ใช้จะไม่รู้ว่ากดติดหรือยัง จึงชะลอแทนการตัดทิ้ง
+ *
+ * บล็อกนี้อยู่นอก `@layer` โดยตั้งใจ (เหตุผลเดียวกับบล็อกธีมมืดด้านบน) และ
+ * `.motion-keep` มี specificity สูงกว่า `*` ของกฎรวม จึงชนะแม้ `!important` เท่ากัน
+ */
+@media (prefers-reduced-motion: reduce) {
+  .motion-keep {
+    animation-duration: 1.6s !important;
+  }
+
+  /**
+   * หน่วงของ entrance ไม่ได้ถูกกฎรวมแตะ — ถ้าไม่ล้าง เนื้อหาจะค้างว่างถึง 350ms
+   * (`.stagger-in` คือการ์ดที่ทยอยขึ้นทีละใบ เช่นบัตรพนักงานในหน้าค้นหา
+   * ซึ่งหน่วงมาเป็น inline style จึงต้องล้างด้วย `!important` เหมือนกัน)
+   */
+  .login-in,
+  .stagger-in {
+    animation-delay: 0ms !important;
+  }
+
+  /* หน่วงของแสงกวาดก็ไม่ได้ถูกกฎรวมแตะเช่นกัน — ล้างทิ้งให้จบไปพร้อมกัน */
+  .badge-shine {
+    animation-delay: 0ms !important;
+  }
+
+  /* แถบ indeterminate กลายเป็นแถบนิ่ง ปล่อยให้ข้อความใน aria-live บอกสถานะแทน */
+  .progress-sweep {
+    animation: none !important;
+    transform: none;
+    width: 100%;
+    opacity: 0.55;
+  }
+}
+
+/* ==========================================================================
+   SweetAlert2 — ผิวของกล่องแจ้งเตือน (ตัวควบคุมอยู่ที่ `lib/swal.ts`)
+
+   ทุกสีมาจาก token ทั้งหมด จึงพลิกตามธีมมืดเองโดยไม่ต้องอ่าน `data-theme`
+   ในจาวาสคริปต์ (ซึ่งจะไม่ตรงกันตอน SSR) · บล็อกนี้อยู่ **นอก `@layer`**
+   โดยตั้งใจ เหตุผลเดียวกับบล็อกธีมมืดด้านบน และต้องอยู่หลัง `@import` ของ
+   ไลบรารีเสมอ เพราะ specificity เท่ากัน — ชนะกันด้วยลำดับล้วน ๆ
+
+   ปุ่มไม่ได้ถูกจัดที่นี่ — `buttonsStyling: false` ปิดสไตล์ปุ่มของไลบรารีทิ้ง
+   แล้วส่งคลาส Tailwind เข้าไปทาง `customClass` แทน (ดู `CONFIRM_CLASS`)
+   ========================================================================== */
+
+.swal2-container {
+  padding: 0.75rem;
+}
+
+/* ฉากหลังชุดเดียวกับ `bg-ink/45` ของโมดัลเคส — กล่องสองแบบจึงทับกันได้ไม่สะดุดตา */
+.swal2-container.swal2-backdrop-show {
+  background: color-mix(in oklab, var(--color-ink) 45%, transparent);
+}
+
+.swal2-popup.hrs-swal {
+  width: min(30rem, 100%);
+  padding: 1.5rem 1.5rem 1.25rem;
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  background: var(--color-base-100);
+  box-shadow: 0 32px 80px -24px rgba(21, 32, 29, 0.45);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+}
+
+.swal2-popup.hrs-swal .swal2-title {
+  padding: 0;
+  color: var(--color-ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.swal2-popup.hrs-swal .swal2-html-container {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  color: var(--color-mut);
+  font-size: 13.5px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+/**
+ * สองคลาสนี้ใช้ในช่อง `html` ของกล่องยืนยัน (ดู `case-modal.tsx`)
+ * `-list` = รายการช่องที่กำลังจะบันทึก · `-quote` = ทวนข้อความที่ผู้ใช้พิมพ์ไว้
+ */
+.hrs-swal .hrs-swal-list {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.hrs-swal .hrs-swal-quote {
+  display: block;
+  margin-top: 0.75rem;
+  border-left: 2px solid var(--color-line);
+  padding-left: 0.75rem;
+  color: var(--color-ink);
+  text-align: left;
+}
+
+.swal2-popup.hrs-swal .swal2-actions {
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+/* ปุ่มที่กำลังรออยู่ถูกไลบรารีตั้ง `display: none` ไว้ — คืนค่าให้ตรงกับ flex ของเรา */
+.swal2-popup.hrs-swal .swal2-actions button {
+  cursor: pointer;
+}
+
+.swal2-popup.hrs-swal .swal2-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* สปินเนอร์ระหว่างรอ (`pending`) */
+.swal2-popup.hrs-swal .swal2-loader {
+  border-color: var(--color-primary) transparent var(--color-primary) transparent;
+}
+
+/* ---------------------------------------------------------------- ไอคอน */
+
+/**
+ * ย่อทั้งชุดด้วย `font-size` ไม่ใช่ `width/height` — เส้นทุกเส้นข้างในวางตำแหน่ง
+ * เป็น `em` การย่อกล่องเฉย ๆ จะทำให้เครื่องหมายถูก/กากบาทหลุดออกนอกวง
+ */
+.swal2-popup.hrs-swal:not(.swal2-toast) .swal2-icon {
+  margin: 0.25rem auto 0.9rem;
+  font-size: 0.66em;
+}
+
+.hrs-swal .swal2-icon.swal2-success {
+  border-color: color-mix(in oklab, var(--color-primary) 45%, transparent);
+  color: var(--color-primary);
+}
+
+.hrs-swal .swal2-icon.swal2-success .swal2-success-ring {
+  border-color: color-mix(in oklab, var(--color-primary) 30%, transparent);
+}
+
+.hrs-swal .swal2-icon.swal2-success [class^="swal2-success-line"] {
+  background-color: var(--color-primary);
+}
+
+/**
+ * สามชิ้นนี้เป็น “ที่บัง” ของแอนิเมชันวงกลม ไลบรารีตั้งไว้เป็น `#fff` ตายตัว
+ * ถ้าไม่ทับ ธีมมืดจะเห็นเป็นแถบขาวพาดกลางไอคอน
+ */
+.hrs-swal .swal2-icon.swal2-success .swal2-success-circular-line-left,
+.hrs-swal .swal2-icon.swal2-success .swal2-success-circular-line-right,
+.hrs-swal .swal2-icon.swal2-success .swal2-success-fix {
+  background-color: var(--color-base-100);
+}
+
+.hrs-swal .swal2-icon.swal2-error {
+  border-color: color-mix(in oklab, var(--color-alert) 45%, transparent);
+  color: var(--color-alert);
+}
+
+.hrs-swal .swal2-icon.swal2-error [class^="swal2-x-mark-line"] {
+  background-color: var(--color-alert);
+}
+
+.hrs-swal .swal2-icon.swal2-warning {
+  border-color: color-mix(in oklab, var(--color-sla) 45%, transparent);
+  color: var(--color-sla);
+}
+
+.hrs-swal .swal2-icon.swal2-info {
+  border-color: color-mix(in oklab, var(--color-info) 45%, transparent);
+  color: var(--color-info);
+}
+
+.hrs-swal .swal2-icon.swal2-question {
+  border-color: color-mix(in oklab, var(--color-primary) 40%, transparent);
+  color: var(--color-primary);
+}
+
+/* --------------------------------------------------------------- ขนมปังปิ้ง */
+
+.swal2-popup.hrs-swal-toast {
+  width: auto;
+  max-width: min(24rem, calc(100vw - 1.5rem));
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-box);
+  box-shadow: 0 12px 32px -12px rgba(21, 32, 29, 0.35);
+}
+
+.swal2-popup.hrs-swal-toast .swal2-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.swal2-popup.hrs-swal-toast .swal2-html-container {
+  margin: 0.15rem 0 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.swal2-popup.hrs-swal-toast .swal2-timer-progress-bar {
+  background: color-mix(in oklab, var(--color-primary) 55%, transparent);
+}
+
+/* bottom padding that clears the iOS home indicator */
+@utility pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
+@utility pt-safe {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+}
+
+/* hides scrollbars on horizontal chip rails without losing scrollability */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

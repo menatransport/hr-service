@@ -1,0 +1,463 @@
+@AGENTS.md
+
+# HR Service — ระบบรับข้อร้องเรียนคนขับและบริการพนักงาน 
+
+**เคสต่อของจริงแล้ว** — ข้อมูลเคส ผู้อนุมัติ และรายชื่อพนักงานมาจาก **NCAC API**
+(ตัวเดียวกับที่ระบบเดิม `driver-complaint` ใช้) ไม่มี mock เคสเหลือใน `lib/data.ts` อีก
+
+ส่วนที่ยังเป็นตัวอย่างคือ **บริการองค์กร** (ห้องประชุม / รถ) — ยังไม่มี endpoint รองรับ ·
+ยังไม่มี auth (`currentUser` / `deskUser` ตรึงไว้)
+
+> **หน้าประกาศกับหน้ารายงานถูกถอดออกชั่วคราวตามคำสั่งเจ้าของงาน (6 ส.ค. 2026)**
+> ลบแล้วคือ route `/desk/announcements` `/desk/reports` `/m/services/announcements`
+> พร้อมเมนู ไทล์ และแจ้งเตือนที่ชี้ไปหน้าเหล่านั้น · **ของที่ยังเก็บไว้รอเปิดใช้ใหม่**
+> คือข้อมูล `announcements` / `monthlyVolume` ใน `lib/data.ts`, `lib/case-report.ts`
+> และคอมโพเนนต์ `case-volume-chart.tsx` / `reason-bars.tsx` — อย่าเพิ่งลบทิ้ง
+
+ตั้งค่า `API_NCAC_URL` ใน `.env.local` ก่อนรัน (ดู `.env.example`) — ถ้าไม่ตั้ง
+หน้าเคสจะขึ้นกล่องแจ้งเตือน `DataError` ไม่ใช่หน้าว่าง
+
+## ที่มาของงาน — สองแหล่ง แยกหน้าที่กันชัดเจน
+
+| แหล่ง | ให้อะไร | ห้ามทำอะไร |
+|---|---|---|
+| **Claude Design** `453d9e27-…` (`HR System.dc.html`, `HR Wireframes.dc.html`) | **ดีไซน์ทั้งหมด** — สี ฟอนต์ radius chip layout nav | — |
+| **โปรเจกต์เดิม** `mena-next-lb/src/app/driver-complaint` | **domain model ทั้งหมด** — วงจรสถานะ PIC routing root cause การอนุมัติ 2 ระดับ กฎล็อกฟอร์ม | **ห้าม**ยกสไตล์ของระบบเดิมมา (indigo/gradient/shadcn) — ดีไซน์มาจากระบบใหม่เท่านั้น |
+
+`support.js` ของ Claude Design เป็น dc-runtime ไม่เกี่ยวกับโปรเจกต์นี้ ไม่ต้องพอร์ต
+
+## Stack
+
+- **Next.js 16** App Router (Turbopack) + React 19 + TypeScript strict
+- **Tailwind CSS v4** (CSS-first config — ไม่มี `tailwind.config.js`)
+- **daisyUI 5** — custom theme `hrs` ประกาศใน `app/globals.css`
+- **lucide-react** สำหรับไอคอนทั้งหมด (stroke 1.6–1.8 ให้ตรงกับ SVG ใน design)
+- Font: **IBM Plex Sans Thai** ผ่าน `next/font/google` (300–700, subset `latin` + `thai`)
+- **Radix UI** (แพ็กเกจรวม `radix-ui`) เป็นฐานของ dropdown — headless ไม่มีสไตล์ติดมา
+  ยังคง **ไม่มี shadcn** และไม่ลอกคอมโพเนนต์สำเร็จรูปจากที่อื่น
+
+## Design tokens
+
+ประกาศครั้งเดียวใน `app/globals.css` สองบล็อก:
+
+1. `@plugin "daisyui/theme" { name: "hrs" }` — semantic slots ของ daisyUI
+   (`primary` = `#0f766e`, `base-100/200/300`, `radius-box` = 12px, `--depth: 0`)
+2. `@theme { ... }` — raw tokens ที่ daisyUI ไม่มี slot ให้
+
+| Token | ค่า | ใช้เมื่อ |
+|---|---|---|
+| `primary` | `#0f766e` | ปุ่มหลัก, ไอคอน, active state, timeline ที่ผ่านแล้ว |
+| `soft` | `color-mix(primary 11%, #fff)` | พื้นไอคอนกลม, chip “แจกจ่ายแล้ว”, toast, hover |
+| `ink` | `#15201d` | ตัวอักษรหลัก, ปุ่ม secondary, filter chip ที่เลือก |
+| `mut` | `#65756f` | ตัวอักษรรอง, label, meta |
+| `line` | `#e2e6e3` | เส้นขอบทุกอย่าง (= `base-300`) |
+| `canvas` | `#eef0ed` | พื้นหลังหน้า (ไม่ใช่พื้นการ์ด) |
+| `alert` | `#b3261e` | ปฏิเสธ, badge unread, ออกจากระบบ |
+| `sla` | `#c2410c` | เกิน SLA, ความสำคัญสูง |
+| `st-{new,wait,live,done}` + `-ink` | — | chip สถานะเคส 4 แบบจาก swatch ใน design |
+| `ink-content` | `#fff` | ตัวอักษรบนพื้น `bg-ink` / `bg-alert` / `bg-sla` — **ห้ามใช้ `text-white` ตรง ๆ** |
+| `ph-avatar` / `ph-thumb` | `#dfe6e3` / `#eaeeec` | placeholder รูปโปรไฟล์ / thumbnail |
+| `series-a` / `series-b` | `#a35a08` / `#0d9488` | สองเส้นของกราฟใน `case-volume-chart` |
+
+### ธีมมืด `hrs-dark`
+
+`hrs` (สว่าง) ยังเป็น **ค่าเริ่มต้นเสมอ** — ตรงกับ design ต้นทางที่ไม่มี dark mode
+`hrs-dark` เป็นทางเลือกที่ผู้ใช้กดเองจากปุ่มบน topbar เท่านั้น (ไม่ตาม
+`prefers-color-scheme` เพื่อไม่ให้คนที่ไม่ได้เลือกเจอหน้าตาที่ไม่ตรง design)
+
+ประกาศสองที่ใน `app/globals.css`:
+
+1. `@plugin "daisyui/theme" { name: "hrs-dark" }` — semantic slots
+   (`primary` = `#14b8a6` เพราะ `#0f766e` มืดเกินจะอ่านออกบนพื้นเข้ม)
+2. บล็อก `[data-theme="hrs-dark"]` — ค่า dark ของ raw token ทุกตัวข้างบน
+   วางไว้ **นอก `@layer`** โดยตั้งใจ เพราะ Tailwind ปล่อย `@theme` ไว้ใน
+   `@layer theme` → unlayered ชนะเสมอโดยไม่ต้องใช้ `!`
+
+**เพิ่ม token ใหม่ต้องเติมค่า dark ในบล็อกนั้นด้วยทุกครั้ง** และห้ามเขียนสีดิบ
+(`text-white`, `bg-[#…]`) ลงใน component เพราะจะไม่สลับตามธีม
+
+การสลับธีมทำที่ `components/ui/theme-toggle.tsx` — เขียน `data-theme` ที่ `<html>`
+แล้วจำใน `localStorage["hrs-theme"]` · `app/layout.tsx` มี inline script อ่านค่า
+ก่อน paint แรก · **หน้าตาไอคอนกับข้อความของปุ่มถูกขับด้วย CSS ที่มองจาก
+`[data-theme]`** ไม่ใช่ React state จึงไม่มี hydration mismatch — ถ้าจะเพิ่มอะไร
+ที่ต่างกันตามธีมในปุ่มนี้ ให้ทำแบบเดียวกัน อย่าเปลี่ยนไปใช้ `useState`
+
+## ฟอร์ม — `components/ui/field.tsx` ที่เดียว
+
+ทุกช่องกรอกในระบบมาจากไฟล์นี้ไฟล์เดียว **ห้ามเขียน `<input>` / `<select>` /
+`<textarea>` ดิบในหน้าอื่น** (ยกเว้น radio/file ที่ `sr-only` ในวิซาร์ด)
+
+| export | ใช้เมื่อ |
+|---|---|
+| `TextField` | ช่องข้อความบรรทัดเดียว · ไม่ส่ง `value/onChange` = uncontrolled |
+| `TextareaField` | ข้อความหลายบรรทัด (`rows`, `resize`) |
+| `NumberField` | ตัวเลข |
+| `SelectField` | dropdown พร้อม label/hint — ใช้ในฟอร์ม |
+| `Select` | dropdown เปล่า ไม่มี label — ใช้ในตาราง/แถบกรอง |
+| `SearchField` | ช่องค้นหา (ไอคอน + ปุ่มล้าง) `tone="filled"` สำหรับพื้นเทา |
+| `ReadOnlyValue` | ค่าที่อ่านอย่างเดียว |
+
+props ร่วมของทุกฟิลด์: `id` `label` `hint` `optional` `readOnly` `srLabel`
+`labelRight` `className` และ **`size`** — `md` (ฝั่ง desk, ค่าเริ่มต้น) /
+`lg` (ฟอร์มบนมือถือที่ช่องสูงกว่า)
+
+`Select` มี `variant` 4 แบบ: `field` (ในฟอร์ม) · `ghost` (ในตาราง ไร้ขอบจนกว่าจะ
+hover) · `dashed` (ชิป “+ มอบหมาย” ตอนค่ายังว่าง) · `bare` (อยู่ในกล่องอื่นแล้ว)
+
+**ข้อควรระวังของ dropdown:**
+
+- **ค่าว่างคือ “ยังไม่เลือก”** — Radix ห้ามมี option ที่ `value=""` ถ้าต้องมีตัวเลือก
+  “ไม่มี/ยังไม่มอบหมาย” ให้ใช้ค่าสมมติ เช่น `UNASSIGNED = "none"` ใน `case-table.tsx`
+- **คลาส `z-60` ที่ `Select.Content` ห้ามลบ** — Radix อ่าน z-index ของ content
+  ไปใส่เป็น inline style ให้กล่องนอก ถ้าไม่มี รายการจะไปโผล่ **ใต้** modal ของ /desk
+- จอ <sm รายการตกลงเป็น **bottom sheet** ผ่านกฎ `[data-hrs-dropdown]` ใน
+  `globals.css` ซึ่งเลือกกล่องนอกของ Radix ด้วย `:has()` + `!important`
+  (เป็นทางเดียวที่คุมกล่องนั้นได้ เพราะ Radix เขียนตำแหน่งเป็น inline style)
+
+### ช่องค้นหาใน dropdown
+
+ตัวเลือกตั้งแต่ **10 รายการ** ขึ้นไป (`SEARCH_THRESHOLD` ใน `field.tsx`) จะมีช่อง
+ค้นหาโผล่หัวรายการเอง — สาเหตุหลัก 34 รายการและผู้อนุมัติ ~39 คนได้ไปโดยอัตโนมัติ
+ส่วนแถบกรองหน่วยงาน (9 ตัวเลือก) ไม่ได้ · บังคับเปิด/ปิดด้วย prop `searchable`
+และเปลี่ยนข้อความด้วย `searchPlaceholder`
+
+Radix Select ไม่ได้ออกแบบมาให้มีช่องพิมพ์ข้างใน สี่จุดนี้จึงห้ามรื้อ:
+
+- **typeahead** ของ Radix อ่านทุกปุ่มที่กด → `SearchBox` `stopPropagation` ทุกคีย์
+  ยกเว้น `ArrowDown/ArrowUp/Escape/Tab` ที่ยังต้องให้ Radix เลื่อนรายการและปิดกล่อง
+  (`Enter` เลือกรายการแรกที่ค้นเจอเอง)
+- **ป้ายบน trigger** ป้อนเป็น children ของ `Select.Value` เอง ไม่ปล่อยให้ Radix ดึง
+  จาก `Item` ที่เลือกไว้ — ไม่งั้นค่าจะหายทันทีที่คำค้นกรอง `Item` นั้นออกไป
+- **โฟกัส** ตอนเปิด Radix ยิงไปที่รายการที่เลือกไว้ก่อน จึงแย่งกลับมาที่ช่องค้นหาใน
+  `requestAnimationFrame` และ **ทำเฉพาะเครื่องที่มีเมาส์** (`(hover: hover)`)
+  ไม่งั้นคีย์บอร์ดมือถือจะเด้งทับ bottom sheet ทุกครั้งที่เปิด
+- **Esc ครั้งเดียวต้องปิดแค่ dropdown** — `case-modal.tsx` ถาม `isDropdownOpen()`
+  จาก `field.tsx` ก่อนปิดตัวเอง · ตัวนับนั้นค้างค่าไว้อีก 1 tick หลังปิดโดยตั้งใจ
+  เพราะ React 19 ถอด dropdown ออกก่อนที่ตัวฟังของ modal จะได้ทำงาน (ถาม DOM ไม่ทัน)
+
+## Domain model — วงจรชีวิตเคส
+
+โค้ดกฎทั้งหมดอยู่ที่ **`lib/case-flow.ts`** ที่เดียว (`lib/data.ts` เก็บแค่ข้อมูล)
+
+```
+คนขับแจ้ง ──► open ──► assigned ──► pending_review ──► ready_to_close ──► closed
+                 │           │              │                                 
+            ERZONE จัด PIC   PIC กรอก    ผู้จัดการอนุมัติ 2 ระดับ            
+                            แผนแก้ไข     (ปฏิเสธ → กลับไป assigned)          
+```
+
+| สถานะ | ป้ายไทย (`label`) | ป้ายสั้น (`short`) | chip |
+|---|---|---|---|
+| `open` | เปิดเคส | เปิดเคส | `st-new` |
+| `assigned` | มอบผู้รับผิดชอบแล้ว | มอบหมายแล้ว | `st-live` |
+| `pending_review` | รออนุมัติ | รออนุมัติ | `st-wait` |
+| `ready_to_close` | รอปิดเคส | รอปิดเคส | `primary` ทึบ |
+| `closed` | ปิดเคสแล้ว | ปิดแล้ว | `st-done` |
+
+`short` ใช้ในตารางและการ์ดที่พื้นที่แคบ (`<StatusBadge short />`) — แก้ป้ายที่
+`statusMeta` ใน `lib/case-flow.ts` ที่เดียว
+
+design ให้ chip มา 4 แบบ ระบบมี 5 สถานะ → สถานะที่ 5 ใช้ `primary` ทึบ
+(สีเดียวกับปุ่มหลัก) **ไม่มีการเพิ่มสีใหม่นอก design system**
+
+### บทบาท
+
+| Role | หน้าที่ |
+|---|---|
+| **คนขับ** | แจ้งเรื่องผ่านแอปมือถือ ติดตามสถานะ |
+| **ERZONE** | คัดกรอง จัดผู้รับผิดชอบ (PIC) — ถ้าไม่มี PIC ที่ตรง จ่ายให้ทีม EZONE |
+| **PIC** | กรอกปัญหา สาเหตุหลัก แผนแก้ไข ผลการดำเนินงาน แล้วส่งขออนุมัติ |
+| **ผู้จัดการ** | อนุมัติ / ปฏิเสธแผนแก้ไข (2 ระดับ, ต้องใส่หมายเหตุทุกครั้ง) |
+
+### กฎล็อกฟอร์ม (ยกมาจากระบบเดิม)
+
+`canEditSection(section, caseStatus, userDepartmentId)` ใน `lib/case-flow.ts`
+
+| ส่วน | ชื่อที่แสดง | แก้ได้เมื่อสถานะ |
+|---|---|---|
+| `classification` | มอบผู้รับผิดชอบ | `open` |
+| `actionPlan` | กรอกรายละเอียดและแผนแก้ไข | `assigned` |
+| `approval` | กำหนดผู้อนุมัติ | `assigned` |
+
+**ยกเว้น** ผู้ใช้สังกัด HR/ER (`departmentId === "24"`) แก้ได้ทุกสถานะยกเว้น `closed`
+— `deskUser` ในข้อมูลตัวอย่างเป็นสังกัดนี้ ถ้าอยากเห็นสถานะล็อกให้เปิดเคสที่ปิดแล้ว
+
+### Reference data (ยกมาครบจากระบบเดิม)
+
+- `departments` — 7 หน่วยงาน PIC, `id` ตรงกับ `department_id` เดิม
+- `complaintTypesByDepartment` — ประเภทเรื่องย่อยตาม PIC
+- `reasonGroups` — ผังสาเหตุ 6 กลุ่ม (PAY / OPS / VEH / SAF / MGT / OTH)
+  ใช้สามที่: คนขับเลือก **กลุ่ม** ตอนแจ้ง · PIC เลือก **รายการย่อย** เป็น root cause ·
+  `lib/ncac/adapt.ts` ย้อนรอยจาก root cause กลับเป็นกลุ่ม
+- ผู้อนุมัติมาจาก NCAC `/users` กรองระดับ ≥ 4 ที่ `getEligibleApprovers()` ใน `lib/cases.ts`
+
+### เวลาและ SLA
+
+`caseAgeDays` นับเป็น **วันตามปฏิทินไทย** (แปลงทั้งสองฝั่งเป็นเลขวันก่อนลบกัน)
+ไม่ใช่ชั่วโมงหาร 24 — ค่าจึงคงที่ตลอดวัน ทำให้ SSR กับ hydration ตรงกันเสมอ
+**ห้ามเปลี่ยนกลับไปหารเวลาดิบ** เพราะค่าจะขยับทุกวินาที → hydration mismatch
+
+วันที่จัดรูปด้วย `formatShort` / `formatDate` / `formatDateTime` ซึ่งบวก +7 ชั่วโมงเอง
+และมีชื่อเดือนไทยเป็น array — **ห้ามใช้ `Intl` / `toLocaleDateString`** เพราะผลลัพธ์
+ขึ้นกับ timezone ของเครื่องที่ render
+
+SLA คิดจาก `caseAgeDays` เทียบเกณฑ์ตามความสำคัญ (สูง 2 วัน / กลาง 5 / ต่ำ 10) ใน `isSlaBreached`
+
+### ไทม์ไลน์คำนวณ ไม่ได้เก็บ
+
+`buildTimeline(hrCase)` สร้าง 5 ขั้นจาก `status` + `reviews` — เพิ่ม/แก้ขั้นตอนที่ฟังก์ชันนี้
+ที่เดียว ไม่ต้องแก้ข้อมูลเคสทีละอัน
+
+## ชั้นข้อมูล — NCAC API
+
+```
+NCAC API  ──►  lib/ncac/client.ts  ──►  lib/ncac/adapt.ts  ──►  HrCase
+(snake_case)   (fetch + error)         (แปลง + คำนวณ)          (ที่ component เห็น)
+                      │                        ▲
+                      ├──► lib/cases.ts ───────┘   server component (cache ต่อ request)
+                      └──► app/api/cases/** ─────► client component (ยิงผ่าน route)
+```
+
+| ไฟล์ | หน้าที่ | ห้าม |
+|---|---|---|
+| `lib/ncac/types.ts` | รูปร่างดิบของ API | ใช้ type พวกนี้นอก `lib/ncac/` |
+| `lib/ncac/client.ts` | เรียก API + `NcacError` | import จาก client component (env จะหลุด) |
+| `lib/ncac/adapt.ts` | แปลงเป็น `HrCase` / `Approver` | ใส่ตรรกะ UI |
+| `lib/cases.ts` | `getCases` / `getCase` / `getCasesByDriver` / `getEligibleApprovers` | import จาก client component |
+| `app/api/cases/**` | ทางเดียวที่ client เข้าถึงข้อมูล | ใส่ตรรกะ business ที่ควรอยู่ใน `case-flow.ts` |
+
+**env ตัวเดียว** คือ `API_NCAC_URL` (ไม่มี `NEXT_PUBLIC_` โดยตั้งใจ) — endpoint
+ทุกเส้นตรงกับระบบเดิมใน `mena-next-lb/.../driver-complaint/api/*` จึงไม่ต้องแก้ backend
+
+### 4 อย่างที่ NCAC ยังไม่มี แล้ว `adapt.ts` คำนวณให้
+
+| ต้องใช้ | ตอนนี้ได้มาจาก |
+|---|---|
+| `reasonGroup` | `root_cause` → `complaint_type` → หน่วยงาน → `OTH` |
+| `priority` | กลุ่มสาเหตุ (SAF/PAY = สูง) + ความเสียหาย ≥ 10,000 บาท = สูง |
+| `driverName` / `driverMeta` · ชื่อผู้อนุมัติ | เทียบรหัสพนักงานกับ `/users` |
+| `notes` (ข้อความโต้ตอบ) | ไม่มี endpoint → `[]` เสมอ บล็อกในหน้าจอจึงไม่ขึ้น |
+
+**backend เพิ่มคอลัมน์จริงเมื่อไหร่ ให้ลบตัวคำนวณทิ้งแล้วอ่านค่าตรง ๆ ที่ `adapt.ts` ที่เดียว**
+— ห้ามไปคำนวณซ้ำใน component
+
+### ⚠️ NCAC ไม่มี `GET /complaints/{tracking_no}`
+
+`/openapi.json` มีแค่ `GET /complaints/` (ทั้งรายการ), `PUT /complaints/{tracking_no}`
+และ action endpoints — ยิง `GET` เคสเดียวได้ **405** ซึ่งเคยทำให้หน้าเคสทุกหน้า 404
+
+`getComplaint()` ใน `lib/ncac/client.ts` จึงดึงทั้งรายการมาค้นเอง (payload ของ
+`/complaints/` มีครบทุกฟิลด์รวม `reviews`) ส่วน `getCase()` ใน `lib/cases.ts` อ่านจาก
+`getCases()` ที่ `cache()` ไว้แล้ว จึงยิง upstream ครั้งเดียวต่อ request แม้หน้า
+`/desk/cases/[id]` จะ render ทั้งตารางและ modal · **วันที่ backend เพิ่ม endpoint จริง
+ให้แก้ที่ `getComplaint()` ที่เดียว** ทุกที่ที่เรียกจะได้ประโยชน์ทันที
+
+อีกเรื่อง: path ของ list ต้องปิดท้ายด้วย `/` ตามที่ FastAPI ประกาศ ไม่งั้นได้ 307 redirect
+
+### หน้าที่แตะเคสต้องเป็น dynamic
+
+ทุกหน้าที่อ่านเคสประกาศ `export const dynamic = "force-dynamic"` และ **ไม่มี
+`generateStaticParams`** — prerender ไว้ตั้งแต่ build จะได้ข้อมูลค้าง
+
+API ล่มหรือยังไม่ตั้ง env → หน้าจอขึ้น `<DataError>` (`components/ui/data-error.tsx`)
+**ห้ามปล่อยให้เป็นหน้าว่าง** เพราะจะอ่านผิดเป็น “ไม่มีเคส”
+
+### การบันทึกยิงจริงแล้ว
+
+| การกระทำ | เส้นทาง |
+|---|---|
+| มอบหมายหน่วยงานจากตาราง | `PATCH /api/cases/{no}` `{ departmentId }` |
+| ปุ่ม “บันทึก” ใน modal | `PATCH /api/cases/{no}` (ทุกช่อง + ผู้อนุมัติ 2 ระดับในคำขอเดียว) |
+| อนุมัติ / ปฏิเสธ | `POST /api/cases/{no}/review` (บังคับ `remark` ทั้งฝั่ง UI และ route) |
+| ปิดเคส | `POST /api/cases/{no}/close` |
+
+สำเร็จแล้วเรียก `router.refresh()` ให้ server component ดึงใหม่ · `CaseModal` รีเซ็ต
+`draft`/`saved` ตอน `hrCase.updatedAt` เปลี่ยน โดย **ปรับ state ระหว่าง render ไม่ใช่ใน
+`useEffect`** (กฎ `react-hooks/set-state-in-effect` จะ error ถ้าย้ายไป effect)
+
+## โครงสร้างเส้นทาง
+
+```
+/                        Login — Google sign-in (โดเมนบริษัท)  ← `HR Service Login Wireframe` 1b
+/m/…                     แอปคนขับ (มือถือ)        ← wireframe 1a + 1b
+/desk/…                  HR Service Desk (เดสก์ท็อป) ← wireframe 1c
+```
+
+### `/m` — app shell แบบมือถือ
+
+`app/m/layout.tsx` เป็น flex column สูงเต็มจอ (`h-dvh`, `md:h-[820px]` ในกรอบเครื่อง
+กว้าง 420px เมื่อเปิดบนจอใหญ่). แต่ละ page **ต้อง** render `<Screen>` เอง (คือ scroll
+area เดียวของ shell) และ **อาจ** ต่อ `<footer>` เป็น sibling ได้
+
+```tsx
+// pattern ของ pushed screen
+<>
+  <ScreenHeader title="…" backHref="/m/services" />
+  <Screen className="flex flex-col gap-4 px-5 pt-4 pb-6">…</Screen>
+  <footer className="flex-none border-t border-line px-5 pt-3.5 pb-safe md:pb-5">…</footer>
+</>
+```
+
+`BottomTabs` ซ่อนตัวเองบน `/m/cases/<อะไรก็ได้>` (ดู `hideOn` ใน
+`components/m/bottom-tabs.tsx`) — **ถ้าเพิ่มหน้าที่ไม่ควรมีแท็บ ให้แก้ regex นั้น**
+ไม่ใช่ทำ layout ซ้อนใหม่
+
+หน้าเคสใช้ `trackingNo` เป็น route param เช่น `/m/cases/DC-2026-0142`
+
+### `/desk` — sidebar shell
+
+topbar สูง `h-14` เต็มความกว้าง แล้วข้างล่างเป็น `[sidebar | main]` ตาม wireframe 1c
+Sidebar ซ่อนต่ำกว่า `lg` และไปโผล่ใน dropdown ของ topbar (ใช้ list เดียวกันผ่าน
+`DeskNavList`) เมนูอยู่ที่ `deskNav` ใน `lib/data.ts`
+
+ขวาสุดของ topbar เรียงเป็น: มุมมองมือถือ · **สลับธีม** · **กระดิ่งแจ้งเตือน** · ผู้ใช้
+
+รายการแจ้งเตือนมาจาก `lib/notifications.ts` ซึ่ง **คำนวณจากเคสจริง** ไม่ได้เก็บเป็น
+ข้อมูลแยก — เรียงตามความเร่งด่วน เกิน SLA → รอฉันอนุมัติ → ยังไม่มอบหมาย
+(เคสเดียวเข้าหลายเงื่อนไขได้ เก็บอันเร่งด่วนสุดพอ) แก้เงื่อนไขที่ `buildNotifications()`
+ที่เดียว · สถานะ “อ่านแล้ว” อยู่ใน local state ไม่ยิง API เหมือนปุ่มอื่นในระบบ
+
+### หน้าเคส — ลำดับที่ตั้งใจไว้ (ห้ามสลับ)
+
+หน้าเคสทั้งสองฝั่งเรียงตามคำถามที่ผู้ใช้มีในหัว:
+
+1. **เรื่องอะไร** — เลขติดตาม สถานะ ความสำคัญ SLA หัวเรื่อง ผู้แจ้ง
+2. **ถึงไหนแล้ว** — `<CaseStepper>` เต็มความกว้าง **ต้องอยู่ก่อนฟอร์มเสมอ**
+3. **ต้องทำอะไร** — แถบ “สิ่งที่ต้องทำตอนนี้” แล้วต่อด้วยฟอร์ม
+
+`components/ui/case-stepper.tsx` render สองแบบ: แนวนอน 5 ขั้นบนจอ ≥md และตกไปใช้
+`CaseTimeline` แนวตั้งบนจอเล็ก โดยซ่อนด้วย `display:none` — จึงไม่มีข้อความซ้ำใน
+accessibility tree ให้แก้ที่นี่ที่เดียวเมื่ออยากเปลี่ยนหน้าตาความคืบหน้า
+
+### หน้าเคสฝั่ง desk เป็น modal
+
+`/desk/cases/[trackingNo]` render **ตารางเคสเดิมไว้ข้างหลัง** (`CaseListView`
+ตัวเดียวกับที่ `/desk` ใช้) แล้วเปิด `components/desk/case-modal.tsx` ทับ —
+ทำให้เปิดจากตารางหรือเปิด URL ตรง ๆ ได้ผลเหมือนกัน โดยไม่ต้องใช้ intercepting routes
+
+`CaseModal` เป็น client component เดียวที่ถือทุกอย่าง โครงเป็น flex column 3 ชั้น
+
+| ชั้น | เนื้อหา |
+|---|---|
+| header (`flex-none`) | เลขติดตาม สถานะ ความสำคัญ SLA หัวเรื่อง + ปุ่มปิด |
+| body (`flex-1 overflow-y-auto`) | `CaseStepper compact` (มี `note` บอกงานถัดไปมุมขวา) → **2 บล็อกเท่านั้น** |
+| footer (`flex-none`) | สถานะปัจจุบัน + **ปุ่มบันทึกและปุ่มตัดสินใจทั้งหมด** |
+
+จัดการ Esc ปิด · ล็อก `body` ไม่ให้เลื่อน · โฟกัสเข้ากล่องด้วย `preventScroll` และรีเซ็ต
+`scrollTop` ของ body · คลิกฉากหลังปิด · ปิดแล้ว `router.push("/desk")`
+
+**เนื้อใน modal มีแค่ 2 บล็อก — อย่าเพิ่มบล็อกที่สาม:**
+
+1. **รายละเอียดเคสจาก พจส.** (คอลัมน์ซ้าย 330px) — ผู้แจ้ง สังกัด กลุ่มเรื่อง เวลาแจ้ง
+   หน่วยงานที่รับผิดชอบ · ข้อความที่ พจส. เขียน · ไฟล์แนบ · ข้อความที่คุยกัน
+   ทั้งบล็อกเป็น read-only
+2. **กรอกข้อมูล** (คอลัมน์ขวา ยืดหยุ่น) — ประเภทเรื่อง · สาเหตุหลัก · แผนแก้ไข ·
+   ผลการดำเนินงาน · มูลค่าความเสียหาย · ผู้อนุมัติ 2 ระดับ + ผลการตรวจสอบ
+
+   **ไม่มีช่อง “ปัญหาที่พบ / ปัญหาที่ตรวจสอบแล้วจริง”** (`problem` ของ NCAC) — เจ้าของงาน
+   ยืนยันว่าคำตอบของหัวข้อนั้นอยู่ใน **ประเภทเรื่อง** อยู่แล้ว ไม่ต้องให้ PIC กรอกซ้ำ
+   ฟิลด์ `problem` ยังอยู่ครบใน `lib/types.ts` / `adapt.ts` / route `PATCH` เผื่อเปิดใช้ใหม่
+
+**สิ่งที่เคยมีแล้วเอาออกไปแล้ว — อย่าใส่กลับ:** ตารางข้อมูลเคสซ้ำ (แจ้งเมื่อ / อัปเดตล่าสุด /
+อายุเคส แยกการ์ด), การ์ดไฟล์แนบแยก, การ์ดแชทแยก, แถบ “สิ่งที่ต้องทำตอนนี้” แบบกล่องใหญ่,
+หัวขั้นแบบมีเลข 1–3, การแบ่งฟอร์มเป็น 3 การ์ด, **ช่อง “ตอบกลับ พจส.” + ปุ่มส่ง**
+และ **ช่อง “ปัญหาที่ตรวจสอบแล้วจริง”** — ทั้งหมดถูกยุบให้กระชับตามที่เจ้าของงานสั่ง
+
+**กฎของฟอร์ม — อย่าเปลี่ยนโดยไม่ถาม:**
+
+- **ไม่มีปุ่มเปิด/ปิดหรือปุ่มแก้ไขรายส่วน** ทุกช่องเห็นและกรอกได้เลยถ้าสถานะอนุญาต
+- **ปุ่มบันทึกมีที่เดียว** คือ “บันทึก” ใน footer — บันทึกทุกช่องพร้อมกัน ปิดใช้งานเมื่อ
+  ไม่มีอะไรเปลี่ยน และ footer ขึ้น “ยังไม่ได้บันทึก N รายการ”
+  **ห้ามเพิ่มปุ่มบันทึกในบล็อกย่อย**
+- ปุ่มอนุมัติ / ปฏิเสธ / ปิดเคส อยู่ใน footer เดียวกัน · กดแล้วช่องหมายเหตุโผล่ใน footer
+  (บังคับกรอกก่อนยืนยัน)
+- `note` ของ stepper (`TodoNote`) เป็น **บรรทัดเดียว** บอกว่าทำอะไรต่อ — ห้ามขยายเป็นกล่อง
+- `hint` ของแต่ละฟิลด์ให้สั้นที่สุดหรือไม่ต้องมีถ้า label ชัดแล้ว · `placeholder` เป็นตัวอย่างจริง
+- ฟิลด์ที่ไม่บังคับใส่ `optional` เพื่อขึ้นคำว่า “ไม่บังคับ” ต่อท้าย label
+
+**การมอบหมายหน่วยงานไม่อยู่ใน modal** — ทำจากคอลัมน์ “ผู้รับผิดชอบ” ในตาราง
+(`DeptCell` ใน `case-table.tsx`): เคสที่ยังไม่มอบหมายเป็นชิปเส้นประ `+ มอบหมาย`
+เคสที่มอบหมายแล้วเป็น `select` แบบไร้ขอบที่เห็นขอบตอน hover · เลือกแล้วแถวขยับเป็น
+`assigned` ทันทีระหว่างรอ API ตอบ · สำเร็จประกาศผ่าน `role="status"` · **ล้มเหลวต้องคืนค่าเดิม**
+แล้วขึ้น `role="alert"` — ห้ามปล่อยให้หน้าจอโกหกว่าบันทึกแล้ว
+
+state ทำงานด้วย `draft` เทียบ `saved` แล้ว `PATCH` จริงตอนกดบันทึก (ดูตารางในหัวข้อ
+“การบันทึกยิงจริงแล้ว”) — ทุกช่องใน modal ยิงจริงหมดแล้ว
+
+> ⚠️ **ห้ามใส่ `transform` / `animation` ที่ `<main>` ของ desk layout**
+> เพราะจะกลายเป็น containing block ของ `position: fixed` ทำให้ modal หลุดตำแหน่ง
+> (เคยเจอจาก `animate-rise` — modal เยื้องขวาและล้นจอล่าง) entrance animation
+> ให้ใส่ที่เนื้อหาของหน้าแทน เช่นที่ `CaseListView`
+
+## กฎการเขียน UI
+
+- **Server Component เป็นค่าเริ่มต้น** ใส่ `"use client"` เฉพาะ component ที่มี state /
+  event / `usePathname` และให้เล็กที่สุด. `page.tsx` เก็บไว้เป็น server component
+  เสมอเพื่อ export `metadata` แล้วค่อย render client child
+- **ขนาดตัวอักษรใช้ค่าจาก design ตรง ๆ** (`text-[13.5px]`, `text-[12.5px]`) —
+  design ต้นทางใช้ครึ่งพิกเซล ห้าม “ปัด” ไป scale ของ Tailwind
+- **spacing/สี ใช้ token ไม่ใช่ hex** ยกเว้นสองสีจาก design คือ `#dfe6e3`
+  (avatar placeholder) และ `#eaeeec` (thumbnail placeholder)
+- **ทุก interactive element ต้องแตะได้จริง** ≥ 36px และมี hover/active state.
+  focus ring มาจาก `:focus-visible` ใน `@layer base` — ไม่ต้องเขียนซ้ำ
+- **ไอคอนตกแต่งใส่ `aria-hidden`**; ปุ่มที่มีแต่ไอคอนต้องมี `aria-label`
+- ข้อความไทยยาว ๆ ใส่ `text-pretty`
+- `animate-rise` ใช้ตอน mount ของ screen/main เท่านั้น อย่าใส่ทุก element
+- `prefers-reduced-motion` ถูกจัดการรวมใน `globals.css` แล้ว
+
+## กราฟ / data viz
+
+`components/desk/case-volume-chart.tsx` ใช้ 2-slot categorical palette ผ่าน token
+`series-a` (เปิดใหม่) / `series-b` (ปิดเคส) — **หนึ่งคู่ต่อหนึ่งธีม ทั้งคู่ผ่าน validate ครบ 6 ข้อ**
+(lightness band, chroma floor, CVD ΔE, normal-vision ΔE, contrast)
+
+| ธีม | คู่สี | พื้น | deutan / tritan / normal ΔE |
+|---|---|---|---|
+| `hrs` | `#a35a08` / `#0d9488` | `#ffffff` | 13.6 / 25.1 / 21.2 |
+| `hrs-dark` | `#e0913f` / `#2fc7b4` | `#161c1b` | 14.0 / 27.5 / 22.5 |
+
+**ห้ามเปลี่ยนสีเหล่านี้โดยไม่ re-validate บนพื้นที่มันวางอยู่จริง** และกฎที่ต้องรักษาไว้:
+
+- แกน y เดียว, baseline เริ่มที่ 0 เสมอ, ห้าม dual-axis
+- มี legend ตลอด + direct label เฉพาะเดือนล่าสุด (ห้ามใส่เลขทุกแท่ง)
+- ต้องมี table view เป็นทางเลือก (ปุ่ม “ดูเป็นตาราง”)
+- grid/axis สีอ่อน (`border-line/60`), ปลายแท่งมน 4px, ช่องว่างระหว่างแท่ง 2px
+- ตัวหนังสือใช้สี ink/mut ไม่ใช่สีของ series
+
+`reason-bars.tsx` และแท่งรายหน่วยงานในหน้ารายงานเป็น single series → ใช้ `primary`
+สีเดียว ไม่ต้องมี legend และ label ทุกแท่งได้
+(ทั้งสองคอมโพเนนต์ยังไม่มีหน้าเรียกใช้ตอนนี้ เพราะหน้ารายงานถูกถอดออกชั่วคราว)
+
+## คำสั่ง
+
+```bash
+cp .env.example .env.local   # แล้วเติม API_NCAC_URL ก่อนรันครั้งแรก
+npm run dev          # dev server
+npm run build        # production build + typecheck (ต้องผ่านก่อน commit)
+npx eslint .         # lint (ต้อง exit 0)
+npx tsc --noEmit     # typecheck เดี่ยว ๆ
+```
+
+## สิ่งที่ยังไม่ทำ (อย่าเผลอคิดว่าพัง)
+
+- **แจ้งเรื่องใหม่จากมือถือยังไม่บันทึกจริง** — วิซาร์ด `/m/cases/new` จบที่หน้า
+  “ส่งเรื่องเรียบร้อย” เฉย ๆ เพราะเคสถูกสร้างใน **mena-go** ไม่ใช่ NCAC
+  (ดู README ของระบบเดิม) ถ้าจะทำต้องได้ endpoint สร้างเคสมาก่อน
+- ช่อง “ส่งข้อความถึงผู้รับผิดชอบ” (ฝั่งมือถือ) ยัง submit ไม่ได้ — NCAC ไม่มี
+  endpoint ข้อความโต้ตอบ `notes` จึงเป็น `[]` เสมอ · ช่อง “ตอบกลับ พจส.” ใน modal
+  ฝั่ง desk **ถูกเอาออกแล้วตามคำสั่งเจ้าของงาน — อย่าใส่กลับ**
+- “อ่านแล้ว” ของกระดิ่งแจ้งเตือนอยู่ใน local state
+- ปุ่มจองห้อง / จองรถ ยัง submit ไม่ได้ · ห้อง / รถ ยังเป็นข้อมูลตัวอย่าง
+- หน้าประกาศและหน้ารายงานถูกถอดออกชั่วคราว (ดูกล่องบนสุดของไฟล์นี้) — โค้ดกราฟและ
+  `monthlyVolume` ยังอยู่ครบ ถ้าจะเปิดกลับมาให้สร้าง `app/desk/reports/page.tsx` ใหม่
+  แล้วเติมเมนูใน `deskNav`
+- ไม่มี auth — `currentUser` (คนขับ) และ `deskUser` (ERZONE/HR) เป็นค่าคงที่
+  `deskUser.employeeId` ถูกส่งเป็นผู้อนุมัติ/ผู้ปิดเคสจริง จึงต้องมีอยู่ใน NCAC
+  **หน้า `/` เป็นหน้า Login เต็มรูปแบบแล้วแต่ยังไม่ต่อ OAuth** — ปุ่ม Google วิ่ง
+  state machine จริง (idle → loading → error) แล้วพาไป `/desk` เฉย ๆ · `.env.local`
+  มี `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` รออยู่แล้ว แต่ยังไม่มี auth library
+  ในโปรเจกต์ · NCAC มี `POST /auth/login/google` ให้ต่อ · เปิดดูหน้าจอ error ตอนรีวิว
+  ดีไซน์ได้ที่ `/?state=error-domain` และ `/?state=error-network`
+  ทางเข้า `/m` กับ `/desk` ย้ายไปอยู่แถว “โหมดสาธิต” ใต้ footer — ลบทั้งบล็อกเมื่อมี auth
+- ไม่มี export Excel (ระบบเดิมมี — ถ้าจะทำให้เพิ่ม `xlsx` แล้วอ่านจาก `getCases()`)
+- ไฟล์แนบใน wizard เก็บเป็น `URL.createObjectURL` ในหน่วยความจำ หายเมื่อ reload
