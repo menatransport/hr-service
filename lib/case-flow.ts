@@ -29,7 +29,7 @@ const THAI_MONTHS = [
 /** แปลง ISO เป็นเวลาไทย (UTC+7) แบบไม่พึ่ง Intl — ผลลัพธ์เท่ากันทั้ง server และ client */
 function toBangkok(iso: string) {
   const d = new Date(iso);
-  const t = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const t = new Date(d.getTime() + 14 * 60 * 60 * 1000);
   return {
     day: t.getUTCDate(),
     month: THAI_MONTHS[t.getUTCMonth()],
@@ -148,6 +148,20 @@ export const TOTAL_STEPS = STATUS_FLOW.length;
 
 export const isOpenCase = (hrCase: HrCase) => hrCase.status !== "closed";
 
+/**
+ * “คำร้องใหม่” — เข้ามาวันนี้และยังไม่ปิด ใช้ติดป้ายในคิวงานให้เห็นของที่เพิ่งเข้ามา
+ *
+ * นับเป็น **วันตามปฏิทินไทย** (`caseAgeDays` = 0) ไม่ใช่ 24 ชั่วโมงย้อนหลังจริง ๆ —
+ * ค่าที่ขยับทุกวินาทีทำให้ HTML ฝั่งเซิร์ฟเวอร์กับตอน hydrate ไม่ตรงกัน ผลที่ได้คือ
+ * ป้ายหมดอายุพร้อมกันทุกเครื่องตอนเที่ยงคืน แทนที่จะหายทีละเคสตามเวลาที่แจ้งเข้ามา
+ *
+ * **ไม่ผูกกับสถานะและไม่ผูกกับการมอบหมาย** — เคสที่มอบหมายไปแล้วในวันเดียวกันก็ยัง
+ * เป็นของที่เพิ่งเข้ามาวันนี้อยู่ดี (คนละเรื่องกับแจ้งเตือน “รอมอบหมายหน่วยงาน”
+ * ใน `lib/notifications.ts` ซึ่งเป็นงานค้าง ไม่ว่าจะค้างมากี่วันก็ตาม)
+ */
+export const isNewCase = (hrCase: HrCase) =>
+  hrCase.status !== "closed" && caseAgeDays(hrCase) === 0;
+
 /** SLA: คำร้องที่ยังไม่ปิดและเปิดมานานกว่าเกณฑ์ตามความสำคัญ */
 const SLA_DAYS: Record<Priority, number> = { high: 2, medium: 5, low: 10 };
 
@@ -264,13 +278,36 @@ export const reviewMeta: Record<
 export const reviewOf = (hrCase: HrCase, level: 1 | 2) =>
   hrCase.reviews.find((r) => r.level === level) ?? null;
 
-/** คำร้องนี้รอ “ฉัน” อนุมัติอยู่หรือไม่ */
+/**
+ * ผู้อนุมัติแทน — ตัดสินคำร้องได้ทุกใบแม้ไม่ได้ถูกตั้งเป็นผู้อนุมัติของระดับนั้น
+ *
+ * มีไว้ให้เดินเรื่องต่อได้เมื่อผู้อนุมัติตัวจริงลา / ลาออก / ติดต่อไม่ได้ ไม่งั้น
+ * คำร้องค้างที่ “รออนุมัติ” ถาวรโดยไม่มีใครปลดได้
+ *
+ * **ต้องตรงกับ `SUPER_APPROVER_IDS` ฝั่ง NCAC** (`routes/complaint.py`) —
+ * ที่นั่นคือด่านจริง ตรงนี้แค่ทำให้ปุ่มโผล่ ใส่รหัสที่ backend ไม่รู้จักจะได้ปุ่ม
+ * ที่กดแล้วเด้ง 400 “Not current approval level” กลับมา
+ */
+export const SUPER_APPROVER_IDS = new Set(["680043"]);
+
+export const isSuperApprover = (employeeId: string) =>
+  SUPER_APPROVER_IDS.has(employeeId);
+
+/**
+ * คำร้องนี้รอ “ฉัน” อนุมัติอยู่หรือไม่
+ *
+ * ผู้อนุมัติแทนได้สิทธิ์เพิ่มก็จริง **แต่ยังต้องมีระดับที่ค้างอยู่จริง** — ไม่งั้น
+ * ทั้งกระดิ่งแจ้งเตือนและปุ่มอนุมัติจะขึ้นกับคำร้องทุกใบรวมถึงใบที่ปิดไปแล้ว
+ * (`buildNotifications()` ก็เรียกฟังก์ชันนี้) แล้วกดไปก็ได้ 400 “No pending review”
+ */
 export function isPendingFor(hrCase: HrCase, employeeId: string): boolean {
+  if (hrCase.status !== "pending_review") return false;
+
+  const pending = hrCase.reviews.filter((r) => r.status === "pending");
+  if (!pending.length) return false;
+
   return (
-    hrCase.status === "pending_review" &&
-    hrCase.reviews.some(
-      (r) => r.reviewerId === employeeId && r.status === "pending",
-    )
+    pending.some((r) => r.reviewerId === employeeId) || isSuperApprover(employeeId)
   );
 }
 
@@ -382,11 +419,16 @@ export function canEditSection(
   caseStatus: CaseStatus,
   userDepartmentId: string,
   caseDepartmentId: DepartmentId | null,
+  employeeId: string,
 ): boolean {
   // ด่านนี้อยู่หน้าข้อยกเว้นของ HR/ER โดยตั้งใจ — ต่อให้เป็น HR ก็กรอกแผนของเคส
   // ที่ยังไม่มีผู้รับผิดชอบไม่ได้ ต้องมอบหมายหน่วยงานก่อนเสมอ
   if (SECTION_NEEDS_DEPARTMENT[section] && !caseDepartmentId) return false;
-  if (userDepartmentId === HR_DEPARTMENT_ID) return caseStatus !== "closed";
+  // ผู้อนุมัติแทนได้สิทธิ์แก้เท่า HR/ER ด้วย — รายชื่ออยู่ที่ `SUPER_APPROVER_IDS`
+  // ที่เดียว ไม่ใช่รหัสลอย ๆ กระจายอยู่หลายไฟล์
+  if (userDepartmentId === HR_DEPARTMENT_ID || isSuperApprover(employeeId)) {
+    return caseStatus !== "closed";
+  }
   return caseStatus === SECTION_REQUIRED_STATUS[section];
 }
 
@@ -403,6 +445,28 @@ export function lockReason(
   return `แก้ไขได้เมื่อสถานะเป็น “${required}” · ปัจจุบัน “${current}”`;
 }
 
+/* ---------------------------------------------------------------- สาเหตุหลัก */
+
+/**
+ * รายการสุดท้ายของกลุ่ม `OTH` ในผังสาเหตุหลัก — **ข้อความต้องตรงกับที่ระบบเดิม
+ * เขียนลง `root_cause` เป๊ะ ๆ** (`mena-next-lb/src/app/driver-complaint/constants.ts`)
+ * ไม่งั้นคำร้องที่บันทึกค่านี้ไว้แล้วจะหาป้ายในดรอปดาวน์ไม่เจอ กลายเป็นช่องว่างเปล่า
+ * ทั้งที่ NCAC ยังเก็บค่าอยู่ — หน้าจอโกหก (มีของจริงในฐานแล้ว ตรวจเมื่อ 13 ส.ค. 2026)
+ *
+ * `lib/data.ts` import ตัวนี้ไปใส่ในรายการ — ห้ามพิมพ์สตริงซ้ำอีกที่
+ */
+export const ROOT_CAUSE_OTHER = "อื่นๆ (บังคับระบุรายละเอียด)";
+
+/**
+ * เลือกสาเหตุหลักเป็น “อื่นๆ” แล้ว **บังคับ**ให้เขียนว่าอื่นๆ คืออะไร — ไม่งั้น
+ * root cause ของเคสนั้นไม่มีความหมายเลยตอนเอาไปไล่ดูย้อนหลัง
+ *
+ * รายละเอียดถูกเก็บที่ `complaint_details` ของ NCAC ซึ่งเป็นคอลัมน์ที่มีอยู่แล้ว
+ * แต่**ยังว่างทั้งฐาน** (ตรวจ 19 คำร้องเมื่อ 13 ส.ค. 2026) จึงไม่ได้ไปทับของใคร
+ */
+export const needsRootCauseDetail = (rootCause: string | null | undefined) =>
+  rootCause === ROOT_CAUSE_OTHER;
+
 /* ---------------------------------------------------------------- departments */
 
 /**
@@ -411,11 +475,12 @@ export function lockReason(
  */
 export const DEPARTMENTS: Record<DepartmentId, { th: string; en: string }> = {
   "3": { th: "ยานยนต์", en: "Vehicle" },
-  "11": { th: "เชื้อเพลิง", en: "Fuel" },
+  "11": { th: "เชื้อเพลิง OPS", en: "Fuel" },
   "19": { th: "จัดส่ง สสบ.", en: "Delivery / Operation" },
   "15": { th: "จัดส่ง ศลบ.", en: "Delivery / Operation" },
   "20": { th: "จัดส่ง ศบก.", en: "Delivery / Operation" },
-  "8": { th: "ความปลอดภัย", en: "Safety" },
+  "8": { th: "Safety", en: "Safety" },
+  "17": { th: "Compliance", en: "Compliance" },
   "24": { th: "ทรัพยากรบุคคล", en: "HR / ER" },
 };
 

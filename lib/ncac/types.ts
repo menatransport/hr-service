@@ -19,6 +19,38 @@ export interface ComplaintReviewDto {
   created_at: string;
 }
 
+/**
+ * หนึ่งแถวของ `complaint_master` — “ประเภทเรื่อง” ของหน่วยงานหนึ่ง
+ *
+ * เดิมรายการนี้ hard-code อยู่ใน `lib/data.ts` แก้ทีต้อง deploy ใหม่
+ * ย้ายมาอยู่ที่ NCAC แล้ว (`/complaint-masters`) แก้ผ่านหน้าจอได้เลย
+ *
+ * `icon` เป็น **ชื่อไอคอนของ lucide** (เช่น `"Wrench"`) ไม่ใช่ SVG —
+ * ตัวแปลงชื่อเป็นคอมโพเนนต์อยู่ที่ `lib/complaint-icons.ts`
+ */
+export interface ComplaintMasterDto {
+  id: number;
+  department_id: number;
+  name: string;
+  icon: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** payload ขาออกของ `POST /complaint-masters/` — ทุกช่องยกเว้น 2 ตัวแรกมีค่าเริ่มต้น */
+export interface ComplaintMasterCreate {
+  department_id: number;
+  name: string;
+  icon?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+/** payload ขาออกของ `PUT /complaint-masters/{id}` — ส่งเฉพาะช่องที่แก้ */
+export type ComplaintMasterPatch = Partial<ComplaintMasterCreate>;
+
 export interface ComplaintDto {
   id: number;
   tracking_no: string;
@@ -32,7 +64,13 @@ export interface ComplaintDto {
   /** URL รูปที่ผู้แจ้งแนบมา (มีได้ไฟล์เดียว) */
   complaint_url: string | null;
   department_id: number | string | null;
-  problem: string | null;
+  /**
+   * **id ของ `complaint_master`** ไม่ใช่ข้อความ — คือ “ประเภทเรื่อง” ของคำร้อง
+   * (เดิมคอลัมน์นี้เก็บชื่อประเภทเป็น text · แปลงเป็น id เมื่อ 13 ส.ค. 2026)
+   */
+  problem: number | null;
+  /** ประเภทเรื่องแบบเต็มที่ backend join มาให้ — `null` เมื่อยังไม่จัดประเภท */
+  problem_master?: ComplaintMasterDto | null;
   root_cause: string | null;
   damage_cost: number | null;
   solution: string | null;
@@ -156,8 +194,11 @@ export interface GoogleLoginResponse {
 export interface ComplaintPatch {
   department_id?: string | number;
   complaint_type?: string | null;
-  problem?: string | null;
+  /** ประเภทเรื่อง = id ของ `complaint_master` · `null` = ล้างประเภททิ้ง */
+  problem?: number | null;
   root_cause?: string | null;
+  /** รายละเอียดของสาเหตุ “อื่นๆ” — `ComplaintUpdate` ของ NCAC รับฟิลด์นี้อยู่แล้ว */
+  complaint_details?: string | null;
   solution?: string | null;
   result?: string | null;
   damage_cost?: number | null;

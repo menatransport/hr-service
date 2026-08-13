@@ -3,6 +3,9 @@ import type {
   ComplaintCreateResponse,
   ComplaintDto,
   ComplaintLogDto,
+  ComplaintMasterCreate,
+  ComplaintMasterDto,
+  ComplaintMasterPatch,
   ComplaintPatch,
   GoogleLoginResponse,
   ReviewAction,
@@ -220,6 +223,58 @@ export function closeComplaint(
   return call(`/complaints/${encodeURIComponent(trackingNo)}/close?${query}`, {
     method: "POST",
   });
+}
+
+/* ---------------------------------------------------------------- ประเภทเรื่อง */
+
+/**
+ * รายการ “ประเภทเรื่อง” ทั้งหมด — `GET /complaint-masters/`
+ *
+ * ค่าเริ่มต้นของ upstream คือ **เฉพาะที่ยังเปิดใช้งาน** · หน้าจอจัดการต้องส่ง
+ * `includeInactive` เพื่อให้เห็นของที่ปิดไว้ด้วย ไม่งั้นกดปิดแล้วแถวหายไปเลย
+ * ทั้งที่ยังอยู่ในฐาน (เปิดกลับมาไม่ได้อีก)
+ */
+export function listComplaintMasters(
+  opts: { departmentId?: number | string; includeInactive?: boolean } = {},
+): Promise<ComplaintMasterDto[]> {
+  const query = new URLSearchParams();
+  if (opts.departmentId !== undefined && opts.departmentId !== "") {
+    query.set("department_id", String(opts.departmentId));
+  }
+  if (opts.includeInactive) query.set("include_inactive", "true");
+
+  const suffix = query.toString();
+  return call<ComplaintMasterDto[]>(
+    `/complaint-masters/${suffix ? `?${suffix}` : ""}`,
+  );
+}
+
+export function createComplaintMaster(
+  payload: ComplaintMasterCreate,
+): Promise<ComplaintMasterDto> {
+  return call<ComplaintMasterDto>("/complaint-masters/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateComplaintMaster(
+  id: number,
+  patch: ComplaintMasterPatch,
+): Promise<ComplaintMasterDto> {
+  return call<ComplaintMasterDto>(`/complaint-masters/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+/**
+ * ลบประเภทเรื่อง — **upstream ตอบ 409 ถ้ามีคำร้องอ้างถึงอยู่** และบอกให้ใช้
+ * `is_active = false` แทน (ลบทิ้งจะทำให้คำร้องเก่าชี้ไปยังแถวที่หายไป
+ * แล้วอ่านประวัติย้อนหลังไม่ออก) — ห้ามกลืน 409 นี้ทิ้ง ต้องบอกผู้ใช้ตรง ๆ
+ */
+export function deleteComplaintMaster(id: number): Promise<unknown> {
+  return call<unknown>(`/complaint-masters/${id}`, { method: "DELETE" });
 }
 
 /* ---------------------------------------------------------------- เข้าสู่ระบบ */

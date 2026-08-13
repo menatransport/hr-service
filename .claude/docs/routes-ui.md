@@ -1,33 +1,18 @@
-# Routes · mobile shell · desk shell · case page & modal
+# Routes · desk shell · case page & modal
 
-> Read when: adding/changing a page, touching a layout, `case-modal.tsx`, bottom tabs, sidebar, notifications.
+> Read when: adding/changing a page, touching a layout, `case-modal.tsx`, sidebar, notifications.
 
 ```
 /                        Login — Google sign-in (company domain)  ← `HR Service Login Wireframe` 1b
-/m/…                     Driver app (mobile)        ← wireframe 1a + 1b
 /desk/…                  HR Service Desk (desktop)  ← wireframe 1c
 ```
 
-## `/m` — mobile app shell
+> The driver mobile app (`/m/…`, wireframe 1a + 1b) was removed on the owner's instruction
+> (10 Aug 2026) — `app/m/**` and `components/m/**` are gone, along with `buildServices()`,
+> `currentUser`, `MobileIdentity` / `getMobileIdentity()` and `getCasesByDriver()`.
+> **Don't add them back** without being asked.
 
-`app/m/layout.tsx` is a full-height flex column (`h-dvh`, `md:h-[820px]` inside a 420px-wide
-device frame on large screens). Each page **must** render its own `<Screen>` (the shell's single
-scroll area) and **may** append a `<footer>` as a sibling.
-
-```tsx
-// pushed-screen pattern
-<>
-  <ScreenHeader title="…" backHref="/m/services" />
-  <Screen className="flex flex-col gap-4 px-5 pt-4 pb-6">…</Screen>
-  <footer className="flex-none border-t border-line px-5 pt-3.5 pb-safe md:pb-5">…</footer>
-</>
-```
-
-`BottomTabs` hides itself on `/m/cases/<anything>` (see `hideOn` in
-`components/m/bottom-tabs.tsx`) — **if you add a page that shouldn't have tabs, edit that regex**
-rather than building a nested layout.
-
-Case pages use `trackingNo` as the route param, e.g. `/m/cases/DC-2026-0142`.
+Case pages use `trackingNo` as the route param, e.g. `/desk/cases/DC-2026-0142`.
 
 ## `/desk` — sidebar shell
 
@@ -35,7 +20,7 @@ A full-width `h-14` topbar, with `[sidebar | main]` below it, per wireframe 1c. 
 hidden below `lg` and moves into a topbar dropdown (same list via `DeskNavList`). Menu items live
 in `deskNav` in `lib/data.ts`.
 
-Topbar right side, in order: mobile view · **theme toggle** · **notification bell** · user.
+Topbar right side, in order: **theme toggle** · **notification bell** · user.
 
 Notifications come from `lib/notifications.ts`, which **derives them from real cases** rather than
 storing them separately — sorted by urgency: SLA breached → awaiting my approval → unassigned
@@ -45,7 +30,7 @@ other button in the system.
 
 ## Case page — the intended order (do not reshuffle)
 
-Both case pages follow the questions in the user's head:
+The case page follows the questions in the user's head:
 
 1. **What is this?** — tracking number, status, priority, SLA, subject, reporter
 2. **Where is it now?** — `<CaseStepper>` full width, **always before the form**

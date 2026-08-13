@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { toEmployee } from "./ncac/adapt";
+import { isSelectableUser, toEmployee } from "./ncac/adapt";
 import { listUsers } from "./ncac/client";
 import type { Employee } from "./types";
 
@@ -16,30 +16,13 @@ import type { Employee } from "./types";
  * client component **ห้าม** import ไฟล์นี้ — `listUsers()` อ่าน env ฝั่งเซิร์ฟเวอร์
  */
 
-/**
- * `employee_status` ของ NCAC — payload จริงมีทั้ง `Active`, `Inactive` และ `active`
- * (ตัวพิมพ์ไม่คงที่) จึงเทียบแบบไม่สนตัวพิมพ์ · ไม่ส่งฟิลด์มา = ถือว่ายังทำงานอยู่
- */
-const isActive = (status: string | null | undefined): boolean =>
-  (status ?? "active").trim().toLowerCase() !== "inactive";
-
-/**
- * บัญชีระบบ ไม่ใช่คน — มีไว้ให้ audit log ของ NCAC มีปลายทาง FK ที่ถูกต้อง
- * ระหว่างที่ยังไม่มี auth (เช่น `HRSVC-DESK` ที่ `deskUser` ใช้)
- *
- * กันไว้ที่นี่ที่เดียวเหมือนกฎพ้นสภาพ — สมุดรายชื่อจึงมีแต่พนักงานจริง
- * ส่วน `getUserDirectory()` ใน `lib/cases.ts` **ไม่กรอง** เพราะยังต้องใช้แปลง
- * รหัสในประวัติเคสให้เป็นชื่อที่อ่านออก
- */
-const isSystemAccount = (status: string | null | undefined): boolean =>
-  (status ?? "").trim().toLowerCase() === "system";
-
 export const getEmployees = cache(async (): Promise<Employee[]> => {
   const users = await listUsers();
   return users
-    // พนักงานที่พ้นสภาพแล้วไม่ต้องแสดงเลย (เจ้าของงานสั่ง 7 ส.ค. 2026) —
-    // กรองที่นี่ที่เดียว หน้าจอจึงไม่ต้องรู้จักสถานะพนักงานอีกต่อไป
-    .filter((u) => isActive(u.employee_status) && !isSystemAccount(u.employee_status))
+    // พนักงานที่พ้นสภาพแล้วไม่ต้องแสดงเลย (เจ้าของงานสั่ง 7 ส.ค. 2026) และบัญชีระบบ
+    // ก็ไม่ใช่คน — กฎอยู่ที่ `isSelectableUser()` ใน `ncac/adapt.ts` ที่เดียว
+    // (ดรอปดาวน์ผู้อนุมัติใน `lib/cases.ts` ใช้ตัวเดียวกัน)
+    .filter(isSelectableUser)
     .map(toEmployee)
     .sort(
       (a, b) =>

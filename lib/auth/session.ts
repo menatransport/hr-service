@@ -2,11 +2,8 @@ import { cookies } from "next/headers";
 
 import {
   FALLBACK_DESK_IDENTITY,
-  FALLBACK_MOBILE_IDENTITY,
   toDeskIdentity,
-  toMobileIdentity,
   type DeskIdentity,
-  type MobileIdentity,
 } from "./identity";
 import {
   SESSION_COOKIE,
@@ -50,15 +47,6 @@ export async function readSessionUser(): Promise<SessionUser | null> {
 export async function getDeskIdentity(): Promise<DeskIdentity> {
   const user = await readSessionUser();
   return user ? toDeskIdentity(user) : FALLBACK_DESK_IDENTITY;
-}
-
-/**
- * ตัวตนของผู้ใช้ฝั่งมือถือ — คนที่ล็อกอิน Google ได้จะเห็น `/m` เป็นตัวเอง
- * ส่วนคนขับ (ยังไม่มีอีเมลบริษัท) ยังได้ค่าตัวอย่างเหมือนเดิม
- */
-export async function getMobileIdentity(): Promise<MobileIdentity> {
-  const user = await readSessionUser();
-  return user ? toMobileIdentity(user) : FALLBACK_MOBILE_IDENTITY;
 }
 
 /**

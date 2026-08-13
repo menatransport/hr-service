@@ -2,6 +2,7 @@ import { cache } from "react";
 
 import {
   buildDirectory,
+  isSelectableUser,
   toApprover,
   toHrCase,
   type UserDirectory,
@@ -39,14 +40,6 @@ export const getCases = cache(async (): Promise<HrCase[]> => {
     .sort((a, b) => b.trackingNo.localeCompare(a.trackingNo));
 });
 
-/** คำร้องของคนขับคนหนึ่ง — ใช้ในแอปมือถือ (`/m`) */
-export const getCasesByDriver = cache(
-  async (employeeId: string): Promise<HrCase[]> => {
-    const all = await getCases();
-    return all.filter((c) => c.driverId === employeeId);
-  },
-);
-
 /**
  * เคสเดียว — อ่านจาก `getCases()` ที่ cache ไว้แล้ว ไม่ใช่ยิง upstream ซ้ำ
  *
@@ -72,6 +65,10 @@ export const APPROVER_MIN_LEVEL = 4;
 export const getEligibleApprovers = cache(async (): Promise<Approver[]> => {
   const directory = await getUserDirectory();
   return [...directory.values()]
+    // คนที่พ้นสภาพแล้ว (`employee_status = "Inactive"`) และบัญชีระบบ อนุมัติไม่ได้
+    // — กรองที่นี่ ไม่ใช่ที่ `getUserDirectory()` เพราะประวัติเคสยังต้องแปลง
+    //   รหัสของคนเหล่านั้นเป็นชื่อได้อยู่
+    .filter(isSelectableUser)
     .map(toApprover)
     .filter((a) => a.level >= APPROVER_MIN_LEVEL)
     .sort((a, b) => b.level - a.level || a.name.localeCompare(b.name, "th"));

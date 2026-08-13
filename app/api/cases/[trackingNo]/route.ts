@@ -2,7 +2,11 @@ import type { NextRequest } from "next/server";
 
 import { badRequest, fail, ok } from "@/app/api/_lib/respond";
 import { getActorEmployeeId } from "@/lib/auth/session";
-import { canDeleteCase, deleteBlockedReason } from "@/lib/case-flow";
+import {
+  canDeleteCase,
+  deleteBlockedReason,
+  needsRootCauseDetail,
+} from "@/lib/case-flow";
 import { buildDirectory, toHrCase } from "@/lib/ncac/adapt";
 import {
   NcacError,
@@ -25,9 +29,10 @@ import type { ComplaintPatch } from "@/lib/ncac/types";
 
 interface PatchBody {
   departmentId?: string | null;
-  complaintType?: string | null;
-  problem?: string | null;
+  /** id ของ `complaint_master` — ลงคอลัมน์ `problem` ของ NCAC */
+  complaintTypeId?: number | null;
   rootCause?: string | null;
+  complaintDetails?: string | null;
   solution?: string | null;
   result?: string | null;
   damageCost?: number | null;
@@ -75,9 +80,12 @@ export async function PATCH(
     const patch: ComplaintPatch = {};
     if (body.departmentId !== undefined && body.departmentId !== null)
       patch.department_id = body.departmentId;
-    if (body.complaintType !== undefined) patch.complaint_type = body.complaintType;
-    if (body.problem !== undefined) patch.problem = body.problem;
+    /* ประเภทเรื่อง = `problem` (id ของ `complaint_master`) · คอลัมน์
+       `complaint_type` ที่เป็นข้อความเป็นของเก่าที่ว่างทั้งฐาน — ไม่เขียนแล้ว */
+    if (body.complaintTypeId !== undefined) patch.problem = body.complaintTypeId;
     if (body.rootCause !== undefined) patch.root_cause = body.rootCause;
+    if (body.complaintDetails !== undefined)
+      patch.complaint_details = body.complaintDetails;
     if (body.solution !== undefined) patch.solution = body.solution;
     if (body.result !== undefined) patch.result = body.result;
     if (body.damageCost !== undefined) patch.damage_cost = body.damageCost;
@@ -89,6 +97,29 @@ export async function PATCH(
 
     if (!Object.keys(patch).length && !reviewers.length) {
       return badRequest("ไม่มีข้อมูลที่จะบันทึก");
+    }
+
+    /**
+     * สาเหตุหลัก “อื่นๆ” ต้องมีรายละเอียดเสมอ (`needsRootCauseDetail`)
+     *
+     * ตรวจกับ **ค่าที่จะเป็นผลลัพธ์จริงหลังบันทึก** ไม่ใช่เฉพาะช่องที่ส่งมารอบนี้ —
+     * หน้าจอส่งมาแค่ช่องที่เปลี่ยน ช่องที่ไม่ได้ส่งคือค่าเดิมที่ยังอยู่ในฐาน
+     * (แก้เฉพาะรายละเอียดให้ว่าง โดยที่ root cause เดิมเป็น “อื่นๆ” ก็ต้องไม่ผ่าน)
+     *
+     * ฟอร์มกันไว้ให้แล้วชั้นหนึ่ง แต่ฟอร์มไม่ใช่ด่าน — ยิง API ตรงต้องไม่รอดเหมือนกัน
+     */
+    if (body.rootCause !== undefined || body.complaintDetails !== undefined) {
+      const before = await reload(id);
+      const rootCause =
+        body.rootCause !== undefined ? body.rootCause : before.rootCause;
+      const details =
+        body.complaintDetails !== undefined
+          ? body.complaintDetails
+          : before.complaintDetails;
+
+      if (needsRootCauseDetail(rootCause) && !details?.trim()) {
+        return badRequest("เลือกสาเหตุหลักเป็น “อื่นๆ” ต้องระบุรายละเอียดด้วย");
+      }
     }
 
     if (Object.keys(patch).length) await updateComplaint(id, patch);

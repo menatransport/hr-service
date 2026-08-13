@@ -1,11 +1,12 @@
 import { DEPARTMENTS } from "../case-flow";
-import { complaintTypesByDepartment, reasonGroups } from "../data";
+import { reasonGroups } from "../data";
 import type {
   ActivityAction,
   ActivityEntry,
   Approver,
   CaseReview,
   CaseStatus,
+  ComplaintType,
   DepartmentId,
   Employee,
   HrCase,
@@ -16,6 +17,7 @@ import type {
 import type {
   ComplaintDto,
   ComplaintLogDto,
+  ComplaintMasterDto,
   ComplaintReviewDto,
   UserDto,
 } from "./types";
@@ -45,6 +47,29 @@ export type UserDirectory = Map<string, UserDto>;
 
 export const buildDirectory = (users: UserDto[]): UserDirectory =>
   new Map(users.map((u) => [String(u.employee_id), u]));
+
+/**
+ * `employee_status` ของ NCAC — payload จริงมีทั้ง `Active`, `Inactive` และ `active`
+ * (ตัวพิมพ์ไม่คงที่) จึงเทียบแบบไม่สนตัวพิมพ์ · ไม่ส่งฟิลด์มา = ถือว่ายังทำงานอยู่
+ */
+export const isActiveUser = (u: UserDto): boolean =>
+  (u.employee_status ?? "active").trim().toLowerCase() !== "inactive";
+
+/**
+ * บัญชีระบบ ไม่ใช่คน — มีไว้ให้ audit log ของ NCAC มีปลายทาง FK ที่ถูกต้อง
+ * (เช่น `HRSVC-DESK` ที่ `deskUser` ใช้)
+ */
+export const isSystemAccount = (u: UserDto): boolean =>
+  (u.employee_status ?? "").trim().toLowerCase() === "system";
+
+/**
+ * คนที่เลือกได้ในดรอปดาวน์/สมุดรายชื่อ = ยังไม่พ้นสภาพ และไม่ใช่บัญชีระบบ
+ *
+ * กันไว้ที่นี่ที่เดียว · `buildDirectory()` **ไม่กรอง** เพราะยังต้องใช้แปลง
+ * รหัสในประวัติเคสให้เป็นชื่อที่อ่านออก แม้เจ้าตัวจะพ้นสภาพไปแล้ว
+ */
+export const isSelectableUser = (u: UserDto): boolean =>
+  isActiveUser(u) && !isSystemAccount(u);
 
 const fullName = (u: UserDto) => `${u.firstname} ${u.lastname}`.trim();
 
@@ -221,30 +246,47 @@ const GROUP_BY_DEPARTMENT: Record<DepartmentId, ReasonGroupCode> = {
   "15": "OPS",
   "20": "OPS",
   "8": "SAF",
+  "17": "MGT",
   "24": "PAY",
 };
 
-/** ประเภทเรื่องย่อย → หน่วยงานเจ้าของ (สร้างจาก `complaintTypesByDepartment`) */
-const DEPARTMENT_BY_TYPE = new Map<string, DepartmentId>(
-  (Object.keys(complaintTypesByDepartment) as DepartmentId[]).flatMap((id) =>
-    complaintTypesByDepartment[id].map((t) => [t.value, id] as const),
-  ),
-);
-
+/**
+ * ไม่มีตารางแปลง “ประเภทเรื่อง → หน่วยงาน” อีกแล้ว — ประเภทเรื่องมาจาก
+ * `complaint_master` ซึ่งบอกหน่วยงานเจ้าของมาในตัว (`problem_master.department_id`)
+ * จึงอ่านตรง ๆ ได้ ไม่ต้องเดาจากชื่อ
+ */
 function deriveReasonGroup(dto: ComplaintDto): ReasonGroupCode {
   if (dto.root_cause) {
     const byItem = GROUP_BY_ITEM.get(dto.root_cause);
     if (byItem) return byItem;
   }
 
-  if (dto.complaint_type) {
-    const byType = DEPARTMENT_BY_TYPE.get(dto.complaint_type);
-    if (byType) return GROUP_BY_DEPARTMENT[byType];
-  }
+  // หน่วยงานของประเภทเรื่องมาก่อนหน่วยงานที่ถือคำร้อง — ประเภทเรื่องเจาะจงกว่า
+  const owner =
+    toDepartmentId(dto.problem_master?.department_id) ??
+    toDepartmentId(dto.department_id);
 
-  const dept = toDepartmentId(dto.department_id);
-  return dept ? GROUP_BY_DEPARTMENT[dept] : "OTH";
+  return owner ? GROUP_BY_DEPARTMENT[owner] : "OTH";
 }
+
+/* ---------------------------------------------------------------- ประเภทเรื่อง */
+
+/**
+ * แถวของ `complaint_master` → ชนิดที่หน้าจอใช้
+ *
+ * `department_id` ถูกแปลงเป็น **สตริง** ให้เทียบกับ `HrCase.departmentId` ได้ตรง ๆ
+ * และ **ไม่ตรวจว่าอยู่ใน `DEPARTMENTS` ไหม** — ถ้าผู้ใช้เพิ่มประเภทให้หน่วยงานที่
+ * ระบบยังไม่รู้จัก มันควรหายไปจากดรอปดาวน์ของหน่วยงานอื่นเฉย ๆ ไม่ใช่ถูกโยนทิ้ง
+ * เงียบ ๆ จนหน้าจัดการแสดงไม่ครบ
+ */
+export const toComplaintType = (dto: ComplaintMasterDto): ComplaintType => ({
+  id: dto.id,
+  departmentId: String(dto.department_id),
+  name: dto.name,
+  icon: dto.icon?.trim() || null,
+  sortOrder: dto.sort_order ?? 0,
+  isActive: dto.is_active !== false,
+});
 
 /* ---------------------------------------------------------------- ความสำคัญ */
 
@@ -308,7 +350,11 @@ export function toHrCase(dto: ComplaintDto, directory: UserDirectory): HrCase {
   return {
     trackingNo: dto.tracking_no,
     subject: dto.subject ?? "(ไม่มีหัวเรื่อง)",
-    detail: dto.detail ?? dto.complaint_details ?? "",
+    /* `complaint_details` **ไม่ใช่ทางสำรองของ `detail` อีกแล้ว** — ตอนนี้มันคือ
+       ช่องที่ PIC กรอกรายละเอียดของสาเหตุ “อื่นๆ” ถ้ายังใช้เป็น fallback อยู่
+       ข้อความของ PIC จะไปโผล่เป็นคำพูดของ พจส. ในกล่องคำอธิบาย ซึ่งผิดคนละเรื่อง
+       (`detail` เป็น NOT NULL ฝั่งฐานข้อมูลอยู่แล้ว fallback นี้จึงไม่เคยได้ทำงาน) */
+    detail: dto.detail ?? "",
 
     driverId: String(dto.driver_id ?? ""),
     // NCAC ส่งชื่อ พจส. มาตรง ๆ แล้ว — สมุดรายชื่อเป็นแค่ทางสำรอง
@@ -322,13 +368,20 @@ export function toHrCase(dto: ComplaintDto, directory: UserDirectory): HrCase {
 
     reasonGroup,
     departmentId: toDepartmentId(dto.department_id),
-    complaintType: emptyToNull(dto.complaint_type),
+
+    /* ประเภทเรื่องมาจาก `complaint_master` แล้ว — `problem` คือ id ที่ฟอร์มส่งกลับ
+       ส่วนชื่อมาจาก `problem_master` ที่ backend join มาให้ **ห้ามไปหาชื่อจาก
+       รายการตัวเลือกฝั่งหน้าจอ** เพราะประเภทที่ถูกปิดใช้งานไปแล้วจะไม่อยู่ในนั้น
+       แล้วคำร้องเก่าจะกลายเป็น “ยังไม่จัดประเภท” ทั้งที่ในฐานมีค่าอยู่
+       (`complaint_type` ของ NCAC เป็นคอลัมน์เก่าที่ว่างทั้งฐาน — ไม่ได้ใช้แล้ว) */
+    complaintTypeId: typeof dto.problem === "number" ? dto.problem : null,
+    complaintType: dto.problem_master?.name?.trim() || null,
 
     status,
     priority: derivePriority(dto, reasonGroup),
 
-    problem: emptyToNull(dto.problem),
     rootCause: emptyToNull(dto.root_cause),
+    complaintDetails: emptyToNull(dto.complaint_details),
     solution: emptyToNull(dto.solution),
     result: emptyToNull(dto.result),
     damageCost: dto.damage_cost ?? null,

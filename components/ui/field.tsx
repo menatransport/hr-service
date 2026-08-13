@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Select as RSelect } from "radix-ui";
 import { Check, ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 /**
  * ฟอร์มคอนโทรลกลางของระบบ — ทุกหน้าดึงจากไฟล์นี้ไฟล์เดียว
@@ -337,6 +338,16 @@ export function RangeField({
 export interface SelectOption {
   value: string;
   label: string;
+  /**
+   * ไอคอนนำหน้าป้าย **ในรายการที่กางออกเท่านั้น** ไม่ขึ้นบน trigger
+   *
+   * ตั้งใจให้ไม่ขึ้นบน trigger เพราะป้ายบนปุ่มถูกป้อนเป็นข้อความล้วน
+   * (ดูเหตุผลที่ `selectedLabel`) การใส่ไอคอนตรงนั้นต้องรื้อทั้งก้อน
+   * และปุ่มที่มีไอคอนของตัวเองอยู่แล้ว (`icon` ของ `Select`) จะชนกัน
+   *
+   * ตัวเลือกที่ไม่ส่งมาก็เว้นว่าง — ไม่ต้องมีครบทุกตัวในรายการเดียวกัน
+   */
+  icon?: LucideIcon;
 }
 
 export interface SelectGroupOption {
@@ -722,6 +733,14 @@ function Item({ option }: { option: SelectOption }) {
       <RSelect.ItemIndicator className="absolute left-2.5 flex items-center text-primary">
         <Check size={15} strokeWidth={2.4} aria-hidden />
       </RSelect.ItemIndicator>
+      {option.icon ? (
+        <option.icon
+          size={14}
+          strokeWidth={1.7}
+          aria-hidden
+          className="mr-2 flex-none text-mut group-data-[state=checked]:text-primary"
+        />
+      ) : null}
       <RSelect.ItemText>{option.label}</RSelect.ItemText>
     </RSelect.Item>
   );

@@ -23,12 +23,14 @@ import {
   departmentLabel,
   formatDateTime,
   isPendingFor,
+  needsRootCauseDetail,
   statusMeta,
 } from "@/lib/case-flow";
-import { complaintTypesFor, reasonGroups } from "@/lib/data";
+import { complaintIcon } from "@/lib/complaint-icons";
+import { reasonGroups } from "@/lib/data";
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction, type ConfirmOptions } from "@/lib/swal";
-import type { Approver, DepartmentId, HrCase } from "@/lib/types";
+import type { Approver, ComplaintType, HrCase } from "@/lib/types";
 
 /* ---------------------------------------------------------------- draft */
 
@@ -37,8 +39,11 @@ import type { Approver, DepartmentId, HrCase } from "@/lib/types";
  * ของหัวข้อนั้นถูกเก็บอยู่ใน “ประเภทเรื่อง” แล้ว จึงไม่ต้องให้ PIC กรอกซ้ำ
  */
 interface Draft {
-  complaintType: string;
+  /** id ของประเภทเรื่องใน `complaint_master` — `""` = ยังไม่เลือก (ค่าของ `Select`) */
+  complaintTypeId: string;
   rootCause: string;
+  /** รายละเอียดของสาเหตุ “อื่นๆ” — ว่างเสมอเมื่อสาเหตุหลักไม่ใช่ “อื่นๆ” */
+  complaintDetails: string;
   solution: string;
   result: string;
   damageCost: number | null;
@@ -47,22 +52,30 @@ interface Draft {
 }
 
 /**
- * “ประเภทเรื่อง” ผูกกับหน่วยงานผู้รับผิดชอบ (`complaintTypesFor`) — พอเคสถูกย้าย
- * หน่วยงานจากในตาราง ค่าที่เลือกไว้เดิมมักไม่มีอยู่ในรายการของหน่วยงานใหม่
+ * “ประเภทเรื่อง” ผูกกับหน่วยงานผู้รับผิดชอบ — พอเคสถูกย้ายหน่วยงานจากในตาราง
+ * ค่าที่เลือกไว้เดิมมักไม่มีอยู่ในรายการของหน่วยงานใหม่
  *
  * ถ้าปล่อยไว้ dropdown จะหาป้ายของค่านั้นไม่เจอ กลายเป็นช่องว่างเปล่าทั้งที่ NCAC
  * ยังเก็บค่าเดิมอยู่ — หน้าจอโกหก จึงตัดทิ้งตั้งแต่ตอนสร้าง draft แล้วให้ PIC เลือกใหม่
- * (ค่าใน NCAC จะถูกล้างจริงตอนกดบันทึกครั้งถัดไป เพราะ `nullable("")` = `null`)
+ * (ค่าใน NCAC จะถูกล้างจริงตอนกดบันทึกครั้งถัดไป)
+ *
+ * เทียบกับ **รายการที่เลือกได้จริงตอนนี้** ไม่ใช่กับ `hrCase.departmentId` เฉย ๆ —
+ * ประเภทที่ถูกปิดใช้งานไปแล้วก็ต้องให้เลือกใหม่เหมือนกัน
  */
-const typeFitsDepartment = (c: HrCase) =>
-  !c.complaintType ||
-  complaintTypesFor(c.departmentId as DepartmentId | null).some(
-    (t) => t.value === c.complaintType,
-  );
+const typeFitsDepartment = (c: HrCase, options: ComplaintType[]) =>
+  c.complaintTypeId === null ||
+  options.some((t) => t.id === c.complaintTypeId);
 
-const draftOf = (c: HrCase): Draft => ({
-  complaintType: typeFitsDepartment(c) ? (c.complaintType ?? "") : "",
+const draftOf = (c: HrCase, options: ComplaintType[]): Draft => ({
+  complaintTypeId: typeFitsDepartment(c, options)
+    ? (c.complaintTypeId?.toString() ?? "")
+    : "",
   rootCause: c.rootCause ?? "",
+  // สาเหตุหลักไม่ใช่ “อื่นๆ” แล้ว = รายละเอียดที่ค้างอยู่ใน NCAC ไม่มีความหมายอีก
+  // (ค่าจะถูกล้างจริงตอนกดบันทึกครั้งถัดไป เพราะ `nullable("")` = `null`)
+  complaintDetails: needsRootCauseDetail(c.rootCause)
+    ? (c.complaintDetails ?? "")
+    : "",
   solution: c.solution ?? "",
   result: c.result ?? "",
   damageCost: c.damageCost,
@@ -71,8 +84,9 @@ const draftOf = (c: HrCase): Draft => ({
 });
 
 const DRAFT_KEYS: (keyof Draft)[] = [
-  "complaintType",
+  "complaintTypeId",
   "rootCause",
+  "complaintDetails",
   "solution",
   "result",
   "damageCost",
@@ -82,8 +96,9 @@ const DRAFT_KEYS: (keyof Draft)[] = [
 
 /** ป้ายของแต่ละช่อง — ใช้บอกในกล่องยืนยันว่ากำลังจะบันทึกอะไรบ้าง */
 const FIELD_LABEL: Record<keyof Draft, string> = {
-  complaintType: "ประเภทเรื่อง",
+  complaintTypeId: "ประเภทเรื่อง",
   rootCause: "สาเหตุหลัก",
+  complaintDetails: "รายละเอียดสาเหตุอื่นๆ",
   solution: "แนวทางแก้ไข",
   result: "ผลการดำเนินการ",
   damageCost: "ความเสียหาย",
@@ -104,18 +119,24 @@ const rootCauseGroups: SelectGroupOption[] = reasonGroups.map((g) => ({
 export function CaseModal({
   hrCase,
   approvers,
+  complaintTypes,
 }: {
   hrCase: HrCase;
   /** ผู้มีสิทธิ์อนุมัติจาก NCAC `/users` (ระดับ ≥ 4) — server ดึงมาให้แล้ว */
   approvers: Approver[];
+  /**
+   * ประเภทเรื่องที่เลือกได้ **ของหน่วยงานที่ถือคำร้องนี้เท่านั้น** — server กรอง
+   * มาให้แล้ว (`activeComplaintTypesFor`) เคสที่ยังไม่มอบหมายจะได้ `[]`
+   */
+  complaintTypes: ComplaintType[];
 }) {
   const router = useRouter();
   const me = useDeskIdentity();
   const dialog = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
 
-  const [saved, setSaved] = useState<Draft>(() => draftOf(hrCase));
-  const [draft, setDraft] = useState<Draft>(() => draftOf(hrCase));
+  const [saved, setSaved] = useState<Draft>(() => draftOf(hrCase, complaintTypes));
+  const [draft, setDraft] = useState<Draft>(() => draftOf(hrCase, complaintTypes));
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(
     null,
@@ -155,7 +176,7 @@ export function CaseModal({
   const version = `${hrCase.trackingNo}|${hrCase.updatedAt}`;
   const [syncedTo, setSyncedTo] = useState(version);
   if (syncedTo !== version) {
-    const fresh = draftOf(hrCase);
+    const fresh = draftOf(hrCase, complaintTypes);
     setSyncedTo(version);
     setSaved(fresh);
     setDraft(fresh);
@@ -164,11 +185,35 @@ export function CaseModal({
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
 
+  /**
+   * เปลี่ยนสาเหตุหลักออกจาก “อื่นๆ” ต้องล้างรายละเอียดไปพร้อมกันในการเปลี่ยนครั้งเดียว
+   *
+   * ถ้าปล่อยค้างไว้ ข้อความที่อธิบายสาเหตุเก่าจะยังถูกส่งไปเก็บใน `complaint_details`
+   * โดยไม่มีอะไรบนจอบอกว่ามันยังอยู่ — แพตเทิร์นเดียวกับ “ประเภทเรื่อง” ที่ถูกล้าง
+   * เมื่อเคสย้ายหน่วยงาน
+   */
+  const setRootCause = (value: string) =>
+    setDraft((d) => ({
+      ...d,
+      rootCause: value,
+      complaintDetails: needsRootCauseDetail(value) ? d.complaintDetails : "",
+    }));
+
   const changed = useMemo(
     () => DRAFT_KEYS.filter((k) => draft[k] !== saved[k]),
     [draft, saved],
   );
   const dirty = changed.length > 0;
+
+  /**
+   * เลือก “อื่นๆ” ค้างไว้โดยไม่เขียนรายละเอียด = บันทึกไม่ได้ทั้งฟอร์ม
+   *
+   * กันทั้งใบไม่ใช่เฉพาะช่องนั้น เพราะปุ่มบันทึกมีปุ่มเดียวและส่งทุกช่องไปพร้อมกัน —
+   * ปล่อยให้บันทึกช่องอื่นผ่านไปก่อนจะได้เคสที่ root cause เป็น “อื่นๆ” ลอย ๆ
+   * (ฝั่ง route ตรวจซ้ำอีกชั้น — ดู `PATCH /api/cases/[trackingNo]`)
+   */
+  const detailMissing =
+    needsRootCauseDetail(draft.rootCause) && !draft.complaintDetails.trim();
 
   const canApprove = isPendingFor(hrCase, me.employeeId);
   const canClose = hrCase.status === "ready_to_close";
@@ -184,14 +229,19 @@ export function CaseModal({
     hrCase.status,
     me.departmentId,
     hrCase.departmentId,
+    me.employeeId
   );
 
-  const typeOptions: SelectOption[] = complaintTypesFor(
-    hrCase.departmentId as DepartmentId | null,
-  ).map((t) => ({ value: t.value, label: t.value }));
+  /** ไอคอนมาจาก `complaint_master.icon` — ผู้ใช้ตั้งเองได้ในหน้าจัดการประเภทเรื่อง */
+  const typeOptions: SelectOption[] = complaintTypes.map((t) => ({
+    value: String(t.id),
+    label: t.name,
+    icon: complaintIcon(t.icon),
+  }));
 
   /** ค่าที่ `draftOf` ตัดทิ้งไปเพราะหน่วยงานเปลี่ยน — ต้องบอกให้ PIC รู้ว่าทำไมช่องว่าง */
-  const staleType = Boolean(hrCase.complaintType) && !typeFitsDepartment(hrCase);
+  const staleType =
+    hrCase.complaintTypeId !== null && !typeFitsDepartment(hrCase, complaintTypes);
 
   /** ชื่อ + ระดับตำแหน่งภาษาอังกฤษเท่านั้น (`สมชาย ใจดี · Manager`) — ชื่อตำแหน่งเต็ม
       ยาวและซ้ำกันจนไล่ด้วยตาไม่ไหว ระดับบอกอำนาจอนุมัติได้ตรงกว่า */
@@ -234,9 +284,16 @@ export function CaseModal({
 
   function save() {
     const payload: Record<string, unknown> = {};
-    if (changed.includes("complaintType"))
-      payload.complaintType = nullable(draft.complaintType);
+    /* ประเภทเรื่องส่งเป็น **id ตัวเลข** ไปลง `problem` ของ NCAC — ไม่ใช่ชื่อ
+       (`""` = ผู้ใช้กดล้าง → `null` = ล้างประเภททิ้ง) */
+    if (changed.includes("complaintTypeId")) {
+      payload.complaintTypeId = draft.complaintTypeId
+        ? Number(draft.complaintTypeId)
+        : null;
+    }
     if (changed.includes("rootCause")) payload.rootCause = nullable(draft.rootCause);
+    if (changed.includes("complaintDetails"))
+      payload.complaintDetails = nullable(draft.complaintDetails);
     if (changed.includes("solution")) payload.solution = nullable(draft.solution);
     if (changed.includes("result")) payload.result = nullable(draft.result);
     if (changed.includes("damageCost")) payload.damageCost = draft.damageCost;
@@ -281,11 +338,10 @@ export function CaseModal({
         /* ทวนหมายเหตุที่พิมพ์ไว้ให้เห็นอีกครั้ง — ตัดสินไปแล้วเปลี่ยนตัวผู้อนุมัติไม่ได้อีก */
         confirm: {
           title: approve ? `อนุมัติแผนแก้ไขของ ${hrCase.trackingNo}?` : `ปฏิเสธแผนแก้ไขของ ${hrCase.trackingNo}?`,
-          html: `${
-            approve
+          html: `${approve
               ? "เคสจะเปลี่ยนเป็น “รอปิดเคส” และแก้ไขแผนไม่ได้อีก"
               : "เคสจะถูกส่งกลับให้ผู้รับผิดชอบแก้ไขแผน"
-          }<span class="hrs-swal-quote">${escapeHtml(reason)}</span>`,
+            }<span class="hrs-swal-quote">${escapeHtml(reason)}</span>`,
           confirmText: approve ? "ยืนยันอนุมัติ" : "ยืนยันปฏิเสธ",
           tone: approve ? "primary" : "danger",
         },
@@ -346,8 +402,8 @@ export function CaseModal({
               id="case-modal-title"
               className="text-lg leading-snug font-semibold text-pretty"
             >
-           เรื่อง :   {hrCase.subject} 
-                &nbsp;({hrCase.trackingNo})
+              เรื่อง :   {hrCase.subject}
+              &nbsp;({hrCase.trackingNo})
             </h2>
           </div>
 
@@ -417,7 +473,7 @@ export function CaseModal({
                      * ตอนไฟล์ถูกบันทึกข้ามเอนโค้ดจนเหลือ span ว่าง
                      */}
                     <span aria-hidden className="font-serif text-primary/45">
-                      &ldquo; 
+                      &ldquo;
                     </span>
                     {hrCase.detail}
                     <span aria-hidden className="font-serif text-primary/45">
@@ -461,7 +517,7 @@ export function CaseModal({
                 locked ? (
                   <span className="flex items-center gap-1.5 rounded-full bg-base-200 px-2 py-[2px] text-[11px] text-mut">
                     <Lock size={11} strokeWidth={2} aria-hidden />
-                    {unassigned ? "รอมอบหมายหน่วยงาน" : "แก้ไขไม่ได้"}
+                    {unassigned ? "รอมอบหมายหน่วยงาน" : ""}
                   </span>
                 ) : null
               }
@@ -490,15 +546,23 @@ export function CaseModal({
 
               <div className="grid gap-3.5 md:grid-cols-2">
                 <SelectField
-                  id="complaintType"
+                  id="complaintTypeId"
                   label="ประเภทเรื่อง"
-                  value={draft.complaintType}
-                  onChange={(v) => set("complaintType", v)}
-                  placeholder={unassigned ? "รอมอบหมายหน่วยงาน" : "เลือก…"}
+                  value={draft.complaintTypeId}
+                  onChange={(v) => set("complaintTypeId", v)}
+                  placeholder={
+                    unassigned
+                      ? "รอมอบหมายหน่วยงาน"
+                      : typeOptions.length
+                        ? "เลือก…"
+                        : "หน่วยงานนี้ยังไม่มีประเภทเรื่อง"
+                  }
                   hint={
                     staleType
-                      ? "ประเภทเดิมไม่มีในรายการของหน่วยงานนี้ — เลือกใหม่แล้วกดบันทึก"
-                      : undefined
+                      ? `ประเภทเดิม “${hrCase.complaintType ?? "—"}” ไม่มีในรายการของหน่วยงานนี้แล้ว — เลือกใหม่แล้วกดบันทึก`
+                      : !unassigned && !typeOptions.length
+                        ? "เพิ่มประเภทเรื่องให้หน่วยงานนี้ได้ที่ปุ่ม “ประเภทเรื่อง” บนหน้าคิวคำร้อง"
+                        : undefined
                   }
                   readOnly={locked || busy}
                   options={typeOptions}
@@ -508,13 +572,32 @@ export function CaseModal({
                   id="rootCause"
                   label="สาเหตุหลัก"
                   value={draft.rootCause}
-                  onChange={(v) => set("rootCause", v)}
+                  onChange={setRootCause}
                   placeholder="เลือก…"
                   readOnly={locked || busy}
                   groups={rootCauseGroups}
                   clearable
                 />
               </div>
+
+              {/*
+               * ช่องนี้โผล่เฉพาะตอนเลือก “อื่นๆ” — ไม่ได้ทำเป็นช่องจาง ๆ ที่กรอกไม่ได้
+               * ค้างไว้ตลอด เพราะฟอร์มนี้ยาวอยู่แล้ว ช่องที่ไม่เกี่ยวข้องคือสิ่งรบกวน
+               *
+               * ปลายทางคือ `complaint_details` ของ NCAC (ดู `needsRootCauseDetail`)
+               */}
+              {needsRootCauseDetail(draft.rootCause) ? (
+                <TextareaField
+                  id="complaintDetails"
+                  label="รายละเอียดของสาเหตุ “อื่นๆ”"
+                  value={draft.complaintDetails}
+                  onChange={(v) => set("complaintDetails", v)}
+                  placeholder="สาเหตุจริงคืออะไร เกิดจากอะไร"
+                  hint=""
+                  readOnly={locked || busy}
+                  rows={2}
+                />
+              ) : null}
 
               <TextareaField
                 id="solution"
@@ -584,6 +667,11 @@ export function CaseModal({
             <p className="text-[12.5px] text-mut">
               {busy ? (
                 "กำลังบันทึก…"
+              ) : detailMissing ? (
+                /* บอกเหตุผลที่ปุ่มกดไม่ได้ตรงนี้ — ปุ่มจางเฉย ๆ ไม่ได้บอกอะไรใคร */
+                <span className="text-sla">
+                  ต้องระบุรายละเอียดของสาเหตุ “อื่นๆ” ก่อนจึงจะบันทึกได้
+                </span>
               ) : dirty ? (
                 <span className="text-sla">
                   ยังไม่ได้บันทึก {changed.length} รายการ
@@ -613,11 +701,10 @@ export function CaseModal({
                     type="button"
                     onClick={confirmAction}
                     disabled={busy || !remark.trim()}
-                    className={`flex items-center gap-1.5 rounded-field px-4 py-2 text-[13px] font-medium transition-opacity disabled:opacity-40 ${
-                      pendingAction === "approve"
+                    className={`flex items-center gap-1.5 rounded-field px-4 py-2 text-[13px] font-medium transition-opacity disabled:opacity-40 ${pendingAction === "approve"
                         ? "bg-primary text-primary-content"
                         : "bg-alert text-ink-content"
-                    }`}
+                      }`}
                   >
                     <Check size={15} strokeWidth={2.2} aria-hidden />
                     ยืนยัน{pendingAction === "approve" ? "อนุมัติ" : "ปฏิเสธ"}
@@ -672,7 +759,7 @@ export function CaseModal({
                   <button
                     type="button"
                     onClick={save}
-                    disabled={!dirty || busy}
+                    disabled={!dirty || busy || detailMissing}
                     className="rounded-field bg-primary px-5 py-2 text-[13px] font-medium text-primary-content transition-opacity disabled:opacity-40"
                   >
                     บันทึก

@@ -23,6 +23,7 @@ import {
   departmentLabel,
   formatShort,
   formatDate,
+  isNewCase,
   isSlaBreached,
   statusMeta,
 } from "@/lib/case-flow";
@@ -360,13 +361,16 @@ export function CaseTable({
                     <div className="flex items-start gap-2.5">
                       <Avatar name={c.driverName} className="mt-0.75" />
                       <div className="min-w-0">
-                        <Link
-                          href={`/desk/cases/${c.trackingNo}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="font-mono text-[11.5px] font-medium text-primary hover:text-ink"
-                        >
-                          {c.trackingNo}
-                        </Link>
+                        <span className="flex items-center gap-1.5">
+                          <Link
+                            href={`/desk/cases/${c.trackingNo}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-mono text-[11.5px] font-medium text-primary hover:text-ink"
+                          >
+                            {c.trackingNo}
+                          </Link>
+                          <NewBadge hrCase={c} />
+                        </span>
                         <span className="mt-0.5 block leading-snug font-medium text-pretty">
                           {c.subject}
                         </span>
@@ -440,7 +444,10 @@ export function CaseTable({
               className="group cursor-pointer rounded-box border border-line bg-base-100 p-3.5 transition-colors hover:border-primary/30"
             >
               <div className="flex items-center justify-between gap-2">
-                <StatusBadge status={statusOf(c)} short />
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <StatusBadge status={statusOf(c)} short />
+                  <NewBadge hrCase={c} />
+                </span>
                 <span
                   className={`flex-none text-[11.5px] ${breached ? "text-sla" : "text-mut"}`}
                 >
@@ -650,6 +657,28 @@ function Step({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * ป้าย “ใหม่” — คำร้องที่เข้ามาวันนี้ (กฎอยู่ที่ `isNewCase` ใน `lib/case-flow.ts`)
+ *
+ * เป็นพิลล์ทึบสี ink เพราะสีทั้ง 5 ของ chip สถานะถูกจองไว้หมดแล้ว — ถ้าใช้ฟ้า
+ * (`st-new`) จะกลายเป็นป้ายสีเดียวกับสถานะ “เปิดคำร้อง” ที่อยู่ห่างไปแค่คอลัมน์เดียว
+ * คนอ่านจะแยกไม่ออกว่าเป็นคนละเรื่องกัน
+ *
+ * `title` บอกวันที่แจ้งจริง — ป้ายบอกแค่ “วันนี้” ซึ่งไม่พอตอนไล่เทียบหลายเคส
+ */
+function NewBadge({ hrCase }: { hrCase: HrCase }) {
+  if (!isNewCase(hrCase)) return null;
+
+  return (
+    <span
+      title={`แจ้งเข้ามาวันนี้ · ${formatDate(hrCase.createdAt)}`}
+      className="flex-none rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] leading-none font-medium tracking-[0.02em] text-ink-content"
+    >
+      ใหม่
+    </span>
   );
 }
 

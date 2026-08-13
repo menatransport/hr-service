@@ -11,11 +11,11 @@ import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction } from "@/lib/swal";
 
 /**
- * ปุ่ม “แจ้งเรื่องเอง” + modal สร้างเคสแทนคนขับ (เช่น รับเรื่องทางโทรศัพท์)
+ * ปุ่ม “แจ้งเรื่องเอง” + modal สร้างคำร้องแทนคนขับ (เช่น รับเรื่องทางโทรศัพท์)
  *
  * ยิงตรงไปที่ `POST /api/cases` → `POST /complaints/` ของ NCAC จริง
  * (`ComplaintCreate` บังคับแค่ `driver_id` / `subject` / `detail`)
- * สร้างสำเร็จแล้วพาไปหน้าเคสนั้นทันทีผ่าน `CaseModal` ที่มีอยู่แล้ว
+ * สร้างสำเร็จแล้วพาไปหน้าคำร้องนั้นทันทีผ่าน `CaseModal` ที่มีอยู่แล้ว
  * แทนที่จะทำหน้าจอ “สำเร็จ” แยกต่างหาก
  *
  * ⚠️ ตัว overlay ต้อง `createPortal` ไป `document.body` เสมอ — ปุ่มนี้ถูก render
@@ -75,15 +75,15 @@ export function NewCaseButton() {
     const out = await runAction({
       confirm: {
         title: "ส่งเรื่องนี้เข้าระบบ?",
-        html: `เคสจะถูกสร้างในชื่อคนขับ <b>${escapeHtml(form.driverId.trim())}</b> และเข้าคิวเป็น “เปิดเคส” ทันที<span class="hrs-swal-quote">${escapeHtml(form.subject.trim())}</span>`,
+        html: `คำร้องจะถูกสร้างในชื่อคนขับ <b>${escapeHtml(form.driverId.trim())}</b> และเข้าคิวเป็น “เปิดคำร้อง” ทันที<span class="hrs-swal-quote">${escapeHtml(form.subject.trim())}</span>`,
         confirmText: "ส่งเรื่อง",
       },
-      pending: "กำลังสร้างเคส…",
-      failureTitle: "สร้างเคสไม่สำเร็จ",
-      /* กล่องกลางจอ ไม่ใช่ขนมปังปิ้ง — ต้องให้ผู้ใช้เห็นเลขเคสที่เพิ่งได้มาก่อนหน้าจะเด้งไปหน้าเคส */
+      pending: "กำลังสร้างคำร้อง…",
+      failureTitle: "สร้างคำร้องไม่สำเร็จ",
+      /* กล่องกลางจอ ไม่ใช่ขนมปังปิ้ง — ต้องให้ผู้ใช้เห็นเลขคำร้องที่เพิ่งได้มาก่อนหน้าจะเด้งไปหน้าคำร้อง */
       loud: true,
-      success: (data: { trackingNo: string }) => `สร้างเคส ${data.trackingNo} แล้ว`,
-      successDetail: "กำลังเปิดหน้าเคสให้กรอกแผนดำเนินการต่อ",
+      success: (data: { trackingNo: string }) => `สร้างคำร้อง ${data.trackingNo} แล้ว`,
+      successDetail: "กำลังเปิดหน้าคำร้องให้กรอกแผนดำเนินการต่อ",
       /* `busy` ล็อกฟอร์มเฉพาะช่วงที่ยิงจริง ไม่ใช่ตั้งแต่ตอนถามยืนยัน */
       run: async () => {
         setBusy(true);
@@ -91,7 +91,7 @@ export function NewCaseButton() {
           return await requestJson<{ trackingNo: string }>(
             "/api/cases",
             { method: "POST", body: form },
-            "สร้างเคสไม่สำเร็จ",
+            "สร้างคำร้องไม่สำเร็จ",
           );
         } finally {
           setBusy(false);
@@ -103,7 +103,7 @@ export function NewCaseButton() {
 
     setOpen(false);
     setForm(emptyForm);
-    router.push(`/desk/cases/${encodeURIComponent(out.data.trackingNo)}`);
+    router.push(`/desk`);
     router.refresh();
   }
 
@@ -153,7 +153,7 @@ export function NewCaseButton() {
                 <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-5">
                   <p className="text-[12.5px] text-mut text-pretty">
                     ใช้เมื่อรับเรื่องแทนคนขับ เช่น แจ้งทางโทรศัพท์ —
-                    เคสจะเข้าคิวเป็น “เปิดเคส” เหมือนแจ้งจากแอปมือถือ
+                    คำร้องจะเข้าคิวเป็น “เปิดคำร้อง” เหมือนแจ้งจากแอปมือถือ
                   </p>
 
                   <TextField

@@ -1,37 +1,23 @@
 import {
-  Ban,
-  BookOpen,
   BookUser,
   CalendarRange,
   Car,
-  CircleAlert,
   ClipboardList,
-  ClipboardX,
-  Database,
   Fuel,
-  Gift,
   HardHat,
   Inbox,
   Package,
-  Receipt,
-  Route,
   Scale,
   ShieldCheck,
-  Timer,
   Truck,
-  TriangleAlert,
-  UserRound,
-  UserX,
   Users,
   Wallet,
-  Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { DEPARTMENTS } from "./case-flow";
+import { DEPARTMENTS, ROOT_CAUSE_OTHER } from "./case-flow";
 import type {
   Announcement,
-  ComplaintTypeOption,
   Department,
   DepartmentId,
   Priority,
@@ -49,24 +35,6 @@ import type {
  */
 
 /* ---------------------------------------------------------------- ผู้ใช้ */
-
-/**
- * คนขับตัวอย่างฝั่งมือถือ — **ค่าสำรองตอนยังไม่ล็อกอินเท่านั้น**
- *
- * หน้าจอห้ามอ่านค่านี้ตรง ๆ ให้ผ่าน `getMobileIdentity()` ใน `lib/auth/session.ts`
- * ซึ่งคืนตัวตนจาก session ของ Google/NCAC ให้เมื่อมี · ที่ยังเหลือค่าสมมติไว้เพราะ
- * พจส. ไม่มีอีเมล `@menatransport.co.th` จึงล็อกอิน Google ไม่ได้ (ดู CLAUDE.md)
- */
-export const currentUser = {
-  name: "สมชาย ก.",
-  firstName: "สมชาย",
-  employeeId: "EMP-2043",
-  role: "พนักงานขับรถ",
-  team: "เขต 3",
-  plate: "82-4471",
-  manager: "ธีรวุฒิ พ.",
-  imageUrl: null as string | null,
-};
 
 /**
  * ผู้ใช้ฝั่งเดสก์ท็อป — ERZONE / HR ดูแลคิวคำร้องทั้งหมด
@@ -112,6 +80,7 @@ const DEPARTMENT_ICONS: Record<DepartmentId, LucideIcon> = {
   "20": Package,
   "8": ShieldCheck,
   "24": Users,
+  "17": ClipboardList,
 };
 
 export const departments: Department[] = (
@@ -126,53 +95,22 @@ export const departments: Department[] = (
 export const departmentIcon = (id: string | null): LucideIcon =>
   (id && DEPARTMENT_ICONS[id as DepartmentId]) || Inbox;
 
-/* ---------------------------------------------------------------- ประเภทข้อร้องเรียนตาม PIC */
-
-export const complaintTypesByDepartment: Record<
-  DepartmentId,
-  ComplaintTypeOption[]
-> = {
-  "3": [
-    { value: "สภาพรถ / ความพร้อมใช้งาน", icon: Car },
-    { value: "การซ่อมบำรุง / อุปกรณ์", icon: Wrench },
-    { value: "รถไม่ปลอดภัย / ชำรุด", icon: TriangleAlert },
-    { value: "การจัดรถ", icon: CalendarRange },
-  ],
-  "11": [
-    { value: "การเบิก–จ่ายน้ำมัน", icon: Receipt },
-    { value: "ปริมาณน้ำมันไม่ถูกต้อง", icon: Fuel },
-    { value: "ระบบบันทึกน้ำมัน", icon: Database },
-    { value: "โปร / สิทธิประโยชน์น้ำมัน", icon: Gift },
-  ],
-  "19": deliveryTypes(),
-  "15": deliveryTypes(),
-  "20": deliveryTypes(),
-  "8": [
-    { value: "อุบัติเหตุ / เกือบเกิดอุบัติเหตุ", icon: TriangleAlert },
-    { value: "อุปกรณ์ PPE", icon: HardHat },
-    { value: "สภาพแวดล้อมเสี่ยง", icon: CircleAlert },
-    { value: "การฝ่าฝืนกฎความปลอดภัย", icon: Ban },
-  ],
-  "24": [
-    { value: "ค่าจ้าง / สวัสดิการ", icon: Wallet },
-    { value: "วินัย / พฤติกรรม", icon: Scale },
-    { value: "ความเป็นธรรมในการทำงาน", icon: Scale },
-    { value: "การคุกคาม / เลือกปฏิบัติ", icon: UserX },
-    { value: "ระเบียบ / นโยบาย", icon: BookOpen },
-  ],
-};
-
-function deliveryTypes(): ComplaintTypeOption[] {
-  return [
-    { value: "แผนงาน / ตารางวิ่ง", icon: CalendarRange },
-    { value: "เส้นทาง / โหลดงาน", icon: Route },
-    { value: "เวลาทำงาน / OT", icon: Timer },
-    { value: "การสั่งงานไม่เหมาะสม", icon: ClipboardX },
-  ];
-}
-
-export const complaintTypesFor = (id: DepartmentId | null) =>
-  id ? complaintTypesByDepartment[id] : [];
+/* ----------------------------------------------------------------------------
+ * ประเภทข้อร้องเรียนตาม PIC — **ย้ายออกจากไฟล์นี้แล้ว 13 ส.ค. 2026**
+ *
+ * เดิมเป็น `complaintTypesByDepartment` ที่ hard-code ไว้ตรงนี้ แก้ทีต้อง deploy
+ * ใหม่ทุกครั้ง · ตอนนี้อยู่ในตาราง `complaint_master` ของ NCAC แก้ผ่านปุ่ม
+ * “ประเภทเรื่อง” บนหน้าคิวคำร้องได้เลย
+ *
+ * | ต้องการอะไร | ไปที่ไหน |
+ * |---|---|
+ * | อ่านฝั่ง server | `getComplaintTypes()` ใน `lib/complaint-types.ts` |
+ * | อ่าน/แก้ฝั่ง client | `/api/complaint-types` (ผ่าน `requestJson`) |
+ * | แปลงชื่อไอคอนเป็นคอมโพเนนต์ | `complaintIcon()` ใน `lib/complaint-icons.ts` |
+ *
+ * **อย่าสร้างรายการ hard-code กลับมาอีก** — ค่าที่อยู่สองที่จะหลุด sync ทันที
+ * ที่มีคนเพิ่มประเภทใหม่ผ่านหน้าจอ
+ * ------------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------- สาเหตุหลัก (Root cause) */
 
@@ -261,7 +199,8 @@ export const reasonGroups: ReasonGroup[] = [
     items: [
       "ปัจจัยจากลูกค้า / คู่ค้าภายนอก",
       "เหตุสุดวิสัย",
-      "อื่นๆ (ระบุรายละเอียด)",
+      // ข้อความมาจาก `case-flow.ts` เพราะเป็นค่าที่ต้องตรงกับข้อมูลเก่าใน NCAC
+      ROOT_CAUSE_OTHER,
     ],
   },
 ];
@@ -276,47 +215,6 @@ export const priorityMeta: Record<Priority, { label: string; chip: string }> = {
   medium: { label: "กลาง", chip: "border-line bg-base-200 text-mut" },
   low: { label: "ต่ำ", chip: "border-line bg-base-100 text-mut" },
 };
-
-/* ---------------------------------------------------------------- บริการองค์กร */
-
-export interface ServiceEntry {
-  href: string;
-  label: string;
-  shortLabel: string;
-  hint: string;
-  hintTone?: "mut" | "alert";
-  icon: LucideIcon;
-}
-
-/**
- * เมนูบริการของแอปมือถือ — รับจำนวนคำร้องที่ยังไม่ปิดเข้ามา เพราะตัวเลขนั้น
- * มาจาก NCAC API จึงประกาศเป็นค่าคงที่ตอน build ไม่ได้อีกแล้ว
- */
-export function buildServices(openCaseCount: number): ServiceEntry[] {
-  return [
-    {
-      href: "/m/cases/new",
-      label: "ข้อร้องเรียน",
-      shortLabel: "แจ้งเรื่อง",
-      hint: "6 กลุ่มเรื่องหลัก",
-      icon: TriangleAlert,
-    },
-    {
-      href: "/m/cases",
-      label: "คำร้องของฉัน",
-      shortLabel: "คำร้องของฉัน",
-      hint: `${openCaseCount} เรื่องยังไม่ปิด`,
-      icon: ClipboardList,
-    },
-    {
-      href: "/m/me",
-      label: "โปรไฟล์",
-      shortLabel: "โปรไฟล์",
-      hint: "ข้อมูลพนักงาน",
-      icon: UserRound,
-    },
-  ];
-}
 
 /* ---------------------------------------------------------------- เมนู HR desk */
 

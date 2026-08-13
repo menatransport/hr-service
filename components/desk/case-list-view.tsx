@@ -1,4 +1,5 @@
 import { CaseTable } from "@/components/desk/case-table";
+import { ComplaintTypeButton } from "@/components/desk/complaint-type-modal";
 import { NewCaseButton } from "@/components/desk/new-case-modal";
 import { PageHead } from "@/components/desk/page-head";
 import { DataError } from "@/components/ui/data-error";
@@ -22,7 +23,12 @@ export async function CaseListView() {
         <PageHead
           title="แจ้งข้อร้องเรียน"
           subtitle="ทุกเรื่องร้องเรียนที่ พจส. แจ้งเข้ามา"
-          actions={<NewCaseButton />}
+          actions={
+            <>
+              <ComplaintTypeButton />
+              <NewCaseButton />
+            </>
+          }
         />
         <DataError message={dataErrorMessage(err)} />
       </div>
@@ -34,7 +40,12 @@ export async function CaseListView() {
       <PageHead
         title="แจ้งข้อร้องเรียน"
         subtitle="คลิกที่แถวเพื่อเปิดรายละเอียดและดำเนินการ"
-        actions={<NewCaseButton />}
+        actions={
+          <>
+            <ComplaintTypeButton />
+            <NewCaseButton />
+          </>
+        }
       />
       <CaseTable cases={cases} />
     </div>

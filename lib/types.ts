@@ -16,7 +16,7 @@ export type CaseStatus =
 export type Priority = "low" | "medium" | "high";
 
 /** รหัสหน่วยงานผู้รับผิดชอบ (PIC) — ตรงกับ department_id ของระบบเดิม */
-export type DepartmentId = "3" | "11" | "15" | "19" | "20" | "8" | "24";
+export type DepartmentId = "3" | "11" | "15" | "19" | "20" | "8" | "24" | "17";
 
 /** กลุ่มสาเหตุหลัก (Reason code) ที่คนขับเลือกตอนแจ้งเรื่อง */
 export type ReasonGroupCode = "PAY" | "OPS" | "VEH" | "SAF" | "MGT" | "OTH";
@@ -56,15 +56,28 @@ export interface HrCase {
 
   /** PIC ที่ ERZONE จัดให้ — null = ยังไม่คัดกรอง */
   departmentId: DepartmentId | null;
-  /** ประเภทข้อร้องเรียนย่อย ขึ้นกับ PIC ที่เลือก */
+  /**
+   * id ของประเภทเรื่องใน `complaint_master` (คอลัมน์ `problem` ของ NCAC)
+   * — **ค่านี้คือค่าที่ฟอร์มส่งกลับไปบันทึก** ไม่ใช่ `complaintType`
+   */
+  complaintTypeId: number | null;
+  /** ชื่อประเภทเรื่องสำหรับแสดงผล — มาจาก `problem_master` ที่ backend join มาให้ */
   complaintType: string | null;
 
   status: CaseStatus;
   priority: Priority;
 
-  /* --- ส่วนที่ PIC กรอกในขั้น “จัดการเคส” --- */
-  problem: string | null;
+  /* --- ส่วนที่ PIC กรอกในขั้น “จัดการเคส” ---
+   *
+   * ไม่มี `problem` แยกอีกแล้ว — คอลัมน์ `problem` ของ NCAC **คือ** ประเภทเรื่อง
+   * ซึ่งอ่านผ่าน `complaintTypeId` / `complaintType` ข้างบนแทน (13 ส.ค. 2026)
+   */
   rootCause: string | null;
+  /**
+   * รายละเอียดของสาเหตุ “อื่นๆ” (`complaint_details` ของ NCAC) — มีค่าเฉพาะเมื่อ
+   * `needsRootCauseDetail(rootCause)` เป็นจริง ที่เหลือเป็น `null` เสมอ
+   */
+  complaintDetails: string | null;
   solution: string | null;
   result: string | null;
   damageCost: number | null;
@@ -135,9 +148,22 @@ export interface Department {
   icon: LucideIcon;
 }
 
-export interface ComplaintTypeOption {
-  value: string;
-  icon: LucideIcon;
+/**
+ * “ประเภทเรื่อง” หนึ่งรายการ — มาจากตาราง `complaint_master` ของ NCAC
+ * (เดิม hard-code อยู่ใน `lib/data.ts` แก้ทีต้อง deploy ใหม่ ถอดออกแล้ว 13 ส.ค. 2026)
+ *
+ * `departmentId` เป็น `string` ธรรมดา **ไม่ใช่ `DepartmentId`** โดยตั้งใจ —
+ * ผู้ใช้เพิ่มประเภทให้หน่วยงานไหนก็ได้ผ่านหน้าจอจัดการ ถ้าบีบเป็น union
+ * แถวของหน่วยงานที่ระบบยังไม่รู้จักจะกลายเป็นข้อมูลผิดชนิดทันทีที่ดึงมา
+ */
+export interface ComplaintType {
+  id: number;
+  departmentId: string;
+  name: string;
+  /** ชื่อไอคอน lucide (`"Wrench"`) — แปลงเป็นคอมโพเนนต์ที่ `lib/complaint-icons.ts` */
+  icon: string | null;
+  sortOrder: number;
+  isActive: boolean;
 }
 
 export interface ReasonGroup {

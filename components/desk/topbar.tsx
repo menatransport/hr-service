@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Headset, Menu, Smartphone } from "lucide-react";
+import { Headset, Menu } from "lucide-react";
 
 import { LogoutButton } from "@/components/auth/logout-button";
 import { NotificationBell } from "@/components/desk/notification-bell";
@@ -52,20 +52,6 @@ export async function DeskTopBar({ identity }: { identity: DeskIdentity }) {
       </Link>
 
       <div className="ml-auto flex items-center gap-1">
-        <Link
-          href="/m"
-          title="มุมมองพนักงาน (มือถือ)"
-          className="group flex size-9 items-center justify-center rounded-selector text-mut transition-colors hover:bg-base-200 hover:text-ink"
-        >
-          <Smartphone
-            size={18}
-            strokeWidth={1.6}
-            aria-hidden
-            className="transition-transform duration-300 group-hover:scale-115 group-hover:-rotate-8"
-          />
-          <span className="sr-only">มุมมองพนักงาน</span>
-        </Link>
-
         <ThemeToggle />
         {/* ทางเข้า `/desk/activity` (ประวัติการทำงาน) อยู่ท้ายดรอปดาวน์ของกระดิ่งนี้ */}
         <NotificationBell items={notifications} />

@@ -1,13 +1,13 @@
 import { positionLevel, positionLevelLabel } from "../ncac/adapt";
-import { currentUser, deskUser } from "../data";
+import { deskUser } from "../data";
 import type { SessionUser } from "./token";
 
 /**
  * “ผู้ใช้ที่กำลังดูหน้าอยู่” ในรูปแบบที่หน้าจอใช้จริง
  *
  * มาจาก session ของ Google/NCAC เสมอเมื่อล็อกอินแล้ว — ค่าใน `lib/data.ts`
- * เหลือไว้เป็น **ค่าสำรองตอนยังไม่ล็อกอิน** เท่านั้น (`/m` ยังเปิดดูได้โดยไม่ล็อกอิน
- * เพราะคนขับไม่มีอีเมลบริษัท ส่วน `/desk` ถูก `middleware.ts` กั้นไว้แล้ว)
+ * เหลือไว้เป็น **ค่าสำรองตอนยังไม่ล็อกอิน** เท่านั้น (`/desk` ถูก `proxy.ts` กั้นไว้แล้ว
+ * ค่าสำรองจึงได้ใช้แค่ตอนคุกกี้หมดอายุพอดีระหว่าง render)
  *
  * ไฟล์นี้ถูก import ได้ทั้งฝั่ง client และ server — ห้ามใส่อะไรที่ผูกกับ Node
  * ตัวอ่าน session จริงอยู่ที่ `lib/auth/session.ts`
@@ -34,18 +34,6 @@ export interface DeskIdentity {
   authenticated: boolean;
 }
 
-/** ฝั่งมือถือใช้ชุดที่ต่างออกไป — คนขับมีทะเบียนรถ/เขต ส่วนพนักงานออฟฟิศไม่มี */
-export interface MobileIdentity {
-  employeeId: string;
-  name: string;
-  firstName: string;
-  role: string;
-  team: string | null;
-  plate: string | null;
-  imageUrl: string | null;
-  authenticated: boolean;
-}
-
 /** `ทรัพยากรบุคคล · Assistant Manager` — ตัดช่องที่ NCAC ส่งขีดกลางมาให้ทิ้ง */
 const roleLine = (department: string, position: string): string =>
   [department, position].filter((v) => v && v !== "—").join(" · ") || "พนักงาน";
@@ -67,20 +55,6 @@ export function toDeskIdentity(user: SessionUser): DeskIdentity {
   };
 }
 
-export function toMobileIdentity(user: SessionUser): MobileIdentity {
-  return {
-    employeeId: user.employeeId,
-    name: user.name || user.employeeId,
-    firstName: user.firstName || user.name || user.employeeId,
-    role: roleLine(user.department, user.position),
-    // พนักงานออฟฟิศไม่มีรถประจำตัว/เขต — ให้ `null` แล้วหน้าจอซ่อนแถวนั้นไปเลย
-    team: null,
-    plate: null,
-    imageUrl: user.imageUrl,
-    authenticated: true,
-  };
-}
-
 /** ค่าสำรองของ desk ตอนยังไม่ล็อกอิน — ใช้แค่ตอน render นอก `middleware` เท่านั้น */
 export const FALLBACK_DESK_IDENTITY: DeskIdentity = {
   employeeId: deskUser.employeeId,
@@ -93,17 +67,5 @@ export const FALLBACK_DESK_IDENTITY: DeskIdentity = {
   level: deskUser.level,
   levelLabel: positionLevelLabel(deskUser.position),
   imageUrl: deskUser.imageUrl,
-  authenticated: false,
-};
-
-/** ค่าสำรองของมือถือ — คนขับตัวอย่าง ใช้จนกว่าจะมีทางล็อกอินของ พจส. */
-export const FALLBACK_MOBILE_IDENTITY: MobileIdentity = {
-  employeeId: currentUser.employeeId,
-  name: currentUser.name,
-  firstName: currentUser.firstName,
-  role: currentUser.role,
-  team: currentUser.team,
-  plate: currentUser.plate,
-  imageUrl: currentUser.imageUrl,
   authenticated: false,
 };

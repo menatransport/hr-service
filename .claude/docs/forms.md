@@ -3,7 +3,7 @@
 > Read when: adding/changing any input, touching a dropdown, touching the in-dropdown search box.
 
 Every input in the system comes from this one file. **Never write raw `<input>` / `<select>` /
-`<textarea>` anywhere else** (the only exception is the `sr-only` radio/file inputs in the wizard).
+`<textarea>` anywhere else.**
 
 | Export | Use for |
 |---|---|
@@ -21,7 +21,7 @@ the route. `lib/image-resize.ts` shrinks anything over 600 KB to a max 1600 px e
 before it leaves the browser, and silently returns the original if the browser can't decode it.
 
 Shared props on every field: `id` `label` `hint` `optional` `readOnly` `srLabel` `labelRight`
-`className`, plus **`size`** — `md` (desk side, default) / `lg` (taller mobile form fields).
+`className`, plus **`size`** — `md` (default) / `lg` (taller fields on roomy forms).
 
 **Required is the default.** A label with no `optional` renders a red `*` (`text-alert`) and the
 control gets `aria-required`; `optional` removes both and prints nothing in its place — required is

@@ -4,22 +4,29 @@
 
 Cases are live — cases, approvers and employee records come from the **NCAC API** (the same one the
 legacy `driver-complaint` system uses). Still sample data: **announcements** only.
-**Auth is live too** — Google OAuth → NCAC (see below); `currentUser` / `deskUser` in `lib/data.ts`
-are now only the logged-out fallback.
+**Auth is live too** — Google OAuth → NCAC (see below); `deskUser` in `lib/data.ts`
+is now only the logged-out fallback.
+
+> **เวอร์ชันมือถือของคนขับถูกถอดออกทั้งชุดตามคำสั่งเจ้าของงาน (10 ส.ค. 2026) — ระบบเหลือแต่ `/desk`**
+> Deleted: `app/m/**` `components/m/**` · ปุ่ม “มุมมองพนักงาน” บน topbar ·
+> `currentUser` `ServiceEntry` `buildServices()` ใน `lib/data.ts` ·
+> `MobileIdentity` `toMobileIdentity()` `FALLBACK_MOBILE_IDENTITY` ใน `lib/auth/identity.ts` ·
+> `getMobileIdentity()` ใน `lib/auth/session.ts` · `getCasesByDriver()` ใน `lib/cases.ts`
+> **อย่าสร้างกลับมาเองถ้าไม่ได้สั่ง** · `isOpenCase()` ใน `lib/case-flow.ts` เก็บไว้ (ไม่มีใครเรียกแล้ว
+> แต่เป็นกฎธุรกิจกลาง)
 
 Set `API_NCAC_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `AUTH_SECRET` in `.env.local`
 before running — without `API_NCAC_URL`, case pages render `DataError`, not a blank page.
 
 > **The announcements and reports pages were temporarily removed on the owner's instruction (6 Aug 2026).**
-> Deleted: routes `/desk/announcements` `/desk/reports` `/m/services/announcements` + their menu items,
+> Deleted: routes `/desk/announcements` `/desk/reports` + their menu items,
 > tiles and notifications.
 > **Kept on purpose — do not delete:** `announcements` / `monthlyVolume` in `lib/data.ts`,
 > `lib/case-report.ts`, `case-volume-chart.tsx`, `reason-bars.tsx`
 
 > **Room / vehicle booking was removed on the owner's instruction (7 Aug 2026) — mocks included.**
-> Deleted: routes `/desk/rooms` `/desk/vehicles` `/m/services/rooms` `/m/services/vehicles`,
-> `components/m/room-booking.tsx`, `ServiceTileSmall`, the `บริการองค์กร` block on `/m` and in
-> `deskNav`, `rooms` / `vehicles` / `timeSlots` in `lib/data.ts`, and the `Room` / `Vehicle` types.
+> Deleted: routes `/desk/rooms` `/desk/vehicles`, the `บริการองค์กร` block in `deskNav`,
+> `rooms` / `vehicles` / `timeSlots` in `lib/data.ts`, and the `Room` / `Vehicle` types.
 > Also under `งานของฉัน`: **`ประวัติการทำงาน`** (`/desk/activity`) — อ่าน `complaint_logs`
 > ของ NCAC ผ่าน `GET /complaints/logs` แสดงว่าใครทำอะไรกับคำร้องไหน รวมคำร้องที่ถูกลบแล้ว
 > **แยกจากกระดิ่งแจ้งเตือนโดยตั้งใจ** (กระดิ่ง = “ต้องทำอะไรต่อ” · หน้านี้ = “เกิดอะไรขึ้นแล้ว”)
@@ -38,7 +45,7 @@ before running — without `API_NCAC_URL`, case pages render `DataError`, not a 
 | `.claude/docs/forms.md` | Any input · Radix dropdowns · the in-dropdown search box |
 | `.claude/docs/domain.md` | Case status, roles, form lock rules, SLA, timeline, reference data |
 | `.claude/docs/data-layer.md` | `lib/ncac/**` `lib/cases.ts` `app/api/**`, writes, 405/404 issues |
-| `.claude/docs/routes-ui.md` | Adding/changing pages, layouts, `/m`, `/desk`, `case-modal.tsx`, notifications |
+| `.claude/docs/routes-ui.md` | Adding/changing pages, layouts, `/desk`, `case-modal.tsx`, notifications |
 
 ## Two sources, strictly separated
 
@@ -59,7 +66,7 @@ Next.js 16 App Router (Turbopack) + React 19 + TS strict · Tailwind v4 (CSS-fir
 as the dropdown base · **no shadcn, and no copying prebuilt components from anywhere**
 
 `@vercel/analytics` — `<Analytics />` จาก `@vercel/analytics/next` วางไว้ท้าย `<body>` ใน
-`app/layout.tsx` ที่เดียว (อย่าใส่ซ้ำใน layout ของ `/desk` หรือ `/m` เดี๋ยวนับซ้ำ) · เงียบตอน dev
+`app/layout.tsx` ที่เดียว (อย่าใส่ซ้ำใน layout ของ `/desk` เดี๋ยวนับซ้ำ) · เงียบตอน dev
 เก็บสถิติจริงเมื่อ deploy บน Vercel และเปิด Analytics ในโปรเจกต์แล้วเท่านั้น · beacon ยิงไป
 `/_vercel/insights/*` โดเมนเดียวกัน `proxy.ts` ไม่ได้ครอบพาธนี้จึงไม่ต้องแก้ matcher
 
@@ -76,14 +83,14 @@ as the dropdown base · **no shadcn, and no copying prebuilt components from any
 | ไฟล์ | หน้าที่ |
 |---|---|
 | `lib/auth/token.ts` | เซ็น/ตรวจคุกกี้ + ชื่อคุกกี้ + `safeNextPath()` — **ต้องรันบน Edge ได้ ห้าม import `next/headers`** |
-| `lib/auth/session.ts` | `getDeskIdentity()` `getMobileIdentity()` `getActorEmployeeId()` (server เท่านั้น) |
+| `lib/auth/session.ts` | `getDeskIdentity()` `getActorEmployeeId()` (server เท่านั้น) |
 | `lib/auth/google.ts` | สร้าง authorize URL + แลก code · `callbackUrl()` ทับได้ด้วย `APP_URL` |
-| `lib/auth/identity.ts` | ชนิด `DeskIdentity` / `MobileIdentity` + ค่าสำรอง (import ได้ทั้งสองฝั่ง) |
+| `lib/auth/identity.ts` | ชนิด `DeskIdentity` + ค่าสำรอง (import ได้ทั้งสองฝั่ง) |
 | `proxy.ts` | ด่าน: `/desk/**` ไม่มี session → เด้งไป `/?next=…` · เขียนข้อมูลผ่าน `/api/**` → 401 |
 
-- **ห้าม import `deskUser` / `currentUser` ในหน้าจออีก** — server ใช้ `getDeskIdentity()` /
-  `getMobileIdentity()` · client ใช้ `useDeskIdentity()` (`components/auth/identity-provider.tsx`
-  ที่ `app/desk/layout.tsx` ครอบไว้ให้แล้ว)
+- **ห้าม import `deskUser` ในหน้าจออีก** — server ใช้ `getDeskIdentity()` · client ใช้
+  `useDeskIdentity()` (`components/auth/identity-provider.tsx` ที่ `app/desk/layout.tsx`
+  ครอบไว้ให้แล้ว)
 - **รหัสผู้ทำรายการมาจาก session เท่านั้น** — `getActorEmployeeId()` ใน route ที่อนุมัติ/ปิด/ลบ ·
   ห้ามรับ `reviewerEmployeeId` / `closerEmployeeId` / `deletedByEmployeeId` จาก body กลับมาอีก
 - **พาธ callback ถูกบังคับด้วยของที่ลงทะเบียนไว้แล้ว** — client id นี้ใช้ร่วมกับ
@@ -94,14 +101,13 @@ as the dropdown base · **no shadcn, and no copying prebuilt components from any
 - NCAC ตอบ **403 ถ้าไม่มีบัญชีพนักงานคนนั้นในฐานข้อมูล** (ไม่ได้สร้างให้อัตโนมัติ) และเป็นคน
   บันทึกรูป Google ลง `image_url` ให้เองเฉพาะครั้งแรกที่ล็อกอิน
 - ยังไม่ได้ทำ: ไม่ได้ส่ง `Authorization` ไปกับคำขออื่นเลย (JWT ของ NCAC อายุ 30 นาที เก็บไว้ใน
-  คุกกี้เฉย ๆ รอวันที่ backend บังคับ) · ไม่มี refresh token · `/m` ยังไม่ถูกกั้น
+  คุกกี้เฉย ๆ รอวันที่ backend บังคับ) · ไม่มี refresh token
 
 ## Hard rules (breaking these breaks something real)
 
 - **Colors come from tokens only** — never raw `text-white` / `bg-[#…]`, or the dark theme breaks ·
   every new token also needs a dark value in the `[data-theme="hrs-dark"]` block
 - **Every input comes from `components/ui/field.tsx`** — never raw `<input>`/`<select>`/`<textarea>`
-  (the only exception is the `sr-only` radio/file inputs in the wizard)
 - **All business rules live in `lib/case-flow.ts`** · `lib/data.ts` holds data only ·
   all API mapping/derivation lives in `lib/ncac/adapt.ts` — never re-derive in a component
 - **Never use `Intl` / `toLocaleDateString`** — use `formatShort`/`formatDate`/`formatDateTime` ·
@@ -131,13 +137,10 @@ npx tsc --noEmit     # typecheck alone
 
 ## Not built yet (don't mistake these for bugs)
 
-- **Reporting a new case from mobile doesn't persist** — the `/m/cases/new` wizard ends at the
-  "ส่งเรื่องเรียบร้อย" screen because cases are created in **mena-go**, not NCAC. Needs a create endpoint first.
-- **The message thread (`notes`) has no endpoint → always `[]`** · the mobile "ส่งข้อความถึงผู้รับผิดชอบ"
-  field can't submit · the desk-side "ตอบกลับ พจส." field **was removed — do not add it back**
-- **Auth is built — but `/m` is still open on purpose.** Drivers (พจส.) have no company Google
-  account, so `/m` renders the sample driver when there is no session and the logged-in person when
-  there is. Only `/desk/**` and write requests are gated (see the auth section below).
+- **ไม่มีทางสร้างคำร้องใหม่จากในระบบนี้** — คำร้องถูกสร้างที่ **mena-go** ไม่ใช่ NCAC
+  (วิซาร์ดฝั่งมือถือที่เคยเป็นตัวจำลองก็ถูกถอดออกไปพร้อมกับ `/m` แล้ว)
+- **The message thread (`notes`) has no endpoint → always `[]`** · the desk-side
+  "ตอบกลับ พจส." field **was removed — do not add it back**
 - The notification bell's "read" state lives in `localStorage` (คีย์ `hrs.desk.notifications.read`)
   — อยู่ข้ามรีเฟรช/ข้ามแท็บ แต่ผูกกับเครื่อง ไม่ใช่กับผู้ใช้ (NCAC ยังไม่มี endpoint สถานะการอ่าน;
   ตอนนี้มี auth แล้ว ต่อ `employeeId` ท้ายคีย์ได้เลยเมื่อต้องการ)
@@ -173,4 +176,3 @@ npx tsc --noEmit     # typecheck alone
   ล็อกอินไม่ได้ และถูกกรองออกจากสมุดรายชื่อใน `getEmployees()`) ต่อ auth เมื่อไหร่
   ให้มาจากบัญชีที่ล็อกอินจริงแทน
 - No Excel export (the legacy system had one — to build it, add `xlsx` and read from `getCases()`)
-- Wizard attachments are held as `URL.createObjectURL` in memory and are lost on reload
