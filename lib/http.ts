@@ -56,3 +56,61 @@ export async function requestJson<T = unknown>(
   if (!res.ok) throw new Error(messageOf(payload, fallbackMessage));
   return payload as T;
 }
+
+/* ------------------------------------------------------------------ ดาวน์โหลดไฟล์ */
+
+/** ชื่อไฟล์จาก `Content-Disposition` — `filename*` (UTF-8) มาก่อนเสมอ ไทยจะได้ไม่เพี้ยน */
+function fileNameOf(disposition: string | null, fallback: string): string {
+  if (!disposition) return fallback;
+
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      /* ชื่อที่ encode มาไม่ถูก — ตกไปใช้ `filename=` ธรรมดาแทน */
+    }
+  }
+
+  const plain = /filename="?([^";]+)"?/i.exec(disposition);
+  return plain ? plain[1] : fallback;
+}
+
+/**
+ * ยิง request แล้วเซฟผลลัพธ์เป็นไฟล์ให้ผู้ใช้
+ *
+ * มีคู่กับ `requestJson()` เพราะเส้นที่ตอบเป็นไฟล์ **ยังตอบ `{ error }` เป็น JSON
+ * เมื่อพัง** — ถ้าปล่อยให้ `<a download>` พาไปเอง เบราว์เซอร์จะเซฟข้อความ error
+ * ลงเครื่องเป็นไฟล์ `.xlsx` ที่เปิดไม่ขึ้นแทนที่จะบอกผู้ใช้ว่าเกิดอะไรขึ้น
+ *
+ * คืนชื่อไฟล์ที่เซฟจริง เพื่อให้ผู้เรียกเอาไปขึ้นข้อความยืนยันได้
+ */
+export async function downloadFile(
+  url: string,
+  fallbackName: string,
+  fallbackMessage = "ดาวน์โหลดไฟล์ไม่สำเร็จ",
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "GET" });
+  } catch {
+    throw new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง");
+  }
+
+  if (!res.ok) throw new Error(messageOf(await parse(res), fallbackMessage));
+
+  const blob = await res.blob();
+  const name = fileNameOf(res.headers.get("Content-Disposition"), fallbackName);
+
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // ปล่อยทีหลังหนึ่งจังหวะ — บางเบราว์เซอร์ยังอ่าน blob อยู่ตอนที่ `click()` คืนค่ามาแล้ว
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
+
+  return name;
+}

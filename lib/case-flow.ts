@@ -26,10 +26,31 @@ const THAI_MONTHS = [
   "ธ.ค.",
 ];
 
-/** แปลง ISO เป็นเวลาไทย (UTC+7) แบบไม่พึ่ง Intl — ผลลัพธ์เท่ากันทั้ง server และ client */
+/**
+ * ระยะที่ต้องเลื่อนเวลาดิบจาก NCAC ให้กลายเป็นเวลาไทยที่แสดงบนหน้าจอ
+ *
+ * **เป็น 14 ชั่วโมงไม่ใช่ 7 โดยตั้งใจ** — NCAC ส่งเวลามาแบบไม่มีโซนต่อท้าย
+ * (`2026-08-01T01:15:00`) ซึ่ง `new Date()` ตีความเป็นเวลาของเครื่องที่รันอยู่
+ * (+07) ทั้งที่ค่าจริงเป็น UTC · ต้องถอนออก 7 แล้วบวกกลับเป็นเวลาไทยอีก 7
+ *
+ * ทุกที่ที่แสดงเวลา **ต้องผ่านค่านี้ที่เดียว** — ไฟล์ Excel ที่ส่งออกก็ใช้ตัวเดียวกัน
+ * ผ่าน `toBangkokDate()` เวลาบนหน้าจอกับในไฟล์จึงไม่มีทางเพี้ยนคนละทาง
+ */
+const BANGKOK_SHIFT_MS = 14 * 60 * 60 * 1000;
+
+/**
+ * ISO → `Date` ที่ **ฟิลด์ UTC ของมันคือเวลาไทยที่ผู้ใช้เห็น**
+ *
+ * (`getUTCHours()` ของค่าที่คืนมา = ชั่วโมงบนหน้าจอ) — ใช้กับตัวที่ต้องการ
+ * `Date` จริง ๆ อย่างเซลล์วันที่ของ Excel ส่วนการแสดงผลบนเว็บใช้ `formatDate` ฯลฯ
+ */
+export function toBangkokDate(iso: string): Date {
+  return new Date(new Date(iso).getTime() + BANGKOK_SHIFT_MS);
+}
+
+/** แปลง ISO เป็นเวลาไทย แบบไม่พึ่ง Intl — ผลลัพธ์เท่ากันทั้ง server และ client */
 function toBangkok(iso: string) {
-  const d = new Date(iso);
-  const t = new Date(d.getTime() + 14 * 60 * 60 * 1000);
+  const t = toBangkokDate(iso);
   return {
     day: t.getUTCDate(),
     month: THAI_MONTHS[t.getUTCMonth()],

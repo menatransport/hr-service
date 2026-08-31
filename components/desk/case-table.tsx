@@ -3,18 +3,19 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Inbox,
-  Paperclip,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Inbox, Paperclip, Plus, Trash2 } from "lucide-react";
 
+import { ExportExcelButton } from "@/components/desk/export-button";
 import { Avatar } from "@/components/ui/avatar";
 import { SearchField, Select, type SelectOption } from "@/components/ui/field";
+import { Pager } from "@/components/ui/pager";
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  UNASSIGNED,
+  hasFilters,
+  matchesFilters,
+  type CaseFilters,
+} from "@/lib/case-filter";
 import {
   STATUS_FLOW,
   TOTAL_STEPS,
@@ -33,9 +34,6 @@ import { escapeHtml, runAction } from "@/lib/swal";
 import type { CaseStatus, DepartmentId, HrCase } from "@/lib/types";
 
 type StatusFilter = CaseStatus | "all";
-
-/** ค่าของ dropdown ต้องไม่ใช่ค่าว่าง (ค่าว่าง = ยังไม่เลือก) จึงใช้ `none` แทน */
-const UNASSIGNED = "none";
 
 /** จำนวนคำร้องต่อหน้า — เริ่มที่ 10 ตามที่ตกลงไว้ */
 const PAGE_SIZES = [10, 20, 50] as const;
@@ -174,22 +172,27 @@ export function CaseTable({
     });
   }
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  /**
+   * ตัวกรองชุดเดียวกับที่ปุ่มส่งออก Excel ส่งไปให้เซิร์ฟเวอร์ — กฎการกรองอยู่ที่
+   * `lib/case-filter.ts` ที่เดียว ไฟล์ที่ได้จึงตรงกับที่เห็นบนจอเสมอ
+   */
+  const filters: CaseFilters = useMemo(
+    () => ({ query, status, department, slaOnly }),
+    [query, status, department, slaOnly],
+  );
 
+  const rows = useMemo(() => {
     return cases.filter((c) => {
       if (removed.has(c.trackingNo)) return false;
-      if (status !== "all" && statusOf(c) !== status) return false;
-      if (department !== "all" && (deptOf(c) ?? UNASSIGNED) !== department)
-        return false;
-      if (slaOnly && !isSlaBreached(c)) return false;
-      if (!q) return true;
-      return `${c.trackingNo} ${c.subject} ${c.driverId} ${c.driverName}`
-        .toLowerCase()
-        .includes(q);
+      // ส่งมุมมองปัจจุบันของแถวเข้าไป — เคสที่เพิ่งมอบหมายไปต้องถูกกรองด้วยค่าใหม่
+      // ทันที ไม่ต้องรอ `router.refresh()` วิ่งกลับมา
+      return matchesFilters(c, filters, {
+        status: statusOf(c),
+        departmentId: deptOf(c),
+      });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cases, query, status, department, slaOnly, assigned, removed]);
+  }, [cases, filters, assigned, removed]);
 
   /**
    * ตัวเลขของแต่ละสถานะอยู่บนชิปกรองเลย — ไม่มีการ์ดสรุปแยกอีกชุด
@@ -230,8 +233,7 @@ export function CaseTable({
     setPage(1);
   }
 
-  const filtered =
-    query.trim() !== "" || status !== "all" || department !== "all" || slaOnly;
+  const filtered = hasFilters(filters);
 
   function clearFilters() {
     setQuery("");
@@ -275,15 +277,22 @@ export function CaseTable({
               เกิน SLA
             </Chip>
 
-            {filtered ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="ml-auto flex-none rounded-full px-3 py-1.5 text-[12.5px] text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
-              >
-                ล้างตัวกรอง
-              </button>
-            ) : null}
+            {/*
+             * ส่งออก + ล้างตัวกรองอยู่ปลายแถวเดียวกัน — ทั้งคู่ทำกับ “ชุดที่กรองไว้
+             * ตอนนี้” เหมือนกัน จึงควรอยู่ติดกันแทนที่จะกระจายไปคนละมุมของหน้า
+             */}
+            <div className="ml-auto flex flex-none items-center gap-2">
+              {filtered ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="flex-none rounded-full px-3 py-1.5 text-[12.5px] text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
+                >
+                  ล้างตัวกรอง
+                </button>
+              ) : null}
+              <ExportExcelButton filters={filters} count={rows.length} />
+            </div>
           </div>
 
           <div
@@ -553,110 +562,6 @@ export function CaseTable({
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * แถบเลขหน้า — แสดงหน้าแรก/หน้าสุดท้ายเสมอ และขยับหน้าต่างรอบหน้าปัจจุบัน
- * เพื่อให้ความกว้างคงที่ ไม่ว่าจะมีกี่หน้า
- */
-function pageWindow(current: number, count: number): (number | "gap")[] {
-  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1);
-
-  const around = [current - 1, current, current + 1].filter(
-    (n) => n > 1 && n < count,
-  );
-  const pages = [1, ...around, count];
-
-  const out: (number | "gap")[] = [];
-  for (const [i, n] of pages.entries()) {
-    if (i && n - (pages[i - 1] as number) > 1) out.push("gap");
-    out.push(n);
-  }
-  return out;
-}
-
-function Pager({
-  current,
-  count,
-  onGo,
-}: {
-  current: number;
-  count: number;
-  onGo: (page: number) => void;
-}) {
-  // หน้าเดียวก็ไม่ต้องมีปุ่มให้กด
-  if (count <= 1) return null;
-
-  return (
-    <nav aria-label="แบ่งหน้า" className="flex items-center gap-1">
-      <Step
-        label="หน้าก่อนหน้า"
-        disabled={current <= 1}
-        onClick={() => onGo(current - 1)}
-      >
-        <ChevronLeft size={15} strokeWidth={1.9} aria-hidden />
-      </Step>
-
-      {pageWindow(current, count).map((n, i) =>
-        n === "gap" ? (
-          <span
-            key={`gap-${i}`}
-            aria-hidden
-            className="px-1 text-[12.5px] text-mut"
-          >
-            …
-          </span>
-        ) : (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onGo(n)}
-            aria-label={`หน้า ${n}`}
-            aria-current={n === current ? "page" : undefined}
-            className={`size-8 flex-none rounded-selector text-[12.5px] transition-colors ${
-              n === current
-                ? "border border-ink bg-ink font-medium text-ink-content"
-                : "border border-line bg-base-100 text-mut hover:border-ink/30 hover:text-ink"
-            }`}
-          >
-            {n}
-          </button>
-        ),
-      )}
-
-      <Step
-        label="หน้าถัดไป"
-        disabled={current >= count}
-        onClick={() => onGo(current + 1)}
-      >
-        <ChevronRight size={15} strokeWidth={1.9} aria-hidden />
-      </Step>
-    </nav>
-  );
-}
-
-function Step({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      className="flex size-8 flex-none items-center justify-center rounded-selector border border-line bg-base-100 text-mut transition-colors hover:border-ink/30 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
-    >
-      {children}
-    </button>
   );
 }
 
