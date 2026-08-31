@@ -61,10 +61,13 @@ function place(x: number, y: number, index: number): Peek {
 export function AttachmentGallery({
   urls,
   thumb = 56,
+  square = false,
 }: {
   urls: string[];
   /** ด้านของรูปย่อเป็น px — desk 56, จอมือถือ 70 */
   thumb?: number;
+  /** มุมตรงไม่มนเลย — ใช้ในแผงรายละเอียดบันทึกเคสที่ทั้งแผงเป็นทรงเหลี่ยม */
+  square?: boolean;
 }) {
   const [peek, setPeek] = useState<Peek | null>(null);
   const [open, setOpen] = useState<number | null>(null);
@@ -146,7 +149,7 @@ export function AttachmentGallery({
               }}
               onPointerLeave={() => setPeek(null)}
               onBlur={() => setPeek(null)}
-              className="group relative block overflow-hidden rounded-[10px] border border-line bg-ph-thumb shadow-[0_1px_2px_rgba(21,32,29,0.06)] transition-[border-color,box-shadow] duration-200 hover:border-primary/60 hover:shadow-[0_10px_22px_-12px_rgba(21,32,29,0.5)]"
+              className={`group relative block overflow-hidden ${square ? "rounded-none" : "rounded-[10px]"} border border-line bg-ph-thumb shadow-[0_1px_2px_rgba(21,32,29,0.06)] transition-[border-color,box-shadow] duration-200 hover:border-primary/60 hover:shadow-[0_10px_22px_-12px_rgba(21,32,29,0.5)]`}
               style={{ width: thumb, height: thumb }}
             >
               <Thumb url={url} index={i} broken={broken} onError={fail} />

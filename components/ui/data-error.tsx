@@ -9,9 +9,12 @@ import { TriangleAlert } from "lucide-react";
 export function DataError({
   title = "โหลดข้อมูลเคสไม่สำเร็จ",
   message,
+  /** ค่าที่ต้องไปตรวจ — บันทึกเคสอ่านจาก MongoDB จึงไม่ได้ชี้ไป `API_NCAC_URL` เสมอไป */
+  envKey = "API_NCAC_URL",
 }: {
   title?: string;
   message: string;
+  envKey?: string;
 }) {
   return (
     <div
@@ -22,7 +25,7 @@ export function DataError({
       <p className="text-sm font-semibold text-sla">{title}</p>
       <p className="max-w-[46ch] text-[12.5px] text-mut text-pretty">{message}</p>
       <p className="text-[11.5px] text-mut">
-        ตรวจค่า <code className="font-mono">API_NCAC_URL</code> แล้วลองโหลดหน้านี้ใหม่
+        ตรวจค่า <code className="font-mono">{envKey}</code> แล้วลองโหลดหน้านี้ใหม่
       </p>
     </div>
   );

@@ -1,6 +1,10 @@
-# Data layer — NCAC API
+# Data layer — NCAC API + MongoDB
 
-> Read when: touching `lib/ncac/**`, `lib/cases.ts`, `app/api/**`, save/write paths, or a 405/404 on a case page.
+> Read when: touching `lib/ncac/**`, `lib/cases.ts`, `lib/record-cases.ts`, `app/api/**`,
+> save/write paths, or a 405/404 on a case page.
+>
+> **สองแหล่งข้อมูล แยกขาดจากกัน** — คำร้องของ พจส. อยู่บน **NCAC** (อ่านต่อข้างล่าง) ·
+> บันทึกเคสส่วนกลางอยู่บน **MongoDB ของเราเอง** (ท้ายไฟล์นี้) อย่าเอามาปนกัน
 
 ```
 NCAC API  ──►  lib/ncac/client.ts  ──►  lib/ncac/adapt.ts  ──►  HrCase
@@ -170,3 +174,84 @@ form leaves an orphan object on the bucket, same as mena-go.
 On success, call `router.refresh()` so server components refetch. `CaseModal` resets
 `draft`/`saved` when `hrCase.updatedAt` changes, by **adjusting state during render, not in a
 `useEffect`** (the `react-hooks/set-state-in-effect` rule errors if you move it into an effect).
+
+## บันทึกเคสส่วนกลาง — MongoDB (คนละแหล่งกับ NCAC)
+
+`/desk/record-cases` **ไม่ได้แตะ NCAC เลย** — เก็บบน MongoDB ของบริษัทโดยตรง
+(`MONGO_URI` / `MONGO_DB` ใน `.env.local` · ไม่ได้ตั้ง = หน้าขึ้น `DataError` ไม่ใช่หน้าว่าง)
+
+```
+MongoDB  ──►  lib/mongo.ts  ──►  lib/record-cases.ts  ──►  RecordCase
+(record_cases)  (client เดียว     (อ่าน/เขียน + ตรวจข้อมูล)    (ชนิดใน lib/record-case-flow.ts
+                 cache บน global)          │                     ซึ่ง client import ได้)
+                                           ├──► app/desk/record-cases/page.tsx  (server component)
+                                           └──► app/api/record-cases/**         (client ยิงผ่านเส้นนี้)
+```
+
+| คอลเลกชัน | เก็บอะไร |
+|---|---|
+| `record_cases` | ตัวเคส + **ไฟล์แนบ** + **ประวัติการเปลี่ยนสถานะ** อยู่ในเอกสารเดียวกัน |
+| `record_counters` | ตัวนับเลขที่เคสรายเดือน (`ER-2608-001` — ปีเดือนเป็น ค.ศ. เปลี่ยนจากรายปี พ.ศ. 26 ส.ค. 2026) — `$inc` แบบ atomic ห้ามเปลี่ยนไปนับด้วย `countDocuments` |
+| `record_categories` | master data ของ**ประเภทเคส** (25 ส.ค. 2026) — คนละคอลเลกชันกับ `record_cases` เพราะวงจรชีวิตต่างกัน (แก้ไม่บ่อย เทียบกับเคสที่ไหลเข้าตลอด) |
+
+- **สถานะมีแค่ 3 ตัว** `pending` / `completed` / `rejected` — กฎอยู่ที่ `lib/record-case-flow.ts`
+  ที่เดียว (`nextStatuses()` `recordStatusMeta`) ห้ามเขียนกฎซ้ำในคอมโพเนนต์
+- **หนึ่งเคสมีฝ่ายที่เกี่ยวข้องได้ฝ่ายเดียว** (`departmentId` ไม่ใช่อาเรย์) เลือกจาก dropdown
+  ตามคำสั่งเจ้าของงาน 19 ส.ค. 2026 — เดิมเป็นชิปเลือกหลายฝ่าย **อย่าเปลี่ยนกลับเอง**
+- **สี่ฟิลด์ที่เพิ่มทีหลัง (21 ส.ค. 2026) ต้องทนกับเอกสารเก่าเสมอ** — `category` (รหัสประเภท
+  จาก `record_categories`) · `involved` (ชื่อผู้เกี่ยวข้อง) · `warnings` (โทษทางวินัย) ·
+  `remark` (หมายเหตุของตัวเคส) เป็น optional ใน `RecordDoc` แต่ `toRecordCase()` เติม
+  `""` / `[]` ให้ **หน้าจอจึงไม่ต้องเช็ค `undefined` เอง** ·
+  ตอนเขียนเข้าไปใหม่บังคับ `category` เสมอ (ตรวจกับ `isKnownRecordCategory()` แบบ async
+  เพราะต้องอ่าน Mongo — รหัสไม่มีอยู่จริงในคอลเลกชัน `record_categories` = 400) ·
+  `involved` ตัดช่องว่าง ทิ้งค่าว่าง ตัดชื่อซ้ำ (ไม่สนตัวพิมพ์) จำกัด `MAX_INVOLVED` คน ·
+  `warnings` รับเฉพาะรหัสใน `WARNING_LEVELS` และ **ตีกลับ 400 ถ้าส่ง “ไม่ได้รับ” มาพร้อมข้ออื่น**
+  (กฎเดียวกับที่ฟอร์มบังคับ) ·
+  **ไม่ได้ backfill เอกสารเก่าโดยตั้งใจ** — เดาประเภท/โทษย้อนหลังให้เท่ากับแต่งข้อมูล
+- **ประเภทเคส (`record_categories`) เป็น master data ที่จัดการได้จาก UI** (25 ส.ค. 2026) —
+  ย้ายออกจากชุดปิดที่เคยฮาร์ดโค้ดเป็น `RECORD_CATEGORIES` ใน `record-case-flow.ts` แล้ว ·
+  `_id` เป็นสตริง = รหัสที่ `RecordCase.category` อ้างถึงตรง ๆ (ไม่ใช่ ObjectId) — ของเดิม 7 ตัว
+  ถูก seed ไว้ครั้งเดียวตอนคอลเลกชันว่างด้วยรหัสเดิมเป๊ะ (`complaint`, `discipline`, …) ไม่ให้
+  เคสเก่าเสียการอ้างอิง ส่วนตัวที่เพิ่มทีหลังได้รหัสสุ่ม (`crypto.randomUUID()`) เพราะผู้ใช้
+  ไม่เคยเห็น/พิมพ์รหัสนี้เอง (กรอกแค่ป้ายภาษาไทย) · จัดการผ่านปุ่ม “จัดการประเภทเคส” →
+  `RecordCategoryManager` → `app/api/record-categories/**` ·
+  **ลบประเภทที่เคสเก่ายังอ้างถึงอยู่ได้โดยตั้งใจ** — ไม่ backfill เคสเก่าตาม เคสนั้นจะแสดง
+  ประเภทเป็น “—” แทน (`recordCategoryLabel()` หารหัสในรายการปัจจุบันไม่เจอ) เหมือนพฤติกรรม
+  เดิมตอน `category` เป็นค่าว่าง
+- **เปลี่ยนสถานะ = ลงประวัติเสมอ** ทำในคำสั่งเดียวด้วย `$set` + `$push` และ filter ด้วยสถานะเดิม
+  → หน้าจอที่ค้างค่าเก่าจะได้ 400 แทนที่จะทับสถานะที่คนอื่นเพิ่งเปลี่ยน
+- **แก้ไขเนื้อเคส = ลงประวัติเสมอเช่นกัน** (`updateRecordCase()` → `PUT /api/record-cases/{id}`
+  เพิ่ม 21 ส.ค. 2026) — แถวประวัติเป็น `kind: "edit"` เก็บ `fields` (ชื่อไทยของฟิลด์ที่เปลี่ยน)
+  และ `from` = `to` = สถานะเดิม เพราะการแก้ไม่ได้ขยับสถานะ · เทียบค่าเก่า/ใหม่ก่อนเสมอ
+  **ไม่มีอะไรต่าง = `RecordCaseError` → 400** จะได้ไม่มีแถว “แก้ไข” เปล่า ๆ ในประวัติ ·
+  `PUT` **ทิ้ง `status` ที่ส่งมาใน body เสมอ** — สถานะเปลี่ยนได้ทาง `PATCH` ทางเดียว
+- **ผู้บันทึก / ผู้เปลี่ยนสถานะมาจาก session เท่านั้น** (`actor()` ใน `app/api/record-cases/_lib.ts`)
+  ห้ามรับจาก body — กฎเดียวกับฝั่งคำร้อง
+- `RecordCaseError` = ข้อมูลที่กรอกมาไม่ผ่าน → ตอบ **400** ผ่าน `failRecord()` ไม่ใช่ 500
+- **วันที่ของเคสเก็บเป็น `YYYY-MM-DD` ล้วน ไม่ใช่ ISO** — ผู้ใช้กรอกแค่ “วันไหน” ถ้าเก็บเป็น ISO
+  วันจะเลื่อนตามโซนเวลาของเครื่องที่ render · แสดงผลผ่าน `formatOccurredOn()` เท่านั้น
+- **ไฟล์แนบอยู่ใน MongoDB (GridFS) ไม่ได้ขึ้น Spaces** — `lib/record-files.ts` ·
+  เอกสารเคสเก็บแค่ `{ fileId, name, type, size }` · ลิงก์เปิดไฟล์สร้างจาก `attachmentUrl()`
+  ชี้ไป `GET /api/record-cases/files/{id}` ซึ่ง **ตรวจ session เองอีกชั้น** (proxy ปล่อย `GET` ผ่านหมด)
+
+  > ⚠️ **ทำไมไม่ใช้ presign API เหมือนคำร้อง พจส.** — บริการนั้นมี allow-list เป็น
+  > **นามสกุลรูปเท่านั้น** (`.jpg .jpeg .png .webp .gif .bmp .tif .tiff .heic .heif .avif`)
+  > ยิง `.pdf` ไปได้ 400 `extension not allowed` (ยิงทดสอบยืนยัน 19 ส.ค. 2026) ·
+  > **อย่าย้ายกลับไปใช้ Spaces** จนกว่าเจ้าของบริการจะเปิดนามสกุลเอกสารให้
+  > ผลพลอยได้ของการอยู่ใน Mongo คือไฟล์ไม่เป็นสาธารณะ ต้องล็อกอินถึงเปิดได้
+  > และจำกัดขนาดที่ `MAX_FILE_BYTES` (10 MB) เพราะกินพื้นที่ฐานข้อมูลจริง
+- ตอนบันทึกเคส `attachments()` **อ่านดูว่าไฟล์มีอยู่จริงใน GridFS** ก่อนเสมอ —
+  ยิง id มั่ว ๆ มาจะได้ 400 ไม่ใช่เคสที่มีไฟล์แนบกดแล้ว 404 ตลอดกาล
+- หน้าจอดึงมาทั้งชุด (สูงสุด 500 รายการ ใหม่สุดก่อน) แล้วค้นหา/กรองฝั่ง client —
+  ถ้าวันหนึ่งเกินนี้ค่อยย้ายไปกรองที่ query ของ Mongo
+- **ส่งออก Excel ได้แล้ว** (26 ส.ค. 2026) — คู่ขนานกับ `GET /api/cases/export` ของฝั่งคำร้อง
+  ปุ่ม “Excel” ท้ายแถวชิปสถานะของ `record-case-view.tsx` → `GET /api/record-cases/export`
+  → `lib/record-case-export.ts` (`exceljs`) · ตัวกรอง (คำค้น/สถานะ/ฝ่าย/ประเภท) แยกออกมาอยู่
+  **`lib/record-case-filter.ts`** ให้ตารางบนจอกับไฟล์ที่ส่งออกกรองด้วยกฎเดียวกัน — ห้ามเขียน
+  เงื่อนไขกรองซ้ำใน component อีก (เหตุผลเดียวกับ `lib/case-filter.ts`) ·
+  **ห้ามใช้ `toBangkokDate()`/`excelDate()` ของ `lib/case-export.ts` กับไทม์สแตมป์ของบันทึกเคส**
+  ตัวนั้นชดเชยเวลาดิบของ NCAC ที่ไม่มีโซนต่อท้าย (+14 ชม.) ส่วน `createdAt`/`updatedAt`/
+  `occurredOn` (ต่อ `+07:00` เองก่อนแปลง) ของบันทึกเคสเป็น ISO ที่มีโซนถูกต้องอยู่แล้ว
+  จึงบวกแค่ +7 ชม. เหมือน `todayInBangkok()` — `excelDate()` ใน `record-case-export.ts`
+  เป็นตัวที่ทำแบบนั้น อย่าเอาของ NCAC มาใช้ผิดที่ · เส้นนี้บังคับล็อกอินเอง (`getDeskIdentity()`)
+  เหมือนฝั่งคำร้อง เพราะยกข้อมูลทั้งคิวออกไปในคำขอเดียว

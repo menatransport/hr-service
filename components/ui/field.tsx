@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Select as RSelect } from "radix-ui";
-import { Check, ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { DayPicker } from "react-day-picker";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Search,
+  X,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 /**
@@ -157,6 +167,7 @@ export function TextField({
   value?: string;
   onChange?: (v: string) => void;
   placeholder?: string;
+  /** ไม่มี `date` โดยตั้งใจ — ช่องวันที่ต้องใช้ `DateField` ท้ายไฟล์นี้ (ดูเหตุผลที่นั่น) */
   type?: "text" | "email" | "tel";
 }) {
   const { id, readOnly, optional, size = "md" } = frame;
@@ -206,6 +217,168 @@ export function TextareaField({
           resize ? "resize-y" : "resize-none"
         } ${readOnly ? disabledBox : enabled}`}
       />
+    </Frame>
+  );
+}
+
+/**
+ * ช่องใส่ “ชื่อหลายชื่อ” เป็นชิป — พิมพ์แล้วกด Enter หรือจุลภาคเพื่อเพิ่มทีละชื่อ
+ *
+ * ใช้กับรายการสั้น ๆ ที่**ไม่มีชุดตัวเลือกตายตัว** (เช่นผู้เกี่ยวข้องกับเคส ซึ่งอาจเป็น
+ * คนนอกบริษัท) — ถ้าเลือกจากรายการที่รู้ล่วงหน้าได้ ให้ใช้ `SelectField` แทน
+ *
+ * ที่ต้องระวัง:
+ * - **`Enter` ต้อง `preventDefault`** ไม่งั้นฟอร์มที่ครอบอยู่จะถูก submit ตั้งแต่ชื่อแรก
+ * - ข้อความที่ค้างในช่องตอนคลิกออก **ถูกเพิ่มให้เลย** — ผู้ใช้ที่ไม่ได้กด Enter
+ *   จะได้ไม่เสียสิ่งที่พิมพ์ไปเงียบ ๆ
+ * - วางข้อความที่มีจุลภาค/ขึ้นบรรทัดใหม่ = เพิ่มทีเดียวหลายชื่อ
+ */
+export function TagsField({
+  value,
+  onChange,
+  placeholder,
+  max,
+  ...frame
+}: FieldBase & {
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+  /** เพิ่มได้สูงสุดกี่ชิป — ถึงเพดานแล้วช่องพิมพ์จะถูกซ่อน */
+  max?: number;
+}) {
+  const { id, readOnly, optional, size = "md" } = frame;
+  const [draft, setDraft] = useState("");
+
+  const full = max !== undefined && value.length >= max;
+
+  function add(raw: string) {
+    const next = [...value];
+    for (const piece of raw.split(/[,\n]/)) {
+      const name = piece.trim();
+      if (!name) continue;
+      if (max !== undefined && next.length >= max) break;
+      // กันชื่อซ้ำแบบไม่สนตัวพิมพ์ — เซิร์ฟเวอร์ก็ตัดซ้ำอีกชั้น
+      if (next.some((v) => v.toLowerCase() === name.toLowerCase())) continue;
+      next.push(name);
+    }
+    setDraft("");
+    if (next.length !== value.length) onChange(next);
+  }
+
+  return (
+    <Frame {...frame}>
+      <div
+        className={`${box} ${boxSize[size]} ${
+          readOnly ? disabledBox : `${enabled} focus-within:border-primary/60`
+        } flex flex-wrap items-center gap-1.5`}
+      >
+        {value.map((name) => (
+          <span
+            key={name}
+            className="flex max-w-full items-center gap-1 rounded-full bg-soft py-1 pr-1.5 pl-2.5 text-[12px] text-primary"
+          >
+            <span className="truncate">{name}</span>
+            {readOnly ? null : (
+              <button
+                type="button"
+                aria-label={`นำ ${name} ออก`}
+                onClick={() => onChange(value.filter((v) => v !== name))}
+                className="flex size-4 flex-none items-center justify-center rounded-full text-primary/60 transition-colors hover:bg-primary/15 hover:text-primary"
+              >
+                <X size={11} strokeWidth={2.2} aria-hidden />
+              </button>
+            )}
+          </span>
+        ))}
+
+        {readOnly || full ? null : (
+          <input
+            id={id}
+            type="text"
+            value={draft}
+            aria-required={optional ? undefined : true}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => add(draft)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                add(draft);
+                return;
+              }
+              // ช่องว่างเปล่า + Backspace = ถอนชิปล่าสุด (พฤติกรรมมาตรฐานของช่องแบบนี้)
+              if (e.key === "Backspace" && !draft && value.length) {
+                onChange(value.slice(0, -1));
+              }
+            }}
+            placeholder={value.length ? "" : placeholder}
+            className="min-w-[10ch] flex-1 bg-transparent outline-none placeholder:text-mut"
+          />
+        )}
+      </div>
+    </Frame>
+  );
+}
+
+/**
+ * กลุ่ม checkbox — ติ๊กได้หลายข้อ ทั้งช่องเป็นปุ่มกด (ไม่ใช่แค่กล่องสี่เหลี่ยมเล็ก ๆ)
+ *
+ * `<input type="checkbox">` จริงถูกซ่อนด้วย `sr-only` แล้ววาดกล่องเองด้วย token ของธีม
+ * — ได้คีย์บอร์ด/screen reader ครบโดยไม่ต้องพึ่งหน้าตาเริ่มต้นของเบราว์เซอร์ซึ่งคุมสีไม่ได้
+ *
+ * **กฎว่าข้อไหนอยู่ด้วยกันได้ไม่ใช่เรื่องของคอมโพเนนต์นี้** — ส่ง `onToggle(id)` ออกไป
+ * ให้ฝั่งกฎธุรกิจตัดสิน (เช่น `toggleWarning()` ที่บังคับว่า “ไม่ได้รับ” อยู่ลำพัง)
+ */
+export function CheckboxGroupField({
+  value,
+  onToggle,
+  options,
+  ...frame
+}: FieldBase & {
+  value: string[];
+  onToggle: (id: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const { id, readOnly, size = "md" } = frame;
+
+  return (
+    <Frame {...frame}>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const on = value.includes(opt.value);
+          return (
+            <label
+              key={opt.value}
+              className={`flex cursor-pointer items-center gap-2 rounded-field border transition-colors ${
+                size === "lg" ? "px-3.5 py-2.5" : "px-3 py-2"
+              } text-[13px] ${
+                readOnly
+                  ? "cursor-not-allowed border-line bg-base-200 text-mut"
+                  : on
+                    ? "border-primary/50 bg-soft text-ink"
+                    : "border-line hover:border-primary/40"
+              }`}
+            >
+              <input
+                type="checkbox"
+                id={`${id}-${opt.value}`}
+                className="sr-only"
+                checked={on}
+                disabled={readOnly}
+                onChange={() => onToggle(opt.value)}
+              />
+              <span
+                aria-hidden
+                className={`flex size-4 flex-none items-center justify-center rounded-[5px] border transition-colors ${
+                  on ? "border-primary bg-primary text-primary-content" : "border-line"
+                }`}
+              >
+                {on ? <Check size={11} strokeWidth={3} /> : null}
+              </span>
+              {opt.label}
+            </label>
+          );
+        })}
+      </div>
     </Frame>
   );
 }
@@ -803,5 +976,252 @@ export function ReadOnlyValue({
         {value}
       </p>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ ช่องวันที่ */
+
+/**
+ * ช่องวันที่แบบ **วว/ดด/ปปปป (พ.ศ.)** พร้อมปฏิทินให้เลือก
+ *
+ * ไม่ใช้ `<input type="date">` ของเบราว์เซอร์ เพราะรูปแบบที่แสดง**ขึ้นกับภาษาของเครื่อง
+ * ผู้ใช้** — เครื่องที่ตั้งภาษาไทยขึ้นปีพุทธศักราช เครื่องอื่นขึ้น ค.ศ. และสลับ
+ * วัน/เดือน คนละแบบ ทั้งที่ค่าที่ส่งออกเป็น `YYYY-MM-DD` เหมือนกันหมด
+ * ผู้ใช้จึงอ่านวันเดียวกันไม่ตรงกันในแต่ละเครื่อง
+ *
+ * ตัวปฏิทินใช้ `react-day-picker` (คีย์บอร์ด / a11y / เดินเดือน มาให้ครบ) แต่ **ไม่ได้ใช้
+ * สไตล์ของไลบรารี** — ส่ง `classNames` เป็นคลาสของธีมเราเองทุกชิ้น ธีมมืดจึงตามไปเอง
+ * และไม่ต้อง import CSS ของไลบรารีมาชนกับ Tailwind
+ *
+ * ชื่อเดือน/วันมาจาก `formatters` ที่เขียนเอง จึง **ไม่ได้แตะ `Intl`** ตามกฎของโปรเจกต์
+ *
+ * ค่าที่รับ/ส่งออกยังเป็น `YYYY-MM-DD` (ค.ศ.) เหมือนเดิม — ที่เปลี่ยนคือสิ่งที่ตาเห็น
+ */
+
+const THAI_MONTHS_FULL = [
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม",
+];
+
+const THAI_WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+/** ปีที่มากกว่านี้ถือว่าเป็น พ.ศ. — ปี ค.ศ. จริงไม่มีทางแตะเลขนี้ในอายุการใช้งานระบบ */
+const BUDDHIST_THRESHOLD = 2400;
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** `2026-08-19` → `19/08/2569` · ค่าที่อ่านไม่ออกคืนสตริงว่าง */
+function isoToThaiDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${Number(m[1]) + 543}` : "";
+}
+
+/**
+ * `19/08/2569` (หรือ `19/08/2026`) → `2026-08-19` · `null` เมื่อยังไม่ครบ/ไม่มีอยู่จริง
+ *
+ * รับทั้ง พ.ศ. และ ค.ศ. เพราะคนพิมพ์มาทั้งสองแบบ — ตัดสินจากขนาดของเลขปี
+ * แล้วตรวจย้อนว่ายังเป็นวันเดิม (กัน `31/02` กลายเป็น 3 มี.ค. เงียบ ๆ)
+ */
+function thaiDateToIso(text: string): string | null {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text.trim());
+  if (!m) return null;
+
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const raw = Number(m[3]);
+  const year = raw > BUDDHIST_THRESHOLD ? raw - 543 : raw;
+
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+/** ใส่ `/` ให้เองระหว่างพิมพ์ — ผู้ใช้พิมพ์แต่ตัวเลข */
+function maskThaiDate(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)]
+    .filter(Boolean)
+    .join("/");
+}
+
+/** `Date` ท้องถิ่น ↔ `YYYY-MM-DD` — ไม่ผ่าน `toISOString()` ซึ่งเลื่อนวันตามโซนเวลา */
+const isoToDate = (iso: string): Date | undefined => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : undefined;
+};
+const dateToIso = (d: Date): string =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/** สไตล์ปฏิทินทั้งชุด — ทุกชิ้นเป็น token ของธีม ไม่มี CSS ของไลบรารีเข้ามาเกี่ยว */
+const dayPickerClassNames = {
+  root: "relative",
+  months: "flex flex-col",
+  month: "flex flex-col gap-2",
+  month_caption: "flex h-8 items-center justify-center",
+  caption_label: "text-[13px] font-semibold",
+  nav: "absolute inset-x-0 top-0 flex h-8 items-center justify-between",
+  button_previous:
+    "flex size-7 items-center justify-center rounded-selector text-mut transition-colors hover:bg-base-200 hover:text-ink disabled:opacity-35",
+  button_next:
+    "flex size-7 items-center justify-center rounded-selector text-mut transition-colors hover:bg-base-200 hover:text-ink disabled:opacity-35",
+  month_grid: "w-full border-collapse",
+  weekday: "pb-1 text-[11px] font-normal text-mut",
+  day: "p-[1px] text-center",
+  day_button:
+    "flex size-8 items-center justify-center rounded-full text-[12.5px] transition-colors hover:bg-soft",
+  today: "[&_button]:font-semibold [&_button]:text-primary",
+  selected:
+    "[&_button]:bg-primary [&_button]:font-semibold [&_button]:text-primary-content",
+  outside: "[&_button]:text-mut/45",
+  disabled: "[&_button]:cursor-not-allowed [&_button]:opacity-35",
+  hidden: "invisible",
+};
+
+export function DateField({
+  value,
+  onChange,
+  ...frame
+}: FieldBase & {
+  /** `YYYY-MM-DD` · `""` = ยังไม่เลือก */
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { id, readOnly, optional, size = "md" } = frame;
+
+  const [open, setOpen] = useState(false);
+  /** ข้อความในช่องระหว่างพิมพ์ — ยังไม่ครบก็ยังไม่ส่งค่าขึ้นไปข้างบน */
+  const [text, setText] = useState(() => isoToThaiDate(value));
+  const wrap = useRef<HTMLDivElement>(null);
+
+  /* ค่าจากข้างบนเปลี่ยน (เลือกจากปฏิทิน / ล้างฟอร์ม) ให้ข้อความตามในการ render เดียวกัน */
+  const [syncedTo, setSyncedTo] = useState(value);
+  if (syncedTo !== value) {
+    setSyncedTo(value);
+    setText(isoToThaiDate(value));
+  }
+
+  useOverlayCount(open);
+
+  // ปิดเมื่อคลิกนอกกล่องหรือกด Esc — Esc ต้องจบตรงนี้ ไม่ให้ทะลุไปปิดโมดัลข้างหลัง
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  function type(raw: string) {
+    const masked = maskThaiDate(raw);
+    setText(masked);
+
+    const iso = thaiDateToIso(masked);
+    if (iso) {
+      setSyncedTo(iso);
+      onChange(iso);
+    } else if (!masked) {
+      setSyncedTo("");
+      onChange("");
+    }
+  }
+
+  /* พิมพ์ค้างไว้ไม่ครบแล้วคลิกออก — ดึงกลับไปแสดงค่าที่บันทึกไว้จริง ไม่ปล่อยให้จอโกหก */
+  const restore = () => setText(isoToThaiDate(value));
+
+  const selected = isoToDate(value);
+
+  return (
+    <Frame {...frame}>
+      <div ref={wrap} className="relative">
+        <input
+          id={id}
+          value={text}
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="วว/ดด/ปปปป"
+          aria-required={optional ? undefined : true}
+          disabled={readOnly}
+          onChange={(e) => type(e.target.value)}
+          onBlur={restore}
+          className={`${box} ${boxSize[size]} pr-11 ${readOnly ? disabledBox : enabled}`}
+        />
+
+        <button
+          type="button"
+          disabled={readOnly}
+          aria-label="เปิดปฏิทิน"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-field text-mut transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-mut"
+        >
+          <CalendarDays size={16} strokeWidth={1.8} aria-hidden />
+        </button>
+
+        {open ? (
+          /* z-60 เหมือน `Select.Content` — ต่ำกว่านี้ปฏิทินจะไปอยู่ใต้โมดัล */
+          <div className="absolute top-[calc(100%+6px)] left-0 z-60 rounded-box border border-line bg-base-100 p-2.5 shadow-[0_18px_40px_-16px_rgba(21,32,29,0.4)]">
+            <DayPicker
+              mode="single"
+              selected={selected}
+              defaultMonth={selected}
+              onSelect={(picked) => {
+                if (!picked) return;
+                onChange(dateToIso(picked));
+                setOpen(false);
+              }}
+              showOutsideDays
+              classNames={dayPickerClassNames}
+              formatters={{
+                formatCaption: (month) =>
+                  `${THAI_MONTHS_FULL[month.getMonth()]} ${month.getFullYear() + 543}`,
+                formatWeekdayName: (day) => THAI_WEEKDAYS[day.getDay()],
+              }}
+              /* ป้ายที่ screen reader อ่าน — ไม่ทับจะเป็นภาษาอังกฤษของไลบรารี
+                 ทั้งที่ทุกอย่างบนจอเป็นไทย */
+              labels={{
+                labelDayButton: (day) =>
+                  `${day.getDate()} ${THAI_MONTHS_FULL[day.getMonth()]} ${day.getFullYear() + 543}`,
+                labelPrevious: () => "เดือนก่อนหน้า",
+                labelNext: () => "เดือนถัดไป",
+              }}
+              components={{
+                Chevron: ({ orientation }) =>
+                  orientation === "left" ? (
+                    <ChevronLeft size={16} strokeWidth={1.9} aria-hidden />
+                  ) : (
+                    <ChevronRight size={16} strokeWidth={1.9} aria-hidden />
+                  ),
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
+    </Frame>
   );
 }

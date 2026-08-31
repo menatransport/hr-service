@@ -1,4 +1,5 @@
 import {
+  Bookmark,
   BookUser,
   CalendarRange,
   Car,
@@ -12,6 +13,7 @@ import {
   Truck,
   Users,
   Wallet,
+  ClipboardPenLine,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -234,16 +236,28 @@ export const deskNav: { section: string; items: DeskNavItem[] }[] = [
     section: "งานของฉัน",
     items: [
       { href: "/desk", label: "แจ้งข้อร้องเรียน", icon: ClipboardList },
+      { href: "/desk/record-cases", label: "บันทึกเคส", icon: Bookmark },
       { href: "/desk/employee", label: "ค้นหาข้อมูลพนักงาน", icon: Users },
-      {
-        href: "/desk/registry",
-        label: "ทะเบียนประวัติ พจส.",
-        icon: BookUser,
-        children: [
-          { href: "/desk/registry/ladkrabang", label: "ทะเบียนลาดกระบัง" },
-          { href: "/desk/registry/saraburi", label: "ทะเบียนสระบุรี" },
-        ],
-      },
+      { href: "/desk/survey", label: "แบบสอบถาม", icon: ClipboardPenLine},
+      // {
+      //   href: "/desk/registry",
+      //   label: "ทะเบียนประวัติ พจส.",
+      //   icon: BookUser,
+      //   children: [
+      //     { href: "/desk/registry/ladkrabang", label: "ทะเบียนลาดกระบัง" },
+      //     { href: "/desk/registry/saraburi", label: "ทะเบียนสระบุรี" },
+      //   ],
+      // },
+      //  {
+      //   href: "/desk/payroll",
+      //   label: "เงินเดือนพจส.",
+      //   icon: Wallet,
+      //   children: [
+      //     { href: "/desk/payroll/upload", label: "อัปโหลดข้อมูล" },
+      //     { href: "/desk/payroll/report", label: "รายงาน" },
+      //     { href: "/desk/payroll/master", label: "คลังข้อมูล" },
+      //   ],
+      // },
       // `/desk/activity` (Log) ย้ายไปเป็นไอคอนบน topbar แล้ว — ไม่ต้องเพิ่มกลับที่นี่
     ],
   },

@@ -27,6 +27,9 @@ const DEFAULT_PRESIGN_URL =
  * `complaints` = โฟลเดอร์เดียวกับที่ไฟล์จากแอปมือถือลง เพื่อให้ไฟล์แนบของเคส
  * อยู่ที่เดียวกันหมด · `employees` = รูปโปรไฟล์พนักงาน แยกไว้เพราะอายุการใช้งาน
  * ต่างกันคนละเรื่อง (ไฟล์แนบผูกกับเคสที่ปิดแล้วจบ ส่วนรูปพนักงานอยู่ยาว)
+ *
+ * **บันทึกเคสส่วนกลางไม่ได้ใช้ทางนี้** — presign API รับเฉพาะนามสกุลรูป แนบเอกสารไม่ได้
+ * ไฟล์ของหน้านั้นจึงอยู่ใน MongoDB (`lib/record-files.ts`)
  */
 export type UploadFolder = "complaints" | "employees";
 
@@ -89,7 +92,7 @@ function uniqueName(original: string): string {
 }
 
 /** อัปไฟล์เดียวจบครบทุกขั้น → คืน URL สาธารณะที่เอาไปเก็บใน NCAC ได้เลย */
-export async function uploadImage(
+export async function uploadFile(
   file: File,
   folder: UploadFolder = "complaints",
 ): Promise<string> {
@@ -131,3 +134,10 @@ export async function uploadImage(
 
   return target.publicUrl;
 }
+
+/**
+ * ชื่อเดิมสมัยที่ยังรับแค่รูป — ขั้นตอนทั้งสามไม่สนใจว่าเป็นไฟล์อะไร ต่างกันแค่
+ * `Content-Type` ที่ส่งไปกับ PUT · **การจำกัดชนิดไฟล์เป็นหน้าที่ของ route
+ * ที่เรียก** (`/api/uploads` รับแค่ JPG/PNG · บันทึกเคสรับเอกสารด้วย)
+ */
+export const uploadImage = uploadFile;

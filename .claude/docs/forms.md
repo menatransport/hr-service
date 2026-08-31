@@ -10,8 +10,10 @@ Every input in the system comes from this one file. **Never write raw `<input>` 
 | `TextField` | Single-line text · omit `value/onChange` for uncontrolled |
 | `TextareaField` | Multi-line text (`rows`, `resize`) |
 | `NumberField` | Numbers |
+| `DateField` | วันที่ — พิมพ์ `วว/ดด/ปปปป` หรือเลือกจากปฏิทิน (ดูหัวข้อล่าง) |
 | `SelectField` | Dropdown with label/hint — use inside forms |
 | `Select` | Bare dropdown, no label — use in tables / filter bars |
+| `TagsField` | ชื่อ/คำหลายค่าเป็นชิป — พิมพ์แล้ว Enter หรือจุลภาคเพื่อเพิ่ม (ดูหัวข้อล่าง) |
 | `SearchField` | Search input (icon + clear button) · `tone="filled"` for grey backgrounds |
 | `ReadOnlyValue` | Read-only value |
 
@@ -30,8 +32,39 @@ it off is what claims the field is required. `srLabel` fields never show the `*`
 to hang it on) but still get `aria-required`.
 Bare `Select` (no `Frame`) takes `required` on its own for the same `aria-required`.
 
+`ModalShell` มี `tone="form"` (เพิ่ม 21 ส.ค. 2026) = **ไม่ใส่ padding/ช่องไฟให้เนื้อใน**
+สำหรับฟอร์มที่แบ่งส่วนเองด้วยแถบหัวข้อพื้นเทาเต็มความกว้าง (ดู `record-case-form.tsx`) ·
+`plain` = ฟอร์มชุดเดียวมี padding ตามปกติ · `sections` = การ์ดหลายใบบนพื้น `canvas`
+
 `Select` has 4 `variant`s: `field` (in forms) · `ghost` (in tables, borderless until hover) ·
 `dashed` (the "+ มอบหมาย" chip when empty) · `bare` (already inside another container).
+
+## `DateField` — ห้ามกลับไปใช้ `<input type="date">`
+
+รูปแบบที่ `<input type="date">` แสดง **ขึ้นกับภาษาของเครื่องผู้ใช้** — เครื่องที่ตั้งภาษาไทย
+ขึ้นปี พ.ศ. เครื่องอื่นขึ้น ค.ศ. และสลับวัน/เดือนคนละแบบ ทั้งที่ค่าที่ส่งออกเหมือนกันหมด
+(เจ้าของงานสั่งให้เป็น `วว/ดด/ปปปป` ทุกเครื่อง 19 ส.ค. 2026)
+
+- รับ/ส่งค่าเป็น **`YYYY-MM-DD` (ค.ศ.)** เหมือนเดิม — ที่เปลี่ยนคือสิ่งที่ตาเห็น
+- ช่องพิมพ์ใส่ `/` ให้เอง · **รับทั้ง พ.ศ. และ ค.ศ.** (ปี > 2400 = พ.ศ.) แล้วตรวจย้อนว่า
+  วันมีอยู่จริง (`31/02` ไม่ผ่าน) · พิมพ์ค้างไม่ครบแล้วคลิกออก จะดึงกลับไปแสดงค่าที่บันทึกไว้
+- ปฏิทินสร้างบน **`react-day-picker`** แต่ **ไม่ได้ import CSS ของไลบรารี** — ส่ง `classNames`
+  เป็นคลาสของธีมทุกชิ้น ธีมมืดจึงตามไปเอง · ชื่อเดือน/วันและป้าย a11y มาจาก `formatters`/`labels`
+  ที่เขียนเอง จึง **ไม่ได้แตะ `Intl`** ตามกฎของโปรเจกต์
+- ป๊อปปฏิทินต้องมี `z-60` เหมือน `Select.Content` ไม่งั้นไปอยู่ใต้โมดัล · และมันกิน `Esc`
+  ของตัวเองก่อน (ผ่าน `useOverlayCount`) ไม่ให้ทะลุไปปิดโมดัลข้างหลัง
+
+## `TagsField` — ค่าหลายค่าที่ไม่มีชุดตัวเลือกตายตัว
+
+ใช้กับรายการสั้น ๆ ที่พิมพ์เอง (ตอนนี้มีที่เดียว: **ผู้เกี่ยวข้อง** ของบันทึกเคส ซึ่งอาจเป็น
+คู่กรณี/พยานที่ไม่ใช่พนักงาน) — **ถ้าตัวเลือกรู้ล่วงหน้าให้ใช้ `SelectField`** อย่าเอาอันนี้ไปแทน
+
+- `value: string[]` · `onChange(next)` · `max` = เพดานจำนวนชิป (ถึงเพดานแล้วช่องพิมพ์หายไป)
+- `Enter` / `,` เพิ่มค่า — **`Enter` เรียก `preventDefault`** ไม่งั้นฟอร์มที่ครอบอยู่ถูก submit
+  ตั้งแต่ค่าแรก · `Backspace` บนช่องว่างเปล่าถอนชิปล่าสุด
+- **คลิกออกแล้วสิ่งที่ค้างในช่องถูกเพิ่มให้เลย** (`onBlur`) — ผู้ใช้ที่ไม่ได้กด Enter
+  จะได้ไม่เสียสิ่งที่พิมพ์ไปเงียบ ๆ · วางข้อความที่มีจุลภาค/ขึ้นบรรทัดใหม่ = เพิ่มทีเดียวหลายค่า
+- ชื่อซ้ำถูกตัดทิ้งแบบไม่สนตัวพิมพ์ทั้งฝั่งช่องกรอกและฝั่งเซิร์ฟเวอร์
 
 ## Dropdown gotchas
 
