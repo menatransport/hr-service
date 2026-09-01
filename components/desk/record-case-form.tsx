@@ -200,6 +200,16 @@ export function RecordCaseForm({
       </Section>
 
       <Section title="รายละเอียดเหตุการณ์">
+        <TagsField
+          id="rc-involved"
+          label="ชื่อพจส."
+          optional
+          placeholder="พิมพ์ชื่อแล้วกด Enter"
+          max={MAX_INVOLVED}
+          value={involved}
+          onChange={setInvolved}
+        />
+
         <TextareaField
           id="rc-detail"
           label="รายละเอียด"
@@ -207,16 +217,6 @@ export function RecordCaseForm({
           rows={6}
           value={detail}
           onChange={setDetail}
-        />
-
-        <TagsField
-          id="rc-involved"
-          label="ผู้เกี่ยวข้อง"
-          optional
-          placeholder="พิมพ์ชื่อแล้วกด Enter"
-          max={MAX_INVOLVED}
-          value={involved}
-          onChange={setInvolved}
         />
       </Section>
 
