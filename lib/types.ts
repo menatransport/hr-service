@@ -148,22 +148,26 @@ export interface Department {
   icon: LucideIcon;
 }
 
+/** ชนิดของ master data ในคอลเลกชัน `master_complainte` (ดู `lib/complaint-master.ts`) */
+export type MasterKind = "type" | "cause";
+
 /**
- * “ประเภทเรื่อง” หนึ่งรายการ — มาจากตาราง `complaint_master` ของ NCAC
- * (เดิม hard-code อยู่ใน `lib/data.ts` แก้ทีต้อง deploy ใหม่ ถอดออกแล้ว 13 ส.ค. 2026)
+ * master data หนึ่งแถว — **ใช้ร่วมกันทั้ง “ประเภทเรื่อง” และ “สาเหตุหลัก”**
+ * เพราะสองอย่างนี้มีโครงเดียวกัน (กลุ่ม / ชื่อ / ลำดับ / เปิด-ปิด) หน้าจอจัดการ
+ * จึงเขียนครั้งเดียวใช้ได้ทั้งคู่
  *
- * `departmentId` เป็น `string` ธรรมดา **ไม่ใช่ `DepartmentId`** โดยตั้งใจ —
- * ผู้ใช้เพิ่มประเภทให้หน่วยงานไหนก็ได้ผ่านหน้าจอจัดการ ถ้าบีบเป็น union
- * แถวของหน่วยงานที่ระบบยังไม่รู้จักจะกลายเป็นข้อมูลผิดชนิดทันทีที่ดึงมา
+ * `group` เป็น `string` ธรรมดา **ไม่ใช่ union** โดยตั้งใจ — ผู้ใช้เพิ่มประเภทให้
+ * หน่วยงานไหนก็ได้ผ่านหน้าจอจัดการ ถ้าบีบเป็น union แถวของหน่วยงานที่ระบบยังไม่
+ * รู้จักจะกลายเป็นข้อมูลผิดชนิดทันทีที่ดึงมา
  */
-export interface ComplaintType {
-  id: number;
-  departmentId: string;
+export interface MasterItem {
+  /** ประเภทเรื่อง → id ของ `complaint_master` ในรูปสตริง (`"12"`) · สาเหตุ → uuid */
+  id: string;
+  /** ประเภทเรื่อง → รหัสหน่วยงาน · สาเหตุ → `ReasonGroupCode` */
+  group: string;
   name: string;
-  /** ชื่อไอคอน lucide (`"Wrench"`) — แปลงเป็นคอมโพเนนต์ที่ `lib/complaint-icons.ts` */
-  icon: string | null;
-  sortOrder: number;
-  isActive: boolean;
+  order: number;
+  active: boolean;
 }
 
 export interface ReasonGroup {

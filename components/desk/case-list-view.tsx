@@ -1,5 +1,5 @@
 import { CaseTable } from "@/components/desk/case-table";
-import { ComplaintTypeButton } from "@/components/desk/complaint-type-modal";
+import { MasterButton } from "@/components/desk/master-modal";
 import { NewCaseButton } from "@/components/desk/new-case-modal";
 import { PageHead } from "@/components/desk/page-head";
 import { DataError } from "@/components/ui/data-error";
@@ -25,7 +25,8 @@ export async function CaseListView() {
           subtitle="ทุกเรื่องร้องเรียนที่ พจส. แจ้งเข้ามา"
           actions={
             <>
-              <ComplaintTypeButton />
+              <MasterButton kind="type" />
+              <MasterButton kind="cause" />
               <NewCaseButton />
             </>
           }
@@ -42,7 +43,8 @@ export async function CaseListView() {
         subtitle="คลิกที่แถวเพื่อเปิดรายละเอียดและดำเนินการ"
         actions={
           <>
-            <ComplaintTypeButton />
+            <MasterButton kind="type" />
+            <MasterButton kind="cause" />
             <NewCaseButton />
           </>
         }

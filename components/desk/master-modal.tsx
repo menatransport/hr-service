@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Check, Pencil, Plus, Tags, Trash2, X } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 import {
   Select,
@@ -13,17 +12,17 @@ import {
   isDropdownOpen,
   type SelectOption,
 } from "@/components/ui/field";
-import { COMPLAINT_ICON_NAMES, complaintIcon } from "@/lib/complaint-icons";
-import { departments } from "@/lib/data";
+import { departments, reasonGroups } from "@/lib/data";
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction } from "@/lib/swal";
-import type { ComplaintType } from "@/lib/types";
+import type { MasterItem, MasterKind } from "@/lib/types";
 
 /**
- * ปุ่ม “ประเภทเรื่อง” + หน้าจอจัดการตาราง `complaint_master` ของ NCAC
+ * ปุ่ม “ประเภทเรื่อง” / “สาเหตุ” + หน้าจอจัดการ `master_complainte` ของ MongoDB
  *
- * เดิมรายการนี้ hard-code อยู่ใน `lib/data.ts` แก้ทีต้อง deploy ใหม่ —
- * ตอนนี้ HR แก้เองได้จากหน้าคิวคำร้อง (เพิ่ม / แก้ไข / ปิดใช้งาน / ลบ)
+ * **คอมโพเนนต์เดียวใช้ได้ทั้งสองชุด** — ต่างกันแค่ป้าย ไอคอน และผังกลุ่ม
+ * (ประเภทเรื่องแบ่งตามหน่วยงาน · สาเหตุแบ่งตามกลุ่มสาเหตุ 6 กลุ่ม) ที่เหลือคือ
+ * ตารางเพิ่ม/แก้/ปิดใช้งาน/ลบชุดเดียวกันหมด ดู `KIND` ข้างล่างเป็นจุดเดียวที่ต่างกัน
  *
  * **ข้อมูลกับคำสั่งเขียนอยู่ที่ปุ่ม ส่วนโมดัลถือแค่สถานะหน้าจอ** — โหลดครั้งแรก
  * เกิดตอนกดปุ่ม ไม่ใช่ตอน mount ของโมดัล จึงไม่ต้อง fetch ใน effect
@@ -34,45 +33,65 @@ import type { ComplaintType } from "@/lib/types";
  * containing block ของ `position: fixed` แล้วโมดัลจะไปจัดกลางเทียบ `<main>`
  */
 
-/** แถวพร้อมไอคอนที่แปลงเป็นคอมโพเนนต์แล้ว — แปลงตอนเตรียมข้อมูล ไม่ใช่ตอน render */
-type TypeRow = ComplaintType & { Icon: LucideIcon };
-
-interface Draft {
-  departmentId: string;
-  name: string;
-  icon: string;
-  sortOrder: string;
+interface KindMeta {
+  /** ป้ายบนปุ่มและหัวโมดัล */
+  label: string;
+  subtitle: string;
+  /** ป้ายของช่อง “กลุ่ม” — คนละความหมายกันในสองชุด */
+  groupLabel: string;
+  groupPlaceholder: string;
+  namePlaceholder: string;
+  emptyHint: string;
+  options: SelectOption[];
+  /** ข้อความเตือนตอนแก้ชื่อ — `null` = ไม่ต้องเตือน */
+  renameWarning: string | null;
 }
 
-const emptyDraft: Draft = {
-  departmentId: "",
-  name: "",
-  icon: "",
-  sortOrder: "",
+const KIND: Record<MasterKind, KindMeta> = {
+  type: {
+    label: "ประเภทเรื่อง",
+    subtitle: "รายการที่ผู้รับผิดชอบเลือกได้ในคำร้อง — แยกตามหน่วยงาน",
+    groupLabel: "หน่วยงาน",
+    groupPlaceholder: "ทุกหน่วยงาน",
+    namePlaceholder: "เช่น การซ่อมบำรุง / อุปกรณ์",
+    emptyHint: "ยังไม่มีประเภทเรื่องในระบบ — กด “เพิ่มรายการ” เพื่อเริ่ม",
+    options: departments.map((d) => ({ value: d.id, label: d.label })),
+    renameWarning: null,
+  },
+  cause: {
+    label: "สาเหตุ",
+    subtitle: "สาเหตุหลักที่ผู้รับผิดชอบเลือกตอนจัดการเคส — แยกตามกลุ่มสาเหตุ",
+    groupLabel: "กลุ่มสาเหตุ",
+    groupPlaceholder: "ทุกกลุ่ม",
+    namePlaceholder: "เช่น อุปกรณ์ชำรุดหรือเสื่อมสภาพ",
+    emptyHint: "ยังไม่มีสาเหตุในระบบ — กด “เพิ่มรายการ” เพื่อเริ่ม",
+    options: reasonGroups.map((g) => ({ value: g.code, label: g.label })),
+    /* คำร้องเก่าเก็บ `root_cause` เป็นข้อความ ไม่ได้อ้างถึงแถวนี้ — เปลี่ยนชื่อแล้ว
+       ของเก่าจึงยังแสดงข้อความเดิม ต้องบอกก่อนกด ไม่ใช่ให้ไปเจอเอาทีหลัง */
+    renameWarning: "คำร้องที่บันทึกสาเหตุเดิมไว้แล้วยังแสดงข้อความเดิม ไม่เปลี่ยนตาม",
+  },
 };
 
-const departmentOptions: SelectOption[] = departments.map((d) => ({
-  value: d.id,
-  label: d.label,
-  icon: d.icon,
-}));
+/** ป้ายกลุ่ม — รหัสที่ระบบยังไม่รู้จักต้องยังอ่านออก ไม่ใช่หายไปเฉย ๆ */
+const groupLabelOf = (kind: MasterKind, id: string) =>
+  KIND[kind].options.find((o) => o.value === id)?.label ?? `กลุ่ม ${id}`;
 
-const iconOptions: SelectOption[] = COMPLAINT_ICON_NAMES.map((name) => ({
-  value: name,
-  label: name,
-  icon: complaintIcon(name),
-}));
+interface Draft {
+  group: string;
+  name: string;
+}
 
-/** ป้ายหน่วยงาน — รหัสที่ระบบยังไม่รู้จักต้องยังอ่านออก ไม่ใช่หายไปเฉย ๆ */
-const departmentLabelOf = (id: string) =>
-  departments.find((d) => d.id === id)?.label ?? `หน่วยงาน ${id}`;
+const emptyDraft: Draft = { group: "", name: "" };
 
-export function ComplaintTypeButton() {
+export function MasterButton({ kind }: { kind: MasterKind }) {
   const router = useRouter();
+  const meta = KIND[kind];
   const [open, setOpen] = useState(false);
-  const [rows, setRows] = useState<TypeRow[] | null>(null);
+  const [rows, setRows] = useState<MasterItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const failMessage = `ดึงรายการ${meta.label}ไม่สำเร็จ`;
 
   /**
    * อ่านรายการใหม่ทั้งชุด — เรียกทั้งตอนเปิดโมดัลและหลังทุกคำสั่งที่เขียน
@@ -83,20 +102,18 @@ export function ComplaintTypeButton() {
    */
   const reload = useCallback(async () => {
     try {
-      const data = await requestJson<ComplaintType[]>(
-        "/api/complaint-types?includeInactive=1",
+      const data = await requestJson<MasterItem[]>(
+        `/api/complaint-master?kind=${kind}&includeInactive=1`,
         { method: "GET" },
-        "ดึงรายการประเภทเรื่องไม่สำเร็จ",
+        failMessage,
       );
-      setRows(data.map((t) => ({ ...t, Icon: complaintIcon(t.icon) })));
+      setRows(data);
       setLoadError(null);
     } catch (err) {
       setRows([]);
-      setLoadError(
-        err instanceof Error ? err.message : "ดึงรายการประเภทเรื่องไม่สำเร็จ",
-      );
+      setLoadError(err instanceof Error ? err.message : failMessage);
     }
-  }, []);
+  }, [kind, failMessage]);
 
   /** ตัวกลางของทุกคำสั่งที่เขียนจริง — ยิง → อ่านรายการใหม่ → รีเฟรชหน้าเบื้องหลัง */
   const write = useCallback(
@@ -116,7 +133,7 @@ export function ComplaintTypeButton() {
       if (out.status !== "done") return;
       after?.();
       await reload();
-      // ดรอปดาวน์ประเภทเรื่องในหน้าคำร้องมาจาก server component — สั่งอ่านใหม่ด้วย
+      // ดรอปดาวน์ในหน้าคำร้องมาจาก server component — สั่งอ่านใหม่ด้วย
       router.refresh();
     },
     [reload, router],
@@ -133,11 +150,12 @@ export function ComplaintTypeButton() {
         className="flex items-center gap-1.5 rounded-field border border-line bg-base-100 px-3.5 py-2 text-[13px] font-medium text-mut transition-colors hover:border-ink/30 hover:text-ink"
       >
         <Tags size={16} strokeWidth={1.8} aria-hidden />
-        ประเภทเรื่อง
+        {meta.label}
       </button>
 
       {open ? (
-        <ComplaintTypePanel
+        <MasterPanel
+          kind={kind}
           rows={rows}
           loadError={loadError}
           busy={busy}
@@ -149,21 +167,25 @@ export function ComplaintTypeButton() {
   );
 }
 
-function ComplaintTypePanel({
+function MasterPanel({
+  kind,
   rows,
   loadError,
   busy,
   write,
   onClose,
 }: {
-  rows: TypeRow[] | null;
+  kind: MasterKind;
+  rows: MasterItem[] | null;
   loadError: string | null;
   busy: boolean;
   write: (opts: Parameters<typeof runAction>[0], after?: () => void) => void;
   onClose: () => void;
 }) {
+  const meta = KIND[kind];
+
   /** id ของแถวที่กำลังแก้ · `"new"` = กำลังเพิ่มของใหม่ · `null` = ไม่ได้แก้อะไร */
-  const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [filter, setFilter] = useState("all");
 
@@ -195,30 +217,25 @@ function ComplaintTypePanel({
 
   const shown = useMemo(() => {
     if (!rows) return [];
-    return filter === "all" ? rows : rows.filter((r) => r.departmentId === filter);
+    return filter === "all" ? rows : rows.filter((r) => r.group === filter);
   }, [rows, filter]);
 
   const filterOptions: SelectOption[] = [
-    { value: "all", label: "ทุกหน่วยงาน" },
-    ...departmentOptions,
+    { value: "all", label: meta.groupPlaceholder },
+    ...meta.options,
   ];
 
-  const draftValid = Boolean(draft.departmentId && draft.name.trim());
+  const draftValid = Boolean(draft.group && draft.name.trim());
 
   function startAdd() {
     setEditing("new");
-    // กรองอยู่ที่หน่วยงานไหน ก็เดาว่ากำลังจะเพิ่มให้หน่วยงานนั้น
-    setDraft({ ...emptyDraft, departmentId: filter === "all" ? "" : filter });
+    // กรองอยู่ที่กลุ่มไหน ก็เดาว่ากำลังจะเพิ่มให้กลุ่มนั้น
+    setDraft({ ...emptyDraft, group: filter === "all" ? "" : filter });
   }
 
-  function startEdit(row: TypeRow) {
+  function startEdit(row: MasterItem) {
     setEditing(row.id);
-    setDraft({
-      departmentId: row.departmentId,
-      name: row.name,
-      icon: row.icon ?? "",
-      sortOrder: String(row.sortOrder),
-    });
+    setDraft({ group: row.group, name: row.name });
   }
 
   const cancelEdit = () => {
@@ -231,18 +248,16 @@ function ComplaintTypePanel({
 
     const name = draft.name.trim();
     const isNew = editing === "new";
-    const body = {
-      departmentId: draft.departmentId,
-      name,
-      icon: draft.icon || null,
-      sortOrder: draft.sortOrder ? Number(draft.sortOrder) : 0,
-    };
+    const renamed = !isNew && rows?.find((r) => r.id === editing)?.name !== name;
+    const warning = renamed ? meta.renameWarning : null;
 
     write(
       {
         confirm: {
-          title: isNew ? "เพิ่มประเภทเรื่องนี้?" : "บันทึกการแก้ไข?",
-          html: `${escapeHtml(departmentLabelOf(draft.departmentId))}<span class="hrs-swal-quote">${escapeHtml(name)}</span>`,
+          title: isNew ? `เพิ่ม${meta.label}นี้?` : "บันทึกการแก้ไข?",
+          html: `${escapeHtml(groupLabelOf(kind, draft.group))}<span class="hrs-swal-quote">${escapeHtml(name)}</span>${
+            warning ? escapeHtml(warning) : ""
+          }`,
           confirmText: isNew ? "เพิ่ม" : "บันทึก",
         },
         pending: isNew ? "กำลังเพิ่ม…" : "กำลังบันทึก…",
@@ -250,25 +265,28 @@ function ComplaintTypePanel({
         failureTitle: isNew ? "เพิ่มไม่สำเร็จ" : "บันทึกไม่สำเร็จ",
         run: () =>
           isNew
-            ? requestJson("/api/complaint-types", { method: "POST", body })
-            : requestJson(`/api/complaint-types/${editing}`, {
+            ? requestJson("/api/complaint-master", {
+                method: "POST",
+                body: { kind, group: draft.group, name },
+              })
+            : requestJson(`/api/complaint-master/${editing}`, {
                 method: "PUT",
-                body,
+                body: { group: draft.group, name },
               }),
       },
       cancelEdit,
     );
   }
 
-  function toggleActive(row: TypeRow) {
-    const next = !row.isActive;
+  function toggleActive(row: MasterItem) {
+    const next = !row.active;
 
     write({
       confirm: {
         title: next ? `เปิดใช้งาน “${row.name}”?` : `ปิดใช้งาน “${row.name}”?`,
         text: next
-          ? "จะกลับมาให้เลือกได้ในฟอร์มคำร้องของหน่วยงานนี้"
-          : "จะไม่ขึ้นให้เลือกในคำร้องใหม่ — คำร้องเก่าที่ใช้ประเภทนี้อยู่ยังแสดงชื่อเดิมตามปกติ",
+          ? "จะกลับมาให้เลือกได้ในฟอร์มคำร้อง"
+          : "จะไม่ขึ้นให้เลือกในคำร้องใหม่ — คำร้องเก่าที่ใช้รายการนี้อยู่ยังแสดงค่าเดิมตามปกติ",
         confirmText: next ? "เปิดใช้งาน" : "ปิดใช้งาน",
         tone: next ? "primary" : "warn",
       },
@@ -276,22 +294,28 @@ function ComplaintTypePanel({
       success: next ? "เปิดใช้งานแล้ว" : "ปิดใช้งานแล้ว",
       failureTitle: "เปลี่ยนสถานะไม่สำเร็จ",
       run: () =>
-        requestJson(`/api/complaint-types/${row.id}`, {
+        requestJson(`/api/complaint-master/${row.id}`, {
           method: "PUT",
-          body: { isActive: next },
+          body: { active: next },
         }),
     });
   }
 
   /**
-   * ลบถาวร — **NCAC ตอบ 409 ถ้ามีคำร้องอ้างถึงอยู่** พร้อมบอกจำนวนและให้ใช้
-   * การปิดใช้งานแทน · ข้อความนั้นถูกส่งต่อไปขึ้นกล่องแดงตรง ๆ ไม่ได้ถูกกลบ
+   * ลบถาวร — **ประเภทเรื่องที่มีคำร้องอ้างถึงอยู่ NCAC ตอบ 409** พร้อมบอกจำนวน
+   * และให้ใช้การปิดใช้งานแทน · ข้อความนั้นถูกส่งต่อไปขึ้นกล่องแดงตรง ๆ ไม่ได้ถูกกลบ
+   * ส่วนสาเหตุลบได้เสมอ เพราะคำร้องเก็บเป็นข้อความไว้แล้ว
    */
-  function remove(row: TypeRow) {
+  function remove(row: MasterItem) {
+    const note =
+      kind === "type"
+        ? "ลบได้เฉพาะประเภทที่ยังไม่มีคำร้องไหนใช้ — ถ้ามีคำร้องใช้อยู่ระบบจะไม่ลบให้ ใช้ “ปิดใช้งาน” แทน"
+        : "คำร้องที่บันทึกสาเหตุนี้ไว้แล้วยังแสดงข้อความเดิม แต่จะไม่มีให้เลือกอีก";
+
     write({
       confirm: {
         title: `ลบ “${row.name}” ถาวร?`,
-        html: `ลบได้เฉพาะประเภทที่ยังไม่มีคำร้องไหนใช้ — ถ้ามีคำร้องใช้อยู่ระบบจะไม่ลบให้ ใช้ “ปิดใช้งาน” แทน<span class="hrs-swal-quote">${escapeHtml(departmentLabelOf(row.departmentId))}</span>`,
+        html: `${escapeHtml(note)}<span class="hrs-swal-quote">${escapeHtml(groupLabelOf(kind, row.group))}</span>`,
         confirmText: "ลบถาวร",
         tone: "danger",
       },
@@ -299,7 +323,7 @@ function ComplaintTypePanel({
       success: `ลบ “${row.name}” แล้ว`,
       failureTitle: "ลบไม่สำเร็จ",
       run: () =>
-        requestJson(`/api/complaint-types/${row.id}`, {
+        requestJson(`/api/complaint-master/${row.id}`, {
           method: "DELETE",
           body: {},
         }),
@@ -310,7 +334,7 @@ function ComplaintTypePanel({
     <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-6">
       <button
         type="button"
-        aria-label="ปิดหน้าต่างจัดการประเภทเรื่อง"
+        aria-label={`ปิดหน้าต่างจัดการ${meta.label}`}
         onClick={close}
         className="absolute inset-0 cursor-default bg-ink/45 backdrop-blur-[2px]"
       />
@@ -318,17 +342,15 @@ function ComplaintTypePanel({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="complaint-type-title"
+        aria-labelledby="master-title"
         className="relative flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-[18px] border border-line bg-canvas shadow-[0_32px_80px_-24px_rgba(21,32,29,0.45)] outline-none animate-rise"
       >
         <header className="flex flex-none items-center justify-between gap-3 border-b border-line bg-base-100 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="complaint-type-title" className="text-[15px] font-semibold">
-              ประเภทเรื่อง
+            <h2 id="master-title" className="text-[15px] font-semibold">
+              {meta.label}
             </h2>
-            <p className="mt-0.5 text-[11.5px] text-mut text-pretty">
-              รายการที่ผู้รับผิดชอบเลือกได้ในคำร้อง — แยกตามหน่วยงาน
-            </p>
+            <p className="mt-0.5 text-[11.5px] text-mut text-pretty">{meta.subtitle}</p>
           </div>
           <button
             type="button"
@@ -343,11 +365,11 @@ function ComplaintTypePanel({
 
         <div className="flex flex-none items-center gap-2 border-b border-line bg-base-100 px-5 py-3">
           <div className="flex items-center gap-2 rounded-field border border-line px-3 py-1.5">
-            <span className="flex-none text-[12px] text-mut">หน่วยงาน</span>
+            <span className="flex-none text-[12px] text-mut">{meta.groupLabel}</span>
             <Select
               value={filter}
               onChange={setFilter}
-              label="กรองตามหน่วยงาน"
+              label={`กรองตาม${meta.groupLabel}`}
               variant="bare"
               options={filterOptions}
             />
@@ -360,14 +382,15 @@ function ComplaintTypePanel({
             className="ml-auto flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             <Plus size={15} strokeWidth={2.2} aria-hidden />
-            เพิ่มประเภท
+            เพิ่มรายการ
           </button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-5">
           {editing === "new" ? (
             <DraftCard
-              title="เพิ่มประเภทเรื่องใหม่"
+              title={`เพิ่ม${meta.label}ใหม่`}
+              meta={meta}
               draft={draft}
               setDraft={setDraft}
               onSave={save}
@@ -390,8 +413,8 @@ function ComplaintTypePanel({
           {rows !== null && !shown.length && !loadError ? (
             <p className="px-1 py-8 text-center text-[13px] text-mut text-pretty">
               {filter === "all"
-                ? "ยังไม่มีประเภทเรื่องในระบบ — กด “เพิ่มประเภท” เพื่อเริ่ม"
-                : `ยังไม่มีประเภทเรื่องของ ${departmentLabelOf(filter)}`}
+                ? meta.emptyHint
+                : `ยังไม่มี${meta.label}ของ ${groupLabelOf(kind, filter)}`}
             </p>
           ) : null}
 
@@ -400,6 +423,7 @@ function ComplaintTypePanel({
               <DraftCard
                 key={row.id}
                 title={`แก้ไข “${row.name}”`}
+                meta={meta}
                 draft={draft}
                 setDraft={setDraft}
                 onSave={save}
@@ -411,6 +435,7 @@ function ComplaintTypePanel({
               <Row
                 key={row.id}
                 row={row}
+                groupLabel={groupLabelOf(kind, row.group)}
                 /* กำลังแก้แถวอื่นอยู่ = กดอะไรกับแถวที่เหลือไม่ได้ กันแก้ทับซ้อนกัน */
                 disabled={busy || editing !== null}
                 onEdit={() => startEdit(row)}
@@ -428,12 +453,14 @@ function ComplaintTypePanel({
 
 function Row({
   row,
+  groupLabel,
   disabled,
   onEdit,
   onToggle,
   onDelete,
 }: {
-  row: TypeRow;
+  row: MasterItem;
+  groupLabel: string;
   disabled: boolean;
   onEdit: () => void;
   onToggle: () => void;
@@ -442,32 +469,26 @@ function Row({
   return (
     <div
       className={`flex items-center gap-3 rounded-box border border-line bg-base-100 px-3.5 py-2.5 ${
-        row.isActive ? "" : "opacity-60"
+        row.active ? "" : "opacity-60"
       }`}
     >
-      <span className="flex size-8 flex-none items-center justify-center rounded-selector bg-soft text-primary">
-        <row.Icon size={15} strokeWidth={1.7} aria-hidden />
-      </span>
-
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13.5px] font-medium">
           {row.name}
-          {row.isActive ? null : (
+          {row.active ? null : (
             <span className="ml-2 rounded-full bg-base-200 px-1.5 py-0.5 text-[10.5px] font-normal text-mut">
               ปิดใช้งาน
             </span>
           )}
         </p>
-        <p className="mt-0.5 truncate text-[11.5px] text-mut">
-          {departmentLabelOf(row.departmentId)} · ลำดับ {row.sortOrder}
-        </p>
+        <p className="mt-0.5 truncate text-[11.5px] text-mut">{groupLabel}</p>
       </div>
 
       <ToolButton
-        label={row.isActive ? `ปิดใช้งาน ${row.name}` : `เปิดใช้งาน ${row.name}`}
+        label={row.active ? `ปิดใช้งาน ${row.name}` : `เปิดใช้งาน ${row.name}`}
         onClick={onToggle}
         disabled={disabled}
-        tone={row.isActive ? "mut" : "primary"}
+        tone={row.active ? "mut" : "primary"}
       >
         <Check size={15} strokeWidth={1.9} aria-hidden />
       </ToolButton>
@@ -529,6 +550,7 @@ function ToolButton({
 
 function DraftCard({
   title,
+  meta,
   draft,
   setDraft,
   onSave,
@@ -537,6 +559,7 @@ function DraftCard({
   busy,
 }: {
   title: string;
+  meta: KindMeta;
   draft: Draft;
   setDraft: (fn: (d: Draft) => Draft) => void;
   onSave: () => void;
@@ -550,46 +573,22 @@ function DraftCard({
 
       <div className="grid gap-3.5 sm:grid-cols-2">
         <SelectField
-          id="ct-department"
-          label="หน่วยงานผู้รับผิดชอบ"
-          value={draft.departmentId}
-          onChange={(v) => setDraft((d) => ({ ...d, departmentId: v }))}
+          id="master-group"
+          label={meta.groupLabel}
+          value={draft.group}
+          onChange={(v) => setDraft((d) => ({ ...d, group: v }))}
           placeholder="เลือก…"
-          options={departmentOptions}
+          options={meta.options}
           readOnly={busy}
         />
         <TextField
-          id="ct-name"
-          label="ชื่อประเภทเรื่อง"
+          id="master-name"
+          label={`ชื่อ${meta.label}`}
           value={draft.name}
           onChange={(v) => setDraft((d) => ({ ...d, name: v }))}
-          placeholder="เช่น การซ่อมบำรุง / อุปกรณ์"
+          placeholder={meta.namePlaceholder}
           readOnly={busy}
         />
-        <SelectField
-          id="ct-icon"
-          label="ไอคอน"
-          value={draft.icon}
-          onChange={(v) => setDraft((d) => ({ ...d, icon: v }))}
-          placeholder="ไม่ระบุ (ใช้ไอคอนกลาง)"
-          options={iconOptions}
-          readOnly={busy}
-          optional
-          clearable
-        />
-        {/* <TextField
-          id="ct-sort"
-          label="ลำดับการแสดง"
-          value={draft.sortOrder}
-          onChange={(v) =>
-            // เก็บเป็นข้อความแต่รับเฉพาะตัวเลข — `NumberField` ใช้ไม่ได้เพราะช่องนี้
-            // ว่างไว้ได้ (ว่าง = 0) แล้วค่า `null` ของมันจะปนกับ “ยังไม่กรอก”
-            setDraft((d) => ({ ...d, sortOrder: v.replace(/\D/g, "") }))
-          }
-          placeholder="0"
-          readOnly={busy}
-          optional
-        /> */}
       </div>
 
       <div className="flex items-center justify-end gap-2">

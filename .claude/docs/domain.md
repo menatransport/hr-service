@@ -57,10 +57,12 @@ state, open a closed case or one that has not been assigned yet.
 ## Reference data (carried over in full from the legacy system)
 
 - `departments` — 7 PIC departments, `id` matches the legacy `department_id`
-- `complaintTypesByDepartment` — sub-types per PIC
-- `reasonGroups` — 6-group root-cause tree (PAY / OPS / VEH / SAF / MGT / OTH), used in three
-  places: the driver picks a **group** when reporting · the PIC picks a **leaf** as root cause ·
-  `lib/ncac/adapt.ts` maps a root cause back to its group
+- **ประเภทเรื่อง and สาเหตุ are no longer hard-coded** — both live in the Mongo collection
+  `master_complainte` and are edited from the queue page (`lib/complaint-master.ts`, see
+  `data-layer.md`). Read them with `getComplaintTypes()` / `getRootCauses()`
+- `reasonGroups` — 6-group root-cause tree (PAY / OPS / VEH / SAF / MGT / OTH). Its `items` are
+  now only **seed data** for `master_complainte` plus the lookup `lib/ncac/adapt.ts` uses to map a
+  stored root cause back to its group; the codes/labels themselves are still live everywhere
 - Approvers come from NCAC `/users`, filtered to level ≥ 4 in `getEligibleApprovers()` (`lib/cases.ts`)
 
 ## Time and SLA

@@ -22,11 +22,13 @@ export interface ComplaintReviewDto {
 /**
  * หนึ่งแถวของ `complaint_master` — “ประเภทเรื่อง” ของหน่วยงานหนึ่ง
  *
- * เดิมรายการนี้ hard-code อยู่ใน `lib/data.ts` แก้ทีต้อง deploy ใหม่
- * ย้ายมาอยู่ที่ NCAC แล้ว (`/complaint-masters`) แก้ผ่านหน้าจอได้เลย
+ * **หน้าจออ่านจาก `master_complainte` ของ MongoDB แล้ว ไม่ได้อ่านจากที่นี่** —
+ * ตารางนี้เหลือหน้าที่เดียวคือเป็นเจ้าของ `id` ที่ `driver_complaints.problem`
+ * ผูก FK ไว้ ทุกคำสั่งเขียนจึงยังต้องผ่าน `/complaint-masters` ก่อนแล้วค่อย sync
+ * ลง Mongo (ดูหัวไฟล์ `lib/complaint-master.ts`)
  *
- * `icon` เป็น **ชื่อไอคอนของ lucide** (เช่น `"Wrench"`) ไม่ใช่ SVG —
- * ตัวแปลงชื่อเป็นคอมโพเนนต์อยู่ที่ `lib/complaint-icons.ts`
+ * `icon` **เลิกใช้แล้ว** (8 ก.ย. 2026) คอลัมน์ยังอยู่ฝั่ง backend แต่ระบบนี้
+ * ไม่อ่านและไม่เขียนอีก — อย่าเอากลับมาใส่ในหน้าจอ
  */
 export interface ComplaintMasterDto {
   id: number;

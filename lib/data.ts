@@ -101,14 +101,16 @@ export const departmentIcon = (id: string | null): LucideIcon =>
  * ประเภทข้อร้องเรียนตาม PIC — **ย้ายออกจากไฟล์นี้แล้ว 13 ส.ค. 2026**
  *
  * เดิมเป็น `complaintTypesByDepartment` ที่ hard-code ไว้ตรงนี้ แก้ทีต้อง deploy
- * ใหม่ทุกครั้ง · ตอนนี้อยู่ในตาราง `complaint_master` ของ NCAC แก้ผ่านปุ่ม
- * “ประเภทเรื่อง” บนหน้าคิวคำร้องได้เลย
+ * ใหม่ทุกครั้ง · ตอนนี้อยู่ในคอลเลกชัน `master_complainte` ของ MongoDB
+ * (`kind: "type"`) แก้ผ่านปุ่ม “ประเภทเรื่อง” บนหน้าคิวคำร้องได้เลย
  *
  * | ต้องการอะไร | ไปที่ไหน |
  * |---|---|
- * | อ่านฝั่ง server | `getComplaintTypes()` ใน `lib/complaint-types.ts` |
- * | อ่าน/แก้ฝั่ง client | `/api/complaint-types` (ผ่าน `requestJson`) |
- * | แปลงชื่อไอคอนเป็นคอมโพเนนต์ | `complaintIcon()` ใน `lib/complaint-icons.ts` |
+ * | อ่านฝั่ง server | `getComplaintTypes()` ใน `lib/complaint-master.ts` |
+ * | อ่าน/แก้ฝั่ง client | `/api/complaint-master?kind=type` (ผ่าน `requestJson`) |
+ *
+ * **ไม่มีไอคอนประจำประเภทแล้ว** — เจ้าของงานให้ถอดออก 8 ก.ย. 2026
+ * (`lib/complaint-icons.ts` ถูกลบทิ้งไปพร้อมกัน อย่าสร้างกลับมา)
  *
  * **อย่าสร้างรายการ hard-code กลับมาอีก** — ค่าที่อยู่สองที่จะหลุด sync ทันที
  * ที่มีคนเพิ่มประเภทใหม่ผ่านหน้าจอ
@@ -118,8 +120,17 @@ export const departmentIcon = (id: string | null): LucideIcon =>
 
 /**
  * ผังสาเหตุหลัก 6 กลุ่ม ยกมาจาก `REASON_CODE_MAIN` ของระบบเดิม
- * ใช้สามที่: คนขับเลือก **กลุ่ม** ตอนแจ้ง · PIC เลือก **รายการย่อย** เป็น root cause ·
- * `lib/ncac/adapt.ts` ใช้ย้อนรอยจาก root cause ที่ NCAC ส่งมากลับเป็นกลุ่ม
+ *
+ * **`items` ไม่ใช่รายการที่หน้าจอใช้เลือกแล้ว** (8 ก.ย. 2026) — รายการจริงอยู่ใน
+ * `master_complainte` (`kind: "cause"`) แก้ผ่านปุ่ม “สาเหตุ” บนหน้าคิวคำร้อง
+ * ที่เหลือไว้ตรงนี้ทำสองหน้าที่:
+ *
+ * 1. **ข้อมูลตั้งต้น** ของคอลเลกชันนั้นตอนยังว่าง (`seedCauses()`)
+ * 2. **ผังย้อนรอย** ที่ `lib/ncac/adapt.ts` ใช้แปลง `root_cause` ที่ NCAC ส่งมา
+ *    กลับเป็นรหัสกลุ่ม — สาเหตุที่ถูกเพิ่มใหม่ทีหลังจะไม่อยู่ในผังนี้ `deriveReasonGroup()`
+ *    จึงถอยไปเดาจากหน่วยงานของคำร้องแทน (พฤติกรรมเดิมของค่าที่ไม่รู้จัก)
+ *
+ * ส่วน `code` / `label` / `icon` / `hint` ยังเป็นของจริงที่ใช้ทั้งระบบ
  */
 export const reasonGroups: ReasonGroup[] = [
   {

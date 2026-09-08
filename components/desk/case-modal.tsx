@@ -27,11 +27,10 @@ import {
   needsRootCauseDetail,
   statusMeta,
 } from "@/lib/case-flow";
-import { complaintIcon } from "@/lib/complaint-icons";
-import { reasonGroups } from "@/lib/data";
+import { reasonGroup } from "@/lib/data";
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction, type ConfirmOptions } from "@/lib/swal";
-import type { Approver, ComplaintType, HrCase } from "@/lib/types";
+import type { Approver, HrCase, MasterItem, ReasonGroupCode } from "@/lib/types";
 
 /* ---------------------------------------------------------------- draft */
 
@@ -63,11 +62,11 @@ interface Draft {
  * เทียบกับ **รายการที่เลือกได้จริงตอนนี้** ไม่ใช่กับ `hrCase.departmentId` เฉย ๆ —
  * ประเภทที่ถูกปิดใช้งานไปแล้วก็ต้องให้เลือกใหม่เหมือนกัน
  */
-const typeFitsDepartment = (c: HrCase, options: ComplaintType[]) =>
+const typeFitsDepartment = (c: HrCase, options: MasterItem[]) =>
   c.complaintTypeId === null ||
-  options.some((t) => t.id === c.complaintTypeId);
+  options.some((t) => t.id === String(c.complaintTypeId));
 
-const draftOf = (c: HrCase, options: ComplaintType[]): Draft => ({
+const draftOf = (c: HrCase, options: MasterItem[]): Draft => ({
   complaintTypeId: typeFitsDepartment(c, options)
     ? (c.complaintTypeId?.toString() ?? "")
     : "",
@@ -110,10 +109,42 @@ const FIELD_LABEL: Record<keyof Draft, string> = {
 /** ช่องที่ส่งเป็น `null` ได้เมื่อผู้ใช้ล้างค่า — ฝั่ง API รับ null แปลว่า “ลบค่า” */
 const nullable = (v: string) => (v.trim() ? v.trim() : null);
 
-const rootCauseGroups: SelectGroupOption[] = reasonGroups.map((g) => ({
-  label: `${g.label} (${g.code})`,
-  options: g.items.map((i) => ({ value: i, label: i })),
-}));
+/**
+ * สาเหตุจาก `master_complainte` → ดรอปดาวน์ที่จัดกลุ่มไว้แล้ว
+ *
+ * **ค่าใน `Select` คือ “ข้อความสาเหตุ” ไม่ใช่ id** เพราะ `root_cause` ของ NCAC
+ * เป็นคอลัมน์ข้อความมาแต่ไหนแต่ไร — ค่าที่คำร้องเก่าเก็บไว้จึงยังหาป้ายเจอตามเดิม
+ *
+ * กลุ่มที่ไม่มีสาเหตุเหลือเลย (ปิดใช้งานหมด) จะไม่ถูกสร้างหัวข้อว่าง ๆ ทิ้งไว้
+ *
+ * `saved` = สาเหตุที่คำร้องนี้เก็บไว้แล้ว — ถ้าถูกปิดใช้งานหรือเปลี่ยนชื่อไปแล้ว
+ * มันจะไม่อยู่ในรายการอีก แล้ว `Select` จะขึ้น placeholder เหมือนยังไม่เคยเลือก
+ * ทั้งที่ค่ายังอยู่จริง (หน้าจอโกหก) — จึงใส่กลับเข้าไปเป็นกลุ่มของตัวเอง
+ */
+function toRootCauseGroups(causes: MasterItem[], saved: string): SelectGroupOption[] {
+  const byGroup = new Map<string, MasterItem[]>();
+  for (const c of causes) {
+    const list = byGroup.get(c.group);
+    if (list) list.push(c);
+    else byGroup.set(c.group, [c]);
+  }
+
+  const groups = [...byGroup].map(([code, items]) => {
+    const g = reasonGroup(code as ReasonGroupCode);
+    return {
+      label: `${g.label} (${g.code})`,
+      options: items.map((i) => ({ value: i.name, label: i.name })),
+    };
+  });
+
+  if (saved && !causes.some((c) => c.name === saved)) {
+    groups.unshift({
+      label: "สาเหตุเดิมของคำร้องนี้",
+      options: [{ value: saved, label: saved }],
+    });
+  }
+  return groups;
+}
 
 /* ---------------------------------------------------------------- modal */
 
@@ -121,6 +152,7 @@ export function CaseModal({
   hrCase,
   approvers,
   complaintTypes,
+  rootCauses,
 }: {
   hrCase: HrCase;
   /** ผู้มีสิทธิ์อนุมัติจาก NCAC `/users` (ระดับ ≥ 4) — server ดึงมาให้แล้ว */
@@ -129,7 +161,12 @@ export function CaseModal({
    * ประเภทเรื่องที่เลือกได้ **ของหน่วยงานที่ถือคำร้องนี้เท่านั้น** — server กรอง
    * มาให้แล้ว (`activeComplaintTypesFor`) เคสที่ยังไม่มอบหมายจะได้ `[]`
    */
-  complaintTypes: ComplaintType[];
+  complaintTypes: MasterItem[];
+  /**
+   * สาเหตุหลักที่ยังเปิดใช้งาน — มาจาก `master_complainte` แก้ได้จากปุ่ม “สาเหตุ”
+   * บนหน้าคิวคำร้อง (เดิมเป็นรายการตายตัวใน `lib/data.ts`)
+   */
+  rootCauses: MasterItem[];
 }) {
   const router = useRouter();
   const me = useDeskIdentity();
@@ -248,12 +285,19 @@ export function CaseModal({
     me.employeeId
   );
 
-  /** ไอคอนมาจาก `complaint_master.icon` — ผู้ใช้ตั้งเองได้ในหน้าจัดการประเภทเรื่อง */
   const typeOptions: SelectOption[] = complaintTypes.map((t) => ({
-    value: String(t.id),
+    value: t.id,
     label: t.name,
-    icon: complaintIcon(t.icon),
   }));
+
+  const savedCause = hrCase.rootCause ?? "";
+  const rootCauseGroups = useMemo(
+    () => toRootCauseGroups(rootCauses, savedCause),
+    [rootCauses, savedCause],
+  );
+
+  /** ค่าเดิมที่ไม่อยู่ในรายการแล้ว — ต้องบอกว่าทำไมมันโผล่มาเป็นกลุ่มแยก */
+  const staleCause = Boolean(savedCause) && !rootCauses.some((c) => c.name === savedCause);
 
   /** ค่าที่ `draftOf` ตัดทิ้งไปเพราะหน่วยงานเปลี่ยน — ต้องบอกให้ PIC รู้ว่าทำไมช่องว่าง */
   const staleType =
@@ -590,6 +634,11 @@ export function CaseModal({
                   value={draft.rootCause}
                   onChange={setRootCause}
                   placeholder="เลือก…"
+                  hint={
+                    staleCause
+                      ? `สาเหตุ “${savedCause}” ถูกปิดใช้งานหรือเปลี่ยนชื่อไปแล้ว — ค่าเดิมยังอยู่ เลือกใหม่ได้ถ้าต้องการ`
+                      : undefined
+                  }
                   readOnly={locked || busy}
                   groups={rootCauseGroups}
                   clearable

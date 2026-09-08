@@ -6,10 +6,10 @@ import type {
   Approver,
   CaseReview,
   CaseStatus,
-  ComplaintType,
   DepartmentId,
   Employee,
   HrCase,
+  MasterItem,
   Priority,
   ReasonGroupCode,
   ReviewStatus,
@@ -272,20 +272,25 @@ function deriveReasonGroup(dto: ComplaintDto): ReasonGroupCode {
 /* ---------------------------------------------------------------- ประเภทเรื่อง */
 
 /**
- * แถวของ `complaint_master` → ชนิดที่หน้าจอใช้
+ * แถวของ `complaint_master` → `MasterItem` ที่ Mongo กับหน้าจอใช้ร่วมกัน
  *
- * `department_id` ถูกแปลงเป็น **สตริง** ให้เทียบกับ `HrCase.departmentId` ได้ตรง ๆ
- * และ **ไม่ตรวจว่าอยู่ใน `DEPARTMENTS` ไหม** — ถ้าผู้ใช้เพิ่มประเภทให้หน่วยงานที่
+ * `id` / `department_id` ถูกแปลงเป็น **สตริง** เพราะ `master_complainte` เก็บ
+ * ประเภทเรื่องกับสาเหตุไว้คอลเลกชันเดียวกัน (`_id` จึงต้องเป็นชนิดเดียวกัน) และ
+ * ทำให้เทียบ `group` กับ `HrCase.departmentId` ได้ตรง ๆ
+ *
+ * **ไม่ตรวจว่าหน่วยงานอยู่ใน `DEPARTMENTS` ไหม** — ถ้าผู้ใช้เพิ่มประเภทให้หน่วยงานที่
  * ระบบยังไม่รู้จัก มันควรหายไปจากดรอปดาวน์ของหน่วยงานอื่นเฉย ๆ ไม่ใช่ถูกโยนทิ้ง
  * เงียบ ๆ จนหน้าจัดการแสดงไม่ครบ
+ *
+ * `icon` ของ upstream ถูกทิ้งโดยตั้งใจ — เจ้าของงานให้ถอดไอคอนออกจากประเภทเรื่อง
+ * แล้ว (8 ก.ย. 2026) คอลัมน์ฝั่ง NCAC ยังอยู่แต่ระบบนี้ไม่อ่านและไม่เขียนอีก
  */
-export const toComplaintType = (dto: ComplaintMasterDto): ComplaintType => ({
-  id: dto.id,
-  departmentId: String(dto.department_id),
+export const toMasterType = (dto: ComplaintMasterDto): MasterItem => ({
+  id: String(dto.id),
+  group: String(dto.department_id),
   name: dto.name,
-  icon: dto.icon?.trim() || null,
-  sortOrder: dto.sort_order ?? 0,
-  isActive: dto.is_active !== false,
+  order: dto.sort_order ?? 0,
+  active: dto.is_active !== false,
 });
 
 /* ---------------------------------------------------------------- ความสำคัญ */
