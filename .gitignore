@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code — ตั้งค่าเฉพาะเครื่อง (มี absolute path ของผู้ใช้อยู่ข้างใน)
+.claude/settings.json
+.claude/settings.local.json

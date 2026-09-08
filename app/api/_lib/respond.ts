@@ -25,3 +25,8 @@ export function fail(err: unknown) {
 export function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }
+
+/** ยังไม่ล็อกอิน — ใช้กับเส้น `GET` ที่คืนข้อมูลซึ่ง `proxy.ts` ไม่ได้กันไว้ให้ */
+export function unauthorized(message: string) {
+  return NextResponse.json({ error: message }, { status: 401 });
+}

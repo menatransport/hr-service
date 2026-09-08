@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Inbox, Paperclip, Plus, Trash2 } from "lucide-react";
 
 import { ExportExcelButton } from "@/components/desk/export-button";
+import { NotifyModal } from "@/components/desk/notify-modal";
 import { Avatar } from "@/components/ui/avatar";
 import { SearchField, Select, type SelectOption } from "@/components/ui/field";
 import { Pager } from "@/components/ui/pager";
@@ -86,6 +87,14 @@ export function CaseTable({
   const [saving, startSaving] = useTransition();
 
   /**
+   * เคสที่กำลังจะส่งอีเมลแจ้งหน่วยงาน — ตั้งค่าหลังมอบหมายสำเร็จเท่านั้น
+   *
+   * กล่องอีเมลเป็น **ขั้นแยก ไม่ใช่ผลพ่วง** ของการมอบหมาย: มอบหมายติดแล้วแม้ผู้ใช้
+   * ปิดกล่องทิ้ง เคสก็ยังอยู่กับหน่วยงานใหม่ · เปิดใหม่ทีหลังได้จากหน้ารายละเอียดเคส
+   */
+  const [notifying, setNotifying] = useState<string | null>(null);
+
+  /**
    * คำร้องที่เพิ่งลบไป — ซ่อนแถวทิ้งระหว่างรอ `router.refresh()` วิ่งกลับมา
    *
    * ใส่**หลังเซิร์ฟเวอร์ยืนยันว่าลบติดจริงแล้วเท่านั้น** ไม่ใช่ตอนกดยืนยัน —
@@ -127,6 +136,8 @@ export function CaseTable({
 
       if (out.status === "done") {
         router.refresh();
+        // มอบหมายแล้วต้องมีคนรู้ — เปิดกล่องส่งอีเมลต่อทันที (กดข้ามได้)
+        setNotifying(c.trackingNo);
         return;
       }
       // คืนค่าเดิมให้แถว เพื่อไม่ให้หน้าจอโกหกว่าบันทึกแล้ว
@@ -561,6 +572,13 @@ export function CaseTable({
           <Pager current={current} count={pageCount} onGo={setPage} />
         </div>
       </div>
+
+      {notifying ? (
+        <NotifyModal
+          trackingNo={notifying}
+          onClose={() => setNotifying(null)}
+        />
+      ) : null}
     </div>
   );
 }

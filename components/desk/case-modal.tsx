@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Lock, X } from "lucide-react";
+import { Check, Lock, Mail, X } from "lucide-react";
 
 import { useDeskIdentity } from "@/components/auth/identity-provider";
 import { ApprovalPanel } from "@/components/desk/approval-panel";
+import { NotifyModal } from "@/components/desk/notify-modal";
 import { AttachmentGallery } from "@/components/ui/attachment-gallery";
 import { Avatar } from "@/components/ui/avatar";
 import { CaseStepper } from "@/components/ui/case-stepper";
@@ -142,8 +143,20 @@ export function CaseModal({
     null,
   );
   const [remark, setRemark] = useState("");
+  /** กล่องส่งอีเมลแจ้งหน่วยงาน — ลอยทับโมดัลนี้อีกชั้น */
+  const [notifyOpen, setNotifyOpen] = useState(false);
 
   const close = useCallback(() => router.push("/desk"), [router]);
+
+  /**
+   * กล่องส่งอีเมลลอยทับอยู่ไหม — ตัวฟัง Esc ข้างล่างต้องรู้ แต่ **ห้ามเป็น dependency
+   * ของ effect นั้น**: effect เดียวกันยิง `dialog.current.focus()` ด้วย ถ้า mount ใหม่
+   * ตอนกล่องอีเมลเปิด โฟกัสจะถูกดึงกลับมาที่กล่องเคสทันทีที่กล่องอีเมลเพิ่งขึ้น
+   */
+  const notifyOpenRef = useRef(false);
+  useEffect(() => {
+    notifyOpenRef.current = notifyOpen;
+  }, [notifyOpen]);
 
   // Esc ปิด · ล็อกไม่ให้หน้าหลังเลื่อน · โฟกัสเข้ามาในกล่อง
   useEffect(() => {
@@ -152,6 +165,9 @@ export function CaseModal({
       // dropdown เปิดอยู่ → Esc ครั้งนี้เป็นของ dropdown เท่านั้น (Radix ไม่ได้
       // หยุด event ให้ ถ้าไม่กันตรงนี้ modal จะปิดตามไปด้วยในการกดครั้งเดียว)
       if (isDropdownOpen()) return;
+      /* กล่องส่งอีเมลก็เหมือนกัน — ตัวฟังของทั้งสองกล่องอยู่บน `document` และทำงาน
+         ทั้งคู่ในการกดครั้งเดียว ปล่อยไว้ Esc ในกล่องอีเมลจะเด้งออกจากหน้าเคสไปเลย */
+      if (notifyOpenRef.current) return;
       close();
     };
     document.addEventListener("keydown", onKey);
@@ -664,7 +680,38 @@ export function CaseModal({
           ) : null}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[12.5px] text-mut">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+              {/**
+               * “แจ้งทางอีเมล” เป็นงานข้าง ๆ ไม่ใช่ปลายทางของฟอร์ม — จึงอยู่ **ฝั่งซ้าย
+               * คู่กับข้อความสถานะ** ไม่ใช่ในกลุ่มปุ่มขวาที่มี “บันทึก/อนุมัติ/ปิดเคส”
+               * ปุ่มรองที่ไปยืนติดปุ่มหลักจะแย่งสายตาและถูกกดพลาดแทนกันได้
+               *
+               * ทรงเป็นเส้นขอบบาง (`text-mut`) ไม่ใช่ปุ่มทึบ — น้ำหนักทางสายตาต้องต่ำ
+               * กว่าปุ่มบันทึกเสมอ แต่ขนาดตัวอักษร/ระยะขอบเท่าปุ่มอื่นในฟุตเตอร์
+               * จะได้ไม่ดูเป็นของแปลกปลอมที่หลุดมาจากที่อื่น
+               *
+               * แสดง **ทุกเคส ตลอดเวลา** · ยังไม่มอบหมาย = กดไม่ได้แต่ยังเห็นพร้อม
+               * เหตุผล (ปุ่มที่หายไปเฉย ๆ ทำให้คนหาไม่เจอและไม่รู้ว่าต้องทำอะไรก่อน) ·
+               * ซ่อนเฉพาะตอนกำลังกรอกเหตุผลอนุมัติ/ปฏิเสธ ซึ่งเป็นโหมดตัดสินใจอย่างเดียว
+               */}
+              {pendingAction ? null : (
+                <button
+                  type="button"
+                  onClick={() => setNotifyOpen(true)}
+                  disabled={unassigned || busy}
+                  title={
+                    unassigned
+                      ? "มอบหมายหน่วยงานผู้รับผิดชอบก่อน จึงจะรู้ว่าต้องส่งอีเมลถึงใคร"
+                      : `แจ้ง ${departmentLabel(hrCase.departmentId)} ทางอีเมล`
+                  }
+                  className="flex flex-none items-center gap-1.5 rounded-field border border-line px-3.5 py-2 text-[13px] text-mut transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <Mail size={15} strokeWidth={1.9} aria-hidden />
+                  แจ้งทางอีเมล
+                </button>
+              )}
+
+              <p className="min-w-0 text-[12.5px] text-mut">
               {busy ? (
                 "กำลังบันทึก…"
               ) : detailMissing ? (
@@ -681,7 +728,8 @@ export function CaseModal({
               ) : (
                 `สถานะ “${statusMeta[hrCase.status].label}”`
               )}
-            </p>
+              </p>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {pendingAction ? (
@@ -770,6 +818,13 @@ export function CaseModal({
           </div>
         </footer>
       </div>
+
+      {notifyOpen ? (
+        <NotifyModal
+          trackingNo={hrCase.trackingNo}
+          onClose={() => setNotifyOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -248,14 +248,17 @@ export const deskNav: { section: string; items: DeskNavItem[] }[] = [
       //     { href: "/desk/registry/saraburi", label: "ทะเบียนสระบุรี" },
       //   ],
       // },
-      //  {
+      // เมนู C&B พร้อมใช้แล้ว แต่ยัง **เปิดไม่ได้** — `app/desk/payroll/**` ยังเป็น
+      // โฟลเดอร์เปล่า ไม่มี `page.tsx` สักหน้า (ทั้งสามลิงก์จะ 404) เอาคอมเมนต์ออก
+      // เมื่อหน้า upload / setting / report มีจริงแล้ว
+      // {
       //   href: "/desk/payroll",
-      //   label: "เงินเดือนพจส.",
+      //   label: "C&B",
       //   icon: Wallet,
       //   children: [
       //     { href: "/desk/payroll/upload", label: "อัปโหลดข้อมูล" },
+      //     { href: "/desk/payroll/setting", label: "ตั้งค่า" },
       //     { href: "/desk/payroll/report", label: "รายงาน" },
-      //     { href: "/desk/payroll/master", label: "คลังข้อมูล" },
       //   ],
       // },
       // `/desk/activity` (Log) ย้ายไปเป็นไอคอนบน topbar แล้ว — ไม่ต้องเพิ่มกลับที่นี่
