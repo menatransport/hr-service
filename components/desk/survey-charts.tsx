@@ -71,7 +71,7 @@ export function SurveyCharts({ responses }: { responses: SurveyResponse[] }) {
 
   if (!responses.length) {
     return (
-      <p className="rounded-box border border-line bg-base-100 px-5 py-14 text-center text-[13px] text-mut">
+      <p className="rounded-box border border-line bg-base-100 px-5 py-14 text-center text-13 text-mut">
         ยังไม่มีคำตอบให้วิเคราะห์
       </p>
     );
@@ -149,12 +149,12 @@ function Stat({
         <Icon size={17} strokeWidth={1.7} aria-hidden />
       </span>
       <div className="flex min-w-0 flex-col">
-        <span className="text-[12px] text-mut">{label}</span>
+        <span className="text-12 text-mut">{label}</span>
         <span className="text-lg font-semibold leading-tight">
           {value.toLocaleString("th-TH")}{" "}
-          <span className="text-[12px] font-normal text-mut">{unit}</span>
+          <span className="text-12 font-normal text-mut">{unit}</span>
         </span>
-        {note ? <span className="text-[11.5px] text-mut">{note}</span> : null}
+        {note ? <span className="text-11-5 text-mut">{note}</span> : null}
       </div>
     </div>
   );
@@ -187,7 +187,7 @@ function ResponseTrend({ responses }: { responses: SurveyResponse[] }) {
           <TrendingUp size={16} strokeWidth={1.8} className="text-primary" aria-hidden />
           แนวโน้มการตอบกลับ
         </figcaption>
-        <p className="text-[12.5px] text-mut">
+        <p className="text-12-5 text-mut">
           {points.length === 1
             ? `คำตอบทั้งหมดเข้ามาวันเดียว (${fmtDay(points[0].day)}) — ยังดูแนวโน้มไม่ได้`
             : "ยังไม่มีข้อมูลวันที่ตอบ"}
@@ -212,15 +212,15 @@ function ResponseTrend({ responses }: { responses: SurveyResponse[] }) {
             <TrendingUp size={16} strokeWidth={1.8} className="text-primary" aria-hidden />
             แนวโน้มการตอบกลับ
           </h2>
-          <p className="text-[12px] text-mut">จำนวนผู้ตอบสะสม · หน่วยเป็นคน</p>
+          <p className="text-12 text-mut">จำนวนผู้ตอบสะสม · หน่วยเป็นคน</p>
         </div>
-        <span className="text-[12px] text-mut">
+        <span className="text-12 text-mut">
           รวม <span className="font-semibold text-ink">{max}</span> คน ใน {points.length} วัน
         </span>
       </figcaption>
 
       <div className="flex gap-2">
-        <div className="relative w-7 flex-none text-[10.5px] text-mut" aria-hidden>
+        <div className="relative w-7 flex-none text-10-5 text-mut" aria-hidden>
           <span className="absolute right-0 top-0 -translate-y-1/2">{max}</span>
           <span className="absolute right-0 bottom-0 translate-y-1/2">0</span>
         </div>
@@ -248,7 +248,7 @@ function ResponseTrend({ responses }: { responses: SurveyResponse[] }) {
         </div>
       </div>
 
-      <div className="flex justify-between pl-9 text-[11.5px] text-mut">
+      <div className="flex justify-between pl-9 text-11-5 text-mut">
         <span>{fmtDay(points[0].day)}</span>
         <span>{fmtDay(points[points.length - 1].day)}</span>
       </div>
@@ -308,6 +308,13 @@ function DonutCard({
               className="transition-all"
             />
           ))}
+          {/*
+            ขนาดตัวอักษรสองตัวนี้เป็น **หน่วยของ SVG ไม่ใช่พิกเซลบนจอ** — วงกราฟนี้
+            วาดใน `viewBox` 36×36 หน่วย ตัวเลข `5` กับ `2.6` จึงอ่านเทียบกับวงแหวน
+            ไม่ใช่เทียบกับตัวหนังสือรอบ ๆ · **ห้ามเปลี่ยนไปใช้โทเคน `text-*`**
+            ของสเกลตัวอักษร ไม่งั้นตัวเลขจะโตทะลุออกนอกวงตอนจอกว้าง
+            (SVG สเกลตัวเองตามกรอบอยู่แล้ว ข้อความในนั้นจึงโตตามจอโดยอัตโนมัติ)
+          */}
           <text
             x="18"
             y="17.2"
@@ -327,7 +334,7 @@ function DonutCard({
               key={row.label}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
-              className="flex items-start gap-2 text-[12.5px]"
+              className="flex items-start gap-2 text-12-5"
             >
               <span
                 className="mt-1 size-2.5 flex-none rounded-[3px]"
@@ -379,7 +386,7 @@ function BarCard({
       <ul className="flex flex-col gap-2">
         {rows.map((row, i) => (
           <li key={row.label} className="flex flex-col gap-1">
-            <span className="flex items-baseline justify-between gap-3 text-[12.5px]">
+            <span className="flex items-baseline justify-between gap-3 text-12-5">
               <span className="min-w-0 text-pretty">{row.label}</span>
               <span className="flex-none tabular-nums text-mut">
                 {row.count} · {Math.round(row.pct)}%
@@ -462,11 +469,11 @@ function RankCard({
       <ul className="flex flex-col gap-2.5">
         {rows.items.map((item, i) => (
           <li key={item.label} className="flex items-center gap-3">
-            <span className="flex size-6 flex-none items-center justify-center rounded-full bg-soft text-[11.5px] font-semibold text-primary">
+            <span className="flex size-6 flex-none items-center justify-center rounded-full bg-soft text-11-5 font-semibold text-primary">
               {i + 1}
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="flex items-baseline justify-between gap-3 text-[12.5px]">
+              <span className="flex items-baseline justify-between gap-3 text-12-5">
                 <span className="min-w-0 text-pretty">{item.label}</span>
                 <span className="flex-none tabular-nums text-mut">
                    {item.first} คน
@@ -514,7 +521,7 @@ function CommentsCard({
           <MessageSquareQuote size={16} strokeWidth={1.8} className="text-primary" aria-hidden />
           {question.short}
         </h2>
-        <p className="text-[12px] text-mut text-pretty">
+        <p className="text-12 text-mut text-pretty">
           {question.question} · {comments.length} คนเขียนมา
         </p>
       </figcaption>
@@ -526,8 +533,8 @@ function CommentsCard({
               key={`${c.name}-${c.text}`}
               className="rounded-box border border-line bg-canvas px-3.5 py-2.5"
             >
-              <p className="text-[13px] text-pretty">{c.text}</p>
-              <p className="mt-1 text-[11.5px] text-mut">
+              <p className="text-13 text-pretty">{c.text}</p>
+              <p className="mt-1 text-11-5 text-mut">
                 {c.name}
                 {c.plant ? ` · ${c.plant}` : ""}
               </p>
@@ -535,7 +542,7 @@ function CommentsCard({
           ))}
         </ul>
       ) : (
-        <p className="text-[12.5px] text-mut">ยังไม่มีใครเขียนข้อความมา</p>
+        <p className="text-12-5 text-mut">ยังไม่มีใครเขียนข้อความมา</p>
       )}
     </figure>
   );
@@ -565,9 +572,9 @@ function CardHead({
           </span>
           {question.short}
         </h2>
-        <p className="text-[12px] text-mut text-pretty">{note ?? question.question}</p>
+        <p className="text-12 text-mut text-pretty">{note ?? question.question}</p>
       </div>
-      <span className="flex-none text-[11.5px] text-mut">ตอบ {base} คน</span>
+      <span className="flex-none text-11-5 text-mut">ตอบ {base} คน</span>
     </figcaption>
   );
 }
@@ -585,7 +592,7 @@ function EmptyCard({ question, tone = "primary" }: { question: SurveyQuestion; t
         </span>
         {question.short}
       </h2>
-      <p className="text-[12.5px] text-mut">ยังไม่มีใครตอบข้อนี้</p>
+      <p className="text-12-5 text-mut">ยังไม่มีใครตอบข้อนี้</p>
     </figure>
   );
 }

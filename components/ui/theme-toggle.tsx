@@ -67,11 +67,11 @@ export function ThemeToggleRow() {
       <span className="flex-none text-mut">
         <ThemeIcons size={17} />
       </span>
-      <span className="flex-1 text-[13.5px]">
+      <span className="flex-1 text-13-5">
         <span className="theme-label theme-label-light">โหมดสว่าง</span>
         <span className="theme-label theme-label-dark">โหมดมืด</span>
       </span>
-      <span className="flex-none text-[12px] text-mut">แตะเพื่อสลับ</span>
+      <span className="flex-none text-12 text-mut">แตะเพื่อสลับ</span>
     </button>
   );
 }

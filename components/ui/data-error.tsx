@@ -23,8 +23,8 @@ export function DataError({
     >
       <TriangleAlert size={22} strokeWidth={1.7} className="text-sla" aria-hidden />
       <p className="text-sm font-semibold text-sla">{title}</p>
-      <p className="max-w-[46ch] text-[12.5px] text-mut text-pretty">{message}</p>
-      <p className="text-[11.5px] text-mut">
+      <p className="max-w-[46ch] text-12-5 text-mut text-pretty">{message}</p>
+      <p className="text-11-5 text-mut">
         ตรวจค่า <code className="font-mono">{envKey}</code> แล้วลองโหลดหน้านี้ใหม่
       </p>
     </div>

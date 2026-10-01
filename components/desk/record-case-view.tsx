@@ -258,7 +258,7 @@ export function RecordCaseView({
               <button
                 type="button"
                 onClick={() => setManagingCategories(true)}
-                className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3.5 py-2 text-[13px] text-mut transition-colors hover:border-ink/30 hover:text-ink"
+                className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3.5 py-2 text-13 text-mut transition-colors hover:border-ink/30 hover:text-ink"
               >
                 <Settings2 size={15} strokeWidth={1.8} aria-hidden />
                 จัดการประเภทเคส
@@ -266,7 +266,7 @@ export function RecordCaseView({
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90"
+                className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
               >
                 <Plus size={16} strokeWidth={2} aria-hidden />
                 บันทึกเคสใหม่
@@ -303,7 +303,7 @@ export function RecordCaseView({
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="flex-none rounded-full px-3 py-1.5 text-[12.5px] text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
+                  className="flex-none rounded-full px-3 py-1.5 text-12-5 text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
                 >
                   ล้างตัวกรอง
                 </button>
@@ -341,14 +341,14 @@ export function RecordCaseView({
 
         {/* ── จอ ≥md: ตารางแบบสเปรดชีต หัวตารางตรึง เส้นตารางครบทุกช่อง ── */}
         <div className="hidden md:block">
-          <div className="max-h-[78dvh] overflow-auto rounded-box border border-line bg-base-100">
-            <table className="w-full min-w-[1120px] border-collapse text-left text-[12.5px]">
+          <div className="elev-card max-h-[78dvh] overflow-auto rounded-box border border-line bg-base-100">
+            <table className="w-full min-w-[1120px] border-collapse text-left text-12-5">
               <thead>
-                <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-line [&>th]:bg-base-200">
+                <tr className="bg-head [&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-line-strong [&>th]:bg-head">
                   {/* ช่องเลขแถวแบบสเปรดชีต — ไม่ใช่ข้อมูลของเคส จึงไม่ให้เรียง */}
                   <th
                     scope="col"
-                    className="w-10 border-r border-line px-2 py-2 text-center text-[11px] font-medium text-mut"
+                    className="w-10 border-r border-line px-2 py-2 text-center text-11 font-medium text-mut"
                   >
                     <span className="sr-only">ลำดับ</span>#
                   </th>
@@ -455,7 +455,7 @@ export function RecordCaseView({
                         }`}
                       >
                         <td
-                          className={`relative border-r border-line px-2 py-2 text-center align-middle text-[11px] tabular-nums ${
+                          className={`relative border-r border-line px-2 py-2 text-center align-middle text-11 tabular-nums ${
                             expanded
                               ? "bg-base-300/70 font-semibold text-ink"
                               : "bg-base-200/70 text-mut"
@@ -495,7 +495,7 @@ export function RecordCaseView({
                                 className={`transition-transform ${expanded ? "rotate-90" : ""}`}
                               />
                             </button>
-                            <span className="font-mono text-[11.5px] text-primary">
+                            <span className="font-mono text-11-5 text-primary">
                               {r.code}
                             </span>
                           </span>
@@ -504,7 +504,7 @@ export function RecordCaseView({
                           <span className="block font-medium text-pretty">{r.title}</span>
                           {/* กางแผงแล้วซ่อนบรรทัดย่อทิ้ง — ข้างล่างมีข้อความเต็มอยู่แล้ว */}
                           {expanded ? null : (
-                            <span className="mt-0.5 flex items-center gap-2 text-[11.5px] text-mut">
+                            <span className="mt-0.5 flex items-center gap-2 text-11-5 text-mut">
                               <span className="truncate">{r.detail}</span>
                               {r.involved.length ? (
                                 <span
@@ -642,20 +642,20 @@ export function RecordCaseView({
                         className={`transition-transform ${expanded ? "rotate-90" : ""}`}
                       />
                     </button>
-                    <span className="font-mono text-[11.5px] text-mut">{r.code}</span>
+                    <span className="font-mono text-11-5 text-mut">{r.code}</span>
                     <RecordStatusBadge status={r.status} />
-                    <span className="min-w-0 flex-1 text-[14px] font-medium text-pretty">
+                    <span className="min-w-0 flex-1 text-14 font-medium text-pretty">
                       {r.title}
                     </span>
                   </div>
 
                   {expanded ? null : (
-                    <p className="line-clamp-2 text-[12.5px] leading-[1.7] text-mut text-pretty">
+                    <p className="line-clamp-2 text-12-5 leading-[1.7] text-mut text-pretty">
                       {r.detail}
                     </p>
                   )}
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-mut">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-11-5 text-mut">
                     <span className="flex items-center gap-1.5">
                       <Cat size={13} strokeWidth={1.7} className="flex-none" />
                       {recordCategoryLabel(categories, r.category)}
@@ -715,7 +715,7 @@ export function RecordCaseView({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
-          <p className="text-[12px] text-mut">
+          <p className="text-12 text-mut">
             {shown.length ? (
               <>
                 แสดง{" "}
@@ -732,7 +732,7 @@ export function RecordCaseView({
 
           <div className="flex items-center gap-3">
             <div className="hidden items-center gap-2 sm:flex">
-              <span className="flex-none text-[12px] text-mut">ต่อหน้า</span>
+              <span className="flex-none text-12 text-mut">ต่อหน้า</span>
               <Select
                 value={String(perPage)}
                 onChange={(v) => setPerPage(Number(v))}
@@ -808,7 +808,7 @@ function Th({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className={`group flex w-full items-center gap-1.5 px-3 py-2 text-left text-[11.5px] tracking-[0.04em] transition-colors hover:text-ink ${
+        className={`group flex w-full items-center gap-1.5 px-3 py-2 text-left text-11-5 tracking-[0.04em] transition-colors hover:text-ink ${
           on ? "text-ink" : "text-mut"
         }`}
       >
@@ -833,7 +833,7 @@ function Empty({ total, onClear }: { total: number; onClear?: () => void }) {
       <p className="text-sm font-semibold">
         {total ? "ไม่มีเคสที่ตรงกับเงื่อนไข" : "ยังไม่มีบันทึกเคส"}
       </p>
-      <p className="max-w-[46ch] text-[12.5px] leading-[1.7] text-mut text-pretty">
+      <p className="max-w-[46ch] text-12-5 leading-[1.7] text-mut text-pretty">
         {total
           ? "ลองล้างตัวกรองหรือเปลี่ยนคำค้นหา"
           : "กด “บันทึกเคสใหม่” เพื่อบันทึกเรื่องแรกเข้าระบบ"}
@@ -842,7 +842,7 @@ function Empty({ total, onClear }: { total: number; onClear?: () => void }) {
         <button
           type="button"
           onClick={onClear}
-          className="rounded-full border border-line px-3.5 py-1.5 text-[12.5px] transition-colors hover:border-ink/30 hover:text-ink"
+          className="rounded-full border border-line px-3.5 py-1.5 text-12-5 transition-colors hover:border-ink/30 hover:text-ink"
         >
           ล้างตัวกรอง
         </button>
@@ -867,7 +867,7 @@ function Chip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12.5px] transition-colors ${
+      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-12-5 transition-colors ${
         active
           ? "border-ink bg-ink font-medium text-ink-content"
           : "border-line bg-base-100 text-mut hover:border-primary/40 hover:text-ink"

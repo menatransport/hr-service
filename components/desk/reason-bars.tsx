@@ -15,7 +15,7 @@ export function ReasonBars({ slices }: { slices: ReasonSlice[] }) {
         <h2 className="text-sm font-semibold">
           เรื่องร้องเรียนแยกตามกลุ่มสาเหตุหลัก
         </h2>
-        <p className="text-[12px] text-mut">รวม {total} เคส</p>
+        <p className="text-12 text-mut">รวม {total} เคส</p>
       </figcaption>
 
       {slices.length ? (
@@ -26,10 +26,10 @@ export function ReasonBars({ slices }: { slices: ReasonSlice[] }) {
 
             return (
               <li key={code} className="flex flex-col gap-1.5">
-                <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                <div className="flex items-baseline justify-between gap-3 text-12-5">
                   <span>
                     {group.label}{" "}
-                    <span className="font-mono text-[11px] text-mut">{code}</span>
+                    <span className="font-mono text-11 text-mut">{code}</span>
                   </span>
                   <span className="flex-none text-mut">
                     <strong className="font-medium text-ink">{count}</strong> ·{" "}
@@ -48,7 +48,7 @@ export function ReasonBars({ slices }: { slices: ReasonSlice[] }) {
           })}
         </ul>
       ) : (
-        <p className="py-6 text-center text-[13px] text-mut">ยังไม่มีข้อมูล</p>
+        <p className="py-6 text-center text-13 text-mut">ยังไม่มีข้อมูล</p>
       )}
     </figure>
   );

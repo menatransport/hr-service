@@ -106,9 +106,9 @@ export function AttachmentField({
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
         {hideLabel ? null : (
-          <span className="text-[12.5px] font-medium text-mut">ไฟล์แนบ</span>
+          <span className="text-12-5 font-medium text-mut">ไฟล์แนบ</span>
         )}
-        <span className="ml-auto text-[11.5px] text-mut">
+        <span className="ml-auto text-11-5 text-mut">
           {value.length}/{MAX_FILES} ไฟล์
         </span>
       </div>
@@ -134,8 +134,8 @@ export function AttachmentField({
         }`}
       >
         <Paperclip size={20} strokeWidth={1.7} className="text-mut" aria-hidden />
-        <span className="text-[13px] font-medium">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</span>
-        <span className="text-[11.5px] text-mut">
+        <span className="text-13 font-medium">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</span>
+        <span className="text-11-5 text-mut">
           รูปภาพ JPG · PNG · WebP และเอกสาร PDF · Word · Excel · CSV · TXT (ไม่เกิน {MAX_MB} MB)
         </span>
         <input
@@ -155,7 +155,7 @@ export function AttachmentField({
       </label>
 
       {error ? (
-        <p className="flex items-start gap-1.5 text-[12px] text-alert">
+        <p className="flex items-start gap-1.5 text-12 text-alert">
           <TriangleAlert size={14} strokeWidth={1.8} className="mt-0.5 flex-none" aria-hidden />
           {error}
         </p>
@@ -173,11 +173,11 @@ export function AttachmentField({
                 href={attachmentUrl(file)}
                 target="_blank"
                 rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-[12.5px] hover:text-primary hover:underline underline-offset-2"
+                className="min-w-0 flex-1 truncate text-12-5 hover:text-primary hover:underline underline-offset-2"
               >
                 {file.name}
               </a>
-              <span className="flex-none text-[11.5px] text-mut">
+              <span className="flex-none text-11-5 text-mut">
                 {formatFileSize(file.size)}
               </span>
               {!disabled ? (
@@ -199,8 +199,8 @@ export function AttachmentField({
               className="flex items-center gap-2.5 rounded-field border border-dashed border-line bg-base-200 px-3 py-2 text-mut"
             >
               <Loader2 size={15} strokeWidth={1.8} className="flex-none animate-spin" aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-[12.5px]">{name}</span>
-              <span className="flex-none text-[11.5px]">กำลังอัปโหลด…</span>
+              <span className="min-w-0 flex-1 truncate text-12-5">{name}</span>
+              <span className="flex-none text-11-5">กำลังอัปโหลด…</span>
             </li>
           ))}
         </ul>

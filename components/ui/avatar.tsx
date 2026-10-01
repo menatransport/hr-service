@@ -10,15 +10,15 @@
  */
 
 const sizes = {
-  sm: "size-8 text-[11.5px]",
+  sm: "size-8 text-11-5",
   /** แถบบนของเดสก์ — เท่าปุ่มไอคอนข้าง ๆ พอดี ไม่ให้แถวขวาสูงต่ำไม่เท่ากัน */
-  nav: "size-9 text-[12px]",
-  md: "size-10 text-[13px]",
-  lg: "size-12 text-[15px]",
+  nav: "size-9 text-12",
+  md: "size-10 text-13",
+  lg: "size-12 text-15",
   /** หัวหน้าโปรไฟล์มือถือ */
-  hero: "size-14 text-[16px]",
+  hero: "size-14 text-16",
   /** ขนาดรูปบนบัตรประจำตัวเต็มใบ — ตรงกับวงรูปบนบัตรหน้า login */
-  xl: "size-18.5 text-[19px]",
+  xl: "size-18.5 text-19",
 };
 
 /** ตัวอักษรที่ใช้เป็นตัวย่อได้จริง — ไม่เอาเว้นวรรค วงเล็บ จุด */
@@ -47,23 +47,37 @@ export function initialsOf(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map(head).join("") || "?";
 }
 
+/**
+ * โทนของวงรูป — พื้นของตัวย่อ สีตัวอักษร และวงขอบ มาเป็นชุดเดียวกัน
+ *
+ * `alert` มีไว้สำหรับ **คนที่พ้นสภาพไปแล้ว** เท่านั้น — ไม่ใช่สีสุ่มตามชื่อ
+ * หรือตามอารมณ์ เพราะสีในระบบนี้แปลความหมายเสมอ (สถานะ / ความสำคัญ)
+ */
+const tones = {
+  default:
+    "bg-linear-to-br from-ph-thumb to-ph-avatar text-ink/75 ring-line group-hover:text-ink group-hover:ring-primary/35",
+  alert: "bg-alert-soft text-alert ring-alert/35 group-hover:text-alert group-hover:ring-alert/60",
+};
+
 export function Avatar({
   name,
   size = "sm",
   src,
+  tone = "default",
   className = "",
 }: {
   name: string;
   size?: keyof typeof sizes;
   /** รูปจริงของคนนี้ — ไม่ส่งมาหรือเป็น `null` จะตกไปใช้ตัวย่อชื่อแทน */
   src?: string | null;
+  tone?: keyof typeof tones;
   className?: string;
 }) {
   return (
     <span
       // ชื่อเต็มอยู่ข้าง ๆ เสมอ — รูป/ตัวย่อจึงเป็นแค่ภาพ ไม่ต้องให้ screen reader อ่านซ้ำ
       aria-hidden
-      className={`inline-flex flex-none items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-ph-thumb to-ph-avatar font-semibold text-ink/75 ring-1 ring-line transition duration-200 ring-inset select-none group-hover:-translate-y-px group-hover:text-ink group-hover:ring-primary/35 ${sizes[size]} ${className}`}
+      className={`inline-flex flex-none items-center justify-center overflow-hidden rounded-full font-semibold ring-1 transition duration-200 ring-inset select-none group-hover:-translate-y-px ${tones[tone]} ${sizes[size]} ${className}`}
     >
       {src ? (
         /* `<img>` ธรรมดา ไม่ใช่ `next/image` — โฮสต์ของรูปยังไม่รู้ จึงประกาศ

@@ -95,7 +95,7 @@ export function ActivityLog({ entries }: { entries: ActivityEntry[] }) {
           <span className="flex size-11 items-center justify-center rounded-full bg-soft text-primary">
             <History size={20} strokeWidth={1.7} aria-hidden />
           </span>
-          <p className="text-[13px] text-mut">
+          <p className="text-13 text-mut">
             {entries.length
               ? "ไม่มีรายการที่ตรงกับเงื่อนไข"
               : "ยังไม่มีประวัติการทำงาน"}
@@ -105,7 +105,7 @@ export function ActivityLog({ entries }: { entries: ActivityEntry[] }) {
         <div className="flex flex-col gap-5">
           {days.map(({ day, items }) => (
             <section key={day} className="flex flex-col gap-2">
-              <h2 className="text-[12px] font-medium tracking-[0.02em] text-mut">
+              <h2 className="text-12 font-medium tracking-[0.02em] text-mut">
                 {day}
               </h2>
               <ul className="overflow-hidden rounded-box border border-line bg-base-100">
@@ -120,7 +120,7 @@ export function ActivityLog({ entries }: { entries: ActivityEntry[] }) {
         </div>
       )}
 
-      <p className="text-[12px] text-mut">
+      <p className="text-12 text-mut">
         แสดง {rows.length} จาก {entries.length} รายการล่าสุด
       </p>
     </div>
@@ -133,14 +133,14 @@ function Row({ entry }: { entry: ActivityEntry }) {
   /* คำร้องที่ถูกลบแล้วเปิดหน้ารายละเอียดไม่ได้ (upstream กรองออกจาก `/complaints/`)
      จึงไม่ทำเป็นลิงก์ — ลิงก์ที่พาไปหน้าว่างแย่กว่าไม่มีลิงก์ */
   const heading = entry.caseDeleted ? (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[11.5px] font-medium text-mut">
+    <span className="inline-flex items-center gap-1.5 font-mono text-11-5 font-medium text-mut">
       {entry.trackingNo}
       <Trash2 size={11} strokeWidth={1.9} aria-hidden />
     </span>
   ) : (
     <Link
       href={`/desk/cases/${entry.trackingNo}`}
-      className="font-mono text-[11.5px] font-medium text-primary hover:text-ink"
+      className="font-mono text-11-5 font-medium text-primary hover:text-ink"
     >
       {entry.trackingNo}
     </Link>
@@ -156,7 +156,7 @@ function Row({ entry }: { entry: ActivityEntry }) {
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span
-            className={`rounded-full px-2 py-[2px] text-[11px] font-medium ${meta.chip}`}
+            className={`rounded-full px-2 py-[2px] text-11 font-medium ${meta.chip}`}
           >
             {meta.label}
             {/* ค่าที่ระบบยังไม่รู้จัก — โชว์ของดิบไว้ ดีกว่าเงียบไปเฉย ๆ */}
@@ -165,24 +165,24 @@ function Row({ entry }: { entry: ActivityEntry }) {
               : null}
           </span>
           {heading}
-          <span className="text-[11.5px] text-mut">
+          <span className="text-11-5 text-mut">
             โดย <span className="text-ink">{activityActor(entry)}</span>
           </span>
         </div>
 
-        <p className="text-[13px] leading-snug text-pretty">
+        <p className="text-13 leading-snug text-pretty">
           {entry.subject}
           {entry.caseDeleted ? (
-            <span className="ml-1.5 text-[11.5px] text-mut">(ถูกลบแล้ว)</span>
+            <span className="ml-1.5 text-11-5 text-mut">(ถูกลบแล้ว)</span>
           ) : null}
         </p>
 
         {entry.remark ? (
-          <p className="text-[12px] text-mut text-pretty">“{entry.remark}”</p>
+          <p className="text-12 text-mut text-pretty">“{entry.remark}”</p>
         ) : null}
       </div>
 
-      <span className="flex-none self-start text-[11.5px] text-mut">
+      <span className="flex-none self-start text-11-5 text-mut">
         {formatDateTime(entry.at).split(" ").slice(-1)}
       </span>
     </div>
@@ -203,7 +203,7 @@ function Chip({
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`flex-none rounded-full border px-3 py-1.5 text-[12.5px] transition-colors ${
+      className={`flex-none rounded-full border px-3 py-1.5 text-12-5 transition-colors ${
         on
           ? "border-ink bg-ink text-ink-content"
           : "border-line bg-base-100 text-mut hover:border-ink/30 hover:text-ink"

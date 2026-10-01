@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Select as RSelect } from "radix-ui";
+import { Popover as RPopover, Select as RSelect } from "radix-ui";
 import { DayPicker } from "react-day-picker";
 import {
   CalendarDays,
@@ -43,8 +43,8 @@ export type FieldSize = "md" | "lg";
 
 const box = "w-full border bg-base-100 outline-none transition-colors";
 const boxSize: Record<FieldSize, string> = {
-  md: "rounded-field px-3.5 py-2.5 text-[13.5px]",
-  lg: "rounded-box px-3.5 py-3 text-[13.5px]",
+  md: "rounded-field px-3.5 py-2.5 text-13-5",
+  lg: "rounded-box px-3.5 py-3 text-13-5",
 };
 const enabled =
   "border-line hover:border-primary/40 focus:border-primary/60 placeholder:text-mut";
@@ -96,7 +96,7 @@ function Label({
         sr
           ? "sr-only"
           : // label เป็น mut ให้ต่างจากค่าที่กรอก (ink) — อ่านแยกออกว่าอันไหนหัวข้อ อันไหนคำตอบ
-            `text-mut ${size === "lg" ? "text-sm font-semibold" : "text-[12.5px] font-medium"}`
+            `text-mut ${size === "lg" ? "text-sm font-semibold" : "text-12-5 font-medium"}`
       }
     >
       {children}
@@ -120,7 +120,7 @@ function Label({
 
 function Hint({ children }: { children?: string }) {
   if (!children) return null;
-  return <p className="text-[11.5px] text-mut text-pretty">{children}</p>;
+  return <p className="text-11-5 text-mut text-pretty">{children}</p>;
 }
 
 /** โครงเดียวกันทุกฟิลด์: label → hint → ตัวคอนโทรล */
@@ -194,6 +194,7 @@ export function TextareaField({
   placeholder,
   rows = 3,
   resize = true,
+  mono = false,
   ...frame
 }: FieldBase & {
   value: string;
@@ -201,6 +202,8 @@ export function TextareaField({
   placeholder?: string;
   rows?: number;
   resize?: boolean;
+  /** ตัวอักษรความกว้างเท่ากัน — สำหรับช่องที่พิมพ์โค้ด/JSON (คอนโซล API Docs) */
+  mono?: boolean;
 }) {
   const { id, readOnly, optional, size = "md" } = frame;
   return (
@@ -213,9 +216,10 @@ export function TextareaField({
         disabled={readOnly}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        spellCheck={mono ? false : undefined}
         className={`${box} ${boxSize[size]} leading-relaxed ${
           resize ? "resize-y" : "resize-none"
-        } ${readOnly ? disabledBox : enabled}`}
+        } ${mono ? "font-mono text-12" : ""} ${readOnly ? disabledBox : enabled}`}
       />
     </Frame>
   );
@@ -275,7 +279,7 @@ export function TagsField({
         {value.map((name) => (
           <span
             key={name}
-            className="flex max-w-full items-center gap-1 rounded-full bg-soft py-1 pr-1.5 pl-2.5 text-[12px] text-primary"
+            className="flex max-w-full items-center gap-1 rounded-full bg-soft py-1 pr-1.5 pl-2.5 text-12 text-primary"
           >
             <span className="truncate">{name}</span>
             {readOnly ? null : (
@@ -350,7 +354,7 @@ export function CheckboxGroupField({
               key={opt.value}
               className={`flex cursor-pointer items-center gap-2 rounded-field border transition-colors ${
                 size === "lg" ? "px-3.5 py-2.5" : "px-3 py-2"
-              } text-[13px] ${
+              } text-13 ${
                 readOnly
                   ? "cursor-not-allowed border-line bg-base-200 text-mut"
                   : on
@@ -448,7 +452,7 @@ export function SearchField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={label}
-        className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-mut [&::-webkit-search-cancel-button]:hidden"
+        className="min-w-0 flex-1 bg-transparent text-13-5 text-ink outline-none placeholder:text-mut [&::-webkit-search-cancel-button]:hidden"
       />
       {value ? (
         <button
@@ -542,11 +546,11 @@ export type SelectVariant = "field" | "ghost" | "dashed" | "bare" | "sign";
 const triggerVariant: Record<SelectVariant, string> = {
   field: "",
   ghost:
-    "-mx-1.5 rounded-field border border-transparent bg-transparent px-1.5 py-1 text-[13px] hover:border-line hover:bg-base-100 data-[state=open]:border-line data-[state=open]:bg-base-100",
+    "-mx-1.5 rounded-field border border-transparent bg-transparent px-1.5 py-1 text-13 hover:border-line hover:bg-base-100 data-[state=open]:border-line data-[state=open]:bg-base-100",
   dashed:
-    "rounded-full border border-dashed border-line bg-base-100 py-1 pr-2.5 pl-2.5 text-[12px] text-mut hover:border-primary/50 hover:text-primary data-[state=open]:border-primary/50 data-[state=open]:text-primary",
-  bare: "bg-transparent text-[13px]",
-  sign: "w-full min-w-0 flex-1 bg-transparent py-1 text-[15.5px] font-medium data-placeholder:font-normal",
+    "rounded-full border border-dashed border-line bg-base-100 py-1 pr-2.5 pl-2.5 text-12 text-mut hover:border-primary/50 hover:text-primary data-[state=open]:border-primary/50 data-[state=open]:text-primary",
+  bare: "bg-transparent text-13",
+  sign: "w-full min-w-0 flex-1 bg-transparent py-1 text-15-5 font-medium data-placeholder:font-normal",
 };
 
 /**
@@ -641,7 +645,7 @@ function SearchBox({
         aria-label="ค้นหาในรายการ"
         autoComplete="off"
         /* จอเล็กใช้ 16px เพราะ iOS จะซูมหน้าจอเองถ้าตัวอักษรเล็กกว่านี้ */
-        className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-mut max-sm:text-[16px]"
+        className="min-w-0 flex-1 bg-transparent text-13 text-ink outline-none placeholder:text-mut max-sm:text-16"
       />
       {value ? (
         <button
@@ -680,6 +684,9 @@ export function Select({
   searchPlaceholder = "ค้นหา…",
   required,
   clearable,
+  trigger,
+  defaultOpen,
+  onOpenChange,
   className = "",
   contentClassName = "",
 }: {
@@ -709,10 +716,32 @@ export function Select({
    * เพราะ NCAC มีแต่ `define-reviewer` ไม่มีทางถอนออก กดล้างแล้วบันทึกจะเงียบหาย
    */
   clearable?: boolean;
+  /**
+   * ปุ่มของตัวเอง — ใช้เมื่อสิ่งที่กดไม่ใช่กล่องข้อความ (เช่นช่องสามเหลี่ยมในตาราง
+   * ติดตามฝึกงาน ที่ตัวช่องเองคือทั้งตัวแสดงผลและตัวเปิดรายการ)
+   *
+   * ส่งมาแล้ว `variant` / `icon` / `placeholder` / `className` บน trigger ถูกข้ามทั้งหมด
+   * — ปุ่มเป็นของผู้เรียกเต็มตัว · ต้องเป็นอิลิเมนต์เดียวที่ส่งต่อ ref ได้ (`<button>`)
+   * เพราะถูกวางผ่าน `asChild` ของ Radix · ส่วนกล่องรายการ ช่องค้นหา และ
+   * bottom sheet บนจอเล็กยังเหมือนดรอปดาวน์ตัวอื่นทั้งหมด
+   */
+  trigger?: React.ReactNode;
+  /**
+   * กางรายการทันทีที่ถูก mount — คู่กับ `onOpenChange` เพื่อ **สร้างดรอปดาวน์
+   * ต่อเมื่อมีคนกดจริง**
+   *
+   * มีไว้ให้ที่ที่ปุ่มมีเป็นพัน ๆ ตัวในหน้าเดียว (ตารางติดตามฝึกงานมีช่องละหนึ่งปุ่ม
+   * ~4,800 ช่อง) — การมี `Select` ประจำทุกปุ่มคือ Radix Root พันกว่าตัวพร้อมกัน
+   * ซึ่งหนักพอจะทำให้เบราว์เซอร์ค้างตั้งแต่ตอนวาดหน้า · ปุ่มเปล่าถูกอย่างมาก
+   * แล้วค่อยสลับมาเป็นตัวจริงตอนกด
+   */
+  defaultOpen?: boolean;
+  /** รู้ว่ากล่องปิดแล้ว — ผู้เรียกจะได้ถอดตัวเองออกเมื่อใช้คู่กับ `defaultOpen` */
+  onOpenChange?: (open: boolean) => void;
   className?: string;
   contentClassName?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [query, setQuery] = useState("");
 
   useOverlayCount(open);
@@ -725,12 +754,24 @@ export function Select({
 
   const q = withSearch ? query.trim().toLowerCase() : "";
   const hit = (o: SelectOption) => o.label.toLowerCase().includes(q);
-  const shownOptions = q ? options?.filter(hit) : options;
-  const shownGroups = q
-    ? groups
-        ?.map((g) => ({ ...g, options: g.options.filter(hit) }))
-        .filter((g) => g.options.length > 0)
-    : groups;
+  /**
+   * **เรนเดอร์ตัวเลือกเฉพาะตอนเปิดอยู่** — Radix Select วาด `Item` ทุกตัวลง
+   * DocumentFragment ที่มองไม่เห็นแม้ตอนปิด ในตารางที่มี `Select` ทุกแถวจึงกลายเป็น
+   * แถว × ตัวเลือก (ช่องครูฝึกในตารางคำขอ: 15 แถว × พจส. 588 คน ≈ 8,800 item)
+   * ทุกครั้งที่ตารางเมานต์ — สลับแท็บจากผู้สมัครกลับมาจึงหน่วงเป็นวินาที
+   *
+   * ปิดไว้แล้วไม่เสียอะไร: ป้ายบน trigger ป้อนเองจาก `selectedLabel` อยู่แล้ว
+   * (ดูข้างล่าง) และ `Select` ตัวนี้ไม่ได้ส่ง `name` ให้ native `<select>` ของ Radix
+   * จึงไม่มีฟอร์มไหนอ่านค่าจากตัวเลือกที่ถูกซ่อน
+   */
+  const shownOptions = !open ? undefined : q ? options?.filter(hit) : options;
+  const shownGroups = !open
+    ? undefined
+    : q
+      ? groups
+          ?.map((g) => ({ ...g, options: g.options.filter(hit) }))
+          .filter((g) => g.options.length > 0)
+      : groups;
   const firstHit = shownOptions?.[0] ?? shownGroups?.[0]?.options[0];
 
   /**
@@ -766,8 +807,14 @@ export function Select({
       onOpenChange={(o) => {
         setOpen(o);
         setQuery("");
+        onOpenChange?.(o);
       }}
     >
+      {trigger ? (
+        <RSelect.Trigger id={id} aria-label={label} asChild>
+          {trigger}
+        </RSelect.Trigger>
+      ) : (
       <RSelect.Trigger
         id={id}
         aria-label={label}
@@ -799,6 +846,7 @@ export function Select({
           />
         </RSelect.Icon>
       </RSelect.Trigger>
+      )}
 
       <RSelect.Portal>
         <RSelect.Content
@@ -848,7 +896,7 @@ export function Select({
             ))}
             {shownGroups?.map((g) => (
               <RSelect.Group key={g.label}>
-                <RSelect.Label className="px-2.5 pt-2.5 pb-1 text-[11.5px] font-medium text-mut">
+                <RSelect.Label className="px-2.5 pt-2.5 pb-1 text-11-5 font-medium text-mut">
                   {g.label}
                 </RSelect.Label>
                 {g.options.map((o) => (
@@ -860,7 +908,7 @@ export function Select({
             {q && !firstHit ? (
               <p
                 role="status"
-                className="px-2.5 py-6 text-center text-[13px] text-mut max-sm:text-[14px]"
+                className="px-2.5 py-6 text-center text-13 text-mut max-sm:text-14"
               >
                 ไม่พบตัวเลือกที่ตรงกับ “{query.trim()}”
               </p>
@@ -885,7 +933,7 @@ export function Select({
                 onChange("");
                 setOpen(false);
               }}
-              className="flex flex-none items-center gap-2 border-t border-line px-3 py-2.5 text-[12.5px] text-mut transition-colors hover:bg-base-200 hover:text-alert max-sm:px-4 max-sm:py-3.5 max-sm:pb-safe max-sm:text-[15px]"
+              className="flex flex-none items-center gap-2 border-t border-line px-3 py-2.5 text-12-5 text-mut transition-colors hover:bg-base-200 hover:text-alert max-sm:px-4 max-sm:py-3.5 max-sm:pb-safe max-sm:text-15"
             >
               <X size={14} strokeWidth={1.9} aria-hidden className="flex-none" />
               ล้างค่าที่เลือก
@@ -901,7 +949,7 @@ function Item({ option }: { option: SelectOption }) {
   return (
     <RSelect.Item
       value={option.value}
-      className="relative flex cursor-pointer items-center rounded-field py-2 pr-2.5 pl-8 text-[13.5px] outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-base-200 data-[state=checked]:font-medium data-[state=checked]:text-primary max-sm:py-3 max-sm:text-[15px]"
+      className="relative flex cursor-pointer items-center rounded-field py-2 pr-2.5 pl-8 text-13-5 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-base-200 data-[state=checked]:font-medium data-[state=checked]:text-primary max-sm:py-3 max-sm:text-15"
     >
       <RSelect.ItemIndicator className="absolute left-2.5 flex items-center text-primary">
         <Check size={15} strokeWidth={2.4} aria-hidden />
@@ -961,6 +1009,78 @@ export function SelectField({
   );
 }
 
+/* ------------------------------------------------------- dropdown ของเบราว์เซอร์ */
+
+/**
+ * `<select>` ของเบราว์เซอร์แท้ ๆ — **สำหรับหน้าที่กรอกบนมือถือเป็นหลัก**
+ *
+ * ต่างจาก `SelectField` ข้างบนที่วาดรายการเองด้วย Radix: ตัวนี้ปล่อยให้ระบบ
+ * ปฏิบัติการเป็นคนกางรายการ ผู้สมัครจึงได้ตัวเลือกหน้าตาเดียวกับทุกแอปในเครื่อง
+ * — วงล้อของ iOS หรือกล่องของ Android — ที่คนขับคุ้นมืออยู่แล้ว ไม่ใช่แผ่นเลื่อน
+ * ที่เราออกแบบเอง · ได้ของแถมคือรายการไม่มีทางถูกอะไรบัง ไม่ต้องคำนวณตำแหน่ง
+ * และใช้ได้แม้ JS ยังโหลดไม่เสร็จ
+ *
+ * ฝั่ง `/desk` ยังใช้ `SelectField` ต่อไป เพราะทำงานบนเดสก์ท็อปและต้องการ
+ * ช่องค้นหา / กลุ่มตัวเลือก / ไอคอน ซึ่ง `<select>` ทำไม่ได้
+ *
+ * จัดสไตล์ได้แค่ **ตอนหุบ** — `appearance-none` ถอดลูกศรของระบบออกแล้ววาด
+ * chevron เองให้เข้าชุดกับช่องอื่น ส่วนรายการที่กางออกเป็นของระบบ แต่งไม่ได้
+ * และไม่ควรแต่ง
+ */
+export function NativeSelectField({
+  value,
+  onChange,
+  options,
+  placeholder,
+  ...frame
+}: FieldBase & {
+  value: string;
+  onChange: (v: string) => void;
+  /** `icon` ของ `SelectOption` ถูกมองข้าม — `<option>` แสดงได้แต่ข้อความ */
+  options: SelectOption[];
+  /** บรรทัดที่เห็นตอนยังไม่เลือก · เป็น `<option value="">` ที่เลือกกลับมาไม่ได้ */
+  placeholder?: string;
+}) {
+  const { id, readOnly, optional, size = "md" } = frame;
+
+  return (
+    <Frame {...frame}>
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          aria-required={optional ? undefined : true}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+          /* ยังไม่เลือก → ตัวอักษรสี mut เท่ากับ placeholder ของช่องพิมพ์
+             ไม่งั้นช่องที่ยังว่างจะดูเข้มเท่าช่องที่ตอบแล้ว */
+          className={`${box} ${boxSize[size]} appearance-none pr-10 ${
+            value ? "" : "text-mut"
+          } ${readOnly ? disabledBox : enabled}`}
+        >
+          {/* `disabled` เมื่อบังคับตอบ — กันไม่ให้เลื่อนกลับมาที่ค่าว่างหลังเลือกแล้ว
+              ข้อที่ไม่บังคับยังต้องถอยกลับมาเป็น “ไม่ตอบ” ได้ จึงปล่อยไว้ */}
+          <option value="" disabled={!optional}>
+            {placeholder ?? "เลือกคำตอบ"}
+          </option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        <ChevronDown
+          size={16}
+          strokeWidth={1.8}
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-mut"
+        />
+      </div>
+    </Frame>
+  );
+}
+
 /** ค่าที่อ่านได้อย่างเดียว จัดรูปให้เข้าชุดกับฟิลด์อื่น */
 export function ReadOnlyValue({
   label,
@@ -972,7 +1092,7 @@ export function ReadOnlyValue({
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
-      <p className="rounded-field border border-line bg-base-200 px-3.5 py-2.5 text-[13.5px] text-pretty">
+      <p className="rounded-field border border-line bg-base-200 px-3.5 py-2.5 text-13-5 text-pretty">
         {value}
       </p>
     </div>
@@ -998,7 +1118,7 @@ export function ReadOnlyValue({
  * ค่าที่รับ/ส่งออกยังเป็น `YYYY-MM-DD` (ค.ศ.) เหมือนเดิม — ที่เปลี่ยนคือสิ่งที่ตาเห็น
  */
 
-const THAI_MONTHS_FULL = [
+export const THAI_MONTHS_FULL = [
   "มกราคม",
   "กุมภาพันธ์",
   "มีนาคม",
@@ -1013,7 +1133,7 @@ const THAI_MONTHS_FULL = [
   "ธันวาคม",
 ];
 
-const THAI_WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+export const THAI_WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
 /** ปีที่มากกว่านี้ถือว่าเป็น พ.ศ. — ปี ค.ศ. จริงไม่มีทางแตะเลขนี้ในอายุการใช้งานระบบ */
 const BUDDHIST_THRESHOLD = 2400;
@@ -1061,30 +1181,42 @@ function maskThaiDate(raw: string): string {
 }
 
 /** `Date` ท้องถิ่น ↔ `YYYY-MM-DD` — ไม่ผ่าน `toISOString()` ซึ่งเลื่อนวันตามโซนเวลา */
-const isoToDate = (iso: string): Date | undefined => {
+export const isoToDate = (iso: string): Date | undefined => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : undefined;
 };
-const dateToIso = (d: Date): string =>
+export const dateToIso = (d: Date): string =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+/**
+ * ปี (ค.ศ.) ในดรอปดาวน์ของปฏิทิน ใหม่ → เก่า · ย้อน 100 ปีพอสำหรับวันเกิด
+ * ล่วงหน้า 10 ปีพอสำหรับวันหมดอายุบัตร · ถ้าค่าที่เปิดอยู่หลุดช่วงก็ขยายให้ครอบ
+ */
+function calendarYears(shown: number): number[] {
+  const now = new Date().getFullYear();
+  const max = Math.max(now + 10, shown);
+  const min = Math.min(now - 100, shown);
+  return Array.from({ length: max - min + 1 }, (_, i) => max - i);
+}
+
 /** สไตล์ปฏิทินทั้งชุด — ทุกชิ้นเป็น token ของธีม ไม่มี CSS ของไลบรารีเข้ามาเกี่ยว */
-const dayPickerClassNames = {
+/** สไตล์ปฏิทินชุดเดียวของทั้งระบบ — ปฏิทินที่ฝังในหน้าอื่นต้องหน้าตาเหมือนกัน */
+export const dayPickerClassNames = {
   root: "relative",
   months: "flex flex-col",
   month: "flex flex-col gap-2",
   month_caption: "flex h-8 items-center justify-center",
-  caption_label: "text-[13px] font-semibold",
+  caption_label: "text-13 font-semibold",
   nav: "absolute inset-x-0 top-0 flex h-8 items-center justify-between",
   button_previous:
     "flex size-7 items-center justify-center rounded-selector text-mut transition-colors hover:bg-base-200 hover:text-ink disabled:opacity-35",
   button_next:
     "flex size-7 items-center justify-center rounded-selector text-mut transition-colors hover:bg-base-200 hover:text-ink disabled:opacity-35",
   month_grid: "w-full border-collapse",
-  weekday: "pb-1 text-[11px] font-normal text-mut",
+  weekday: "pb-1 text-11 font-normal text-mut",
   day: "p-[1px] text-center",
   day_button:
-    "flex size-8 items-center justify-center rounded-full text-[12.5px] transition-colors hover:bg-soft",
+    "flex size-8 items-center justify-center rounded-full text-12-5 transition-colors hover:bg-soft",
   today: "[&_button]:font-semibold [&_button]:text-primary",
   selected:
     "[&_button]:bg-primary [&_button]:font-semibold [&_button]:text-primary-content",
@@ -1107,7 +1239,6 @@ export function DateField({
   const [open, setOpen] = useState(false);
   /** ข้อความในช่องระหว่างพิมพ์ — ยังไม่ครบก็ยังไม่ส่งค่าขึ้นไปข้างบน */
   const [text, setText] = useState(() => isoToThaiDate(value));
-  const wrap = useRef<HTMLDivElement>(null);
 
   /* ค่าจากข้างบนเปลี่ยน (เลือกจากปฏิทิน / ล้างฟอร์ม) ให้ข้อความตามในการ render เดียวกัน */
   const [syncedTo, setSyncedTo] = useState(value);
@@ -1116,26 +1247,9 @@ export function DateField({
     setText(isoToThaiDate(value));
   }
 
+  /* คลิกนอกกล่อง / Esc / ปิดเมื่อเลื่อนจอ เป็นงานของ Radix แล้ว — ที่ยังต้องทำเอง
+     คือบอก modal ของ /desk ว่ามี overlay กางอยู่ ให้ Esc ครั้งแรกกินแค่ปฏิทิน */
   useOverlayCount(open);
-
-  // ปิดเมื่อคลิกนอกกล่องหรือกด Esc — Esc ต้องจบตรงนี้ ไม่ให้ทะลุไปปิดโมดัลข้างหลัง
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey, true);
-    };
-  }, [open]);
 
   function type(raw: string) {
     const masked = maskThaiDate(raw);
@@ -1156,47 +1270,124 @@ export function DateField({
 
   const selected = isoToDate(value);
 
+  /* เดือนที่ปฏิทินกางอยู่ — คุมเองเพื่อให้ดรอปดาวน์เดือน/ปีกระโดดไปได้
+     (วันเกิดย้อนไปหลายสิบปี กดลูกศรทีละเดือนไม่ไหว) · เปิดใหม่ทุกครั้งเริ่มที่ค่าที่เลือกไว้ */
+  const [month, setMonth] = useState<Date>(() => selected ?? new Date());
+  function toggle(next: boolean) {
+    if (next) setMonth(selected ?? new Date());
+    setOpen(next);
+  }
+  const years = calendarYears(month.getFullYear());
+
   return (
     <Frame {...frame}>
-      <div ref={wrap} className="relative">
-        <input
-          id={id}
-          value={text}
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder="วว/ดด/ปปปป"
-          aria-required={optional ? undefined : true}
-          disabled={readOnly}
-          onChange={(e) => type(e.target.value)}
-          onBlur={restore}
-          className={`${box} ${boxSize[size]} pr-11 ${readOnly ? disabledBox : enabled}`}
-        />
+      <RPopover.Root open={open} onOpenChange={toggle}>
+        {/* `Anchor` ครอบทั้งช่อง ปฏิทินจึงเกาะขอบซ้ายของช่อง ไม่ใช่ขอบปุ่มไอคอน
+            ที่อยู่ชิดขวา — ปฏิทินกว้างกว่าปุ่มมาก ถ้าเกาะปุ่มจะล้นออกนอกจอ */}
+        <RPopover.Anchor asChild>
+          <div className="relative">
+            <input
+              id={id}
+              value={text}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="วว/ดด/ปปปป"
+              aria-required={optional ? undefined : true}
+              disabled={readOnly}
+              onChange={(e) => type(e.target.value)}
+              onBlur={restore}
+              className={`${box} ${boxSize[size]} pr-11 ${readOnly ? disabledBox : enabled}`}
+            />
 
-        <button
-          type="button"
-          disabled={readOnly}
-          aria-label="เปิดปฏิทิน"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-field text-mut transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-mut"
-        >
-          <CalendarDays size={16} strokeWidth={1.8} aria-hidden />
-        </button>
+            <RPopover.Trigger
+              type="button"
+              disabled={readOnly}
+              aria-label="เปิดปฏิทิน"
+              className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-field text-mut transition-colors hover:text-primary disabled:cursor-not-allowed disabled:hover:text-mut"
+            >
+              <CalendarDays size={16} strokeWidth={1.8} aria-hidden />
+            </RPopover.Trigger>
+          </div>
+        </RPopover.Anchor>
 
-        {open ? (
-          /* z-60 เหมือน `Select.Content` — ต่ำกว่านี้ปฏิทินจะไปอยู่ใต้โมดัล */
-          <div className="absolute top-[calc(100%+6px)] left-0 z-60 rounded-box border border-line bg-base-100 p-2.5 shadow-[0_18px_40px_-16px_rgba(21,32,29,0.4)]">
+        <RPopover.Portal>
+          {/*
+           * ต้องเป็น **portal** ไม่ใช่ `absolute` ในช่อง — ก่อนหน้านี้ปฏิทินถูกแถบ
+           * ปุ่มล่างทับ เพราะกล่องแม่ที่เล่นแอนิเมชันขาเข้า (`animate-lift-in`)
+           * ทิ้ง `transform` ค้างไว้ = เปิด stacking context ใหม่ · `z-60` ของ
+           * ปฏิทินจึงแข่งได้แค่ในกล่องนั้น ไม่มีทางชนะ `z-20` ของแถบปุ่มที่อยู่
+           * นอกกล่อง · ออกไปอยู่ที่ `body` แล้วไม่มี transform / overflow / z-index
+           * ของใครมาขังได้อีก
+           *
+           * `collisionPadding` ให้ Radix พลิกปฏิทินขึ้นด้านบนเองเมื่อที่ว่าง
+           * ด้านล่างไม่พอ — ช่องวันเกิดมักอยู่ท้ายหน้าจอพอดี
+           */}
+          <RPopover.Content
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            collisionPadding={12}
+            /* z-60 เหมือน `Select.Content` — Radix ยกค่านี้ไปใส่กล่องนอกที่ครอบอยู่
+               ต่ำกว่านี้ปฏิทินจะไปอยู่ใต้โมดัลของ /desk */
+            className="z-60 rounded-box border border-line bg-base-100 p-2.5 shadow-[0_18px_40px_-16px_rgba(21,32,29,0.4)]"
+          >
+            {/* หัวปฏิทินทำเอง: ลูกศร + ดรอปดาวน์เดือน/ปี (พ.ศ.) — ใช้ `Select` ของเรา
+                ไม่ใช้ `captionLayout="dropdown"` ของไลบรารีซึ่งเป็น `<select>` ดิบ */}
+            <div className="mb-2 flex items-center justify-between gap-1">
+              <button
+                type="button"
+                aria-label="เดือนก่อนหน้า"
+                onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                disabled={month.getFullYear() <= years[years.length - 1] && month.getMonth() === 0}
+                className={dayPickerClassNames.button_previous}
+              >
+                <ChevronLeft size={16} strokeWidth={1.9} aria-hidden />
+              </button>
+              <div className="flex items-center gap-1">
+                <Select
+                  label="เลือกเดือน"
+                  variant="ghost"
+                  searchable={false}
+                  value={String(month.getMonth())}
+                  onChange={(v) => setMonth(new Date(month.getFullYear(), Number(v), 1))}
+                  options={THAI_MONTHS_FULL.map((name, i) => ({ value: String(i), label: name }))}
+                  className="font-semibold"
+                />
+                <Select
+                  label="เลือกปี (พ.ศ.)"
+                  variant="ghost"
+                  searchPlaceholder="พิมพ์ปี พ.ศ.…"
+                  value={String(month.getFullYear())}
+                  onChange={(v) => setMonth(new Date(Number(v), month.getMonth(), 1))}
+                  options={years.map((y) => ({ value: String(y), label: String(y + 543) }))}
+                  className="font-semibold"
+                  contentClassName="min-w-36"
+                />
+              </div>
+              <button
+                type="button"
+                aria-label="เดือนถัดไป"
+                onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                disabled={month.getFullYear() >= years[0] && month.getMonth() === 11}
+                className={dayPickerClassNames.button_next}
+              >
+                <ChevronRight size={16} strokeWidth={1.9} aria-hidden />
+              </button>
+            </div>
+
             <DayPicker
               mode="single"
               selected={selected}
-              defaultMonth={selected}
+              month={month}
+              onMonthChange={setMonth}
+              hideNavigation
               onSelect={(picked) => {
                 if (!picked) return;
                 onChange(dateToIso(picked));
                 setOpen(false);
               }}
               showOutsideDays
-              classNames={dayPickerClassNames}
+              classNames={{ ...dayPickerClassNames, month_caption: "hidden" }}
               formatters={{
                 formatCaption: (month) =>
                   `${THAI_MONTHS_FULL[month.getMonth()]} ${month.getFullYear() + 543}`,
@@ -1219,9 +1410,9 @@ export function DateField({
                   ),
               }}
             />
-          </div>
-        ) : null}
-      </div>
+          </RPopover.Content>
+        </RPopover.Portal>
+      </RPopover.Root>
     </Frame>
   );
 }

@@ -46,6 +46,7 @@ before running — without `API_NCAC_URL`, case pages render `DataError`, not a 
 | `.claude/docs/domain.md` | Case status, roles, form lock rules, SLA, timeline, reference data |
 | `.claude/docs/data-layer.md` | `lib/ncac/**` `lib/cases.ts` `app/api/**`, writes, 405/404 issues |
 | `.claude/docs/routes-ui.md` | Adding/changing pages, layouts, `/desk`, `case-modal.tsx`, notifications |
+| `.claude/docs/requisitions.md` | "ขอสรรหา" — สเปกหน้า `/recruitment/admin/requisitions` + การเชื่อม ขอสรรหา↔ผู้สมัคร↔ฝึกงาน (ยังไม่ได้สร้างหน้าจริง) |
 
 ## Two sources, strictly separated
 
@@ -120,6 +121,12 @@ as the dropdown base · **no shadcn, and no copying prebuilt components from any
 - **Pages that read cases need `export const dynamic = "force-dynamic"`** and no `generateStaticParams`
 - **The UI must never lie** — a failed save rolls back · a failed API renders `<DataError>`,
   never a blank page
+- **API Docs ต้องตรงกับ route จริงเสมอ** — ขอบเขต: ยืนยันตัวตน + Mass Recruitment
+  (`/api/auth/` `/api/recruitment/` `/api/drivers/` `/api/uploads` = `API_DOCS_SCOPE`) ·
+  เพิ่ม/แก้/ลบ route ในขอบเขตนี้ (เส้น พารามิเตอร์
+  ผลลัพธ์ สิทธิ์) ต้องแก้ `app/recruitment/_lib/api-docs.ts` ในงานเดียวกัน + เพิ่มบรรทัดใน
+  `API_CHANGELOG` + ขยับ `API_DOCS_UPDATED`/`API_DOCS_VERSION` · ยืนยันด้วย `node check_api_docs.mjs`
+  (exit 0) · หน้าแสดงผลอยู่ที่ `/recruitment/admin/settings/api-docs`
 - **Every write goes through `runAction()` in `lib/swal.ts`** — ถาม → ยิง → บอกผล ·
   ห้าม `import Swal` ตรง ๆ ในคอมโพเนนต์ และห้ามยิง `fetch` ไป `/api/**` เองโดยไม่ผ่าน
   `requestJson()` ใน `lib/http.ts` · ผู้เรียกต้องแยก `cancelled` ออกจาก `failed` เสมอ

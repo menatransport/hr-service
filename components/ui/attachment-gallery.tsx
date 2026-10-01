@@ -181,7 +181,7 @@ export function AttachmentGallery({
           <span className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[9px] bg-ph-thumb">
             <Big url={urls[peek.index]} broken={broken} onError={fail} />
           </span>
-          <span className="flex-none text-center text-[11px] text-mut">
+          <span className="flex-none text-center text-11 text-mut">
             คลิกเพื่อดูเต็มจอ
           </span>
         </div>
@@ -204,14 +204,14 @@ export function AttachmentGallery({
 
           <div className="animate-pop-in relative flex max-h-full w-full max-w-[min(1080px,100%)] flex-col items-center gap-3">
             <div className="flex w-full flex-none items-center gap-2">
-              <span className="rounded-full bg-base-100/90 px-3 py-1.5 text-[12px] font-medium text-ink shadow-sm">
+              <span className="rounded-full bg-base-100/90 px-3 py-1.5 text-12 font-medium text-ink shadow-sm">
                 ไฟล์แนบที่ {(open ?? 0) + 1} / {urls.length}
               </span>
               <a
                 href={current}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full bg-base-100/90 px-3 py-1.5 text-[12px] text-mut shadow-sm transition-colors hover:text-primary"
+                className="rounded-full bg-base-100/90 px-3 py-1.5 text-12 text-mut shadow-sm transition-colors hover:text-primary"
               >
                 เปิดไฟล์ต้นฉบับ
               </a>
@@ -312,8 +312,8 @@ function FileFallback({ url, large }: { url: string; large?: boolean }) {
     <span
       className={`flex flex-col items-center gap-2 text-mut ${
         large
-          ? "rounded-[14px] border border-line bg-base-100 px-8 py-10 text-[13px]"
-          : "text-[11.5px]"
+          ? "rounded-[14px] border border-line bg-base-100 px-8 py-10 text-13"
+          : "text-11-5"
       }`}
     >
       <FileText size={large ? 30 : 22} strokeWidth={1.6} aria-hidden />

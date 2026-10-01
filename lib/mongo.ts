@@ -44,3 +44,19 @@ export async function getDb(): Promise<Db> {
   const client = await globalThis.__hrsMongo;
   return client.db(process.env.MONGO_DB?.trim() || "hr_service");
 }
+
+/**
+ * `Boom_ETL` — กระจกเงาของระบบต้นทางที่ ETL ภายนอก sync มาให้ **อ่านอย่างเดียว**
+ *
+ * อยู่บนคลัสเตอร์เดียวกับ `hr_service` จึง **ใช้ client ตัวเดิม สลับแค่ `.db()`**
+ * ห้ามเปิด `MongoClient` ตัวที่สองเด็ดขาด เดี๋ยวชน connection pool limit ของ Atlas
+ *
+ * **ห้ามเขียนลง db นี้ทุกกรณี** — ETL sync ทับเองเป็นรอบ ของที่เขียนเพิ่มจะหาย
+ * ฟิลด์ที่ hr-service เป็นเจ้าของต้องอยู่ใน `hr_service` เท่านั้น
+ * (ดู `.claude/docs/registry-history.md` และ `sync_master_driver.mjs`)
+ */
+export async function getBoomEtlDb(): Promise<Db> {
+  globalThis.__hrsMongo ??= connect();
+  const client = await globalThis.__hrsMongo;
+  return client.db("Boom_ETL");
+}

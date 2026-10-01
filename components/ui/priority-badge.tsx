@@ -6,7 +6,7 @@ export function PriorityBadge({ priority }: { priority: Priority }) {
 
   return (
     <span
-      className={`inline-flex flex-none items-center rounded-full border px-2 py-[2px] text-[11px] whitespace-nowrap ${meta.chip}`}
+      className={`inline-flex flex-none items-center rounded-full border px-2 py-[2px] text-11 whitespace-nowrap ${meta.chip}`}
     >
       {meta.label}
     </span>

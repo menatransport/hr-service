@@ -136,7 +136,7 @@ export function SignInCard({
           />
           <span
             lang="en"
-            className="relative font-mono text-[11px] tracking-[0.14em] text-primary-content/85"
+            className="relative font-mono text-11 tracking-[0.14em] text-primary-content/85"
           >
             HR SERVICE
           </span>
@@ -157,16 +157,16 @@ export function SignInCard({
         <div className="px-5.5 pt-3 pb-6">
           <span
             lang="en"
-            className="login-in block animate-fade-in font-mono text-[10px] tracking-[0.16em] text-primary [animation-delay:150ms]"
+            className="login-in block animate-fade-in font-mono text-10 tracking-[0.16em] text-primary [animation-delay:150ms]"
           >
             WELCOME
           </span>
 
-          <h1 className="login-in mt-1 animate-lift-in text-[21px] leading-[1.35] font-bold [animation-delay:170ms]">
+          <h1 className="login-in mt-1 animate-lift-in text-21 leading-[1.35] font-bold [animation-delay:170ms]">
             ยินดีต้อนรับ
           </h1>
 
-          <p className="login-in mt-1.5 animate-lift-in text-[13px] leading-[1.7] text-mut text-pretty [animation-delay:210ms]">
+          <p className="login-in mt-1.5 animate-lift-in text-13 leading-[1.7] text-mut text-pretty [animation-delay:210ms]">
             เข้าสู่ระบบด้วยบัญชีอีเมลบริษัท
           </p>
 
@@ -178,7 +178,7 @@ export function SignInCard({
               <div key={field.label} className="flex items-center gap-3">
                 <span
                   lang="en"
-                  className="w-24 flex-none font-mono text-[10px] tracking-[0.08em] text-mut/75"
+                  className="w-24 flex-none font-mono text-10 tracking-[0.08em] text-mut/75"
                 >
                   {field.label}
                 </span>
@@ -201,7 +201,7 @@ export function SignInCard({
               aria-busy={busy}
               /* ใช้ aria-disabled ไม่ใช่ disabled — โฟกัสจะได้ไม่หลุดจากปุ่มระหว่างรอ */
               aria-disabled={busy}
-              className={`group relative cursor-pointer flex h-[50px] w-full items-center justify-center gap-2.5 rounded-selector bg-primary text-[14.5px] font-semibold text-primary-content shadow-[0_1px_2px_rgba(21,32,29,0.10)] transition-[transform,box-shadow] duration-[140ms] ease-out ${
+              className={`group relative cursor-pointer flex h-[50px] w-full items-center justify-center gap-2.5 rounded-selector bg-primary text-14-5 font-semibold text-primary-content shadow-[0_1px_2px_rgba(21,32,29,0.10)] transition-[transform,box-shadow] duration-[140ms] ease-out ${
                 busy
                   ? "pointer-events-none opacity-95"
                   : "hover:-translate-y-px hover:shadow-[0_6px_16px_-6px_rgba(21,32,29,0.40)] active:translate-y-0 active:scale-[0.985] active:duration-[90ms]"
@@ -239,7 +239,7 @@ export function SignInCard({
               <div className="h-[3px] overflow-hidden rounded-full bg-line" aria-hidden>
                 <div className="progress-sweep h-full w-[40%] animate-sweep rounded-full bg-primary" />
               </div>
-              <p className="mt-2.5 text-[12px] text-mut">กำลังดึงข้อมูลพนักงานของคุณ</p>
+              <p className="mt-2.5 text-12 text-mut">กำลังดึงข้อมูลพนักงานของคุณ</p>
             </Reveal>
 
             <Reveal open={Boolean(error)}>
@@ -252,8 +252,8 @@ export function SignInCard({
                     aria-hidden
                   />
                   <div>
-                    <p className="text-[13px] font-semibold text-alert">{error.title}</p>
-                    <p className="mt-1 text-[12.5px] leading-[1.6] text-mut text-pretty">
+                    <p className="text-13 font-semibold text-alert">{error.title}</p>
+                    <p className="mt-1 text-12-5 leading-[1.6] text-mut text-pretty">
                       {error.detail}
                     </p>
                   </div>
@@ -264,7 +264,7 @@ export function SignInCard({
         </div>
 
         <div className="login-in flex animate-fade-in items-center justify-between gap-3 border-t border-dashed border-line bg-base-200 px-5.5 py-3.5 [animation-delay:330ms]">
-          <span className="text-[11px] text-mut">
+          <span className="text-11 text-mut">
             เฉพาะ <span className="font-semibold text-primary">@menatransport.co.th</span>
           </span>
           <span aria-hidden className="flex h-4.5 items-end gap-0.5">

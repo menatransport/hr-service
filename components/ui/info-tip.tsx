@@ -51,7 +51,7 @@ export function InfoTip({
           collisionPadding={12}
           // กล่องนี้เป็นแค่คำอธิบาย ไม่มีอะไรให้ทำต่อ — อย่าดึงโฟกัสออกจากฟอร์ม
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="z-60 max-w-[292px] rounded-box border border-line bg-base-100 p-3 text-[12px] leading-relaxed text-mut text-pretty shadow-[0_14px_36px_-14px_rgba(21,32,29,0.4)]"
+          className="z-60 max-w-[292px] rounded-box border border-line bg-base-100 p-3 text-12 leading-relaxed text-mut text-pretty shadow-[0_14px_36px_-14px_rgba(21,32,29,0.4)]"
         >
           {children}
         </Popover.Content>

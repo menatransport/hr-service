@@ -20,7 +20,7 @@ export function RegistryView({ title, branch }: { title: string; branch: string 
       <div className="flex flex-col items-center gap-2.5 rounded-box border border-dashed border-line bg-base-100 px-5 py-14 text-center">
         <BookUser size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
         <p className="text-sm font-semibold">ยังไม่มีข้อมูลทะเบียน</p>
-        <p className="max-w-[52ch] text-[12.5px] leading-[1.7] text-mut text-pretty">
+        <p className="max-w-[52ch] text-12-5 leading-[1.7] text-mut text-pretty">
           NCAC ยังไม่มี endpoint ทะเบียนประวัติ พจส. — หน้านี้เตรียมโครงไว้แล้ว
           ต่อข้อมูลได้ทันทีเมื่อ endpoint พร้อม
         </p>

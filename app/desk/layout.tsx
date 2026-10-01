@@ -20,7 +20,7 @@ export default async function DeskLayout({ children }: LayoutProps<"/desk">) {
 
   return (
     <IdentityProvider identity={identity}>
-      <div className="flex min-h-dvh flex-col bg-canvas">
+      <div className="page-canvas flex min-h-dvh flex-col">
         {/* `useSearchParams` ต้องอยู่ใต้ Suspense เสมอ — ตัวนี้ไม่วาดอะไรอยู่แล้ว */}
         <Suspense fallback={null}>
           <WelcomeToast name={identity.firstName} />

@@ -259,14 +259,14 @@ export function AvatarCropper({
         className="flex w-full max-w-88 animate-lift-in flex-col gap-4 rounded-box border border-line bg-base-100 p-5 outline-none"
       >
         <div className="flex flex-col gap-1">
-          <h2 className="text-[15px] font-semibold">ปรับรูปโปรไฟล์</h2>
-          <p className="text-[12.5px] text-mut text-pretty">
+          <h2 className="text-15 font-semibold">ปรับรูปโปรไฟล์</h2>
+          <p className="text-12-5 text-mut text-pretty">
             ลากเพื่อเลื่อนรูป และซูมให้ใบหน้าอยู่ในวงกลม
           </p>
         </div>
 
         {decodeFailed ? (
-          <p role="alert" className="flex items-start gap-2 text-[12.5px] text-alert">
+          <p role="alert" className="flex items-start gap-2 text-12-5 text-alert">
             <TriangleAlert size={14} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none" />
             เปิดไฟล์รูปนี้ไม่ได้ — ลองเลือกไฟล์ JPG หรือ PNG ไฟล์อื่น
           </p>
@@ -360,7 +360,7 @@ export function AvatarCropper({
         {error ? (
           <p
             role="alert"
-            className="flex items-start gap-2 rounded-[10px] border border-alert/25 bg-alert/8 px-3 py-2.5 text-[12px] leading-[1.6] text-alert text-pretty"
+            className="flex items-start gap-2 rounded-[10px] border border-alert/25 bg-alert/8 px-3 py-2.5 text-12 leading-[1.6] text-alert text-pretty"
           >
             <TriangleAlert size={14} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none" />
             {error}
@@ -372,7 +372,7 @@ export function AvatarCropper({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="cursor-pointer rounded-selector border border-line px-4 py-2 text-[13px] transition-colors hover:bg-base-200 disabled:opacity-50"
+            className="cursor-pointer rounded-selector border border-line px-4 py-2 text-13 transition-colors hover:bg-base-200 disabled:opacity-50"
           >
             ยกเลิก
           </button>
@@ -380,7 +380,7 @@ export function AvatarCropper({
             type="button"
             onClick={save}
             disabled={busy || !image}
-            className="flex cursor-pointer items-center gap-2 rounded-selector bg-primary px-4 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex cursor-pointer items-center gap-2 rounded-selector bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {busy ? (
               <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />

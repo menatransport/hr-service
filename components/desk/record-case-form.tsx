@@ -153,7 +153,7 @@ export function RecordCaseForm({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-field border border-line px-3.5 py-2 text-[13px] text-mut transition-colors hover:text-ink"
+            className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
           >
             ยกเลิก
           </button>
@@ -161,7 +161,7 @@ export function RecordCaseForm({
             type="button"
             onClick={save}
             disabled={!ready || busy}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
           >
             <Check size={16} strokeWidth={2} aria-hidden />
             {busy ? "กำลังบันทึก…" : editing ? "บันทึกการแก้ไข" : "บันทึกเคส"}
@@ -274,7 +274,7 @@ function Section({
 }) {
   return (
     <section className={last ? "" : "border-b border-line"}>
-      <h3 className="border-b border-line bg-base-200 px-5 py-1.5 text-[11px] font-semibold tracking-[0.06em] text-mut">
+      <h3 className="border-b border-line bg-base-200 px-5 py-1.5 text-11 font-semibold tracking-[0.06em] text-mut">
         {title}
       </h3>
       <div className="flex flex-col gap-4 px-5 py-4">{children}</div>

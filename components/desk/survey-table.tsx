@@ -48,7 +48,7 @@ const CELL: Record<string, (r: SurveyResponse) => React.ReactNode> = {
     r.submittedAt ? (
       <span className="flex flex-col leading-tight">
         <span>{bangkokDateLabel(r.submittedAt)}</span>
-        <span className="text-[11px] text-mut">{bangkokTimeLabel(r.submittedAt)} น.</span>
+        <span className="text-11 text-mut">{bangkokTimeLabel(r.submittedAt)} น.</span>
       </span>
     ) : (
       <span className="text-mut">—</span>
@@ -58,7 +58,7 @@ const CELL: Record<string, (r: SurveyResponse) => React.ReactNode> = {
       <span className="text-mut">—</span>
     ) : (
       <span
-        className={`inline-flex rounded-full px-2 py-0.5 text-[11.5px] font-medium ${
+        className={`inline-flex rounded-full px-2 py-0.5 text-11-5 font-medium ${
           r.attending ? "bg-soft text-primary" : "bg-sla/10 text-sla"
         }`}
       >
@@ -80,7 +80,7 @@ function cellOf(key: string, r: SurveyResponse): React.ReactNode {
     return (
       <span className="flex flex-col leading-tight">
         <span>{full[0]}</span>
-        <span className="text-[11px] text-mut">อันดับ 1 จาก {full.length}</span>
+        <span className="text-11 text-mut">อันดับ 1 จาก {full.length}</span>
       </span>
     );
   }
@@ -244,7 +244,7 @@ export function SurveyTable({
           onChange={setQuery}
           className="w-full max-w-[340px]"
         />
-        <div className="flex items-center gap-2.5 text-[12.5px] text-mut">
+        <div className="flex items-center gap-2.5 text-12-5 text-mut">
           <span>
             แสดง <span className="font-semibold text-ink">{rows.length}</span> จาก{" "}
             {responses.length} คน
@@ -255,7 +255,7 @@ export function SurveyTable({
             onClick={() => startRefresh(() => router.refresh())}
             disabled={refreshing}
             title="โหลดคำตอบล่าสุดจากฐานข้อมูลใหม่"
-            className="inline-flex flex-none items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11.5px] transition-colors hover:border-ink/30 hover:text-ink disabled:opacity-50"
+            className="inline-flex flex-none items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-11-5 transition-colors hover:border-ink/30 hover:text-ink disabled:opacity-50"
           >
             <RotateCw
               size={13}
@@ -272,7 +272,7 @@ export function SurveyTable({
                 setFilters({});
                 setQuery("");
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-[11.5px] transition-colors hover:border-ink/30 hover:text-ink"
+              className="inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-11-5 transition-colors hover:border-ink/30 hover:text-ink"
             >
               <X size={13} strokeWidth={2} aria-hidden />
               ล้างตัวกรอง{activeFilters ? ` (${activeFilters})` : ""}
@@ -284,13 +284,13 @@ export function SurveyTable({
         </div>
       </div>
 
-      <div className="overflow-auto rounded-box border border-line bg-base-100 [max-height:min(68vh,640px)]">
-        <table className="w-full border-collapse text-left text-[13px]">
+      <div className="elev-card overflow-auto rounded-box border border-line bg-base-100 [max-height:min(68vh,640px)]">
+        <table className="w-full border-collapse text-left text-13">
           <thead className="sticky top-0 z-20">
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-30 w-[168px] min-w-[168px] border-r border-b border-line bg-base-200 px-3 py-2"
+                className="sticky left-0 z-30 w-[168px] min-w-[168px] border-r border-b border-line-strong bg-head px-3 py-2"
               >
                 <HeadCell
                   label={IDENTITY_COLUMN.label}
@@ -303,7 +303,7 @@ export function SurveyTable({
                   key={col.key}
                   scope="col"
                   style={{ width: col.width, minWidth: col.width }}
-                  className="border-b border-line bg-base-200 px-3 py-2 align-bottom"
+                  className="border-b border-line-strong bg-head px-3 py-2 align-bottom"
                 >
                   <HeadCell
                     label={col.label}
@@ -337,11 +337,11 @@ export function SurveyTable({
                   <span className="flex flex-col leading-tight">
                     <span className="flex items-center gap-1.5">
                       {fresh ? <NewBadge submittedAt={r.submittedAt} /> : null}
-                      <span className="font-mono text-[12.5px] font-medium">
+                      <span className="font-mono text-12-5 font-medium">
                         {r.drivercode}
                       </span>
                     </span>
-                    <span className="truncate text-[12px] text-mut">
+                    <span className="truncate text-12 text-mut">
                       {r.driverName || "—"}
                     </span>
                   </span>
@@ -360,7 +360,7 @@ export function SurveyTable({
         {!rows.length ? (
           <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
             <Inbox size={22} strokeWidth={1.6} className="text-mut" aria-hidden />
-            <p className="text-[13px] text-mut">
+            <p className="text-13 text-mut">
               {responses.length
                 ? "ไม่มีคำตอบที่ตรงกับเงื่อนไข"
                 : "ยังไม่มีใครตอบแบบสอบถามนี้"}
@@ -410,7 +410,7 @@ function NewBadge({ submittedAt }: { submittedAt: string | null }) {
   return (
     <span
       title={`เพิ่งตอบเข้ามา · ${bangkokDateLabel(submittedAt)} ${bangkokTimeLabel(submittedAt)} น.`}
-      className="animate-pop-in relative inline-flex flex-none items-center gap-0.5 overflow-hidden rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-semibold tracking-[0.02em] text-ink-content shadow-sm"
+      className="animate-pop-in relative inline-flex flex-none items-center gap-0.5 overflow-hidden rounded-full bg-primary px-1.5 py-0.5 text-10 leading-none font-semibold tracking-[0.02em] text-ink-content shadow-sm"
     >
       <span
         aria-hidden
@@ -451,7 +451,7 @@ function HeadCell({
         onOpen((e.currentTarget.closest("th") ?? e.currentTarget).getBoundingClientRect());
       }}
       aria-label={`เรียงและกรอง ${label}`}
-      className={`flex w-full items-center justify-between gap-1 rounded-selector px-1 py-0.5 text-[11.5px] font-medium transition-colors hover:bg-base-300 ${
+      className={`flex w-full items-center justify-between gap-1 rounded-selector px-1 py-0.5 text-11-5 font-medium transition-colors hover:bg-base-300 ${
         active ? "text-primary" : "text-mut hover:text-ink"
       }`}
     >
@@ -463,7 +463,7 @@ function HeadCell({
         ) : sorted === "desc" ? (
           <ArrowDown size={12} strokeWidth={2.2} aria-hidden />
         ) : null}
-        {filterCount ? <span className="text-[10px] font-semibold">{filterCount}</span> : null}
+        {filterCount ? <span className="text-10 font-semibold">{filterCount}</span> : null}
         <ListFilter size={13} strokeWidth={1.9} aria-hidden />
       </span>
     </button>
@@ -543,7 +543,7 @@ function FilterPopover({
       className="fixed z-50 flex flex-col gap-2 rounded-box border border-line bg-base-100 p-2.5 shadow-lg"
     >
       <div className="flex items-center justify-between gap-2 px-0.5">
-        <span className="truncate text-[12.5px] font-semibold">{label}</span>
+        <span className="truncate text-12-5 font-semibold">{label}</span>
         <button
           type="button"
           onClick={onClose}
@@ -564,7 +564,7 @@ function FilterPopover({
               key={dir}
               type="button"
               onClick={() => onSort(dir)}
-              className={`flex items-center gap-2 rounded-selector px-1.5 py-1.5 text-left text-[12.5px] transition-colors ${
+              className={`flex items-center gap-2 rounded-selector px-1.5 py-1.5 text-left text-12-5 transition-colors ${
                 on ? "bg-soft font-medium text-primary" : "hover:bg-base-200"
               }`}
             >
@@ -598,19 +598,19 @@ function FilterPopover({
                   onChange={() => onToggle(o.value)}
                   className="size-3.5 flex-none accent-primary"
                 />
-                <span className="min-w-0 flex-1 truncate text-[12.5px]">{o.value}</span>
-                <span className="flex-none text-[11px] text-mut">{o.count}</span>
+                <span className="min-w-0 flex-1 truncate text-12-5">{o.value}</span>
+                <span className="flex-none text-11 text-mut">{o.count}</span>
               </label>
             </li>
           ))}
           {!shown.length ? (
-            <li className="px-1.5 py-3 text-center text-[12px] text-mut">ไม่พบตัวเลือก</li>
+            <li className="px-1.5 py-3 text-center text-12 text-mut">ไม่พบตัวเลือก</li>
           ) : null}
         </ul>
       ) : null}
 
       {options.length ? (
-        <div className="flex items-center justify-between border-t border-line pt-2 text-[11.5px]">
+        <div className="flex items-center justify-between border-t border-line pt-2 text-11-5">
           <span className="text-mut">
             {picked.length ? `เลือกไว้ ${picked.length}` : "ไม่ติ๊ก = แสดงทั้งหมด"}
           </span>
@@ -667,7 +667,7 @@ function DetailPanel({
             <span className="truncate text-sm font-semibold">
               {response.driverName || "ไม่ระบุชื่อ"}
             </span>
-            <span className="text-[12px] text-mut">
+            <span className="text-12 text-mut">
               {response.drivercode}
               {response.plant ? ` · ${response.plant}` : ""}
               {response.truckplate ? ` · ${response.truckplate}` : ""}
@@ -688,16 +688,16 @@ function DetailPanel({
             const list = response.answers[q.id] ?? [];
             return (
               <div key={q.id} className="rounded-box border border-line bg-base-100 p-3.5">
-                <p className="text-[12px] text-mut text-pretty">
+                <p className="text-12 text-mut text-pretty">
                   {q.no}. {q.question}
                 </p>
                 {!list.length ? (
-                  <p className="mt-1 text-[13px] text-mut italic">ไม่ได้ตอบ</p>
+                  <p className="mt-1 text-13 text-mut italic">ไม่ได้ตอบ</p>
                 ) : q.kind === "rank" ? (
                   <ol className="mt-1.5 flex flex-col gap-1">
                     {list.map((v, i) => (
-                      <li key={v} className="flex items-center gap-2 text-[13px]">
-                        <span className="flex size-5 flex-none items-center justify-center rounded-full bg-soft text-[11px] font-semibold text-primary">
+                      <li key={v} className="flex items-center gap-2 text-13">
+                        <span className="flex size-5 flex-none items-center justify-center rounded-full bg-soft text-11 font-semibold text-primary">
                           {i + 1}
                         </span>
                         {v}
@@ -705,7 +705,7 @@ function DetailPanel({
                     ))}
                   </ol>
                 ) : (
-                  <p className="mt-1 text-[13.5px] text-pretty">{list.join(" · ")}</p>
+                  <p className="mt-1 text-13-5 text-pretty">{list.join(" · ")}</p>
                 )}
               </div>
             );

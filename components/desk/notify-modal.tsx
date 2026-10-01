@@ -189,7 +189,7 @@ export function NotifyModal({
           <button
             type="button"
             onClick={onClose}
-            className="mr-auto rounded-field border border-line px-3.5 py-2 text-[13px] text-mut transition-colors hover:text-ink"
+            className="mr-auto rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
           >
             {opened ? "เสร็จแล้ว" : "ปิด"}
           </button>
@@ -198,7 +198,7 @@ export function NotifyModal({
             type="button"
             onClick={copyBody}
             disabled={!draft}
-            className="flex items-center gap-2 rounded-field border border-line px-3.5 py-2 text-[13px] text-mut transition-colors hover:text-ink disabled:opacity-45"
+            className="flex items-center gap-2 rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink disabled:opacity-45"
           >
             <Copy size={15} strokeWidth={1.9} aria-hidden />
             คัดลอกเนื้อหา
@@ -208,7 +208,7 @@ export function NotifyModal({
             type="button"
             onClick={openGmail}
             disabled={!canOpen}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
           >
             <ExternalLink size={15} strokeWidth={2} aria-hidden />
             {opened ? "เปิด Gmail อีกครั้ง" : `เปิด Gmail (${to.length + cc.length})`}
@@ -217,14 +217,14 @@ export function NotifyModal({
       }
     >
       {error ? (
-        <p className="rounded-field border border-alert/30 bg-alert/10 px-3.5 py-3 text-[13px] leading-relaxed text-ink">
+        <p className="rounded-field border border-alert/30 bg-alert/10 px-3.5 py-3 text-13 leading-relaxed text-ink">
           {error}
         </p>
       ) : !draft ? (
-        <p className="px-1 py-6 text-center text-[13px] text-mut">กำลังเตรียมอีเมล…</p>
+        <p className="px-1 py-6 text-center text-13 text-mut">กำลังเตรียมอีเมล…</p>
       ) : (
         <>
-          <p className="rounded-field border border-line bg-base-200/60 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-mut">
+          <p className="rounded-field border border-line bg-base-200/60 px-3.5 py-2.5 text-12-5 leading-relaxed text-mut">
             ระบบจะ<span className="text-ink"> ไม่ส่งอีเมลเอง </span>— กด “เปิด Gmail”
             แล้วหน้าเขียนเมลจะขึ้นมาพร้อมผู้รับและเนื้อหาครบ ตรวจแล้วกดส่งได้เลย
             {draft.senderEmail ? (
@@ -260,7 +260,7 @@ export function NotifyModal({
                 className="mt-0.5 flex-none text-sla"
                 aria-hidden
               />
-              <div className="min-w-0 text-[12.5px] leading-relaxed">
+              <div className="min-w-0 text-12-5 leading-relaxed">
                 <p className="font-medium">
                   ข้ามไป {draft.skipped.length} คน — อีเมลในสมุดรายชื่อใช้ไม่ได้
                 </p>
@@ -283,16 +283,16 @@ export function NotifyModal({
           />
 
           <details className="rounded-field border border-line bg-base-200/60">
-            <summary className="cursor-pointer px-3.5 py-2.5 text-[13px] font-medium">
+            <summary className="cursor-pointer px-3.5 py-2.5 text-13 font-medium">
               ดูตัวอย่างอีเมล
             </summary>
             <div className="flex flex-col gap-2 border-t border-line px-3.5 py-3">
-              <p className="text-[12px] text-mut">
+              <p className="text-12 text-mut">
                 หัวเรื่อง · <span className="text-ink">{draft.subject}</span>
               </p>
               {/* ข้อความล้วนล้วน ๆ — Gmail รับเนื้อความผ่าน URL ได้แค่แบบนี้
                   จึงโชว์ตรงตามที่จะไปโผล่ในหน้าเขียนเมลจริง ไม่ตกแต่งเพิ่ม */}
-              <pre className="max-h-[300px] overflow-auto rounded-field border border-line bg-base-100 px-3 py-2.5 text-[12px] leading-relaxed whitespace-pre-wrap">
+              <pre className="max-h-[300px] overflow-auto rounded-field border border-line bg-base-100 px-3 py-2.5 text-12 leading-relaxed whitespace-pre-wrap">
                 {preview}
               </pre>
             </div>
@@ -323,8 +323,8 @@ function RecipientBlock({
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-baseline gap-2">
-        <h3 className="text-[13px] font-semibold">{label}</h3>
-        <p className="text-[12px] text-mut">{hint}</p>
+        <h3 className="text-13 font-semibold">{label}</h3>
+        <p className="text-12 text-mut">{hint}</p>
       </div>
 
       {people.length ? (
@@ -352,13 +352,13 @@ function RecipientBlock({
                     {on ? <Check size={12} strokeWidth={3} /> : null}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-medium">
+                    <span className="block truncate text-13-5 font-medium">
                       {r.name}
-                      <span className="ml-1.5 text-[11.5px] font-normal text-mut">
+                      <span className="ml-1.5 text-11-5 font-normal text-mut">
                         {r.levelLabel}
                       </span>
                     </span>
-                    <span className="block truncate text-[11.5px] text-mut">
+                    <span className="block truncate text-11-5 text-mut">
                       {r.email} · {r.position}
                     </span>
                   </span>
@@ -368,7 +368,7 @@ function RecipientBlock({
           })}
         </ul>
       ) : (
-        <p className="rounded-field border border-dashed border-line px-3.5 py-2.5 text-[12.5px] text-mut">
+        <p className="rounded-field border border-dashed border-line px-3.5 py-2.5 text-12-5 text-mut">
           {emptyHint}
         </p>
       )}

@@ -27,11 +27,13 @@ const DEFAULT_PRESIGN_URL =
  * `complaints` = โฟลเดอร์เดียวกับที่ไฟล์จากแอปมือถือลง เพื่อให้ไฟล์แนบของเคส
  * อยู่ที่เดียวกันหมด · `employees` = รูปโปรไฟล์พนักงาน แยกไว้เพราะอายุการใช้งาน
  * ต่างกันคนละเรื่อง (ไฟล์แนบผูกกับเคสที่ปิดแล้วจบ ส่วนรูปพนักงานอยู่ยาว)
+ * `drivers` = รูป พจส. ในทะเบียนประวัติ — แยกจาก `employees` เพราะคนละทะเบียนกัน
+ * (พนักงานออฟฟิศอยู่ที่ NCAC · พจส. อยู่ที่ `master_driver` ของเราเอง)
  *
  * **บันทึกเคสส่วนกลางไม่ได้ใช้ทางนี้** — presign API รับเฉพาะนามสกุลรูป แนบเอกสารไม่ได้
  * ไฟล์ของหน้านั้นจึงอยู่ใน MongoDB (`lib/record-files.ts`)
  */
-export type UploadFolder = "complaints" | "employees";
+export type UploadFolder = "complaints" | "employees" | "drivers";
 
 export class UploadError extends Error {
   constructor(

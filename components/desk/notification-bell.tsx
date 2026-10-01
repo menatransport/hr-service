@@ -176,12 +176,12 @@ export function NotificationBell({ items }: { items: DeskNotification[] }) {
           />
 
           <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
-            <p className="text-[13.5px] font-semibold">การแจ้งเตือน</p>
+            <p className="text-13-5 font-semibold">การแจ้งเตือน</p>
             {unread.length ? (
               <button
                 type="button"
                 onClick={() => markRead(items.map((n) => n.id))}
-                className="flex items-center gap-1 rounded-full px-2 py-1 text-[11.5px] text-mut transition-colors hover:bg-base-200 hover:text-ink"
+                className="flex items-center gap-1 rounded-full px-2 py-1 text-11-5 text-mut transition-colors hover:bg-base-200 hover:text-ink"
               >
                 <Check size={13} strokeWidth={1.8} aria-hidden />
                 อ่านทั้งหมด
@@ -191,7 +191,7 @@ export function NotificationBell({ items }: { items: DeskNotification[] }) {
 
           <ul className="max-h-[min(60vh,420px)] overflow-y-auto border-t border-line">
             {items.length === 0 ? (
-              <li className="px-4 py-8 text-center text-[13px] text-mut">
+              <li className="px-4 py-8 text-center text-13 text-mut">
                 ยังไม่มีการแจ้งเตือน
               </li>
             ) : (
@@ -207,13 +207,13 @@ export function NotificationBell({ items }: { items: DeskNotification[] }) {
                     />
                     <span className="flex min-w-0 flex-col gap-0.5">
                       <span
-                        className={`text-pretty text-[13px] leading-snug ${
+                        className={`text-pretty text-13 leading-snug ${
                           isRead ? "text-mut" : "font-medium text-ink"
                         }`}
                       >
                         {n.title}
                       </span>
-                      <span className="text-[11.5px] text-mut">{n.meta}</span>
+                      <span className="text-11-5 text-mut">{n.meta}</span>
                     </span>
                   </>
                 );
@@ -253,7 +253,7 @@ export function NotificationBell({ items }: { items: DeskNotification[] }) {
             href="/desk/activity"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="group flex items-center gap-2.5 border-t border-line px-4 py-2.5 text-[12.5px] text-mut transition-colors hover:bg-base-200 hover:text-ink"
+            className="group flex items-center gap-2.5 border-t border-line px-4 py-2.5 text-12-5 text-mut transition-colors hover:bg-base-200 hover:text-ink"
           >
             <History size={15} strokeWidth={1.7} aria-hidden className="flex-none" />
             <span className="flex-1">ประวัติการทำงานทั้งหมด</span>

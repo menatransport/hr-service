@@ -70,7 +70,7 @@ export function LogoutRow() {
       className="flex w-full cursor-pointer items-center gap-3 rounded-box border border-line bg-base-100 px-3.5 py-3 text-left transition-colors hover:border-alert/40"
     >
       <LogOut size={17} strokeWidth={1.6} className="flex-none text-alert" aria-hidden />
-      <span className="flex-1 text-[13.5px] text-alert">ออกจากระบบ</span>
+      <span className="flex-1 text-13-5 text-alert">ออกจากระบบ</span>
     </button>
   );
 }

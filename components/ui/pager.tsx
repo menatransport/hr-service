@@ -52,7 +52,7 @@ export function Pager({
           <span
             key={`gap-${i}`}
             aria-hidden
-            className="px-1 text-[12.5px] text-mut"
+            className="px-1 text-12-5 text-mut"
           >
             …
           </span>
@@ -63,7 +63,7 @@ export function Pager({
             onClick={() => onGo(n)}
             aria-label={`หน้า ${n}`}
             aria-current={n === current ? "page" : undefined}
-            className={`size-8 flex-none rounded-selector text-[12.5px] transition-colors ${
+            className={`size-8 flex-none rounded-selector text-12-5 transition-colors ${
               n === current
                 ? "border border-ink bg-ink font-medium text-ink-content"
                 : "border border-line bg-base-100 text-mut hover:border-ink/30 hover:text-ink"

@@ -46,7 +46,7 @@ export async function DeskTopBar({ identity }: { identity: DeskIdentity }) {
             className="transition-transform duration-300 group-hover:scale-115 group-hover:-rotate-8"
           />
         </span>
-        <span className="text-[14.5px] font-semibold whitespace-nowrap">
+        <span className="text-14-5 font-semibold whitespace-nowrap">
           HR Service 
         </span>
       </Link>
@@ -60,10 +60,10 @@ export async function DeskTopBar({ identity }: { identity: DeskIdentity }) {
 
         <div className="ml-1.5 flex items-center gap-2.5 border-l border-line pl-3">
           <div className="hidden flex-col text-right md:flex">
-            <span className="text-[13px] leading-tight font-medium">
+            <span className="text-13 leading-tight font-medium">
               {identity.name}
             </span>
-            <span className="text-[11px] leading-tight text-mut">
+            <span className="text-11 leading-tight text-mut">
               {identity.role}
             </span>
           </div>

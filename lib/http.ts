@@ -57,6 +57,63 @@ export async function requestJson<T = unknown>(
   return payload as T;
 }
 
+/* ------------------------------------------------------------------ คอนโซลทดสอบ API */
+
+export interface RawResponse {
+  /** `0` = ยิงไม่ถึงเซิร์ฟเวอร์ */
+  status: number;
+  ms: number;
+  contentType: string;
+  /** JSON ที่ parse แล้ว · ข้อความล้วน · หรือ `null` เมื่อเป็นไฟล์/ว่าง */
+  body: unknown;
+  /** ขนาดไบต์เมื่อตอบเป็นไฟล์ */
+  size: number | null;
+}
+
+/**
+ * ยิงแล้วคืน **ผลดิบทุกกรณี ไม่โยน** — ใช้ที่คอนโซลทดสอบของหน้า API Docs ที่เดียว
+ * (ต้องเห็น status 4xx/5xx ตามจริง) · หน้าจอทำงานปกติใช้ `requestJson()` เสมอ
+ */
+export async function requestRaw(
+  url: string,
+  method: string,
+  body: string | null,
+): Promise<RawResponse> {
+  const started = performance.now();
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body || null,
+      redirect: "manual",
+    });
+  } catch {
+    return {
+      status: 0,
+      ms: Math.round(performance.now() - started),
+      contentType: "",
+      body: { error: "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้" },
+      size: null,
+    };
+  }
+
+  const contentType = res.headers.get("Content-Type") ?? "";
+  let parsed: unknown = null;
+  let size: number | null = null;
+  if (contentType.includes("json")) parsed = await parse(res);
+  else if (contentType.startsWith("text/")) parsed = await res.text();
+  else size = (await res.blob()).size;
+
+  return {
+    status: res.status,
+    ms: Math.round(performance.now() - started),
+    contentType,
+    body: parsed,
+    size,
+  };
+}
+
 /* ------------------------------------------------------------------ ดาวน์โหลดไฟล์ */
 
 /** ชื่อไฟล์จาก `Content-Disposition` — `filename*` (UTF-8) มาก่อนเสมอ ไทยจะได้ไม่เพี้ยน */

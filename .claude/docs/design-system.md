@@ -13,17 +13,52 @@ Declared once in `app/globals.css`, two blocks:
 | Token | Value | Use for |
 |---|---|---|
 | `primary` | `#0f766e` | Primary buttons, icons, active state, completed timeline steps |
-| `soft` | `color-mix(primary 11%, #fff)` | Round icon backgrounds, "แจกจ่ายแล้ว" chip, toast, hover |
+| `soft` | `color-mix(primary 13%, #fff)` | Round icon backgrounds, "แจกจ่ายแล้ว" chip, toast, hover |
 | `ink` | `#15201d` | Body text, secondary buttons, selected filter chip |
-| `mut` | `#65756f` | Secondary text, labels, meta |
-| `line` | `#e2e6e3` | Every border (= `base-300`) |
-| `canvas` | `#eef0ed` | Page background (not card background) |
+| `mut` | `#5a6b65` | Secondary text, labels, meta |
+| `line` | `#d4ded9` | Every border (= `base-300`) |
+| `line-strong` | `#b6c4be` | Dividers that must **separate** — under a table head, between groups |
+| `canvas` | `#e9eeeb` | Page background (not card background) |
+| `head` | `#115e59` (dark `#134e4a`) | Table headers / panel heads — deep teal, **opaque**; tokens flip light inside `.bg-head` (see `globals.css`) |
 | `alert` | `#b3261e` | Reject, unread badge, sign out |
+| `rose` | `#e11d48` (dark `#fb7185`, on `bg-head` `#fda4af`) | Sunday label/date in the trainee matrix — text only, never a fill |
 | `sla` | `#c2410c` | SLA breach, high priority |
-| `st-{new,wait,live,done}` + `-ink` | — | The 4 case-status chips from the design swatches |
+| `st-{new,wait,live,done}` + `-ink` + `-line` | — | The 4 case-status chips from the design swatches |
 | `ink-content` | `#fff` | Text on `bg-ink` / `bg-alert` / `bg-sla` — **never use raw `text-white`** |
 | `ph-avatar` / `ph-thumb` | `#dfe6e3` / `#eaeeec` | Avatar / thumbnail placeholders |
 | `series-a` / `series-b` | `#a35a08` / `#0d9488` | The two chart series in `case-volume-chart` |
+| `--elev-{card,raise,pop}` | — | The 3 elevation levels — used via the utilities below, never as raw rgba |
+
+### Surface hierarchy (light)
+
+Four levels, and they must stay in this order or a table stops reading top-to-bottom:
+
+```
+base-100 #ffffff   ← card / table row
+head     #115e59   ← table header band (deep teal, sticky, must be opaque)
+canvas   #e9eeeb   ← the page behind the cards
+```
+
+`head` is **not** `base-200`. They used to be the same value, which made a hovered row
+(`bg-base-200/50`) look like a second header dropped into the middle of the table.
+`base-200` stays the generic muted-panel fill; table headers use `bg-head` + `border-line-strong`.
+
+### The `st-*` chip pairs are used in **both** directions
+
+Chips in a row are `bg-st-x text-st-x-ink`; the year calendar and heat map invert them to
+`bg-st-x-ink text-st-x` (`driver-work-year.tsx`). So the constraint on these values is the
+**contrast of the pair** (≥ 5:1, measured: new 6.3 · wait 5.6 · live 5.9 · done 5.1) — moving
+one half without moving the other breaks one direction. Every pair also has a `-line` value
+one step darker than the fill, applied by the `chip-*` utilities.
+
+### Utilities that carry the theme (defined at the bottom of `globals.css`)
+
+| Utility | What it is |
+|---|---|
+| `page-canvas` | The page background for all three shells — dot texture + one faint corner glow. Use instead of `bg-canvas` on a shell wrapper. |
+| `elev-card` / `elev-raise` / `elev-pop` | The 3 elevation levels. **Use these instead of writing `shadow-[0_18px_44px_…rgba(21,32,29,…)]`** — raw rgba does not flip for dark mode. |
+| `card-lift` | Hover treatment for a clickable card (2px lift + `elev-raise` + primary-tinted border). |
+| `chip` + `chip-{new,wait,live,done,alert,on}` | The status-badge template. `chip` is the shape; the tone classes only set `--chip-bg` / `--chip-ink` / `--chip-line`, so class order never matters. `chip-on` is the one solid-fill tone, for the status that must be found first. |
 
 ## Dark theme `hrs-dark`
 
@@ -39,8 +74,13 @@ Declared in two places in `app/globals.css`:
    Placed **outside `@layer`** on purpose: Tailwind leaves `@theme` inside `@layer theme`,
    so unlayered always wins without needing `!`.
 
-**Every new token must also get a dark value in that block.** Never hardcode colors
+**Every new token must also get a dark value in that block** — including the `--elev-*`
+shadows, which are pure black on dark (the light theme's ink is a light color there, so
+reusing it would paint a glow instead of a shadow). Never hardcode colors
 (`text-white`, `bg-[#…]`) in a component — they won't follow the theme.
+
+The `@media print` block at the very bottom pins a light palette for paper, so **a new
+color token that appears on the candidate report needs a third value there too.**
 
 Theme switching lives in `components/ui/theme-toggle.tsx` — writes `data-theme` on `<html>`,
 persists to `localStorage["hrs-theme"]`. `app/layout.tsx` has an inline script that reads it
@@ -53,8 +93,17 @@ button, do it the same way. Do not switch it to `useState`.
 - **Server Components by default.** Add `"use client"` only for components with state / events /
   `usePathname`, and keep them as small as possible. `page.tsx` always stays a server component
   so it can export `metadata`, then renders a client child.
-- **Font sizes come straight from the design** (`text-[13.5px]`, `text-[12.5px]`) — the source
-  design uses half-pixels. Do not "round" them to Tailwind's scale.
+- **Font sizes come from the project's own scale, never a raw `text-[13.5px]`.** The token
+  name *is* the design's px value — `text-13-5` = 13.5px, `text-12-5` = 12.5px — so the
+  half-pixel steps the source design uses are preserved exactly. Do not "round" them to
+  Tailwind's `text-sm` / `text-base` scale.
+- Every one of those tokens is `calc(<design px> * var(--ui-text-scale))`, and the multiplier
+  steps up on wide screens (1 → 1.04 at 80rem → 1.08 at 100rem → 1.12 at 120rem), so text
+  grows on a large monitor while staying exactly on-design on a laptop. **To add a size, add
+  a `--text-<px>` token to that block** rather than writing an arbitrary value in a component.
+  `--spacing` is deliberately *not* scaled — see the comment on the block for why.
+- The two font sizes in `survey-charts.tsx` are SVG user units inside a `viewBox`, not screen
+  pixels, and must stay arbitrary values.
 - **Spacing/colors use tokens, not hex** — except the two design colors `#dfe6e3`
   (avatar placeholder) and `#eaeeec` (thumbnail placeholder).
 - **Every interactive element must be genuinely tappable** — ≥ 36px, with hover/active states.
@@ -63,6 +112,10 @@ button, do it the same way. Do not switch it to `useState`.
 - Long Thai text gets `text-pretty`.
 - `animate-rise` is for screen/main mount only — don't put it on every element.
 - `prefers-reduced-motion` is already handled centrally in `globals.css`.
+- **Summary + toolbar card above a table** is `components/ui/summary-panel.tsx`
+  (`SummaryPanel` → `SummaryStats`/`SummaryStat` → `SummaryToolbar` → `SummaryStrip`, plus
+  `SegmentedControl` for single-choice filters). Used by resign reasons, the พจส. registry and
+  the candidates table — build new summary strips from it, don't write another stat-card set.
 
 ## Alerts / confirmations — SweetAlert2
 

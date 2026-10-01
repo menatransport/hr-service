@@ -5,7 +5,49 @@
 ```
 /                        Login — Google sign-in (company domain)  ← `HR Service Login Wireframe` 1b
 /desk/…                  HR Service Desk (desktop)  ← wireframe 1c
+/recruitment/…           Public job-application flow
+/recruitment/admin/…     Mass Recruitment back office (own shell — `app/recruitment/admin/layout.tsx`)
 ```
+
+## `/recruitment/admin` — menu ↔ route map
+
+Menu items live in `adminNav` (`app/recruitment/_lib/admin-nav.ts`) and are read by **both**
+the sidebar (client) and the module cards on the hub page (server) — edit once, both follow.
+
+| Menu | Route |
+|---|---|
+| หน้าหลัก | `/recruitment/admin` |
+| **ขอสรรหาและผู้สมัคร** | `/recruitment/admin/requisitions` — **two tabs in one page**, see below |
+| ติดตามฝึกงาน | `/recruitment/admin/trainees` |
+| คลังคำถาม | `/recruitment/admin/questions` |
+| ทะเบียนประวัติ พจส. | `/recruitment/admin/drivers` |
+
+### Requisitions + candidates are one page, two tabs (22 Sep 2026)
+
+`ผู้สมัคร` used to be its own menu entry. It is now the second tab of the requisitions
+page, because every real question spans both tables (*is this vacancy filled yet?* /
+*which vacancy is this person taking?*).
+
+```
+/recruitment/admin/requisitions                      → tab คำขอสรรหา (default)
+/recruitment/admin/requisitions?tab=candidates       → tab ผู้สมัคร
+/recruitment/admin/requisitions?tab=candidates&ref=  → …filtered to that application
+/recruitment/admin/candidates[?ref=]                 → redirect() to the line above
+```
+
+- **Do not delete `app/recruitment/admin/candidates/page.tsx`** — it is a `redirect()` that
+  keeps old bookmarks and the hub's queue links (`?ref=`) working.
+- The active tab is written back to the URL with `window.history.replaceState`, **never
+  `router.push`** — the page is `force-dynamic`, so a push would re-read Mongo just to
+  switch tabs.
+- Both tabs' data is fetched together in the server page (`Promise.all` × 4) and held by
+  `recruitment-tabs.tsx`; the two table components are controlled on their `rows`.
+- Full rationale and the rules that must not be re-litigated: `.claude/docs/requisitions.md`,
+  section “สองแท็บใต้หัวเดียว”.
+
+Both admin tables (requisitions and candidates) use **one column-header component**,
+`components/ui/column-menu.tsx` — `sheet-column.tsx` is gone. It calls `useOverlayCount()`,
+so the first Esc closes only the column menu and never punches through to a modal behind it.
 
 > The driver mobile app (`/m/…`, wireframe 1a + 1b) was removed on the owner's instruction
 > (10 Aug 2026) — `app/m/**` and `components/m/**` are gone, along with `buildServices()`,

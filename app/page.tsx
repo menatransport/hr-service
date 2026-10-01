@@ -53,7 +53,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/">) {
       </div>
 
       <footer className="login-in animate-fade-in pb-6 [animation-delay:350ms]">
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-mut">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-11 text-mut">
           <span className="-my-2 py-2">นโยบายความเป็นส่วนตัว</span>
 
           <span className="-my-2 w-full py-2 text-center sm:w-auto">© 2026 Mena Transport</span>

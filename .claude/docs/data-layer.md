@@ -161,6 +161,10 @@ NCAC stores attachments as **URLs** (`complaint_url` / `solution_url`), never th
 live on DigitalOcean Spaces (`mn-bucket`), reached through the same presign service the mena-go
 mobile app uses (`src/hooks/usePresignedUpload.js` over there).
 
+> **Mass Recruitment ไม่ใช้ทางนี้แล้ว (1 ต.ค. 2026)** — เอกสารผู้สมัคร รูป/แฟ้ม พจส. อยู่บน S3
+> แบบ private ผ่าน `lib/s3.ts` + `lib/media.ts` (`mass-image/…`, ลิงก์ `/api/media/{key}`) ·
+> `/api/uploads` เหลือไว้แนบรูปคำร้องฝั่ง desk และ **ต้องล็อกอินแล้ว**
+
 `POST /api/uploads` (multipart, field `file`) → `{ url }`, done entirely server-side in
 `lib/uploads.ts`: presign → `PUT` to Spaces → `set-public-acl-batch` (skip the ACL step and the
 file returns 403 in `<img>`). Base URL is `API_PRESIGN_URL`, defaulting to the same Cloud Run host
@@ -290,3 +294,39 @@ MongoDB  ──►  lib/mongo.ts  ──►  lib/record-cases.ts  ──►  Rec
   คำร้องที่ใช้สาเหตุใหม่จึงถูกจัดกลุ่มจาก **หน่วยงานของคำร้อง** แทน (พฤติกรรมเดิมของค่าที่ไม่รู้จัก)
   กระทบแค่ `priority` กับกราฟกลุ่มสาเหตุ · จะให้ตรงเป๊ะต้องส่ง map จาก Mongo เข้า `toHrCase()`
   ซึ่งมีผู้เรียกหลายที่ ยังไม่คุ้มจนกว่าจะมีคนเพิ่มสาเหตุนอกผังจริงจัง
+
+## ทำเอกสาร (Mass Recruitment) — `recruitment_hr_documents` / `recruitment_hr_document_prints` (29 ก.ย. 2026)
+
+ชั้นข้อมูลอยู่ที่ `app/recruitment/_lib/hr-document-records-store.ts` เส้น API อยู่ใต้
+`app/api/recruitment/applications/[id]/hr-documents/**` — ชนิด/ค่าคงที่ร่วมของทั้งสองฝั่งอยู่ที่
+`app/recruitment/_lib/hr-document-records.ts` (client import ชนิดจากไฟล์นี้ได้ ไม่แตะ `lib/mongo.ts`)
+
+| คอลเลกชัน | เก็บอะไร |
+|---|---|
+| `recruitment_hr_documents` | **หนึ่งใบสมัครหนึ่งเอกสาร** ถือ `fill` (ค่าที่กรอก) ก้อนล่าสุดทั้งหมด — สามฉบับ (สัญญาจ้าง/สัญญาค้ำ/ยินยอมคืนเงินค้ำ) ใช้ช่องร่วมกัน จึงไม่แยกเอกสารตามฉบับ |
+| `recruitment_hr_document_prints` | **การพิมพ์ล่าสุด ฉบับละแถว** (upsert ตาม `applicationId` + `docId`) พร้อมสำเนา `fill` ของครั้งล่าสุด — เดิมเก็บต่อท้ายทุกครั้ง เปลี่ยนตามคำสั่งเจ้าของงาน 29 ก.ย. 2026 |
+
+- **`revision` กันบันทึกทับกัน (optimistic concurrency)** — จอต้องส่ง `revision` ที่ตัวเองถือมาด้วย
+  ทุกครั้งที่ `PUT …/hr-documents` (`0` = ยังไม่เคยบันทึก) บันทึกครั้งแรกเป็น `insertOne` ได้
+  `revision: 1` (สองคนบันทึกครั้งแรกพร้อมกันชนที่ดัชนี unique ของ `applicationId` → 409) ส่วน
+  บันทึกทับใช้ `findOneAndUpdate({applicationId, revision: expected})` + `$inc` ในคำสั่งเดียว
+  ไม่เจอแถวที่ตรง = คนอื่นบันทึกไปก่อนแล้ว → **409** "มีคนบันทึกเอกสารนี้ไปก่อนแล้ว — โหลดค่าล่าสุดก่อนแก้ต่อ"
+- **`HrDocumentError`** (นิยามในไฟล์ store) คือทางออกจาก 400 เดียวของ `RecruitmentError` — ตอบ 404
+  (ไม่พบใบสมัคร) กับ 409 (revision ชนกัน) `failRecruitment()` ใน `app/api/recruitment/_lib.ts`
+  รู้จัก error คลาสนี้เพิ่มแล้ว · error อื่นของโฟลว์นี้ (ข้อมูลไม่ผ่าน / ใบสมัครถูกลบแล้ว) ยังเป็น
+  `RecruitmentError` ธรรมดา → 400 เหมือนเดิม
+- **การพิมพ์ = ฉบับละแถว เขียนทับ** — `recordHrDocumentPrint()` ไม่แก้เอกสารหลัก ทำ `findOneAndUpdate`
+  upsert ที่ `{applicationId, docId}` เก็บเวลา ผู้พิมพ์ สำเนา `fill` และ `revision` ของเอกสารหลัก ณ ตอนนั้น
+  แล้วลบแถวซ้ำของฉบับเดียวกันที่ค้างจากตอนยังเก็บต่อท้าย · ดัชนี `{applicationId, docId}` **จงใจไม่
+  unique** (ฐานมีแถวซ้ำเก่าอยู่ สร้าง unique จะล้ม) ตอนอ่านจึงเลือกแถวล่าสุดต่อฉบับเองอีกชั้น
+  รายการในประวัติ (`GET …/hr-documents`) **ไม่มี `fill`** ต่อรายการ (`projection: {fill: 0}`) ขอทีละ
+  ใบเต็มผ่าน `GET …/hr-documents/prints/{printId}` เท่านั้น กัน payload ของหน้ารายการบวมโดยไม่จำเป็น
+- **ใบสมัครต้องมีอยู่จริงและยังไม่ถูกลบตามคำขอ** — `guardApplication()` ตรวจทั้งสองข้อก่อนบันทึก/สั่งพิมพ์
+  (ไม่ตรวจ “ลบแล้วหรือยัง” ตอนอ่าน `GET …/hr-documents` เพราะอ่านไม่ทำอันตราย และถ้า hook ลบทำงาน
+  ถูกต้อง ใบที่ถูกลบก็จะไม่มีเอกสารเหลือให้อ่านอยู่แล้ว) กติกา "ลบแล้วหรือยัง" คัดลอกมาจาก `erasedOf()`
+  ของ `applications.ts` ตรง ๆ (`erasedAt` มีค่า หรือ `status === "withdrawn"`) **ไม่ import ข้ามมา**
+  เพราะ `applications.ts` ต้องเรียกกลับมาที่ store นี้เพื่อลบข้อมูล (ดูข้อถัดไป) — import สองทางจะวนเป็น cycle
+- **ลบตามคำขอ (PDPA) ลากเข้ามาด้วยเสมอ** — `cancelApplication()` ใน `applications.ts` เรียก
+  `eraseHrDocuments(applicationId)` (deleteMany ทั้งสองคอลเลกชัน) ทันทีหลังล้างใบสมัครหลัก เพราะ
+  `fill` มีทั้งเลขบัตรประชาชนและที่อยู่ · **ล้มเหลวแล้วไม่โยนต่อ** (แค่ `console.warn`) — การลบใบสมัคร
+  หลักต้องสำเร็จเสมอ ต่อให้เอกสาร HR มีปัญหา ท่าเดียวกับ `syncRequisitionForApplication()`

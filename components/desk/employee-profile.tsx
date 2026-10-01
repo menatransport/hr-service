@@ -36,7 +36,7 @@ export function EmployeeProfile({
     <div className="flex flex-col gap-5 animate-rise">
       <Link
         href="/desk/employee"
-        className="group flex w-fit items-center gap-1.5 text-[13px] text-mut transition-colors hover:text-primary"
+        className="group flex w-fit items-center gap-1.5 text-13 text-mut transition-colors hover:text-primary"
       >
         <ArrowLeft
           size={15}
@@ -52,7 +52,7 @@ export function EmployeeProfile({
 
         <div className="flex flex-col gap-5">
           <section className="flex flex-col gap-4 rounded-box border border-line bg-base-100 p-5">
-            <h2 className="text-[14px] font-semibold">ข้อมูลพนักงาน</h2>
+            <h2 className="text-14 font-semibold">ข้อมูลพนักงาน</h2>
 
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <InfoRow icon={Hash} label="รหัสพนักงาน" value={employee.employeeId} mono />
@@ -71,12 +71,12 @@ export function EmployeeProfile({
 
           <section className="flex flex-col gap-3.5 rounded-box border border-line bg-base-100 p-5">
             <div className="flex items-baseline gap-2.5">
-              <h2 className="text-[14px] font-semibold">เพื่อนร่วมแผนก</h2>
-              <span className="text-[12px] text-mut">{employee.department}</span>
+              <h2 className="text-14 font-semibold">เพื่อนร่วมแผนก</h2>
+              <span className="text-12 text-mut">{employee.department}</span>
             </div>
 
             {teammates.length === 0 ? (
-              <p className="text-[12.5px] text-mut text-pretty">
+              <p className="text-12-5 text-mut text-pretty">
                 ยังไม่มีพนักงานคนอื่นในแผนกนี้ในสมุดรายชื่อ
               </p>
             ) : (
@@ -89,14 +89,14 @@ export function EmployeeProfile({
                     >
                       <Avatar name={mate.name} src={mate.imageUrl} size="sm" />
                       <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-[13.5px] font-medium transition-colors group-hover:text-primary">
+                        <span className="truncate text-13-5 font-medium transition-colors group-hover:text-primary">
                           {mate.name}
                         </span>
-                        <span className="truncate text-[11.5px] text-mut">
+                        <span className="truncate text-11-5 text-mut">
                           {mate.position}
                         </span>
                       </span>
-                      <span className="flex-none font-mono text-[11.5px] text-mut max-sm:hidden">
+                      <span className="flex-none font-mono text-11-5 text-mut max-sm:hidden">
                         {mate.employeeId}
                       </span>
                       <ChevronRight
@@ -147,16 +147,16 @@ function IdBadge({ employee }: { employee: Employee }) {
 
           <span
             lang="en"
-            className="mt-4 block animate-fade-in font-mono text-[10px] tracking-[0.16em] text-primary [animation-delay:150ms]"
+            className="mt-4 block animate-fade-in font-mono text-10 tracking-[0.16em] text-primary [animation-delay:150ms]"
           >
             EMPLOYEE
           </span>
 
-          <h1 className="mt-1 animate-lift-in text-[21px] leading-[1.35] font-bold text-pretty [animation-delay:170ms]">
+          <h1 className="mt-1 animate-lift-in text-21 leading-[1.35] font-bold text-pretty [animation-delay:170ms]">
             {employee.name}
           </h1>
 
-          <p className="mt-1.5 animate-lift-in text-[13px] leading-[1.7] text-mut text-pretty [animation-delay:210ms]">
+          <p className="mt-1.5 animate-lift-in text-13 leading-[1.7] text-mut text-pretty [animation-delay:210ms]">
             {employee.position}
           </p>
 
@@ -168,7 +168,7 @@ function IdBadge({ employee }: { employee: Employee }) {
         </div>
 
         <div className="flex animate-fade-in items-center justify-between gap-3 border-t border-dashed border-line bg-base-200 px-5.5 py-3.5 [animation-delay:330ms]">
-          <span className="min-w-0 truncate text-[11px] text-mut">
+          <span className="min-w-0 truncate text-11 text-mut">
             {employee.site}
           </span>
           <Barcode className="h-4.5 flex-none" />
@@ -191,7 +191,7 @@ function InfoRow({
   href?: string;
   mono?: boolean;
 }) {
-  const text = `min-w-0 truncate text-[13.5px] ${mono ? "font-mono" : ""}`;
+  const text = `min-w-0 truncate text-13-5 ${mono ? "font-mono" : ""}`;
 
   return (
     <div className="flex items-start gap-3">
@@ -199,7 +199,7 @@ function InfoRow({
         <Icon size={15} strokeWidth={1.7} aria-hidden />
       </span>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <dt className="text-[11.5px] text-mut">{label}</dt>
+        <dt className="text-11-5 text-mut">{label}</dt>
         <dd className="min-w-0">
           {href ? (
             <a href={href} className={`${text} block hover:text-primary hover:underline`}>

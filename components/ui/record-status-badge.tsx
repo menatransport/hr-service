@@ -1,7 +1,7 @@
 import { recordStatusMeta, type RecordStatus } from "@/lib/record-case-flow";
 
 const sizes = {
-  sm: "text-[11.5px] gap-1.5 pl-2 pr-2.5 py-[3px]",
+  sm: "text-11-5 gap-1.5 pl-2 pr-2.5 py-[3px]",
   md: "text-xs gap-2 pl-2.5 pr-3 py-1",
 };
 

@@ -36,16 +36,16 @@ export function CaseVolumeChart() {
   const last = monthlyVolume.length - 1;
 
   return (
-    <figure className="flex flex-col gap-4 rounded-box border border-line bg-base-100 p-5">
+    <figure className="elev-card flex flex-col gap-4 rounded-box border border-line bg-base-100 p-5">
       <figcaption className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 className="text-sm font-semibold">เคสเปิดใหม่เทียบเคสที่ปิดได้</h2>
-          <p className="text-[12px] text-mut">รายเดือน · หน่วยเป็นจำนวนเคส</p>
+          <p className="text-12 text-mut">รายเดือน · หน่วยเป็นจำนวนเคส</p>
         </div>
         <div className="flex items-center gap-4">
           <ul className="flex items-center gap-3.5">
             {series.map((s) => (
-              <li key={s.key} className="flex items-center gap-1.5 text-[12px] text-mut">
+              <li key={s.key} className="flex items-center gap-1.5 text-12 text-mut">
                 <span
                   className="size-2.5 flex-none rounded-[3px]"
                   style={{ backgroundColor: s.color }}
@@ -58,7 +58,7 @@ export function CaseVolumeChart() {
           <button
             type="button"
             onClick={() => setAsTable((v) => !v)}
-            className="rounded-full border border-line px-2.5 py-1 text-[11.5px] text-mut transition-colors hover:border-ink/30 hover:text-ink"
+            className="rounded-full border border-line px-2.5 py-1 text-11-5 text-mut transition-colors hover:border-ink/30 hover:text-ink"
           >
             {asTable ? "ดูเป็นกราฟ" : "ดูเป็นตาราง"}
           </button>
@@ -75,7 +75,7 @@ export function CaseVolumeChart() {
               {ticks.map((t) => (
                 <span
                   key={t}
-                  className="absolute right-0 translate-y-1/2 text-[10.5px] text-mut"
+                  className="absolute right-0 translate-y-1/2 text-10-5 text-mut"
                   style={{ bottom: `${(t / max) * 100}%` }}
                 >
                   {t}
@@ -125,7 +125,7 @@ export function CaseVolumeChart() {
                         >
                           {/* selective direct labels: latest month only */}
                           {mi === last ? (
-                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[10.5px] font-medium text-mut">
+                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-10-5 font-medium text-mut">
                               {value}
                             </span>
                           ) : null}
@@ -136,7 +136,7 @@ export function CaseVolumeChart() {
                     {hover?.m === mi ? (
                       <div
                         role="status"
-                        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 rounded-selector border border-line bg-base-100 px-2.5 py-1.5 text-[11.5px] whitespace-nowrap shadow-md"
+                        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 rounded-selector border border-line bg-base-100 px-2.5 py-1.5 text-11-5 whitespace-nowrap shadow-md"
                       >
                         <span className="font-medium">{m.month}</span>
                         <span className="text-mut">
@@ -155,7 +155,7 @@ export function CaseVolumeChart() {
             {monthlyVolume.map((m) => (
               <span
                 key={m.month}
-                className="flex-1 text-center text-[11.5px] text-mut"
+                className="flex-1 text-center text-11-5 text-mut"
               >
                 {m.month}
               </span>
@@ -170,9 +170,9 @@ export function CaseVolumeChart() {
 function VolumeTable() {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[420px] border-collapse text-left text-[13px]">
+      <table className="w-full min-w-[420px] border-collapse text-left text-13">
         <thead>
-          <tr className="border-b border-line text-[11.5px] text-mut">
+          <tr className="border-b border-line text-11-5 text-mut">
             <th scope="col" className="py-2 font-medium">เดือน</th>
             <th scope="col" className="py-2 text-right font-medium">เปิดใหม่</th>
             <th scope="col" className="py-2 text-right font-medium">ปิดเคส</th>

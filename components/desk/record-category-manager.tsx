@@ -172,7 +172,7 @@ export function RecordCategoryManager({
               </>
             ) : (
               <>
-                <span className="min-w-0 flex-1 truncate text-[13px]">{c.label}</span>
+                <span className="min-w-0 flex-1 truncate text-13">{c.label}</span>
                 <button
                   type="button"
                   onClick={() => startEdit(c)}
@@ -196,7 +196,7 @@ export function RecordCategoryManager({
         ))}
 
         {items.length ? null : (
-          <li className="px-3 py-4 text-center text-[12.5px] text-mut">ยังไม่มีประเภทเคส</li>
+          <li className="px-3 py-4 text-center text-12-5 text-mut">ยังไม่มีประเภทเคส</li>
         )}
       </ul>
 
@@ -216,7 +216,7 @@ export function RecordCategoryManager({
           type="button"
           disabled={busy || !adding.trim()}
           onClick={add}
-          className="flex flex-none items-center gap-1.5 rounded-field bg-primary px-3.5 py-2.5 text-[12.5px] font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+          className="flex flex-none items-center gap-1.5 rounded-field bg-primary px-3.5 py-2.5 text-12-5 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
         >
           <Plus size={14} strokeWidth={2} aria-hidden />
           เพิ่ม

@@ -10,7 +10,7 @@
  * hit area ขยายด้วย `before:` ให้ครบ 44px โดยที่ตัว pill ยังสูง 32px ตามดีไซน์
  */
 const OPTION =
-  "relative isolate flex h-7 items-center rounded-full px-3 text-[12.5px] transition-colors " +
+  "relative isolate flex h-7 items-center rounded-full px-3 text-12-5 transition-colors " +
   "before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']";
 
 export function LangToggle() {

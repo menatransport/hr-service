@@ -62,7 +62,7 @@ export function SurveyView({ responses }: { responses: SurveyResponse[] }) {
 
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="flex items-start justify-between gap-2">
-                    <span className="text-[13.5px] font-semibold text-pretty">{f.title}</span>
+                    <span className="text-13-5 font-semibold text-pretty">{f.title}</span>
                     {on ? (
                       <CheckCircle2
                         size={16}
@@ -72,7 +72,7 @@ export function SurveyView({ responses }: { responses: SurveyResponse[] }) {
                       />
                     ) : null}
                   </span>
-                  <span className="text-[12px] text-mut text-pretty">{f.subtitle}</span>
+                  <span className="text-12 text-mut text-pretty">{f.subtitle}</span>
                 </span>
               </button>
             );
@@ -93,7 +93,7 @@ export function SurveyView({ responses }: { responses: SurveyResponse[] }) {
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-12-5 font-medium transition-colors ${
                 tab === id ? "bg-ink text-ink-content" : "text-mut hover:text-ink"
               }`}
             >

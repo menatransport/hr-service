@@ -70,7 +70,7 @@ export function ExportExcelButton({
           ? "ไม่มีคำร้องที่ตรงกับเงื่อนไขให้ส่งออก"
           : `ส่งออกคำร้อง ${scope} ${count} รายการเป็นไฟล์ Excel`
       }
-      className="flex flex-none items-center gap-1.5 cursor-pointer rounded-md bg-lime-600 px-3.5 py-1.5 text-[14px] font-semibold text-primary-content shadow-sm transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+      className="flex flex-none items-center gap-1.5 cursor-pointer rounded-md bg-lime-600 px-3.5 py-1.5 text-14 font-semibold text-primary-content shadow-sm transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
     >
       {busy ? (
         <Loader2 size={15} strokeWidth={1.9} className="animate-spin" aria-hidden />

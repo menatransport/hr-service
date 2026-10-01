@@ -168,7 +168,7 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line pb-3">
           {/* live region ต้องไม่ถูก remount — `key` จึงอยู่ที่ span ชั้นใน
               ไม่ใช่ที่ <p> ไม่งั้น screen reader บางตัวจะไม่ประกาศผลลัพธ์ */}
-          <p role="status" aria-live="polite" className="text-[12.5px] text-mut">
+          <p role="status" aria-live="polite" className="text-12-5 text-mut">
             <span key={results.length} className="inline-block animate-fade-in">
               {filtering
                 ? `พบ ${results.length} คน จากทั้งหมด ${employees.length} คน · ${groups.length} แผนก`
@@ -180,7 +180,7 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
             <button
               type="button"
               onClick={clearFilters}
-              className="flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
+              className="flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-12-5 text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
             >
               <X size={14} strokeWidth={1.9} aria-hidden />
               ล้างตัวกรอง
@@ -206,8 +206,8 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
                   className="flex-none text-primary"
                   aria-hidden
                 />
-                <h2 className="text-[14px] font-semibold">{group.department}</h2>
-                <span className="rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-medium text-primary">
+                <h2 className="text-14 font-semibold">{group.department}</h2>
+                <span className="rounded-full bg-soft px-2 py-0.5 text-11-5 font-medium text-primary">
                   {group.employees.length}
                 </span>
                 <span aria-hidden className="h-px flex-1 bg-line" />
@@ -298,7 +298,7 @@ function EmptyResult({
     <div className="flex animate-fade-in flex-col items-center gap-2.5 rounded-box border border-dashed border-line bg-base-100 px-5 py-12 text-center">
       <SearchX size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
       <p className="text-sm font-semibold">ไม่พบพนักงานที่ตรงกับที่ค้นหา</p>
-      <p className="max-w-[46ch] text-[12.5px] leading-[1.7] text-mut text-pretty">
+      <p className="max-w-[46ch] text-12-5 leading-[1.7] text-mut text-pretty">
         {reason}
       </p>
 
@@ -306,7 +306,7 @@ function EmptyResult({
       <button
         type="button"
         onClick={onClear}
-        className="mt-1.5 cursor-pointer rounded-full border border-line bg-base-100 px-4 py-2 text-[12.5px] text-ink transition-colors hover:border-primary/40 hover:text-primary"
+        className="mt-1.5 cursor-pointer rounded-full border border-line bg-base-100 px-4 py-2 text-12-5 text-ink transition-colors hover:border-primary/40 hover:text-primary"
       >
         ล้างตัวกรองทั้งหมด
       </button>

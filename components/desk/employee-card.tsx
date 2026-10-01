@@ -58,7 +58,7 @@ export function BadgeHeader({ tall }: { tall?: boolean }) {
       <span
         lang="en"
         className={`font-mono tracking-[0.14em] text-primary-content/85 ${
-          tall ? "text-[11px]" : "text-[10px]"
+          tall ? "text-11" : "text-10"
         }`}
       >
         Employee ID Card
@@ -88,12 +88,12 @@ export function BadgeRow({
     <div className="flex items-baseline gap-3">
       <dt
         lang="en"
-        className="w-18.5 flex-none font-mono text-[9.5px] tracking-[0.08em] text-mut/80"
+        className="w-18.5 flex-none font-mono text-9-5 tracking-[0.08em] text-mut/80"
       >
         {label}
       </dt>
       <dd
-        className={`min-w-0 flex-1 truncate border-b border-dashed border-line pb-1 text-right text-[12.5px] ${
+        className={`min-w-0 flex-1 truncate border-b border-dashed border-line pb-1 text-right text-12-5 ${
           mono ? "font-mono tracking-[0.02em]" : ""
         }`}
       >
@@ -130,10 +130,10 @@ export function EmployeeCard({
             className="ring-line/70"
           />
           <div className="flex min-w-0 flex-1 flex-col">
-            <p className="truncate text-[14.5px] font-semibold transition-colors group-hover:text-primary">
+            <p className="truncate text-14-5 font-semibold transition-colors group-hover:text-primary">
               {employee.name}
             </p>
-            <p className="truncate text-[12px] text-mut">{employee.position}</p>
+            <p className="truncate text-12 text-mut">{employee.position}</p>
           </div>
         </div>
 
@@ -144,7 +144,7 @@ export function EmployeeCard({
       </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-dashed border-line bg-base-200 px-4 py-2.5">
-        <span className="min-w-0 truncate text-[11px] text-mut">{employee.site}</span>
+        <span className="min-w-0 truncate text-11 text-mut">{employee.site}</span>
         <Barcode className="h-3.5 flex-none opacity-70" />
       </div>
     </Link>

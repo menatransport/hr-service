@@ -33,7 +33,7 @@ export function CaseStepper({
       }`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[12.5px] text-mut">
+        <p className="text-12-5 text-mut">
           {compact ? null : (
             <span className="pr-2 text-sm font-semibold text-ink">
               ความคืบหน้าของเคส
@@ -89,7 +89,7 @@ export function CaseStepper({
 
               <div className="flex flex-col items-center gap-0.5 px-1.5 text-center">
                 <span
-                  className={`${compact ? "text-[12px]" : "text-[13px]"} ${
+                  className={`${compact ? "text-12" : "text-13"} ${
                     step.state === "current"
                       ? "font-semibold text-primary"
                       : step.state === "todo"
@@ -100,7 +100,7 @@ export function CaseStepper({
                   {step.title}
                 </span>
                 {!compact && step.meta ? (
-                  <span className="text-[11.5px] leading-snug text-mut text-pretty">
+                  <span className="text-11-5 leading-snug text-mut text-pretty">
                     {step.meta}
                   </span>
                 ) : null}

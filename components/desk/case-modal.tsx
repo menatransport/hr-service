@@ -494,10 +494,10 @@ export function CaseModal({
               <div className="flex items-center gap-3 rounded-field bg-base-200 px-3 py-2.5">
                 <Avatar name={hrCase.driverName} size="md" />
                 <div className="min-w-0">
-                  <p className="truncate text-[13.5px] font-medium">
+                  <p className="truncate text-13-5 font-medium">
                     {hrCase.driverName}
                   </p>
-                  <p className="truncate text-[11.5px] text-mut">
+                  <p className="truncate text-11-5 text-mut">
                     {/* สังกัดว่างเมื่อ พจส. ไม่มีใน `/users` — แสดงแค่รหัสก็พอ */}
                     {[hrCase.driverId, hrCase.driverMeta].filter(Boolean).join(" · ")}
                   </p>
@@ -509,7 +509,7 @@ export function CaseModal({
                * `root_cause` ซึ่งก็คือช่อง “สาเหตุหลัก” ในบล็อก 2 (ดรอปดาวน์จัดกลุ่ม
                * ด้วย `reasonGroups` อยู่แล้ว) จึงเป็นข้อมูลซ้ำ
                */}
-              <dl className="flex flex-col gap-1 text-[12.5px]">
+              <dl className="flex flex-col gap-1 text-12-5">
                 <Row label="แจ้งเมื่อ">{formatDateTime(hrCase.createdAt)}</Row>
                 <Row label="ผู้รับผิดชอบ">
                   {departmentLabel(hrCase.departmentId)}
@@ -527,7 +527,7 @@ export function CaseModal({
                     aria-hidden
                     className="absolute -top-1.25 left-6 size-2.5 rotate-45 rounded-xs bg-soft transition-colors duration-200 group-hover/say:bg-primary/15"
                   />
-                  <p className="relative text-[16px] leading-[1.7] text-pretty">
+                  <p className="relative text-16 leading-[1.7] text-pretty">
                     {/*
                      * อัญประกาศคู่เขียนเป็น entity ไม่ใช่ตัวอักษรดิบ — เคยหายไป
                      * ตอนไฟล์ถูกบันทึกข้ามเอนโค้ดจนเหลือ span ว่าง
@@ -542,14 +542,14 @@ export function CaseModal({
                   </p>
                 </blockquote>
               ) : (
-                <p className="rounded-field border border-dashed border-line px-3 py-2.5 text-center text-[12.5px] text-mut">
+                <p className="rounded-field border border-dashed border-line px-3 py-2.5 text-center text-12-5 text-mut">
                   — ไม่มีรายละเอียดเพิ่มเติม —
                 </p>
               )}
 
               {hrCase.attachments.length ? (
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[11.5px] text-mut">
+                  <span className="text-11-5 text-mut">
                     ไฟล์แนบ ({hrCase.attachments.length})
                   </span>
                   <AttachmentGallery urls={hrCase.attachments} />
@@ -560,10 +560,10 @@ export function CaseModal({
                 <div className="flex flex-col gap-2 border-t border-line pt-3">
                   {hrCase.notes.map((note, i) => (
                     <div key={i} className="flex flex-col gap-0.5">
-                      <span className="text-[11.5px] text-mut">
+                      <span className="text-11-5 text-mut">
                         {note.author} · {formatDateTime(note.at)}
                       </span>
-                      <p className="text-[12.5px] text-pretty">{note.body}</p>
+                      <p className="text-12-5 text-pretty">{note.body}</p>
                     </div>
                   ))}
                 </div>
@@ -575,7 +575,7 @@ export function CaseModal({
               title="กรอกข้อมูลแผนดำเนินการ"
               badge={
                 locked ? (
-                  <span className="flex items-center gap-1.5 rounded-full bg-base-200 px-2 py-[2px] text-[11px] text-mut">
+                  <span className="flex items-center gap-1.5 rounded-full bg-base-200 px-2 py-[2px] text-11 text-mut">
                     <Lock size={11} strokeWidth={2} aria-hidden />
                     {unassigned ? "รอมอบหมายหน่วยงาน" : ""}
                   </span>
@@ -583,7 +583,7 @@ export function CaseModal({
               }
             >
               {unassigned ? (
-                <p className="flex items-start gap-2 rounded-field border border-line bg-base-200 px-3 py-2.5 text-[12px] leading-[1.7] text-mut text-pretty">
+                <p className="flex items-start gap-2 rounded-field border border-line bg-base-200 px-3 py-2.5 text-12 leading-[1.7] text-mut text-pretty">
                   <Lock
                     size={14}
                     strokeWidth={1.8}
@@ -596,7 +596,7 @@ export function CaseModal({
                   </span>
                 </p>
               ) : (
-                <div className="flex items-center gap-2 rounded-field px-3 py-2.5 text-[15px]">
+                <div className="flex items-center gap-2 rounded-field px-3 py-2.5 text-15">
                   <span className="text-mut">ผู้รับผิดชอบเคสนี้</span>
                   <span className="font-semibold text-primary underline decoration-primary underline-offset-2">
                     {departmentLabel(hrCase.departmentId)}
@@ -753,14 +753,14 @@ export function CaseModal({
                       ? "มอบหมายหน่วยงานผู้รับผิดชอบก่อน จึงจะรู้ว่าต้องส่งอีเมลถึงใคร"
                       : `แจ้ง ${departmentLabel(hrCase.departmentId)} ทางอีเมล`
                   }
-                  className="flex flex-none items-center gap-1.5 rounded-field border border-line px-3.5 py-2 text-[13px] text-mut transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none disabled:opacity-40"
+                  className="flex flex-none items-center gap-1.5 rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none disabled:opacity-40"
                 >
                   <Mail size={15} strokeWidth={1.9} aria-hidden />
                   แจ้งทางอีเมล
                 </button>
               )}
 
-              <p className="min-w-0 text-[12.5px] text-mut">
+              <p className="min-w-0 text-12-5 text-mut">
               {busy ? (
                 "กำลังบันทึก…"
               ) : detailMissing ? (
@@ -790,7 +790,7 @@ export function CaseModal({
                       setPendingAction(null);
                       setRemark("");
                     }}
-                    className="rounded-field border border-line px-3.5 py-2 text-[13px] text-mut hover:text-ink disabled:opacity-40"
+                    className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
                   >
                     ยกเลิก
                   </button>
@@ -798,7 +798,7 @@ export function CaseModal({
                     type="button"
                     onClick={confirmAction}
                     disabled={busy || !remark.trim()}
-                    className={`flex items-center gap-1.5 rounded-field px-4 py-2 text-[13px] font-medium transition-opacity disabled:opacity-40 ${pendingAction === "approve"
+                    className={`flex items-center gap-1.5 rounded-field px-4 py-2 text-13 font-medium transition-opacity disabled:opacity-40 ${pendingAction === "approve"
                         ? "bg-primary text-primary-content"
                         : "bg-alert text-ink-content"
                       }`}
@@ -814,7 +814,7 @@ export function CaseModal({
                       type="button"
                       disabled={busy}
                       onClick={() => setDraft(saved)}
-                      className="rounded-field border border-line px-3.5 py-2 text-[13px] text-mut hover:text-ink disabled:opacity-40"
+                      className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
                     >
                       ล้างที่แก้
                     </button>
@@ -826,7 +826,7 @@ export function CaseModal({
                         type="button"
                         disabled={busy}
                         onClick={() => setPendingAction("reject")}
-                        className="rounded-field border border-alert/40 px-3.5 py-2 text-[13px] font-medium text-alert hover:bg-alert/5 disabled:opacity-40"
+                        className="rounded-field border border-alert/40 px-3.5 py-2 text-13 font-medium text-alert hover:bg-alert/5 disabled:opacity-40"
                       >
                         ปฏิเสธ
                       </button>
@@ -834,7 +834,7 @@ export function CaseModal({
                         type="button"
                         disabled={busy}
                         onClick={() => setPendingAction("approve")}
-                        className="rounded-field border border-primary/45 px-3.5 py-2 text-[13px] font-medium text-primary hover:bg-soft disabled:opacity-40"
+                        className="rounded-field border border-primary/45 px-3.5 py-2 text-13 font-medium text-primary hover:bg-soft disabled:opacity-40"
                       >
                         อนุมัติแผนแก้ไข
                       </button>
@@ -846,7 +846,7 @@ export function CaseModal({
                       type="button"
                       disabled={busy}
                       onClick={closeCase}
-                      className="rounded-field border border-primary/45 px-3.5 py-2 text-[13px] font-medium text-primary hover:bg-soft disabled:opacity-40"
+                      className="rounded-field border border-primary/45 px-3.5 py-2 text-13 font-medium text-primary hover:bg-soft disabled:opacity-40"
                     >
                       ปิดเคส
                     </button>
@@ -857,7 +857,7 @@ export function CaseModal({
                     type="button"
                     onClick={save}
                     disabled={!dirty || busy || detailMissing}
-                    className="rounded-field bg-primary px-5 py-2 text-[13px] font-medium text-primary-content transition-opacity disabled:opacity-40"
+                    className="rounded-field bg-primary px-5 py-2 text-13 font-medium text-primary-content transition-opacity disabled:opacity-40"
                   >
                     บันทึก
                   </button>
@@ -892,7 +892,7 @@ function Card({
   return (
     <section className="flex h-fit flex-col gap-3.5 rounded-box border border-line bg-base-100 p-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13.5px] font-semibold">{title}</h3>
+        <h3 className="text-13-5 font-semibold">{title}</h3>
         {badge}
       </div>
       {children}

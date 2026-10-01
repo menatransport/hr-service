@@ -110,14 +110,14 @@ export function ImageUploadField({
   return (
     <div className="flex flex-col gap-2">
       {/* ไม่มีดอกจัน — แนบรูปไม่บังคับ และระบบทำเครื่องหมายเฉพาะช่องที่บังคับ */}
-      <span className="text-[12.5px] font-medium text-mut">{label}</span>
+      <span className="text-12-5 font-medium text-mut">{label}</span>
 
       {value ? (
         <div className="flex items-center gap-3 rounded-box border border-line bg-base-100 p-2.5">
           <AttachmentGallery urls={[value]} thumb={64} />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-[12px] text-ink">แนบรูปแล้ว</span>
-            <span className="text-[11.5px] text-mut">
+            <span className="text-12 text-ink">แนบรูปแล้ว</span>
+            <span className="text-11-5 text-mut">
               ชี้ที่รูปเพื่อดูภาพขยาย · คลิกเพื่อดูเต็มจอ
             </span>
           </div>
@@ -163,7 +163,7 @@ export function ImageUploadField({
                 alt=""
                 className="size-14 rounded-[9px] border border-line object-cover"
               />
-              <span className="flex items-center gap-1.5 text-[12.5px]">
+              <span className="flex items-center gap-1.5 text-12-5">
                 <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
                 {stage === "resizing" ? "กำลังย่อรูป…" : "กำลังอัปโหลด…"}
               </span>
@@ -171,8 +171,8 @@ export function ImageUploadField({
           ) : (
             <>
               <ImagePlus size={22} strokeWidth={1.6} aria-hidden />
-              <span className="text-[12.5px]">เลือกไฟล์รูป หรือ ลากมาวางตรงนี้</span>
-              <span className="text-[11px]">
+              <span className="text-12-5">เลือกไฟล์รูป หรือ ลากมาวางตรงนี้</span>
+              <span className="text-11">
                 {hint ?? `${ACCEPTED_LABEL} · ไม่เกิน ${MAX_MB} MB · ระบบย่อรูปให้เอง`}
               </span>
             </>
@@ -197,7 +197,7 @@ export function ImageUploadField({
       {error ? (
         <p
           role="alert"
-          className="flex items-center gap-1.5 text-[11.5px] text-alert"
+          className="flex items-center gap-1.5 text-11-5 text-alert"
         >
           <TriangleAlert size={13} strokeWidth={1.9} aria-hidden className="flex-none" />
           {error}

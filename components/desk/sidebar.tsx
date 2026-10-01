@@ -12,7 +12,7 @@ function isActive(pathname: string, href: string) {
 }
 
 const ROW =
-  "group flex w-full items-center gap-2.5 rounded-field px-2.5 py-2 text-left text-[13.5px] transition-colors";
+  "group flex w-full items-center gap-2.5 rounded-field px-2.5 py-2 text-left text-13-5 transition-colors";
 
 export function DeskSidebar() {
   const pathname = usePathname();
@@ -35,7 +35,7 @@ function NavList({ pathname }: { pathname: string }) {
     <nav aria-label="เมนู HR" className="flex flex-col gap-5 p-3">
       {deskNav.map((group) => (
         <div key={group.section} className="flex flex-col gap-1">
-          <p className="px-2.5 pb-1 text-[11px] tracking-[0.08em] text-mut">
+          <p className="px-2.5 pb-1 text-11 tracking-[0.08em] text-mut">
             {group.section}
           </p>
           {group.items.map((item) =>

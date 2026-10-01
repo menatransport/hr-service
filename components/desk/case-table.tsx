@@ -269,7 +269,7 @@ export function CaseTable({
             />
 
             <div className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3 py-1.5">
-              <span className="flex-none text-[12px] text-mut">ผู้รับผิดชอบ</span>
+              <span className="flex-none text-12 text-mut">ผู้รับผิดชอบ</span>
               <Select
                 value={department}
                 onChange={setDepartment}
@@ -297,7 +297,7 @@ export function CaseTable({
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="flex-none rounded-full px-3 py-1.5 text-[12.5px] text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
+                  className="flex-none rounded-full px-3 py-1.5 text-12-5 text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
                 >
                   ล้างตัวกรอง
                 </button>
@@ -333,10 +333,10 @@ export function CaseTable({
       ) : null}
 
       {/* ── จอ ≥md: ตาราง 4 คอลัมน์ (ผู้แจ้งอยู่ในคอลัมน์ “เรื่อง”) ── */}
-      <div className="hidden overflow-x-auto rounded-box border border-line bg-base-100 md:block">
+      <div className="elev-card hidden overflow-x-auto rounded-box border border-line bg-base-100 md:block">
         <table className="w-full min-w-[820px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-line text-[11.5px] tracking-[0.04em] text-mut">
+            <tr className="border-b border-line-strong bg-head text-11-5 tracking-[0.04em] text-mut">
               <Th className="w-[110px]">อายุคำร้อง</Th>
               <Th>เรื่องแจ้ง</Th>
               <Th className="w-[168px]">ผู้รับผิดชอบ</Th>
@@ -359,20 +359,20 @@ export function CaseTable({
                 <tr
                   key={c.trackingNo}
                   onClick={() => open(c)}
-                  className="group cursor-pointer border-b border-line/70 align-top text-[13px] transition-colors last:border-0 hover:bg-base-200/70"
+                  className="group cursor-pointer border-b border-line/70 align-top text-13 transition-colors last:border-0 hover:bg-base-200/70"
                 >
                   <td className="px-3.5 py-3">
                     <span
-                      className={`block text-[17px] leading-none font-semibold ${
+                      className={`block text-17 leading-none font-semibold ${
                         breached ? "text-sla" : "text-ink"
                       }`}
                     >
                       {caseAgeDays(c)}
-                      <span className="ml-1 text-[10.5px] font-normal text-mut">
+                      <span className="ml-1 text-10-5 font-normal text-mut">
                         วัน
                       </span>
                     </span>
-                    <span className="mt-1 block text-[11px] text-mut">
+                    <span className="mt-1 block text-11 text-mut">
                       {formatDate(c.createdAt)}
                     </span>
                   </td>
@@ -385,7 +385,7 @@ export function CaseTable({
                           <Link
                             href={`/desk/cases/${c.trackingNo}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="font-mono text-[11.5px] font-medium text-primary hover:text-ink"
+                            className="font-mono text-11-5 font-medium text-primary hover:text-ink"
                           >
                             {c.trackingNo}
                           </Link>
@@ -394,7 +394,7 @@ export function CaseTable({
                         <span className="mt-0.5 block leading-snug font-medium text-pretty">
                           {c.subject}
                         </span>
-                        <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11.5px] text-mut">
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 text-11-5 text-mut">
                           <span className="text-ink">{c.driverName}</span>
                           <span>{c.driverId}</span>
                           <span aria-hidden>·</span>
@@ -461,7 +461,7 @@ export function CaseTable({
             <div
               key={c.trackingNo}
               onClick={() => open(c)}
-              className="group cursor-pointer rounded-box border border-line bg-base-100 p-3.5 transition-colors hover:border-primary/30"
+              className="card-lift group cursor-pointer rounded-box border border-line bg-base-100 p-3.5"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -469,7 +469,7 @@ export function CaseTable({
                   <NewBadge hrCase={c} />
                 </span>
                 <span
-                  className={`flex-none text-[11.5px] ${breached ? "text-sla" : "text-mut"}`}
+                  className={`flex-none text-11-5 ${breached ? "text-sla" : "text-mut"}`}
                 >
                   {caseAgeDays(c)} วัน · {formatShort(c.createdAt)}
                 </span>
@@ -481,14 +481,14 @@ export function CaseTable({
                   <Link
                     href={`/desk/cases/${c.trackingNo}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="block font-mono text-[11.5px] font-medium text-primary"
+                    className="block font-mono text-11-5 font-medium text-primary"
                   >
                     {c.trackingNo}
                   </Link>
-                  <p className="mt-0.5 text-[13.5px] leading-snug font-medium text-pretty">
+                  <p className="mt-0.5 text-13-5 leading-snug font-medium text-pretty">
                     {c.subject}
                   </p>
-                  <p className="mt-1 text-[11.5px] text-mut">
+                  <p className="mt-1 text-11-5 text-mut">
                     <span className="text-ink">{c.driverName}</span> {c.driverId}
                   </p>
                 </div>
@@ -496,7 +496,7 @@ export function CaseTable({
 
               <StepBar status={statusOf(c)} />
 
-              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-mut">
+              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-11-5 text-mut">
                 <span>{c.complaintType ?? "ยังไม่จัดประเภท"}</span>
                 {c.attachments.length ? (
                   <span className="inline-flex items-center gap-1">
@@ -542,7 +542,7 @@ export function CaseTable({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
-        <p className="text-[12px] text-mut">
+        <p className="text-12 text-mut">
           {rows.length ? (
             <>
               แสดง{" "}
@@ -559,7 +559,7 @@ export function CaseTable({
 
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 sm:flex">
-            <span className="flex-none text-[12px] text-mut">ต่อหน้า</span>
+            <span className="flex-none text-12 text-mut">ต่อหน้า</span>
             <Select
               value={String(perPage)}
               onChange={(v) => setPerPage(Number(v))}
@@ -598,7 +598,7 @@ function NewBadge({ hrCase }: { hrCase: HrCase }) {
   return (
     <span
       title={`แจ้งเข้ามาวันนี้ · ${formatDate(hrCase.createdAt)}`}
-      className="flex-none rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] leading-none font-medium tracking-[0.02em] text-ink-content"
+      className="flex-none rounded-full bg-indigo-600 px-1.5 py-0.5 text-10 leading-none font-medium tracking-[0.02em] text-ink-content"
     >
       ใหม่
     </span>
@@ -631,12 +631,12 @@ function Empty({ hint, onClear }: { hint: string; onClear?: () => void }) {
       <span className="flex size-11 items-center justify-center rounded-full bg-soft text-primary">
         <Inbox size={20} strokeWidth={1.7} aria-hidden />
       </span>
-      <p className="text-[13px] text-mut">{hint}</p>
+      <p className="text-13 text-mut">{hint}</p>
       {onClear ? (
         <button
           type="button"
           onClick={onClear}
-          className="rounded-full border border-line px-3.5 py-1.5 text-[12.5px] transition-colors hover:border-ink/30 hover:text-ink"
+          className="rounded-full border border-line px-3.5 py-1.5 text-12-5 transition-colors hover:border-ink/30 hover:text-ink"
         >
           ล้างตัวกรอง
         </button>
@@ -771,7 +771,7 @@ function Chip({
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`flex-none rounded-full border px-3 py-1.5 text-[12.5px] transition-colors ${
+      className={`flex-none rounded-full border px-3 py-1.5 text-12-5 transition-colors ${
         on
           ? onCls
           : "border-line bg-base-100 text-mut hover:border-ink/30 hover:text-ink"

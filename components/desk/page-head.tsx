@@ -12,7 +12,7 @@ export function PageHead({
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-[-0.01em]">{title}</h1>
         {subtitle ? (
-          <p className="max-w-[62ch] text-[13px] text-mut text-pretty">
+          <p className="max-w-[62ch] text-13 text-mut text-pretty">
             {subtitle}
           </p>
         ) : null}

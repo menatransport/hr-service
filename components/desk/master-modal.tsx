@@ -147,7 +147,7 @@ export function MasterButton({ kind }: { kind: MasterKind }) {
           setOpen(true);
           void reload();
         }}
-        className="flex items-center gap-1.5 rounded-field border border-line bg-base-100 px-3.5 py-2 text-[13px] font-medium text-mut transition-colors hover:border-ink/30 hover:text-ink"
+        className="flex items-center gap-1.5 rounded-field border border-line bg-base-100 px-3.5 py-2 text-13 font-medium text-mut transition-colors hover:border-ink/30 hover:text-ink"
       >
         <Tags size={16} strokeWidth={1.8} aria-hidden />
         {meta.label}
@@ -347,10 +347,10 @@ function MasterPanel({
       >
         <header className="flex flex-none items-center justify-between gap-3 border-b border-line bg-base-100 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="master-title" className="text-[15px] font-semibold">
+            <h2 id="master-title" className="text-15 font-semibold">
               {meta.label}
             </h2>
-            <p className="mt-0.5 text-[11.5px] text-mut text-pretty">{meta.subtitle}</p>
+            <p className="mt-0.5 text-11-5 text-mut text-pretty">{meta.subtitle}</p>
           </div>
           <button
             type="button"
@@ -365,7 +365,7 @@ function MasterPanel({
 
         <div className="flex flex-none items-center gap-2 border-b border-line bg-base-100 px-5 py-3">
           <div className="flex items-center gap-2 rounded-field border border-line px-3 py-1.5">
-            <span className="flex-none text-[12px] text-mut">{meta.groupLabel}</span>
+            <span className="flex-none text-12 text-mut">{meta.groupLabel}</span>
             <Select
               value={filter}
               onChange={setFilter}
@@ -379,7 +379,7 @@ function MasterPanel({
             type="button"
             onClick={startAdd}
             disabled={busy || editing === "new"}
-            className="ml-auto flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="ml-auto flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             <Plus size={15} strokeWidth={2.2} aria-hidden />
             เพิ่มรายการ
@@ -401,17 +401,17 @@ function MasterPanel({
           ) : null}
 
           {loadError ? (
-            <p className="rounded-field border border-alert/40 bg-alert/5 px-3.5 py-3 text-[12.5px] text-alert text-pretty">
+            <p className="rounded-field border border-alert/40 bg-alert/5 px-3.5 py-3 text-12-5 text-alert text-pretty">
               {loadError}
             </p>
           ) : null}
 
           {rows === null ? (
-            <p className="px-1 py-8 text-center text-[13px] text-mut">กำลังโหลด…</p>
+            <p className="px-1 py-8 text-center text-13 text-mut">กำลังโหลด…</p>
           ) : null}
 
           {rows !== null && !shown.length && !loadError ? (
-            <p className="px-1 py-8 text-center text-[13px] text-mut text-pretty">
+            <p className="px-1 py-8 text-center text-13 text-mut text-pretty">
               {filter === "all"
                 ? meta.emptyHint
                 : `ยังไม่มี${meta.label}ของ ${groupLabelOf(kind, filter)}`}
@@ -473,15 +473,15 @@ function Row({
       }`}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13.5px] font-medium">
+        <p className="truncate text-13-5 font-medium">
           {row.name}
           {row.active ? null : (
-            <span className="ml-2 rounded-full bg-base-200 px-1.5 py-0.5 text-[10.5px] font-normal text-mut">
+            <span className="ml-2 rounded-full bg-base-200 px-1.5 py-0.5 text-10-5 font-normal text-mut">
               ปิดใช้งาน
             </span>
           )}
         </p>
-        <p className="mt-0.5 truncate text-[11.5px] text-mut">{groupLabel}</p>
+        <p className="mt-0.5 truncate text-11-5 text-mut">{groupLabel}</p>
       </div>
 
       <ToolButton
@@ -569,7 +569,7 @@ function DraftCard({
 }) {
   return (
     <div className="flex flex-col gap-3.5 rounded-box border border-primary/35 bg-base-100 p-3.5">
-      <p className="text-[13px] font-medium">{title}</p>
+      <p className="text-13 font-medium">{title}</p>
 
       <div className="grid gap-3.5 sm:grid-cols-2">
         <SelectField
@@ -596,7 +596,7 @@ function DraftCard({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="rounded-field border border-line px-3.5 py-2 text-[13px] text-mut hover:text-ink disabled:opacity-40"
+          className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
         >
           ยกเลิก
         </button>
@@ -604,7 +604,7 @@ function DraftCard({
           type="button"
           onClick={onSave}
           disabled={!valid || busy}
-          className="rounded-field bg-primary px-4 py-2 text-[13px] font-medium text-primary-content transition-opacity disabled:opacity-40"
+          className="rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity disabled:opacity-40"
         >
           {busy ? "กำลังบันทึก…" : "บันทึก"}
         </button>

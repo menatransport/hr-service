@@ -41,8 +41,15 @@ export const viewport: Viewport = {
  * Applies the saved theme before the first paint. Light (`hrs`) stays the
  * default — the design doc has no dark mode, so only an explicit choice from
  * the topbar toggle switches it. Keep the key in sync with `theme-toggle.tsx`.
+ *
+ * **ยกเว้นหน้ารับสมัครฝั่งคนนอก** (`/recruitment/**` ที่ไม่ใช่ `/recruitment/admin`)
+ * ซึ่งถูกบังคับเป็นธีมสว่างเสมอ — หน้ากลุ่มนั้นออกแบบพื้นหลังไว้ชุดเดียวและไม่มี
+ * ปุ่มสลับธีมให้แล้ว · ตัดสินตั้งแต่ในสคริปต์นี้เพราะถ้าไปแก้ทีหลังใน effect
+ * ผู้ใช้ที่เคยตั้งโหมดมืดจะเห็นหน้าสมัครงานกระพริบเป็นสีมืดหนึ่งเฟรมก่อน
+ * (การย้ายหน้าแบบ client-side ยังต้องพึ่ง `components/recruitment/light-theme.tsx`
+ * เพราะสคริปต์นี้ไม่ทำงานซ้ำ)
  */
-const themeScript = `try{var t=localStorage.getItem("hrs-theme");if(t==="hrs-dark")document.documentElement.dataset.theme=t}catch(e){}`;
+const themeScript = `try{var p=location.pathname;var pub=p==="/recruitment"||(p.indexOf("/recruitment/")===0&&p.indexOf("/recruitment/admin")!==0);if(pub){document.documentElement.dataset.theme="hrs"}else{var t=localStorage.getItem("hrs-theme");if(t==="hrs-dark")document.documentElement.dataset.theme=t}}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

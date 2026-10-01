@@ -90,14 +90,14 @@ export function RecordCaseDetail({
   const shownHistory = allHistory ? history : history.slice(0, HISTORY_PREVIEW);
 
   return (
-    <div className="border-t border-line bg-base-100 text-[12.5px]">
+    <div className="border-t border-line bg-base-100 text-12-5">
       {/* สองคอลัมน์ต่อกันสนิท คั่นด้วยเส้นตั้งเส้นเดียว ไม่มีช่องไฟ */}
       <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] lg:divide-x lg:divide-line">
         {/* ── ซ้าย: ตัวเรื่อง ── */}
         <div className="min-w-0">
           <Head title="รายละเอียดของเรื่อง" />
           {/* ย่อหน้าอ่านยาว — บรรทัดโปร่ง กว้างไม่เกิน 90 ตัวอักษรตามระยะที่ตาอ่านสบาย */}
-          <p className="max-w-[90ch] px-4 py-3.5 text-[13px] leading-[1.95] whitespace-pre-wrap text-pretty">
+          <p className="max-w-[90ch] px-4 py-3.5 text-13 leading-[1.95] whitespace-pre-wrap text-pretty">
             {record.detail}
           </p>
 
@@ -110,7 +110,7 @@ export function RecordCaseDetail({
                   {record.warnings.map((w) => (
                     <li
                       key={w}
-                      className={`border px-2 py-0.5 text-[11.5px] ${warningChip(w)}`}
+                      className={`border px-2 py-0.5 text-11-5 ${warningChip(w)}`}
                     >
                       {warningLabel(w)}
                     </li>
@@ -168,7 +168,7 @@ export function RecordCaseDetail({
                 <button
                   type="button"
                   onClick={() => setAllHistory((v) => !v)}
-                  className="text-[11px] font-normal text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
+                  className="text-11 font-normal text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
                 >
                   {allHistory ? "ย่อ" : "ดูทั้งหมด"}
                 </button>
@@ -204,14 +204,14 @@ export function RecordCaseDetail({
                       </span>
                       <span className="text-mut"> · {formatDateTime(entry.at)}</span>
                     </span>
-                    <span className="text-[11.5px] text-mut">
+                    <span className="text-11-5 text-mut">
                       โดย {entry.by.name}
                       {edited && entry.fields?.length
                         ? ` — ${entry.fields.join(" · ")}`
                         : ""}
                     </span>
                     {entry.note ? (
-                      <span className="text-[11.5px] leading-[1.65] text-pretty">
+                      <span className="text-11-5 leading-[1.65] text-pretty">
                         “{entry.note}”
                       </span>
                     ) : null}
@@ -226,7 +226,7 @@ export function RecordCaseDetail({
       {/* ── แถบดำเนินการ: ใครบันทึกไว้เมื่อไร + จะทำอะไรต่อ ── */}
       <div className="border-t border-line bg-base-200/60">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
-          <span className="text-[11.5px] text-mut">
+          <span className="text-11-5 text-mut">
             บันทึกโดย {record.recorder.name} · {formatDateTime(record.createdAt)}
           </span>
 
@@ -234,7 +234,7 @@ export function RecordCaseDetail({
             <button
               type="button"
               onClick={onEdit}
-              className={`${squareButton} flex-none border border-line bg-base-100 text-[12px] hover:border-ink/30 hover:text-ink`}
+              className={`${squareButton} flex-none border border-line bg-base-100 text-12 hover:border-ink/30 hover:text-ink`}
             >
               <Pencil size={14} strokeWidth={1.8} aria-hidden />
               แก้ไข
@@ -248,7 +248,7 @@ export function RecordCaseDetail({
                   type="button"
                   disabled={busy}
                   onClick={() => change(record, to)}
-                  className={`${squareButton} px-3.5 text-[12.5px] font-medium disabled:opacity-45 ${statusActionTone[to]}`}
+                  className={`${squareButton} px-3.5 text-12-5 font-medium disabled:opacity-45 ${statusActionTone[to]}`}
                 >
                   <Icon size={14} strokeWidth={2} aria-hidden />
                   {recordStatusMeta[to].action}
@@ -283,9 +283,9 @@ function Head({
         divider ? "border-t" : ""
       }`}
     >
-      <h3 className="text-[11px] font-semibold tracking-[0.06em] text-mut">{title}</h3>
+      <h3 className="text-11 font-semibold tracking-[0.06em] text-mut">{title}</h3>
       {count === undefined ? null : (
-        <span className="text-[11px] text-mut tabular-nums">({count})</span>
+        <span className="text-11 text-mut tabular-nums">({count})</span>
       )}
       {action ? <span className="ml-auto">{action}</span> : null}
     </div>
@@ -336,7 +336,7 @@ function DocLink({ file }: { file: RecordAttachment }) {
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate">{file.name}</span>
-        <span className="text-[11px] text-mut">
+        <span className="text-11 text-mut">
           {kind.label} · {formatFileSize(file.size)}
         </span>
       </span>

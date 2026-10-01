@@ -129,7 +129,7 @@ export function EmployeePhoto({
 
       {/* ข้อผิดพลาดตอนเลือกไฟล์ — ตอนบันทึกจะไปโผล่ในกล่องครอปแทน */}
       {error && !picked ? (
-        <p role="alert" className="text-center text-[11.5px] text-alert text-pretty">
+        <p role="alert" className="text-center text-11-5 text-alert text-pretty">
           {error}
         </p>
       ) : null}

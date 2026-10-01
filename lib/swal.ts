@@ -46,7 +46,7 @@ const ICON: Record<Tone, SweetAlertOptions["icon"]> = {
 
 /** ปุ่มใช้คลาสเดียวกับปุ่มในฟุตเตอร์ของ `case-modal.tsx` — กล่องจึงดูเป็นระบบเดียวกัน */
 const BTN_BASE =
-  "rounded-field px-4 py-2 text-[13px] font-medium transition-opacity hover:opacity-90";
+  "rounded-field px-4 py-2 text-13 font-medium transition-opacity hover:opacity-90";
 
 const CONFIRM_CLASS: Record<Tone, string> = {
   primary: `${BTN_BASE} bg-primary text-primary-content`,
@@ -56,7 +56,7 @@ const CONFIRM_CLASS: Record<Tone, string> = {
 };
 
 const CANCEL_CLASS =
-  "rounded-field border border-line px-3.5 py-2 text-[13px] text-mut transition-colors hover:text-ink";
+  "rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink";
 
 /**
  * ค่าที่ทุกกล่องใช้ร่วมกัน

@@ -36,7 +36,7 @@ export function CaseTimeline({ steps }: { steps: TimelineStep[] }) {
                 {step.title}
               </span>
               {step.meta ? (
-                <span className="text-[12.5px] text-mut">{step.meta}</span>
+                <span className="text-12-5 text-mut">{step.meta}</span>
               ) : null}
             </div>
           </li>

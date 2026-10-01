@@ -112,7 +112,7 @@ export function NewCaseButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-content transition-opacity hover:opacity-90"
+        className="flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
       >
         <MessageSquarePlus size={16} strokeWidth={1.8} aria-hidden />
         แจ้งเรื่องเอง
@@ -136,7 +136,7 @@ export function NewCaseButton() {
                 className="relative flex max-h-[92dvh] w-full max-w-[480px] flex-col overflow-hidden rounded-[18px] border border-line bg-canvas shadow-[0_32px_80px_-24px_rgba(21,32,29,0.45)] outline-none animate-rise"
               >
                 <header className="flex flex-none items-center justify-between gap-3 border-b border-line bg-base-100 px-5 py-4">
-                  <h2 id="new-case-title" className="text-[15px] font-semibold">
+                  <h2 id="new-case-title" className="text-15 font-semibold">
                     แจ้งเรื่องเอง
                   </h2>
                   <button
@@ -151,7 +151,7 @@ export function NewCaseButton() {
                 </header>
 
                 <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-5">
-                  <p className="text-[12.5px] text-mut text-pretty">
+                  <p className="text-12-5 text-mut text-pretty">
                     ใช้เมื่อรับเรื่องแทนคนขับ เช่น แจ้งทางโทรศัพท์ —
                     คำร้องจะเข้าคิวเป็น “เปิดคำร้อง” เหมือนแจ้งจากแอปมือถือ
                   </p>
@@ -198,7 +198,7 @@ export function NewCaseButton() {
                     type="button"
                     onClick={close}
                     disabled={busy}
-                    className="rounded-field border border-line px-3.5 py-2 text-[13px] text-mut hover:text-ink disabled:opacity-40"
+                    className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
                   >
                     ยกเลิก
                   </button>
@@ -206,7 +206,7 @@ export function NewCaseButton() {
                     type="button"
                     onClick={submit}
                     disabled={!valid || busy}
-                    className="rounded-field bg-primary px-4 py-2 text-[13px] font-medium text-primary-content transition-opacity disabled:opacity-40"
+                    className="rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity disabled:opacity-40"
                   >
                     {busy ? "กำลังส่ง…" : "ส่งเรื่อง"}
                   </button>

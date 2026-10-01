@@ -11,6 +11,7 @@ import {
   Scale,
   ShieldCheck,
   Truck,
+  UserSearch,
   Users,
   Wallet,
   ClipboardPenLine,
@@ -250,6 +251,7 @@ export const deskNav: { section: string; items: DeskNavItem[] }[] = [
       { href: "/desk/record-cases", label: "บันทึกเคส", icon: Bookmark },
       { href: "/desk/employee", label: "ค้นหาข้อมูลพนักงาน", icon: Users },
       { href: "/desk/survey", label: "แบบสอบถาม", icon: ClipboardPenLine},
+      { href: "/recruitment/admin", label: "ฝ่ายสรรหา", icon: UserSearch },
       // {
       //   href: "/desk/registry",
       //   label: "ทะเบียนประวัติ พจส.",
@@ -259,19 +261,10 @@ export const deskNav: { section: string; items: DeskNavItem[] }[] = [
       //     { href: "/desk/registry/saraburi", label: "ทะเบียนสระบุรี" },
       //   ],
       // },
-      // เมนู C&B พร้อมใช้แล้ว แต่ยัง **เปิดไม่ได้** — `app/desk/payroll/**` ยังเป็น
-      // โฟลเดอร์เปล่า ไม่มี `page.tsx` สักหน้า (ทั้งสามลิงก์จะ 404) เอาคอมเมนต์ออก
-      // เมื่อหน้า upload / setting / report มีจริงแล้ว
-      // {
-      //   href: "/desk/payroll",
-      //   label: "C&B",
-      //   icon: Wallet,
-      //   children: [
-      //     { href: "/desk/payroll/upload", label: "อัปโหลดข้อมูล" },
-      //     { href: "/desk/payroll/setting", label: "ตั้งค่า" },
-      //     { href: "/desk/payroll/report", label: "รายงาน" },
-      //   ],
-      // },
+      /* โมดูลค่าจ้างและสวัสดิการเป็น **ระบบแยก** ที่ `/payroll` มี topbar/sidebar
+         ของตัวเอง — ท่าเดียวกับ “ฝ่ายสรรหา” ข้างบน ไม่ใช่หน้าย่อยใต้ `/desk`
+         (เมนู `C&B` ที่เคยชี้ไป `/desk/payroll/**` ถูกแทนที่ด้วยบรรทัดนี้ทั้งชุด) */
+      { href: "/payroll", label: "ฝ่ายค่าจ้างและสวัสดิการ", icon: Wallet },
       // `/desk/activity` (Log) ย้ายไปเป็นไอคอนบน topbar แล้ว — ไม่ต้องเพิ่มกลับที่นี่
     ],
   },

@@ -100,7 +100,7 @@ export function ApprovalPanel({
     <section className="flex flex-col gap-4 border-t border-line pt-4">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span className="flex items-center gap-1.5">
-          <h4 className="text-[13.5px] font-semibold">การอนุมัติ</h4>
+          <h4 className="text-13-5 font-semibold">การอนุมัติ</h4>
           <InfoTip label="วิธีกำหนดผู้อนุมัติ">
             แจ้งให้<span className="font-semibold text-ink">หัวหน้า</span>
             รับทราบเรื่องก่อน แล้วใส่ชื่อไว้เป็นผู้อนุมัติระดับ 1
@@ -111,7 +111,7 @@ export function ApprovalPanel({
         </span>
 
         <p
-          className={`text-[12px] font-medium ${
+          className={`text-12 font-medium ${
             rejected ? "text-alert" : approved ? "text-primary" : "text-mut"
           }`}
         >
@@ -214,8 +214,8 @@ function Slot({
           />
         ) : (
           <p
-            className={`min-w-0 flex-1 truncate text-[15.5px] font-medium ${
-              signed ? "" : "text-[13px] font-normal text-mut"
+            className={`min-w-0 flex-1 truncate text-15-5 font-medium ${
+              signed ? "" : "text-13 font-normal text-mut"
             }`}
           >
             {signed ?? (options.length ? "ไม่ได้กำหนด" : "โหลดรายชื่อไม่สำเร็จ")}
@@ -223,7 +223,7 @@ function Slot({
         )}
       </div>
 
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[12px]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-12">
         {/* ระดับ 1 บังคับ · ระดับ 2 ใส่เมื่อมีผู้อนุมัติที่เกี่ยวข้องอีกคน จึงไม่มีดอกจัน */}
         <span className="text-mut">
           ผู้อนุมัติระดับ {level}
@@ -237,7 +237,7 @@ function Slot({
 
       {review?.remark ? (
         <p
-          className={`text-[12px] text-pretty ${
+          className={`text-12 text-pretty ${
             state === "rejected" ? "text-alert" : "text-mut"
           }`}
         >
