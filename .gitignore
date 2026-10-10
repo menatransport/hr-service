@@ -49,3 +49,9 @@ next-env.d.ts
 
 # agent skills ภายนอก (Vercel react-best-practices · MongoDB) — วิธีติดตั้งอยู่ใน .claude/CLAUDE.md หัวข้อ "Agent skills" · ไม่ commit
 .claude/skills/
+
+# ไฟล์ของ Claude / agent และสคริปต์ seed — เก็บไว้ในเครื่อง ไม่ขึ้น git (Bew สั่ง 10 ต.ค. 2569)
+/.claude/
+/AGENTS.md
+/seed_*.mjs
+/.perf/
