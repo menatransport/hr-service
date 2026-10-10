@@ -3,7 +3,9 @@
  * `Reason Code Master_Final ส่งทีม OPS.xlsx` ของทีม OPS (ก.ย. 2026) **ลอกมาครบทุกรหัส**
  *
  *   node seed_resign_reasons.mjs            → เพิ่มหมวด/รหัสที่ยังไม่มี (ของที่มีแล้วไม่แตะ)
- *   node seed_resign_reasons.mjs --reset    → เขียนทับข้อความของทุกรหัสในไฟล์นี้ให้ตรง Excel
+ *   node seed_resign_reasons.mjs --reset    → เขียนทับข้อความของทุกรหัสในไฟล์นี้ให้ตรง Excel *
+ * ⚠️ เขียนได้เฉพาะ `hr_service_dev` — ใส่ `--db hr_service_dev` (หรือ `MONGO_DB=hr_service_dev`)
+ *    จะลงฐานจริงต้องใส่ `--force` เอง (ดู `seedTargetDb()` ใน `db_env.mjs`)
  *
  * รันซ้ำได้ปลอดภัย — จับคู่ด้วย `prefix` (หมวด) และ `code` (รหัส) · รหัสที่ฝ่ายบุคคล
  * เพิ่มเองจากหน้าตั้งค่าไม่ถูกลบ ไม่ว่าจะรันแบบไหน
@@ -11,19 +13,12 @@
  * ประเภทการออกตั้งต้น (ตารางท้าย Excel): หมวด X = Inv · หมวด N = Disap · ที่เหลือ Vol
  * ยกเว้น N2 “ปฏิเสธการให้ข้อมูล” = Vol เพราะติดต่อได้ แค่ไม่ยอมบอกเหตุผล
  */
-import fs from "node:fs";
 import { MongoClient } from "mongodb";
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+import { loadEnv, seedTargetDb } from "./db_env.mjs";
+import { HR, INDEXES } from "./lib/db/registry.mjs";
+
+const env = loadEnv();
 
 const RESET = process.argv.includes("--reset");
 
@@ -111,13 +106,15 @@ const MASTER = [
   ]],
 ];
 
+const dbName = seedTargetDb(env);
 const client = await new MongoClient(env.MONGO_URI).connect();
 try {
-  const db = client.db(env.MONGO_DB || "hr_service");
-  const categories = db.collection("master_resign_category");
-  const reasons = db.collection("master_resign_reason");
-  await categories.createIndex({ prefix: 1 }, { name: "prefix_unique", unique: true });
-  await reasons.createIndex({ code: 1 }, { name: "code_unique", unique: true });
+  const db = client.db(dbName);
+  const categories = db.collection(HR.resignCategories.name);
+  const reasons = db.collection(HR.resignReasons.name);
+  /* สเปกเดียวกับที่แอปประกาศ (`prefix_unique` / `code_unique`) — มีอยู่แล้ว = no-op */
+  await categories.createIndexes([...INDEXES.resignCategories]);
+  await reasons.createIndexes([...INDEXES.resignReasons]);
 
   const stamp = { updatedAt: new Date().toISOString(), updatedBy: "seed (Reason Code Master_Final)" };
   let addedCat = 0;

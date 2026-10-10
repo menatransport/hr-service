@@ -93,7 +93,7 @@ export function DriverStatusControl({
     ) : (
       <button
         type="button"
-        className="flex cursor-pointer items-center gap-2 rounded-field border border-line bg-base-100 px-3 py-2 text-13 transition-colors hover:border-primary/40 hover:text-primary"
+        className="btn-sec flex cursor-pointer items-center gap-2 px-3 py-2 text-13 transition-colors hover:border-primary/40 hover:text-primary"
       >
         {resigned ? (
           <UserMinus size={15} strokeWidth={1.8} aria-hidden />
@@ -294,7 +294,7 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="cursor-pointer rounded-field border border-line px-4 py-2 text-13 transition-colors hover:border-ink/30 disabled:opacity-50"
+            className="btn-sec cursor-pointer px-4 py-2 text-13 transition-colors hover:border-ink/30 disabled:opacity-50"
           >
             ยกเลิก
           </button>
@@ -302,7 +302,7 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
             type="button"
             onClick={save}
             disabled={busy}
-            className="cursor-pointer rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="btn-pri cursor-pointer px-4 py-2 text-13 font-medium disabled:opacity-50"
           >
             {existing ? "บันทึกการแก้ไข" : "บันทึกการพ้นสภาพ"}
           </button>

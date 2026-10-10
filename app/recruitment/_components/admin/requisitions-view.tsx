@@ -503,7 +503,7 @@ export function RequisitionsView({
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 lg:ml-auto"
+            className="btn-pri flex cursor-pointer items-center justify-center gap-1.5 px-3.5 py-2 text-13 font-medium lg:ml-auto"
           >
             <Plus size={16} strokeWidth={2.2} aria-hidden />
             ขอสรรหา
@@ -529,7 +529,7 @@ export function RequisitionsView({
               <button
                 type="button"
                 onClick={clearAll}
-                className="flex cursor-pointer items-center gap-1 rounded-field border border-line bg-base-100 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
+                className="btn-sec flex cursor-pointer items-center gap-1 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
               >
                 <RotateCcw size={12} strokeWidth={2} aria-hidden />
                 ล้างตัวกรองทั้งหมด
@@ -751,7 +751,7 @@ export function RequisitionsView({
               <button
                 type="button"
                 onClick={clearAll}
-                className="mt-1 rounded-field border border-line px-3 py-1.5 text-12-5 transition-colors hover:border-primary/40 hover:text-primary"
+                className="btn-sec mt-1 px-3 py-1.5 text-12-5 transition-colors hover:border-primary/40 hover:text-primary"
               >
                 ล้างตัวกรองทั้งหมด
               </button>

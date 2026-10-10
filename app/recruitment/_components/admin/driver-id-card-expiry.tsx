@@ -185,7 +185,7 @@ export function DriverIdCardExpiry({ driver }: { driver: DriverRecord }) {
                   type="button"
                   onClick={save}
                   disabled={busy}
-                  className="cursor-pointer rounded-field bg-primary px-3 py-1.5 text-12 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+                  className="btn-pri cursor-pointer px-3 py-1.5 text-12 font-medium disabled:pointer-events-none disabled:opacity-50"
                 >
                   {busy ? "กำลังบันทึก…" : "บันทึก"}
                 </button>
@@ -193,7 +193,7 @@ export function DriverIdCardExpiry({ driver }: { driver: DriverRecord }) {
                   type="button"
                   onClick={() => setEditing(false)}
                   disabled={busy}
-                  className="flex cursor-pointer items-center gap-1 rounded-field border border-line px-2.5 py-1.5 text-12 text-mut transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-50"
+                  className="btn-sec flex cursor-pointer items-center gap-1 px-2.5 py-1.5 text-12 text-mut transition-colors hover:text-ink disabled:pointer-events-none disabled:opacity-50"
                 >
                   <X size={13} strokeWidth={1.9} aria-hidden />
                   ยกเลิก

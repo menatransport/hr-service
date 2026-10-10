@@ -46,7 +46,7 @@
 
   --radius-selector: 0.5rem;
   --radius-field: 0.75rem;
-  --radius-box: 0.75rem;
+  --radius-box: 1rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -89,7 +89,7 @@
 
   --radius-selector: 0.5rem;
   --radius-field: 0.75rem;
-  --radius-box: 0.75rem;
+  --radius-box: 1rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -272,6 +272,8 @@
 
   /* แผ่นเลื่อนขึ้นจากขอบล่าง — กล่องยินยอม PDPA บนมือถือ (`consent-dialog.tsx`) */
   --animate-sheet-up: sheet-up 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+  /* ลิ้นชักเมนูของเชลล์บนมือถือ — เลื่อนเข้าจากขอบซ้าย (`components/shell/shell-header.tsx`) */
+  --animate-sheet-in: sheet-in 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
   /* มาสคอตลอยขึ้นลงช้า ๆ บนหน้าแรกของการรับสมัคร (`mascot.tsx`) */
   --animate-float: float 4.5s ease-in-out infinite;
 
@@ -395,6 +397,12 @@
 
   /* ช่องกรอกอยู่บนพื้นมืด — indigo อ่อนลงให้อ่านออก (กระดาษยังขาวจึงไม่ต้องพลิก) */
   --color-entered: #a5b4fc;
+
+  /* ปุ่มหลักไล่สี — primary ของธีมมืดเป็น teal สว่าง ตัวหนังสือบนปุ่มจึงเป็นสีเข้ม */
+  --pri-from: #2dd4bf;
+  --pri-to: #14a08f;
+  --pri-glow: rgba(20, 184, 166, 0.32);
+  --danger-glow: rgba(255, 122, 112, 0.28);
 
   color-scheme: dark;
 }
@@ -535,6 +543,15 @@
 @keyframes sheet-up {
   from {
     transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(-100%);
   }
   to {
     transform: none;
@@ -949,7 +966,7 @@
   width: min(30rem, 100%);
   padding: 1.5rem 1.5rem 1.25rem;
   border: 1px solid var(--color-line);
-  border-radius: 18px;
+  border-radius: 24px;
   background: var(--color-base-100);
   box-shadow: 0 32px 80px -24px rgba(21, 32, 29, 0.45);
   color: var(--color-ink);
@@ -1000,6 +1017,24 @@
   margin: 1.5rem 0 0;
   width: 100%;
   justify-content: flex-end;
+}
+
+/* ปุ่มของกล่องกลางจอยืดเท่ากันเต็มแถว (แบบ UI Kit) — toast ไม่มีปุ่มจึงไม่โดน */
+.swal2-popup.hrs-swal:not(.swal2-toast) .swal2-actions > button {
+  flex: 1 1 0;
+}
+
+/* ไอคอนเป็นน้องมีนาแทนเครื่องหมายถูก (`alertSuccess`) — ถอดวงกลมของไลบรารีทิ้ง */
+.swal2-popup.hrs-swal .swal2-icon.hrs-swal-mascot {
+  width: auto;
+  height: auto;
+  margin: 0 auto 0.5rem;
+  border: 0;
+  font-size: 1em;
+}
+
+.swal2-popup.hrs-swal .swal2-icon.hrs-swal-mascot .swal2-icon-content {
+  font-size: 1em;
 }
 
 /* ปุ่มที่กำลังรออยู่ถูกไลบรารีตั้ง `display: none` ไว้ — คืนค่าให้ตรงกับ flex ของเรา */
@@ -1081,8 +1116,8 @@
   width: auto;
   max-width: min(24rem, calc(100vw - 1.5rem));
   padding: 0.85rem 1rem;
-  border-radius: var(--radius-box);
-  box-shadow: 0 12px 32px -12px rgba(21, 32, 29, 0.35);
+  border-radius: 18px;
+  box-shadow: var(--elev-pop);
 }
 
 .swal2-popup.hrs-swal-toast .swal2-title {
@@ -1403,9 +1438,9 @@
   gap: 0.375rem;
   white-space: nowrap;
   border: 1px solid var(--chip-line, transparent);
-  border-radius: var(--radius-selector);
+  border-radius: 9999px;
   background-color: var(--chip-bg, transparent);
-  padding: 0.125rem 0.5rem;
+  padding: 0.125rem 0.625rem;
   font-size: var(--text-11-5);
   font-weight: 500;
   line-height: 1.55;
@@ -1461,6 +1496,698 @@
   --chip-bg: var(--color-primary);
   --chip-ink: var(--color-primary-content);
   --chip-line: var(--color-primary);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UI Kit (Teal × น้องมีนา) — ปุ่ม · เมนู · ช่องกรอก · มาสคอต
+   ต้นแบบอยู่ที่ Claude Design “HR Service UI Kit” และหน้า `/design` ของระบบนี้
+
+   ยืมบุคลิกจาก menaIT V.2 (ปุ่มแคปซูลไล่สี ยกตัวตอน hover · มาสคอตตัวกลม)
+   แต่คงโทน teal ของ HR · ทุกค่าอ้าง token จึงพลิกตามธีมมืดเอง
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --pri-from: #0f8274;
+  --pri-to: #0c625c;
+  --pri-glow: rgba(15, 118, 110, 0.5);
+  --danger-glow: rgba(179, 38, 30, 0.45);
+}
+
+/**
+ * ปุ่ม — ห้าชนิด **กำหนดแค่ผิว รูปทรง และพฤติกรรม ไม่กำหนดขนาด**
+ * ขนาดยังมาจาก `px-* py-* text-*` ของผู้เรียกเหมือนเดิม จึงสวมแทนของเดิมได้ทุกจุด
+ * โดยไม่ทำให้ปุ่มไหนโตหรือหดลง · ไม่ตั้ง `display` ด้วยเหตุผลเดียวกัน
+ *
+ * - `btn-pri`    งานหลักของจอ — ไล่สี teal ยกตัว 1px ตอน hover (หนึ่งปุ่มต่อหนึ่งบริเวณ)
+ * - `btn-sec`    ยกเลิก / ย้อนกลับ / ส่งออก — ขอบเส้น พื้นการ์ด
+ * - `btn-soft`   งานรอง เช่น บันทึกร่าง — พื้น `soft` ตัวหนังสือ `primary`
+ * - `btn-ghost`  ลิงก์ในการ์ด/แถว — ไม่มีพื้นจนกว่าจะ hover
+ * - `btn-danger` ลบ / ไม่อนุมัติ
+ */
+@utility btn-pri {
+  border-radius: 9999px;
+  color: var(--color-primary-content);
+  background-color: var(--color-primary);
+  background-image: linear-gradient(135deg, var(--pri-from) 0%, var(--pri-to) 100%);
+  box-shadow: 0 10px 20px -12px var(--pri-glow);
+  cursor: pointer;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms ease,
+    filter 180ms ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.07);
+    box-shadow: 0 14px 26px -12px var(--pri-glow);
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+    transition-duration: 90ms;
+  }
+  &:disabled {
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+@utility btn-sec {
+  border-radius: 9999px;
+  border: 1px solid var(--color-line);
+  background-color: var(--color-base-100);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 90ms ease;
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-primary) 40%, var(--color-line));
+    background-color: color-mix(in oklab, var(--color-primary) 5%, var(--color-base-100));
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@utility btn-soft {
+  border-radius: 9999px;
+  background-color: var(--color-soft);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 90ms ease;
+
+  &:hover:not(:disabled) {
+    background-color: color-mix(in oklab, var(--color-primary) 18%, var(--color-base-100));
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@utility btn-ghost {
+  border-radius: 9999px;
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-soft);
+  }
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@utility btn-danger {
+  border-radius: 9999px;
+  background-color: var(--color-alert);
+  color: var(--color-ink-content);
+  box-shadow: 0 10px 20px -12px var(--danger-glow);
+  cursor: pointer;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 180ms ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(0.94);
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  &:disabled {
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+/* เตือน (โทน `sla`) — ทรงเดียวกับ `btn-danger` ใช้กับกล่อง `confirm({ tone: "warn" })` */
+@utility btn-warn {
+  border-radius: 9999px;
+  background-color: var(--color-sla);
+  color: var(--color-ink-content);
+  cursor: pointer;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 180ms ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(0.94);
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* เมนูข้างที่เลือกอยู่ — ไล่สีชุดเดียวกับปุ่มหลัก แต่ไม่ยกตัว (เมนูไม่ใช่ปุ่มลงมือทำ) */
+@utility nav-on {
+  color: var(--color-primary-content);
+  background-color: var(--color-primary);
+  background-image: linear-gradient(135deg, var(--pri-from) 0%, var(--pri-to) 100%);
+  box-shadow: 0 8px 18px -12px var(--pri-glow);
+}
+
+/**
+ * วงแสงโฟกัสของช่องกรอก — ใช้คู่กับ `focus:border-primary/60` เดิมใน `field.tsx`
+ * ครอบทั้ง `:focus` (input), `:focus-within` (กล่องที่มี input ข้างใน) และ
+ * `[data-state=open]` (ปุ่มเปิด dropdown ของ Radix ที่โฟกัสหลุดไปอยู่ในรายการ)
+ */
+@utility field-ring {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+
+  &:focus,
+  &:focus-within,
+  &[data-state="open"] {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 14%, transparent);
+  }
+}
+
+/* แถบไล่สีบาง ๆ ใต้ขอบบนของแถบหัว — ลายเซ็นของ HR ที่เห็นทุกหน้า */
+@utility shell-accent {
+  background-image: linear-gradient(90deg, #0f766e 0%, #18a58d 55%, #f8b545 100%);
+}
+
+/* แถบฮีโร่ไล่สี teal (ชุดเดียวกับ `v2-shell` ของ menaIT ในโทน HR) — ตัวหนังสือบนนี้เป็นขาวเสมอ
+   จึงตรึงสีไว้ทั้งสองธีม ไม่อ้าง `primary` ที่ธีมมืดสว่างเกินกว่าจะรองรับตัวหนังสือขาว */
+@utility shell-hero {
+  background-image: linear-gradient(140deg, #0f766e 0%, #0f8a78 55%, #18a58d 100%);
+}
+
+/* ดวงไฟทองลอยช้า ๆ บนฮีโร่ (แทน mint orb ของ menaIT) */
+@utility shell-orb {
+  pointer-events: none;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #fde7a8, #f8b545 72%);
+  opacity: 0.85;
+}
+
+/* ไทล์ไอคอนไล่สี (โลโก้ · การ์ดสถิติ) — ชุดเดียวกับ `v2-tile-*` ของ menaIT ในโทน HR */
+@utility tile-teal {
+  color: #ffffff;
+  background-image: linear-gradient(135deg, #5fd0b9, #0f8274);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* ─────────────────────────────────────────────── มาสคอต (`components/ui/mascot.tsx`) */
+
+.mascot-bob {
+  animation: mascot-bob 3.2s ease-in-out infinite;
+}
+.mascot-hop {
+  animation: mascot-hop 1s cubic-bezier(0.4, 0, 0.3, 1) infinite;
+}
+.mascot svg {
+  display: block;
+  overflow: visible;
+}
+.mascot .mascot-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascot-blink 4s infinite;
+}
+.mascot .mascot-arm {
+  transform-box: fill-box;
+  transform-origin: 50% 93%;
+  animation: mascot-wave 3.4s infinite;
+}
+.mascot .mascot-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascot-glow 1.6s ease-in-out infinite;
+}
+.mascot-bubble {
+  animation: mascot-bubble 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.4) backwards;
+}
+
+/* วงแหวนรอบน้องมีนาตอนโหลด — `motion-keep` ทำให้ยังหมุน (ช้าลง) แม้ลดการเคลื่อนไหว */
+.mascot-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 4px solid var(--color-soft);
+  border-top-color: var(--color-primary);
+  border-right-color: #f8b545;
+  animation: mascot-spin 1.1s linear infinite;
+}
+
+.mascot-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.mascot-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: mascot-dot 1.2s ease-in-out infinite;
+}
+.mascot-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.mascot-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes mascot-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-6px) rotate(-2deg);
+  }
+}
+@keyframes mascot-hop {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  40% {
+    transform: translateY(-12px) scaleY(1.03);
+  }
+  80% {
+    transform: translateY(0) scaleY(0.94);
+  }
+}
+@keyframes mascot-blink {
+  0%,
+  90%,
+  97%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes mascot-wave {
+  0%,
+  24%,
+  48%,
+  100% {
+    transform: rotate(0);
+  }
+  12%,
+  36% {
+    transform: rotate(-28deg);
+  }
+}
+@keyframes mascot-glow {
+  0%,
+  100% {
+    transform: scale(0.92);
+  }
+  50% {
+    transform: scale(1.16);
+  }
+}
+@keyframes mascot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes mascot-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+@keyframes mascot-bubble {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Home แบบโมดูล (`/desk`) + แถบข้างของโมดูล — ต้นแบบ Claude Design “HR Service Home”
+
+   สามกลุ่มงานมีสีประจำกลุ่มผ่านตัวแปร `--tone*` (คลาส `tone-<id>`) ซึ่งใช้ทั้งบนการ์ด
+   หน้า Home และในแถบข้างของหน้าใน — ผู้ใช้จึงรู้ด้วยสีว่าตอนนี้อยู่กลุ่มไหน
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.tone-driver {
+  --tone: #d97f06;
+  --tone-soft: #fdf0d8;
+  --tone-ink: #8a4b04;
+  --tone-glow: rgba(217, 127, 6, 0.4);
+  --tone-grad: linear-gradient(135deg, #fcd38d 0%, #f0a43a 55%, #d97f06 100%);
+}
+.tone-office {
+  --tone: #1e6fd0;
+  --tone-soft: #e1ecfb;
+  --tone-ink: #1e4f9e;
+  --tone-glow: rgba(30, 111, 208, 0.38);
+  --tone-grad: linear-gradient(135deg, #9cc3f5 0%, #4f8fe0 55%, #1e4f9e 100%);
+}
+.tone-master {
+  --tone: #0f766e;
+  --tone-soft: #dff2ee;
+  --tone-ink: #0b5f58;
+  --tone-glow: rgba(15, 118, 110, 0.4);
+  --tone-grad: linear-gradient(135deg, #7ae8d3 0%, #22b59b 50%, #0c625c 100%);
+}
+[data-theme="hrs-dark"] .tone-driver {
+  --tone: #f0a43a;
+  --tone-soft: #3a2c10;
+  --tone-ink: #f5c27a;
+}
+[data-theme="hrs-dark"] .tone-office {
+  --tone: #6aa8f0;
+  --tone-soft: #1e2c3e;
+  --tone-ink: #9cc2f5;
+}
+[data-theme="hrs-dark"] .tone-master {
+  --tone: #2fc7b4;
+  --tone-soft: color-mix(in oklab, #14b8a6 18%, #161c1b);
+  --tone-ink: #5fe0cf;
+}
+
+/* ─────────────────────────────────────────── เชลล์ “Night Route” (สไตล์ menaIT V.2)
+ *
+ * พื้นไล่สี teal เต็มจอแทน `v2-shell` สีฟ้าของ menaIT — ใช้ทั้งฮีโร่หน้า Home และพื้นหลังของ
+ * หน้าในทุกหน้า (`components/shell/app-shell.tsx`) · `background-attachment: fixed` ทั้งตัวเชลล์
+ * และแถบบนที่ติดหัวจอ ภาพสองชั้นจึงต่อกันสนิทตอนเลื่อน ไม่เห็นรอยต่อของแถบบน
+ *
+ * ตัวหนังสือบนพื้นนี้เป็นขาวเสมอ จึงตรึงสีไว้ (ธีมมืดแค่เข้มลง) ไม่อ้าง `primary`
+ */
+:root {
+  --shell-header-h: 3.5rem;
+  --shell-bg:
+    radial-gradient(40rem 26rem at 100% 0%, rgba(248, 181, 69, 0.3), transparent 60%),
+    radial-gradient(44rem 30rem at 0% 100%, rgba(45, 212, 191, 0.3), transparent 62%),
+    linear-gradient(150deg, #0b3a36 0%, #0f5f58 40%, #0f766e 70%, #129a85 100%);
+}
+[data-theme="hrs-dark"] {
+  --shell-bg:
+    radial-gradient(40rem 26rem at 100% 0%, rgba(248, 181, 69, 0.16), transparent 60%),
+    radial-gradient(44rem 30rem at 0% 100%, rgba(45, 212, 191, 0.16), transparent 62%),
+    linear-gradient(150deg, #061514 0%, #0a2b28 45%, #0d4541 100%);
+}
+.app-shell {
+  background-color: #0f5f58;
+  background-image: var(--shell-bg);
+  background-attachment: fixed;
+}
+.app-shell-fixed {
+  background-image: var(--shell-bg);
+  background-attachment: fixed;
+}
+/* แผ่นเนื้อหาโค้งมนที่วางบนพื้นไล่สี — พื้นแบบ `page-canvas` ของหน้าเดิม เนื้อในจึงไม่ต้องแก้ */
+.app-shell-sheet {
+  color: var(--color-ink);
+  background-color: var(--color-canvas);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in oklab, var(--color-ink) 4%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 26px 26px;
+  box-shadow: 0 30px 60px -30px rgba(4, 30, 27, 0.65);
+}
+/* แถบข้าง — พื้นทึบเรียบ ๆ สีเดียวกับการ์ด ให้สีของกลุ่ม (`--tone`) เป็นสีเดียวที่เด่นในแถบ */
+.app-shell-side {
+  color: var(--color-ink);
+  background: var(--color-base-100);
+  box-shadow: 0 18px 40px -26px rgba(4, 30, 27, 0.55);
+}
+/* ปุ่มกระจกบนพื้นไล่สี (ย้อนกลับ · กระดิ่ง · เมนูผู้ใช้) — แบบ `bg-white/10` ของ NavbarHeader menaIT */
+.glass-btn {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition:
+    background-color 0.25s ease,
+    transform 0.25s ease;
+}
+.glass-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: scale(1.04);
+}
+.glass-btn[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* ดวงไฟทองลอยช้า ๆ (แทน mint orb ของ menaIT) */
+.shell-orb-float {
+  animation: shell-floaty 16s ease-in-out infinite;
+}
+.home-route-dash {
+  stroke-dasharray: 3 12;
+  animation: home-drive 6s linear infinite;
+}
+.home-pin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: home-pulse 2.4s ease-in-out infinite;
+}
+
+/* น้องมีนากลางฮีโร่ Home ย่อตามความสูงจอ — หน้าเดสก์ท็อปต้องพอดีหนึ่งจอไม่มี scroll */
+.home-mascot .mascot {
+  width: clamp(60px, 11vh, 140px) !important;
+  height: clamp(60px, 11vh, 140px) !important;
+}
+.home-mascot .mascot svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* พื้นของแผ่นล่างบน Home (สไตล์ `v2-canvas`) */
+.home-canvas {
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(60rem 30rem at 0% 70%, color-mix(in oklab, #14b8a6 14%, transparent), transparent 62%),
+    radial-gradient(48rem 26rem at 100% 90%, color-mix(in oklab, #f8b545 13%, transparent), transparent 60%);
+}
+
+/* ไทล์ไล่สีตามกลุ่ม (สไตล์ `v2-tile-*`) */
+.tone-tile {
+  color: #ffffff;
+  background: var(--tone-grad);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.08);
+}
+.tone-soft {
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+}
+
+/* การ์ดคอลัมน์กลุ่มบน Home + แถวเมนู (สไตล์ GroupColumn / MenuRow ของ menaIT) */
+.home-col {
+  animation: home-card-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.home-row {
+  background: color-mix(in oklab, var(--tone-soft) 32%, var(--color-base-100));
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+a.home-row:hover {
+  background: var(--tone-soft);
+  box-shadow: 0 6px 16px -10px var(--tone-glow);
+}
+a.home-row:hover .home-row-arrow {
+  color: var(--tone);
+  transform: translateX(4px);
+}
+.home-row-arrow {
+  transition:
+    transform 0.2s ease,
+    color 0.2s ease;
+}
+
+/* ─────────────────────────────────────────── แถบเลื่อน (scrollbar)
+ *
+ * แทนแถบเทาหนาของ Windows ทุกที่ที่มี overflow — บาง โปร่ง สีหมึกจาง เข้มขึ้นตอนชี้กล่องนั้น
+ * ใช้ `scrollbar-width` / `scrollbar-color` มาตรฐาน (Chrome 121+ · Edge · Firefox) ·
+ * Safari ไม่รองรับ = แถบลอยของ macOS ตามเดิม ซึ่งบางอยู่แล้ว
+ * · `no-scrollbar` ยังซ่อนได้ตามเดิม (utility มาทีหลังและเจาะจงกว่า)
+ */
+/* อยู่ใน `@layer base` — ไม่งั้น `*` ที่ไม่มี layer จะชนะ utility `no-scrollbar` */
+@layer base {
+  :root {
+    --sb-thumb: color-mix(in oklab, var(--color-ink) 20%, transparent);
+    --sb-thumb-hover: color-mix(in oklab, var(--color-ink) 36%, transparent);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb) transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--sb-thumb-hover) transparent;
+  }
+  /* แถบเลื่อนของทั้งหน้าในเชลล์ (หน้าใน + Home) อยู่บนพื้นไล่สี teal — ทำให้กลืนกับพื้น ไม่ใช่แถบขาวโดด ๆ
+     (`:has` เจาะจงกว่า `*:hover` ตัวบนจึงไม่โดนทับตอนชี้) */
+  html:has(.app-shell) {
+    scrollbar-color: rgba(255, 255, 255, 0.3) #0d4f4a;
+  }
+  html:has(.app-shell):hover {
+    scrollbar-color: rgba(255, 255, 255, 0.5) #0d4f4a;
+  }
+  [data-theme="hrs-dark"]:has(.app-shell) {
+    scrollbar-color: rgba(255, 255, 255, 0.22) #0a2b28;
+  }
+}
+
+/* ─────────────────────────────────────────── แถบข้างของโมดูล — แบบ A “Quiet list”
+ *
+ * จาก Claude Design “MenaHR Sidebar — Minimal” (https://claude.ai/artifact/MMDPpkT9qvMRQuc4dFRNfc)
+ * แถวไม่มีพื้น ไอคอนเทา · สีกลุ่ม (`--tone`) โผล่แค่สามที่: จุดหน้าชื่อกลุ่ม · พื้นอ่อนของแถวที่เปิดอยู่ ·
+ * ไอคอนของแถวนั้น — แถบข้างจึงเงียบ เนื้อหาเป็นพระเอก
+ */
+.module-row {
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.module-row:hover {
+  background: color-mix(in oklab, var(--tone) 7%, var(--color-base-100));
+}
+.module-row[aria-current="page"] {
+  background: color-mix(in oklab, var(--tone) 13%, var(--color-base-100));
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.module-row-tile {
+  color: var(--color-mut);
+  transition: color 0.15s ease;
+}
+.module-row:hover .module-row-tile {
+  color: var(--color-ink);
+}
+.module-row[aria-current="page"] .module-row-tile,
+.module-row[data-active] .module-row-tile {
+  color: var(--tone);
+}
+/* หัวข้อ subgroup ที่หน้าปัจจุบันอยู่ข้างใน — ตัวหนาพอ ไฮไลต์เต็มเป็นของลูกที่เปิดอยู่ */
+.module-row[data-active] {
+  font-weight: 600;
+}
+.module-dot {
+  background: var(--tone);
+}
+.module-sub,
+.home-sub {
+  border-color: color-mix(in oklab, var(--tone) 40%, transparent);
+}
+/* ลูกที่เปิดอยู่: จุดสีกลุ่มทับเส้นประ บอกว่ากิ่งไหนคือหน้านี้ */
+.module-sub-row {
+  position: relative;
+}
+.module-sub-row[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(-0.5rem - 3.5px);
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--tone);
+  transform: translateY(-50%);
+}
+
+/* ─────────────────────────────────────────── View transition: เมนู → แถบข้าง
+ *
+ * รายการเมนูบน Home กับแถวในแถบข้างใช้ `<ViewTransition name="menu-<id>" share="menu-morph">`
+ * ชื่อเดียวกัน → ตอนเปลี่ยนหน้า เบราว์เซอร์ย้ายภาพจากตำแหน่งเดิมไปตำแหน่งใหม่ให้เอง
+ * (หัวกลุ่ม `module-<id>` ก็เช่นกัน) · ส่วนที่เหลือของหน้าครอสเฟดผ่าน `root`
+ */
+::view-transition-group(.menu-morph) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-image-pair(.menu-morph) {
+  animation-name: menu-morph-blur;
+}
+::view-transition-old(root) {
+  animation: 200ms ease-in both view-fade-out;
+}
+::view-transition-new(root) {
+  animation: 320ms ease-out 80ms both view-fade-in;
+}
+@keyframes menu-morph-blur {
+  35% {
+    filter: blur(2px);
+  }
+}
+@keyframes view-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes view-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .home-route-dash,
+  .home-pin,
+  .home-col,
+  .shell-orb-float {
+    animation: none !important;
+  }
+}
+
+@keyframes home-drive {
+  to {
+    stroke-dashoffset: -150;
+  }
+}
+@keyframes home-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.35;
+  }
+}
+@keyframes home-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+}
+@keyframes shell-floaty {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(24px, -18px);
+  }
 }
 
 /* ────────────────────────────────────────────────────────────── การพิมพ์

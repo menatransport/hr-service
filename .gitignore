@@ -46,3 +46,6 @@ next-env.d.ts
 
 # สำรองข้อมูลจาก MongoDB — มีข้อมูลส่วนบุคคล ห้าม commit
 /backups/
+
+# agent skills ภายนอก (Vercel react-best-practices · MongoDB) — วิธีติดตั้งอยู่ใน .claude/CLAUDE.md หัวข้อ "Agent skills" · ไม่ commit
+.claude/skills/

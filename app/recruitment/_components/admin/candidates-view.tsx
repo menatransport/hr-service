@@ -552,7 +552,7 @@ export function CandidatesView({
           <button
             type="button"
             onClick={() => setFilters(DEFAULT_FILTERS)}
-            className="rounded-field border border-line px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
+            className="btn-sec px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
           >
             ล้างตัวกรองทั้งหมด
           </button>
@@ -751,7 +751,7 @@ export function CandidatesView({
               <button
                 type="button"
                 onClick={() => setFilters(DEFAULT_FILTERS)}
-                className="mt-1 rounded-field border border-line px-3 py-1.5 text-12-5 transition-colors hover:border-primary/40 hover:text-primary"
+                className="btn-sec mt-1 px-3 py-1.5 text-12-5 transition-colors hover:border-primary/40 hover:text-primary"
               >
                 ล้างตัวกรองทั้งหมด
               </button>

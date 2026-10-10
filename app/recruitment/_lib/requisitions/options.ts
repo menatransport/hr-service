@@ -1,7 +1,10 @@
-import { getBoomEtlDb, getDb } from "@/lib/mongo";
+import { etlCol, hrCol } from "@/lib/db";
 import { siteLabel } from "@/app/recruitment/_lib/drivers/types";
-import { normalizeStatus } from "@/app/recruitment/_lib/types";
-import { fullNameOf } from "@/app/recruitment/_lib/applications";
+import { normalizeStatus, type AnswerMap } from "@/app/recruitment/_lib/types";
+import {
+  fullNameOf,
+  readApplicationsWithSnapshot,
+} from "@/app/recruitment/_lib/applications";
 import { LINKABLE_STATUSES } from "./types";
 
 /**
@@ -46,16 +49,18 @@ const EMPTY: RequisitionOptions = {
   failed: [],
 };
 
-/** เรียงแบบไทย — ตัวเลขในชื่อเรียงตามค่า ไม่ใช่ตามตัวอักษร */
-const thai = (a: PickOption, b: PickOption) =>
-  a.label.localeCompare(b.label, "th", { numeric: true });
+/**
+ * เรียงแบบไทย — ตัวเลขในชื่อเรียงตามค่า ไม่ใช่ตามตัวอักษร
+ *
+ * สร้าง `Collator` ครั้งเดียวแล้วใช้ซ้ำ — `localeCompare(…, "th", …)` เตรียมกติกาภาษาใหม่
+ * ทุกครั้งที่เทียบ (รถ 1,409 คันวัดได้ 20 ms → 1.4 ms · ลำดับที่ได้เหมือนกันทุกตัว)
+ */
+const THAI_ORDER = new Intl.Collator("th", { numeric: true });
+const thai = (a: PickOption, b: PickOption) => THAI_ORDER.compare(a.label, b.label);
 
 async function loadDrivers(): Promise<PickOption[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection<{ drivercode?: string; driverName?: string; branch?: string }>(
-      "master_driver",
-    )
+  const drivers = await hrCol<{ drivercode?: string; driverName?: string; branch?: string }>("drivers");
+  const docs = await drivers
     .find({ active: true }, { projection: { drivercode: 1, driverName: 1, branch: 1 } })
     .toArray();
 
@@ -73,11 +78,10 @@ async function loadDrivers(): Promise<PickOption[]> {
 }
 
 async function loadVehicles(): Promise<{ vehicles: PickOption[]; plants: PickOption[] }> {
-  const db = await getBoomEtlDb();
-  const docs = await db
-    .collection<{ code?: string; plate_no?: string; brand?: string; plant?: string }>(
-      "vehicles",
-    )
+  const vehicleCol = await etlCol<{ code?: string; plate_no?: string; brand?: string; plant?: string }>(
+    "vehicles",
+  );
+  const docs = await vehicleCol
     .find({ active: true }, { projection: { code: 1, plate_no: 1, brand: 1, plant: 1 } })
     .toArray();
 
@@ -103,21 +107,15 @@ async function loadVehicles(): Promise<{ vehicles: PickOption[]; plants: PickOpt
 }
 
 async function loadCandidates(): Promise<PickOption[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection<{ ref?: string; fullName?: string; status?: unknown }>(
-      "recruitment_regist_answer",
-    )
-    /* คำตอบทั้งใบมาด้วยเพราะนามสกุลอยู่ในนั้น (`fullNameOf()`) — ดึงเฉพาะใบที่ผูกได้
-       ตั้งแต่ในคิวรีไม่ได้ เพราะสถานะเก่าต้องแปลงก่อน (ดูคอมเมนต์ข้างล่าง) */
-    .find(
-      {},
-      {
-        projection: { ref: 1, fullName: 1, status: 1, questionSnapshot: 1, answers: 1 },
-        sort: { createdAt: -1 },
-      },
-    )
-    .toArray();
+  /* คำตอบทั้งใบมาด้วยเพราะนามสกุลอยู่ในนั้น (`fullNameOf()`) — ดึงเฉพาะใบที่ผูกได้
+     ตั้งแต่ในคิวรีไม่ได้ เพราะสถานะเก่าต้องแปลงก่อน (ดูคอมเมนต์ข้างล่าง) ·
+     สำเนาฟอร์มมาทีละรุ่นผ่าน `readApplicationsWithSnapshot()` ไม่ใช่ ~31 KB ซ้ำทุกใบ */
+  const docs = await readApplicationsWithSnapshot<{
+    ref?: string;
+    fullName?: string;
+    status?: unknown;
+    answers?: AnswerMap;
+  }>([{ $sort: { createdAt: -1 } }], { ref: 1, fullName: 1, status: 1, answers: 1 });
 
   return docs
     /* กรองด้วย `normalizeStatus()` ไม่ใช่ `$in` ในคิวรี — ใบเก่ายังถือสถานะชุดเดิม

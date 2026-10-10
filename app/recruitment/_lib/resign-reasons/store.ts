@@ -1,6 +1,6 @@
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
-import { getDb } from "@/lib/mongo";
+import { hrCol } from "@/lib/db";
 import { RecruitmentError } from "@/app/recruitment/_lib/questions";
 import {
   compareCode,
@@ -26,9 +26,6 @@ import {
  * เฉพาะตอนไม่มีรหัสเหลือในหมวดแล้ว (กันรหัสกำพร้าที่ไม่มีหมวดให้แสดง)
  */
 
-const CATEGORIES = "master_resign_category";
-const REASONS = "master_resign_reason";
-
 const MAX_LABEL = 120;
 const MAX_DESC = 300;
 
@@ -53,30 +50,18 @@ interface ReasonDoc {
   updatedBy: string;
 }
 
-let indexed = false;
-
+/**
+ * ดัชนี unique (`prefix_unique` · `code_unique`) คือด่านสุดท้ายกันรหัสซ้ำ — ประกาศที่
+ * `lib/db/registry.mjs` และมีบนฐานจริงแล้ว · ในโค้ดยังตรวจซ้ำอีกชั้นเหมือนเดิม
+ */
 async function cols(): Promise<{
   categories: Collection<CategoryDoc>;
   reasons: Collection<ReasonDoc>;
 }> {
-  const db = await getDb();
-  const categories = db.collection<CategoryDoc>(CATEGORIES);
-  const reasons = db.collection<ReasonDoc>(REASONS);
-
-  /* ดัชนี unique คือด่านสุดท้ายกันรหัสซ้ำ — สร้างไม่ได้ก็ยังมีการตรวจซ้ำในโค้ด
-     จึงไม่ล้มทั้งหน้า (ท่าเดียวกับ `requisitions/store.ts`) */
-  if (!indexed) {
-    indexed = true;
-    try {
-      await Promise.all([
-        categories.createIndex({ prefix: 1 }, { name: "prefix_unique", unique: true }),
-        reasons.createIndex({ code: 1 }, { name: "code_unique", unique: true }),
-      ]);
-    } catch (err) {
-      console.warn("[resign-reasons] สร้างดัชนีไม่สำเร็จ —", err);
-    }
-  }
-
+  const [categories, reasons] = await Promise.all([
+    hrCol<CategoryDoc>("resignCategories"),
+    hrCol<ReasonDoc>("resignReasons"),
+  ]);
   return { categories, reasons };
 }
 

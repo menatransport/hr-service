@@ -1,6 +1,7 @@
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
-import { getBoomEtlDb, getDb } from "@/lib/mongo";
+import { etlCol, hrCol } from "@/lib/db";
+import { nextSeq } from "@/lib/db/counters";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import {
   isHiredStatus,
@@ -39,12 +40,6 @@ import {
  * ทะเบียนลงในคำขอ ไม่ใช่เก็บแค่รหัสแล้ว join ตอนอ่าน เพราะทะเบียนเปลี่ยนชื่อ/
  * ปลดรถได้ แต่คำขอต้องอ่านได้เหมือนวันที่แจ้ง · **ห้ามเขียนลง `Boom_ETL`**
  */
-
-const REQUISITIONS = "recruitment_requests";
-const COUNTERS = "recruitment_counters";
-const APPLICATIONS = "recruitment_regist_answer";
-const DRIVERS = "master_driver";
-const VEHICLES = "vehicles";
 
 /** จำนวนที่ดึงมาแสดงบนหน้าจอ — ค้นหา/กรองทำฝั่ง client บนชุดนี้ */
 const LIST_LIMIT = 500;
@@ -101,44 +96,13 @@ interface RequisitionDoc {
   updatedAt: string;
 }
 
-async function requisitions(): Promise<Collection<RequisitionDoc>> {
-  const db = await getDb();
-  const col = db.collection<RequisitionDoc>(REQUISITIONS);
-  await ensureIndexes(col);
-  return col;
-}
-
 /**
- * ดัชนีถูกสร้างครั้งเดียวต่อโปรเซส · **ล้มเหลวแล้วไม่โยนต่อ** เหมือน
- * `lib/record-cases.ts` — ดัชนีเป็นเรื่องความเร็ว ไม่ใช่ความถูกต้อง
- *
- * ยกเว้น `match_unique` ที่เป็นเรื่องความถูกต้องจริง (กันใบสมัครใบเดียวถูกผูก
- * กับสองอัตรา) — แต่ถึงสร้างไม่ได้ก็ยังมี `linkApplication()` ตรวจซ้ำอยู่ดี
- * จึงไม่ต้องทำให้ทั้งหน้าพังเพราะสิทธิ์สร้างดัชนี
+ * ดัชนี (`code_unique` `status_requested` `drivercode` `match_unique`) ประกาศที่
+ * `lib/db/registry.mjs` และมีบนฐานจริงแล้ว — `match_unique` เป็นเรื่องความถูกต้องจริง
+ * (กันใบสมัครใบเดียวถูกผูกกับสองอัตรา) แต่ `linkApplication()` ก็ยังตรวจซ้ำอีกชั้นอยู่ดี
  */
-let indexed = false;
-async function ensureIndexes(col: Collection<RequisitionDoc>) {
-  if (indexed) return;
-  indexed = true;
-  try {
-    await col.createIndexes([
-      { key: { code: 1 }, name: "code_unique", unique: true },
-      { key: { status: 1, requestedOn: -1 }, name: "status_requested" },
-      {
-        key: { drivercode: 1 },
-        name: "drivercode",
-        partialFilterExpression: { drivercode: { $type: "string", $gt: "" } },
-      },
-      {
-        key: { "match.applicationId": 1 },
-        name: "match_unique",
-        unique: true,
-        partialFilterExpression: { "match.applicationId": { $type: "string" } },
-      },
-    ]);
-  } catch (err) {
-    console.warn("[requisitions] สร้างดัชนีไม่สำเร็จ —", err);
-  }
+function requisitions(): Promise<Collection<RequisitionDoc>> {
+  return hrCol<RequisitionDoc>("requisitions");
 }
 
 function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
@@ -186,18 +150,8 @@ function currentYymm(): string {
  * ใน `lib/record-cases.ts`)
  */
 async function reserveCodes(count: number): Promise<string[]> {
-  const db = await getDb();
   const yymm = currentYymm();
-
-  const counter = await db
-    .collection<{ _id: string; seq: number }>(COUNTERS)
-    .findOneAndUpdate(
-      { _id: `requisitions:${yymm}` },
-      { $inc: { seq: count } },
-      { upsert: true, returnDocument: "after" },
-    );
-
-  const last = counter?.seq ?? count;
+  const last = await nextSeq("recruitmentCounters", `requisitions:${yymm}`, count);
   const first = last - count + 1;
   return Array.from(
     { length: count },
@@ -250,9 +204,8 @@ function customer(value: unknown, other: unknown): { customer: string; customerO
 /** ชื่อ พจส. จากรหัส — **ต้องมีอยู่จริงในทะเบียน** ไม่งั้นคำขอจะอ้างถึงคนที่ไม่มีตัวตน */
 async function person(drivercode: unknown, field: string): Promise<PersonDoc> {
   const code = text(drivercode, field);
-  const db = await getDb();
-  const doc = await db
-    .collection<{ drivercode?: string; driverName?: string }>(DRIVERS)
+  const drivers = await hrCol<{ drivercode?: string; driverName?: string }>("drivers");
+  const doc = await drivers
     .findOne({ drivercode: code }, { projection: { drivercode: 1, driverName: 1 } });
 
   if (!doc) throw new RequisitionError(`ไม่พบ พจส. รหัส ${code} ในทะเบียนประวัติ`);
@@ -268,9 +221,8 @@ async function vehicle(code: unknown): Promise<RequisitionDoc["vehicle"]> {
   const v = typeof code === "string" ? code.trim() : "";
   if (!v) return null;
 
-  const db = await getBoomEtlDb();
-  const doc = await db
-    .collection<{ code?: string; plate_no?: string; brand?: string }>(VEHICLES)
+  const vehicles = await etlCol<{ code?: string; plate_no?: string; brand?: string }>("vehicles");
+  const doc = await vehicles
     .findOne(
       { $or: [{ code: v }, { plate_no: v }] },
       { projection: { code: 1, plate_no: 1, brand: 1 } },
@@ -306,9 +258,8 @@ async function attachMatchStatus(rows: Requisition[]): Promise<void> {
   if (!ids.length) return;
 
   try {
-    const db = await getDb();
-    const docs = await db
-      .collection<ApplicationRow>(APPLICATIONS)
+    const applications = await hrCol<ApplicationRow>("applications");
+    const docs = await applications
       .find(
         { _id: { $in: ids.map((id) => new ObjectId(id)) } },
         { projection: { status: 1, fullName: 1, questionSnapshot: 1, answers: 1 } },
@@ -564,9 +515,8 @@ async function linkApplication(
   if (!ObjectId.isValid(applicationId))
     throw new RequisitionError("ไม่พบใบสมัครที่ระบุ");
 
-  const db = await getDb();
-  const doc = await db
-    .collection<ApplicationRow>(APPLICATIONS)
+  const applications = await hrCol<ApplicationRow>("applications");
+  const doc = await applications
     .findOne(
       { _id: new ObjectId(applicationId) },
       { projection: { ref: 1, fullName: 1, status: 1, questionSnapshot: 1, answers: 1 } },
@@ -577,7 +527,7 @@ async function linkApplication(
   if (!LINKABLE_STATUSES.includes(status))
     throw new RequisitionError("ใบสมัครนี้ถูกยกเลิกแล้ว — ผูกกับคำขอไม่ได้");
 
-  /* ตรวจซ้ำนอกเหนือจากดัชนี unique — ดัชนีอาจสร้างไม่สำเร็จ (ดู `ensureIndexes`)
+  /* ตรวจซ้ำนอกเหนือจากดัชนี unique — ดัชนีอาจสร้างไม่สำเร็จ (ดู `ensureIndexesOnce()` ใน `lib/db`)
      และข้อความจากดัชนีก็อ่านไม่รู้เรื่องสำหรับผู้ใช้ */
   const taken = await col.findOne(
     {

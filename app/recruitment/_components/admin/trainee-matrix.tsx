@@ -309,7 +309,7 @@ export function TraineeMatrix({
             <button
               type="button"
               onClick={clearFilters}
-              className="flex cursor-pointer items-center gap-1 rounded-field border border-line bg-base-100 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
+              className="btn-sec flex cursor-pointer items-center gap-1 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
             >
               <X size={12} strokeWidth={2} aria-hidden />
               ล้างตัวกรอง

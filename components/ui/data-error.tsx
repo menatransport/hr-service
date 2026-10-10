@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react";
+import { Mascot } from "@/components/ui/mascot";
 
 /**
  * ขึ้นแทนเนื้อหาเมื่อดึงข้อมูลจาก NCAC API ไม่สำเร็จ
@@ -21,8 +21,8 @@ export function DataError({
       role="alert"
       className="flex flex-col items-center gap-2.5 rounded-box border border-sla/30 bg-sla/6 px-5 py-10 text-center"
     >
-      <TriangleAlert size={22} strokeWidth={1.7} className="text-sla" aria-hidden />
-      <p className="text-sm font-semibold text-sla">{title}</p>
+      <Mascot size={76} mood="oops" motion="none" className="mb-1" />
+      <p className="text-15 font-semibold text-sla">{title}</p>
       <p className="max-w-[46ch] text-12-5 text-mut text-pretty">{message}</p>
       <p className="text-11-5 text-mut">
         ตรวจค่า <code className="font-mono">{envKey}</code> แล้วลองโหลดหน้านี้ใหม่

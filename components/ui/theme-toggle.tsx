@@ -75,3 +75,21 @@ export function ThemeToggleRow() {
     </button>
   );
 }
+
+/** ปุ่มเต็ม (พื้น teal) ในเมนูผู้ใช้ของเชลล์ — วางคู่กับ `LogoutTile` แทนปุ่ม “ตั้งค่า” ของ menaIT */
+export function ThemeToggleTile() {
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label="สลับธีมสว่าง / มืด"
+      className="group flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-primary-content transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+    >
+      <ThemeIcons size={16} />
+      <span className="text-14 font-medium">
+        <span className="theme-label theme-label-light">โหมดสว่าง</span>
+        <span className="theme-label theme-label-dark">โหมดมืด</span>
+      </span>
+    </button>
+  );
+}

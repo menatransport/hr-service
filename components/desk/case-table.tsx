@@ -3,11 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Inbox, Paperclip, Plus, Trash2 } from "lucide-react";
+import { Paperclip, Plus, Trash2 } from "lucide-react";
 
 import { ExportExcelButton } from "@/components/desk/export-button";
 import { NotifyModal } from "@/components/desk/notify-modal";
 import { Avatar } from "@/components/ui/avatar";
+import { EmptyState } from "@/components/ui/empty-state";
 import { SearchField, Select, type SelectOption } from "@/components/ui/field";
 import { Pager } from "@/components/ui/pager";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -627,21 +628,12 @@ function StepBar({ status }: { status: CaseStatus }) {
 
 function Empty({ hint, onClear }: { hint: string; onClear?: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 px-4 py-12 text-center">
-      <span className="flex size-11 items-center justify-center rounded-full bg-soft text-primary">
-        <Inbox size={20} strokeWidth={1.7} aria-hidden />
-      </span>
-      <p className="text-13 text-mut">{hint}</p>
-      {onClear ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="rounded-full border border-line px-3.5 py-1.5 text-12-5 transition-colors hover:border-ink/30 hover:text-ink"
-        >
-          ล้างตัวกรอง
-        </button>
-      ) : null}
-    </div>
+    <EmptyState
+      title={hint}
+      bubble={onClear ? "ไม่เจอเลย ลองล้างตัวกรองดูนะ" : undefined}
+      hint={onClear ? "ลองล้างตัวกรองหรือเปลี่ยนคำค้นหา" : undefined}
+      onClear={onClear}
+    />
   );
 }
 

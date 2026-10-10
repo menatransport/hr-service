@@ -19,18 +19,10 @@ import { ADMIN_ROOT, adminNav, type AdminNavItem } from "@/app/recruitment/_lib/
  */
 
 const ROW =
-  "group flex w-full items-center gap-2.5 rounded-field px-2.5 py-2 text-left text-13-5 transition-colors";
+  "group flex min-h-10 w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-13-5 transition-colors";
 
 function isActive(pathname: string, href: string): boolean {
   return href === ADMIN_ROOT ? pathname === ADMIN_ROOT : pathname.startsWith(href);
-}
-
-export function AdminSidebar() {
-  return (
-    <aside className="hidden w-[248px] flex-none border-r border-line bg-base-100 lg:sticky lg:top-14 lg:block lg:h-[calc(100dvh-3.5rem)] lg:overflow-y-auto">
-      <AdminNavList />
-    </aside>
-  );
 }
 
 /** รายการเดียวกัน ใช้ซ้ำในดรอปดาวน์ของ topbar เมื่อจอแคบกว่า `lg` */
@@ -41,7 +33,7 @@ export function AdminNavList() {
     <nav aria-label="เมนูศูนย์กลางสรรหา" className="flex flex-col gap-5 p-3">
       {adminNav.map((group) => (
         <div key={group.section} className="flex flex-col gap-1">
-          <p className="px-2.5 pb-1 text-11 tracking-[0.08em] text-mut">
+          <p className="px-3 pb-1 text-11 font-semibold tracking-[0.08em] text-mut">
             {group.section}
           </p>
           {group.items.map((item) =>
@@ -81,8 +73,8 @@ function NavRow({ item, active }: { item: AdminNavItem; active: boolean }) {
       aria-current={active ? "page" : undefined}
       className={`${ROW} ${
         active
-          ? "bg-primary font-medium text-primary-content"
-          : "text-ink hover:bg-base-200"
+          ? "nav-on font-medium"
+          : "text-ink hover:bg-soft hover:text-primary"
       }`}
     >
       <Icon

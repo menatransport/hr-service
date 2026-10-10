@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 
 import ExcelJS from "exceljs";
-import type { Db } from "mongodb";
-
-import { getBoomEtlDb, getDb } from "@/lib/mongo";
+import { etlCol, hrCol } from "@/lib/db";
+import { nextSeq } from "@/lib/db/counters";
 import { snapshotOf } from "./applications";
 import { EXIT_STATUS_CODES, workStatusFullLabel } from "./drivers/types";
 import {
@@ -43,7 +42,7 @@ import {
 /**
  * นำเข้าใบสมัครจากไฟล์ Excel ของ Google Form รุ่นเก่า (ชีต “การตอบแบบฟอร์ม 1”)
  * — **ฝั่งเซิร์ฟเวอร์เท่านั้น** และ**ต้องรันได้นอก Next ด้วย** (ดู scratch runner
- * ที่เรียกผ่าน `npx tsx`) จึงพึ่งแค่ `@/lib/mongo`, `questions.ts`, และ helper
+ * ที่เรียกผ่าน `npx tsx`) จึงพึ่งแค่ `@/lib/db`, `questions.ts`, และ helper
  * ล้วน ๆ — ห้าม import อะไรที่ลาก React/Next runtime เข้ามา
  *
  * โครงสร้างไฟล์:
@@ -57,11 +56,6 @@ import {
  * 6. `previewImport()` / `commitImport()` — ตัวเดียวกันเกือบทั้งหมด ต่างกันแค่
  *    ปลายทางเขียนฐานข้อมูลจริงหรือไม่
  */
-
-const APPLICATIONS_COLLECTION = "recruitment_regist_answer";
-const COUNTERS_COLLECTION = "recruitment_counters";
-const MASTER_DRIVER_COLLECTION = "master_driver";
-const WORK_STATUS_COLLECTION = "employee_work_status";
 
 /** สถานะเก่าที่ยังนับว่า “มีใบที่กำลังพิจารณาอยู่” ตามกติกาเดียวกับ `guardDuplicate()` */
 const DUPLICATE_BLOCKING_STATUSES = new Set([
@@ -626,9 +620,8 @@ function toIsoDateLoose(raw: unknown): string {
 }
 
 async function loadDriverLites(): Promise<DriverLite[]> {
-  const hrDb = await getDb();
-  const driverDocs = await hrDb
-    .collection(MASTER_DRIVER_COLLECTION)
+  const drivers = await hrCol("drivers");
+  const driverDocs = await drivers
     .find(
       {},
       { projection: { drivercode: 1, driverName: 1, phone: 1, active: 1, statusOverride: 1 } },
@@ -644,9 +637,8 @@ async function loadDriverLites(): Promise<DriverLite[]> {
   }
   let workDocs: WorkStatusLite[] = [];
   if (codes.length) {
-    const boomDb = await getBoomEtlDb();
-    workDocs = await boomDb
-      .collection<WorkStatusLite>(WORK_STATUS_COLLECTION)
+    const workStatus = await etlCol<WorkStatusLite>("workStatus");
+    workDocs = await workStatus
       .find(
         { employee_code: { $in: codes } },
         { projection: { employee_code: 1, latest_status: 1, latest_work_date: 1 } },
@@ -1317,8 +1309,7 @@ async function buildImport(
   let existingPhoneHits = new Set<string>();
 
   if (pendingCandidates.length || classified.some((c) => c.outcome)) {
-    const db = await getDb();
-    const col = db.collection(APPLICATIONS_COLLECTION);
+    const col = await hrCol("applications");
 
     const keys = await col.distinct("importKey", { importKey: { $exists: true, $ne: "" } });
     for (const k of keys) if (typeof k === "string") existingImportKeys.add(k);
@@ -1459,15 +1450,8 @@ function computeImportKey(parsed: ParsedRow): string {
 /** จองเลข ref เป็นก้อนเดียวต่อปี พ.ศ. — `$inc` หนึ่งครั้งได้เลขท้ายบล็อกกลับมา
  *  เลขต้นบล็อก = เลขท้าย − จำนวนที่จอง + 1 (รูปแบบเดียวกับ `nextRef()` ใน
  *  `applications.ts` แต่จองเป็นก้อนแทนทีละ 1 เพราะนำเข้าครั้งเดียวหลายพันแถว) */
-async function reserveRefBlock(db: Db, yy: string, count: number): Promise<number> {
-  const counter = await db
-    .collection<{ _id: string; seq: number }>(COUNTERS_COLLECTION)
-    .findOneAndUpdate(
-      { _id: `recruitment:${yy}` },
-      { $inc: { seq: count } },
-      { upsert: true, returnDocument: "after" },
-    );
-  return counter?.seq ?? count;
+function reserveRefBlock(yy: string, count: number): Promise<number> {
+  return nextSeq("recruitmentCounters", `recruitment:${yy}`, count);
 }
 
 /* ------------------------------------------------------------------ ทางเข้า */
@@ -1498,10 +1482,8 @@ export async function commitImport(
   const batchStamp = `${bkkNow.getUTCFullYear()}${String(bkkNow.getUTCMonth() + 1).padStart(2, "0")}${String(bkkNow.getUTCDate()).padStart(2, "0")}-${String(bkkNow.getUTCHours()).padStart(2, "0")}${String(bkkNow.getUTCMinutes()).padStart(2, "0")}${String(bkkNow.getUTCSeconds()).padStart(2, "0")}`;
   const importBatch = `gform-${batchStamp}`;
 
-  const db = await getDb();
-  await db
-    .collection(APPLICATIONS_COLLECTION)
-    .createIndex({ importKey: 1 }, { sparse: true, name: "importKey_sparse" });
+  /* ดัชนี `importKey_sparse` ประกาศที่ `lib/db/registry.mjs` แล้ว (เดิมสร้างตรงนี้ทุกครั้งที่นำเข้า) */
+  const applications = await hrCol<ImportedApplicationDoc>("applications");
 
   const questions = await listActiveQuestions();
   const snapshot = snapshotOf(questions);
@@ -1517,7 +1499,7 @@ export async function commitImport(
   const refByRow = new Map<number, string>();
   for (const [yy, items] of byYy) {
     items.sort((a, b) => a.parsed.submittedAtISO.localeCompare(b.parsed.submittedAtISO));
-    const seqEnd = await reserveRefBlock(db, yy, items.length);
+    const seqEnd = await reserveRefBlock(yy, items.length);
     const seqStart = seqEnd - items.length + 1;
     items.forEach((item, i) => {
       refByRow.set(item.parsed.row, `DRV-${yy}-${String(seqStart + i).padStart(4, "0")}`);
@@ -1590,7 +1572,7 @@ export async function commitImport(
   for (let i = 0; i < docs.length; i += CHUNK) {
     const chunk = docs.slice(i, i + CHUNK);
     if (chunk.length) {
-      await db.collection<ImportedApplicationDoc>(APPLICATIONS_COLLECTION).insertMany(chunk, { ordered: false });
+      await applications.insertMany(chunk, { ordered: false });
     }
   }
 

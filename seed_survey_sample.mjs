@@ -2,7 +2,10 @@
  * ใส่ข้อมูลตัวอย่างแบบสอบถามปีใหม่ 50 คน ลง hr_service."newyear-survey"
  *
  *   node seed_survey_sample.mjs          → ล้างของเดิมแล้วใส่ใหม่ 50 คน
- *   node seed_survey_sample.mjs --clean  → ลบเฉพาะข้อมูลตัวอย่าง (drivercode ขึ้นต้น SAMPLE)
+ *   node seed_survey_sample.mjs --clean  → ลบเฉพาะข้อมูลตัวอย่าง (drivercode ขึ้นต้น SAMPLE) *
+ * ⚠️ เขียนได้เฉพาะ `hr_service_dev` — ใส่ `--db hr_service_dev` (หรือ `MONGO_DB=hr_service_dev`)
+ *    จะลงฐานจริงต้องใส่ `--force` เอง (ดู `seedTargetDb()` ใน `db_env.mjs`)
+ *    `newyear-survey` บนฐานจริงเป็นของ ncacdb (ระบบอื่นเขียน) — `--force` ลงฐานจริงแปลว่าทับข้อมูลของเขา
  *
  * **ตัวเลือกคำตอบอ่านจากไฟล์ฟอร์มจริง** (`mena-go-lb/src/pages/newyear-survey.jsx`)
  * ไม่ได้ก๊อปมาแปะไว้ที่นี่ — แก้ข้อความตัวเลือกในฟอร์มเมื่อไหร่ ข้อมูลตัวอย่างตามทันที
@@ -16,22 +19,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MongoClient } from "mongodb";
 
+import { loadEnv, seedTargetDb } from "./db_env.mjs";
+import { HR } from "./lib/db/registry.mjs";
+
 /* ---------------------------------------------------------------- env */
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+const env = loadEnv();
+/* หยุดก่อนต่อฐานถ้าไม่ใช่ฐานทดลอง — ฐานจริง `newyear-survey` เป็นของ ncacdb ห้ามทับโดยไม่ตั้งใจ */
+const dbName = seedTargetDb(env);
 
 const client = new MongoClient(env.MONGO_URI, { serverSelectionTimeoutMS: 8000 });
 await client.connect();
-const col = client.db(env.MONGO_DB || "hr_service").collection("newyear-survey");
+const col = client.db(dbName).collection(HR.newyearSurvey.name);
 
 if (process.argv.includes("--clean")) {
   const r = await col.deleteMany({ drivercode: { $regex: "^SAMPLE" } });

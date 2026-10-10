@@ -314,7 +314,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={`inline-flex max-w-full overflow-x-auto rounded-field border border-line bg-base-200/60 p-0.5 scrollbar-thin ${className}`}
+      className={`inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-soft p-1 scrollbar-thin ${className}`}
     >
       {options.map((o) => {
         const on = value === o.value;
@@ -325,8 +325,8 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={on}
             onClick={() => onChange(o.value)}
-            className={`flex min-h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-selector px-3 text-12-5 whitespace-nowrap transition-colors sm:flex-none ${
-              on ? "bg-base-100 font-medium text-ink ring-1 ring-line-strong" : "text-mut hover:text-ink"
+            className={`flex min-h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3.5 text-12-5 whitespace-nowrap transition-colors sm:flex-none ${
+              on ? "bg-base-100 font-semibold text-primary elev-card" : "text-mut hover:text-ink"
             }`}
           >
             {o.dot ? <span aria-hidden className={`size-1.5 rounded-full ${o.dot}`} /> : null}

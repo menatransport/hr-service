@@ -1,6 +1,6 @@
 import type { WithId } from "mongodb";
 
-import { getBoomEtlDb, getDb } from "@/lib/mongo";
+import { etlCol, hrCol } from "@/lib/db";
 import {
   DriverRegistryError,
   loadManualDays,
@@ -31,14 +31,6 @@ import type { DriverSiteKey, TraineeDailyEntry } from "./types";
  * (`?m=`) ไม่ใช่ state ในเบราว์เซอร์ — เปลี่ยนเดือนคือโหลดเดือนนั้นมาจริง ๆ
  * แลกการรออีกครั้งหนึ่งกับการไม่ต้องขนทั้งปีมาตั้งแต่แรก
  */
-
-const DRIVERS = "master_driver";
-const VEHICLES = "vehicles";
-const WORK_STATUS = "employee_work_status";
-/** คนละคอลเลกชันกับสามตัวข้างบน — อยู่ `hr_service` เหมือนกันแต่เป็นของโมดูลขอสรรหา
-    (ดู `app/recruitment/_lib/requisitions/store.ts`) ไม่ import จากที่นั่นเพราะ
-    ไฟล์นั้น export แค่ operation ระดับ id เดียว ไม่มีตัวอ่านแบบ "หลายคนพร้อมกัน" */
-const REQUISITIONS = "recruitment_requests";
 
 /**
  * เลื่อนดูย้อนหลังได้กี่เดือน
@@ -132,9 +124,8 @@ const isTrainingCode = (code: string) => code.trim() === TRAINING_CODE;
  * ก็ผ่านเหมือนกันเพราะดูแค่ค่า ไม่ดูคีย์
  */
 async function trainingCodesInMonth(month: string): Promise<string[]> {
-  const db = await getBoomEtlDb();
-  const rows = await db
-    .collection(WORK_STATUS)
+  const workStatus = await etlCol("workStatus");
+  const rows = await workStatus
     .aggregate<{ employee_code?: unknown }>([
       { $match: { [`months.${month}`]: { $type: "object" } } },
       { $project: { employee_code: 1, days: { $objectToArray: `$months.${month}` } } },
@@ -227,9 +218,8 @@ export async function getTraineeBoard(requestedMonth: string): Promise<TraineeBo
   let docs: DriverLite[] = [];
   try {
     if (codes.length) {
-      const db = await getDb();
-      docs = await db
-        .collection<DriverLite>(DRIVERS)
+      const drivers = await hrCol<DriverLite>("drivers");
+      docs = await drivers
         .find(
           { drivercode: { $in: codes } },
           {
@@ -384,9 +374,8 @@ function exitReasonOf(
 async function loadWorkMonth(codes: string[], month: string): Promise<Map<string, WorkMonth>> {
   if (!codes.length) return new Map();
 
-  const db = await getBoomEtlDb();
-  const docs = await db
-    .collection(WORK_STATUS)
+  const workStatus = await etlCol("workStatus");
+  const docs = await workStatus
     .find(
       { employee_code: { $in: codes } },
       /* `latest_*` เป็นฟิลด์บนสุดสองช่อง ไม่ใช่ก้อน — ขอมาด้วยแทบไม่มีต้นทุน
@@ -428,9 +417,8 @@ async function attachPlants(drivers: TraineeBoardDriver[], docs: DriverLite[]): 
   if (!refs.length) return;
 
   try {
-    const db = await getBoomEtlDb();
-    const rows = await db
-      .collection(VEHICLES)
+    const vehicles = await etlCol("vehicles");
+    const rows = await vehicles
       .find(
         { $or: [{ code: { $in: refs } }, { plate_no: { $in: refs } }] },
         { projection: { code: 1, plate_no: 1, plant: 1 } },
@@ -480,9 +468,10 @@ async function attachRequisitions(drivers: TraineeBoardDriver[]): Promise<void> 
   if (!codes.length) return;
 
   try {
-    const db = await getDb();
-    const rows = await db
-      .collection<RequisitionLite>(REQUISITIONS)
+    /* คำขอสรรหาของโมดูลขอสรรหา — อ่านตรงจากคอลเลกชันเพราะ `requisitions/store.ts` export แค่
+       operation ระดับ id เดียว ไม่มีตัวอ่านแบบ "หลายคนพร้อมกัน" */
+    const requisitions = await hrCol<RequisitionLite>("requisitions");
+    const rows = await requisitions
       .find(
         { drivercode: { $in: codes } },
         { projection: { code: 1, drivercode: 1, status: 1, vehicle: 1, "match.fullName": 1 } },

@@ -1,6 +1,6 @@
 import type { Collection } from "mongodb";
 
-import { getDb } from "./mongo";
+import { hrCol } from "./db";
 import type { RecordCategory } from "./record-case-flow";
 
 /**
@@ -16,8 +16,6 @@ import type { RecordCategory } from "./record-case-flow";
  * **ลบประเภทที่เคสเก่ายังอ้างถึงอยู่ได้โดยตั้งใจ** — ไม่ backfill เคสเก่าให้ เหมือนพฤติกรรม
  * เดิมตอน `category` เป็น `""`: `recordCategoryLabel()` คืน “—” เมื่อหารหัสนั้นไม่เจอ
  */
-
-const CATEGORIES = "record_categories";
 
 interface CategoryDoc {
   _id: string;
@@ -40,8 +38,7 @@ const SEED: { id: string; label: string }[] = [
 ];
 
 async function collection(): Promise<Collection<CategoryDoc>> {
-  const db = await getDb();
-  const col = db.collection<CategoryDoc>(CATEGORIES);
+  const col = await hrCol<CategoryDoc>("recordCategories");
   await ensureSeed(col);
   return col;
 }

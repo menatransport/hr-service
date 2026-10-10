@@ -24,8 +24,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "HR Service Desk",
-    template: "%s · HR Service Desk",
+    default: "MenaHR Service",
+    template: "%s · MenaHR Service",
   },
   description:
     "ระบบรับข้อร้องเรียนและบริการพนักงาน — แจ้งเรื่อง ติดตามสถานะ จองห้องประชุม จองรถ และดูประกาศบริษัท",
@@ -64,7 +64,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         {/* สถิติการเข้าหน้าเว็บของ Vercel — เงียบสนิทตอน dev, เก็บจริงเมื่อ deploy บน Vercel
             สคริปต์และ beacon อยู่ใต้ `/_vercel/insights/*` ของโดเมนเดียวกัน ซึ่ง `proxy.ts`
-            ไม่ได้ครอบไว้ (matcher มีแค่ `/desk` กับ `/api`) จึงไม่โดนด่านล็อกอิน */}
+            ไม่ได้ครอบไว้ (matcher มีแค่ `/home` `/desk` `/payroll` `/recruitment/admin` กับ `/api`) จึงไม่โดนด่านล็อกอิน */}
         <Analytics />
       </body>
     </html>

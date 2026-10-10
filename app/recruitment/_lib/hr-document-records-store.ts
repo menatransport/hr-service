@@ -1,6 +1,6 @@
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
-import { getDb } from "@/lib/mongo";
+import { hrCol } from "@/lib/db";
 import type { DocFill } from "./hr-documents";
 import { RecruitmentError } from "./questions";
 import {
@@ -23,13 +23,8 @@ import {
  *
  * **จงใจไม่ import จาก `applications.ts`** เพื่อไม่ให้เกิด import cycle (`applications.ts`
  * ต้องเรียก `eraseHrDocuments()` ของไฟล์นี้ตอนผู้สมัครขอลบข้อมูล) — คิวรีใบสมัครตรงจาก
- * `getDb()` เอาเอง ท่าเดียวกับที่ `requisitions/store.ts` ทำกับคอลเลกชันเดียวกันนี้อยู่แล้ว
+ * `hrCol("applications")` เอาเอง ท่าเดียวกับที่ `requisitions/store.ts` ทำกับคอลเลกชันเดียวกันนี้อยู่แล้ว
  */
-
-const RECORDS = "recruitment_hr_documents";
-const PRINTS = "recruitment_hr_document_prints";
-/** คอลเลกชันใบสมัคร — ชื่อเดียวกับ `COLLECTION` ใน `applications.ts` (จงใจคัดลอกค่า ดูเหตุผลด้านบน) */
-const APPLICATIONS = "recruitment_regist_answer";
 
 /**
  * ความผิดพลาดที่ต้องตอบรหัสอื่นนอกจาก 400 — `RecruitmentError` ทั่วไปในไฟล์นี้และ
@@ -69,40 +64,18 @@ interface HrDocumentPrintDoc {
   printedBy: HrActor;
 }
 
-let recordIndexesReady: Promise<void> | undefined;
-async function records(): Promise<Collection<HrDocumentDoc>> {
-  const db = await getDb();
-  const col = db.collection<HrDocumentDoc>(RECORDS);
-  recordIndexesReady ??= col
-    .createIndexes([{ key: { applicationId: 1 }, name: "application_unique", unique: true }])
-    .then(() => undefined)
-    /* ล้มเหลวแล้วไม่โยนต่อ (ท่าเดียวกับ `ensureIndexes()` ของ `requisitions/store.ts`) —
-       แต่ต่างจากที่นั่นตรงที่ดัชนีตัวนี้ **คือ** กลไกกันบันทึกครั้งแรกชนกัน (ดู `saveHrDocument()`)
-       ถ้าสร้างไม่สำเร็จจริง ๆ ยังพอมีชั้นกันซ้ำจาก `findOneAndUpdate` ตอนบันทึกซ้ำอยู่บ้าง
-       แต่การชนกันของ “บันทึกครั้งแรกพร้อมกันสองคน” จะหลุดได้ — ยอมรับความเสี่ยงนี้เพื่อไม่ให้
-       สิทธิ์สร้างดัชนีที่ขาดหายกลายเป็นทั้งหน้าพัง */
-    .catch((err: unknown) => {
-      console.warn("[hr-document-records] สร้างดัชนีไม่สำเร็จ —", err);
-    });
-  await recordIndexesReady;
-  return col;
+/**
+ * ดัชนีของสองคอลเลกชันนี้ประกาศที่ `lib/db/registry.mjs` — `application_unique` **คือ** กลไกกัน
+ * บันทึกครั้งแรกชนกัน (ดู `saveHrDocument()`) และมีอยู่บนฐานจริงแล้ว · `application_doc` จงใจ
+ * **ไม่ unique** เพราะฐานมีแถวซ้ำจากตอนที่ยังเก็บต่อท้ายอยู่ (ก่อน 29 ก.ย. 2026) แถวซ้ำถูกเก็บกวาด
+ * ทิ้งเองทุกครั้งที่ฉบับนั้นถูกพิมพ์ใหม่ และตอนอ่านก็เลือกแถวล่าสุดต่อฉบับ
+ */
+function records(): Promise<Collection<HrDocumentDoc>> {
+  return hrCol<HrDocumentDoc>("hrDocuments");
 }
 
-let printIndexesReady: Promise<void> | undefined;
-async function prints(): Promise<Collection<HrDocumentPrintDoc>> {
-  const db = await getDb();
-  const col = db.collection<HrDocumentPrintDoc>(PRINTS);
-  printIndexesReady ??= col
-    /* คีย์ค้นของการเขียนทับ (`recordHrDocumentPrint()`) — **ไม่ใช่ unique** เพราะฐานมีแถว
-       ซ้ำจากตอนที่ยังเก็บต่อท้ายอยู่ (ก่อน 29 ก.ย. 2026) สร้าง unique ตอนนี้จะล้ม · แถวซ้ำ
-       ถูกเก็บกวาดทิ้งเองทุกครั้งที่ฉบับนั้นถูกพิมพ์ใหม่ และตอนอ่านก็เลือกแถวล่าสุดต่อฉบับ */
-    .createIndexes([{ key: { applicationId: 1, docId: 1 }, name: "application_doc" }])
-    .then(() => undefined)
-    .catch((err: unknown) => {
-      console.warn("[hr-document-records] สร้างดัชนีไม่สำเร็จ —", err);
-    });
-  await printIndexesReady;
-  return col;
+function prints(): Promise<Collection<HrDocumentPrintDoc>> {
+  return hrCol<HrDocumentPrintDoc>("hrDocumentPrints");
 }
 
 function isDuplicateKeyError(err: unknown): boolean {
@@ -240,9 +213,10 @@ async function guardApplication(
     throw new HrDocumentError("ไม่พบใบสมัครที่ระบุ", 404);
   }
 
-  const db = await getDb();
-  const doc = await db
-    .collection<{ ref?: string; status?: unknown; erasedAt?: string }>(APPLICATIONS)
+  const applications = await hrCol<{ ref?: string; status?: unknown; erasedAt?: string }>(
+    "applications",
+  );
+  const doc = await applications
     .findOne(
       { _id: new ObjectId(applicationId) },
       { projection: { ref: 1, status: 1, erasedAt: 1 } },

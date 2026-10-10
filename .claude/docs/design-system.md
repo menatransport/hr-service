@@ -117,6 +117,42 @@ button, do it the same way. Do not switch it to `useState`.
   `SegmentedControl` for single-choice filters). Used by resign reasons, the พจส. registry and
   the candidates table — build new summary strips from it, don't write another stat-card set.
 
+## UI Kit (Teal × น้องมีนา) — ใช้กับทุกหน้าจอใหม่
+
+ต้นแบบ: Claude Design “HR Service UI Kit” · ตัวจริงที่กดลองได้: **`/design`** (เปิดสาธารณะ ข้อมูลตัวอย่างล้วน)
+บุคลิกยืมจาก menaIT V.2 (ปุ่มแคปซูลไล่สี · มาสคอต) แต่คงโทน teal ของ HR — ทุกค่าอ้าง token จึงพลิกธีมมืดเอง
+
+| Utility | ใช้กับ |
+|---|---|
+| `btn-pri` | งานหลักของจอ — ไล่สี teal ยกตัวตอน hover (**หนึ่งปุ่มต่อหนึ่งบริเวณ**, อยู่ขวาสุดของแถบปุ่ม) |
+| `btn-sec` | ยกเลิก / ย้อนกลับ / ส่งออก |
+| `btn-soft` | งานรอง เช่น บันทึกร่าง |
+| `btn-ghost` | ลิงก์ในการ์ด/แถว · ปุ่มไอคอนในตาราง |
+| `btn-danger` · `btn-warn` | ลบ / ไม่อนุมัติ · เตือน (`sla`) |
+| `nav-on` | เมนูข้างที่เลือกอยู่ (ทั้งสามเชลล์) |
+| `field-ring` | วงแสงโฟกัสของช่องกรอก — ใส่ไว้ใน `enabled` ของ `field.tsx` แล้ว |
+| `shell-accent` · `shell-hero` · `shell-orb` · `tile-teal` | แถบไล่สีใต้ขอบบน · ฮีโร่ · ดวงไฟทอง · ไทล์ไอคอน |
+
+- `btn-*` **กำหนดแค่ผิว รูปทรง (แคปซูล) และพฤติกรรม ไม่กำหนดขนาด/`display`** — ขนาดมาจาก
+  `px-* py-* text-*` ของผู้เรียก · ห้ามเขียน `bg-primary text-primary-content hover:opacity-90`
+  เป็นปุ่มใหม่อีก
+- ป้าย `chip` เป็นแคปซูลแล้ว · การ์ดใช้ `rounded-box` (16px) · กล่อง SweetAlert มุม 24px ปุ่มเต็มแถว
+- `SegmentedControl` เป็นรางแคปซูลพื้น `soft`
+
+### มาสคอต “น้องมีนา” (HR)
+
+SVG มาจาก `mascotSvg()` ใน `lib/mascot.ts` ที่เดียว (ใช้ร่วม React + SweetAlert2) · สีตัวละครตายตัวทั้งสองธีม
+**คนละตัวกับ “น้องมิกซ์”** (รถมิกเซอร์) ของหน้ารับสมัครฝั่งคนนอก — ห้ามสลับกัน
+
+| ชิ้น | ใช้เมื่อ |
+|---|---|
+| `<Mascot size motion="bob\|hop\|none" mood="idle\|happy\|oops" bubble>` | โลโก้แถบบน (`motion="none"`) · ฮีโร่ |
+| `<MascotLoader text>` | `app/desk/loading.tsx` · `app/payroll/loading.tsx` — โหลดทั้งหน้า (ตารางบางส่วนใช้ skeleton) |
+| `<EmptyState title hint bubble onClear>` | ทางตันของรายการ — มีตัวกรองค้างต้องส่ง `onClear` เสมอ |
+| `alertSuccess()` · `toastWelcome()` | กล่องสำเร็จกลางจอ · ทักทายหลังล็อกอิน |
+
+**ใช้เฉพาะจุดที่ผู้ใช้หยุดรอหรือเจอทางตัน** — ห้ามใส่ในทุกการ์ด/ทุก toast
+
 ## Alerts / confirmations — SweetAlert2
 
 ทุกกล่องที่เด้งขึ้นมา **ต้องเรียกผ่าน `lib/swal.ts` เท่านั้น** — ห้าม `import Swal` ในคอมโพเนนต์
@@ -124,7 +160,7 @@ button, do it the same way. Do not switch it to `useState`.
 
 | ฟังก์ชัน | ใช้เมื่อ |
 |---|---|
-| `toastSuccess` / `toastError` / `toastInfo` | บอกผลที่ผู้ใช้เห็นการเปลี่ยนแปลงบนจอตามอยู่แล้ว — ขนมปังปิ้งมุมขวาบน หายเอง 3.2 วิ (ค้างเมื่อเอาเมาส์ไปวาง) |
+| `toastSuccess` / `toastError` / `toastInfo` / `toastWelcome` | บอกผลที่ผู้ใช้เห็นการเปลี่ยนแปลงบนจอตามอยู่แล้ว — ขนมปังปิ้งมุมขวาบน หายเอง 3.2 วิ (ค้างเมื่อเอาเมาส์ไปวาง) |
 | `alertSuccess` / `alertError` / `alertWarning` | เรื่องที่พลาดไม่ได้ — กล่องกลางจอ ต้องกดรับทราบ |
 | `confirm({ title, text \| html, tone })` | ถามก่อนยิง คืน `boolean` |
 | `runAction({ confirm, pending, success, run })` | **ท่ามาตรฐาน** ถาม → ยิง → บอกผล คืน `ActionOutcome` |

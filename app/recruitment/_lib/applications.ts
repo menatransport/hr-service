@@ -1,6 +1,7 @@
-import { ObjectId, type Collection, type WithId } from "mongodb";
+import { ObjectId, type Collection, type Document, type WithId } from "mongodb";
 
-import { getDb } from "@/lib/mongo";
+import { hrCol } from "@/lib/db";
+import { nextSeq } from "@/lib/db/counters";
 import { DRAFT_PREFIX, mediaKeyOf, mediaUrl } from "@/lib/media";
 import { copyMedia, deleteMedia, deleteMediaFolder, keyPart, mediaKeys } from "@/lib/s3";
 import { CONSENT_ITEMS, CONSENT_VERSION, hasRequiredConsent } from "./consent";
@@ -66,9 +67,6 @@ import {
  * (ท่าเดียวกับ `lib/record-cases.ts`)
  */
 
-const COLLECTION = "recruitment_regist_answer";
-const COUNTERS = "recruitment_counters";
-
 /** จำนวนที่ดึงมาแสดงบนหน้าแอดมิน — ค้นหา/กรองทำฝั่ง client บนชุดนี้ */
 const LIST_LIMIT = 500;
 
@@ -117,24 +115,13 @@ interface ApplicationDoc {
   updatedAt: string;
 }
 
-let indexesReady: Promise<void> | undefined;
-
-async function applications(): Promise<Collection<ApplicationDoc>> {
-  const db = await getDb();
-  const col = db.collection<ApplicationDoc>(COLLECTION);
-  indexesReady ??= col
-    .createIndexes([
-      { key: { ref: 1 }, name: "ref_unique", unique: true },
-      { key: { phone: 1, createdAt: -1 }, name: "phone_recent" },
-      { key: { status: 1, createdAt: -1 }, name: "status_recent" },
-      /* ตารางแอดมินเรียงใหม่→เก่าโดยไม่มีเงื่อนไขอื่น — ไม่มีตัวนี้จะเป็น
-         COLLSCAN + เรียงในหน่วยความจำทุกครั้งที่เปิดหน้า (`listApplications()`)
-         สองตัวบนช่วยไม่ได้เพราะขึ้นต้นด้วยฟิลด์ที่ query นั้นไม่ได้ระบุ */
-      { key: { createdAt: -1 }, name: "recent" },
-    ])
-    .then(() => undefined);
-  await indexesReady;
-  return col;
+/**
+ * ดัชนี (`ref_unique` `phone_recent` `status_recent` `recent` `importKey_sparse`) ประกาศที่
+ * `lib/db/registry.mjs` — เดิม cache promise ของ `createIndexes` ไว้โดยไม่มี `.catch` ล้มครั้งเดียว
+ * ทั้งโปรเซสพังถาวร ตอนนี้ `ensureIndexesOnce()` ดูแลแทนและลองใหม่เองเมื่อล้ม
+ */
+function applications(): Promise<Collection<ApplicationDoc>> {
+  return hrCol<ApplicationDoc>("applications");
 }
 
 /**
@@ -254,16 +241,9 @@ function currentThaiYy(): string {
  * และมีดัชนี unique บน `ref` เป็นตาข่ายชั้นสุดท้ายอีกที
  */
 async function nextRef(): Promise<string> {
-  const db = await getDb();
   const yy = currentThaiYy();
-  const counter = await db
-    .collection<{ _id: string; seq: number }>(COUNTERS)
-    .findOneAndUpdate(
-      { _id: `recruitment:${yy}` },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" },
-    );
-  return `DRV-${yy}-${String(counter?.seq ?? 1).padStart(4, "0")}`;
+  const seq = await nextSeq("recruitmentCounters", `recruitment:${yy}`);
+  return `DRV-${yy}-${String(seq).padStart(4, "0")}`;
 }
 
 /* --------------------------------------------------------------- ตรวจข้อมูลเข้า */
@@ -1021,17 +1001,67 @@ export async function updateApplication(
 /* -------------------------------------------------------------------- อ่าน */
 
 /**
+ * อ่านใบสมัครทีละหลายใบ **พร้อม `questionSnapshot` โดยไม่ส่งสำเนาซ้ำข้ามเน็ต**
+ *
+ * สำเนาฟอร์มคือ ~31 KB ต่อใบ แต่ใบที่สมัครจากฟอร์มรุ่นเดียวกันถือสำเนา **ก้อนเดียวกันเป๊ะ**
+ * (วัด 10 ต.ค. 2026: 264 ใบ = 1 รุ่น) · เดิมดึงมาพร้อมทุกใบ = ก้อนเดิม 264 รอบ ≈ 8 MB
+ * ต่อการเปิดตารางหนึ่งครั้ง (~1 วินาที) · ตัวนี้ยิงสองคำสั่งพร้อมกันด้วย `head` ชุดเดียวกัน:
+ * ใบสมัคร **ไม่เอาสำเนา** กับ `$group` ด้วยตัวสำเนาเอง → ได้สำเนาทีละรุ่นพร้อมรายการ `_id`
+ * แล้วประกบคืนให้ทุกใบ · ผลที่ได้คือสำเนา **เต็มรูปเหมือนเดิมทุกข้อ** ไม่ได้ตัดอะไรทิ้ง
+ * (`findByRole()` จับคู่ด้วย label จึงคัดข้อทิ้งตั้งแต่ในฐานไม่ได้ — ดู `ROLE_MATCHERS`)
+ *
+ * ไม่ใช้ `$facet` รวมเป็นคำสั่งเดียว เพราะผลของ `$facet` เป็นเอกสารเดียวที่ติดเพดาน 16 MB
+ * — วันที่ฟอร์มถูกแก้บ่อยจนรุ่นเยอะ หน้าจะพังทั้งหน้า · สองคำสั่งแยกไม่มีเพดานนั้น
+ *
+ * ⚠️ ใบที่ใช้รุ่นเดียวกันได้สำเนา **อ็อบเจกต์ตัวเดียวกัน** — ขาอ่านเท่านั้น ห้ามแก้ในที่
+ */
+export async function readApplicationsWithSnapshot<T extends Document>(
+  /** `$match` / `$sort` / `$limit` ที่เลือกใบ — ใช้ชุดเดียวกันทั้งสองคำสั่ง */
+  head: Document[],
+  /** projection ของฟิลด์อื่น **ไม่ต้องใส่ `questionSnapshot`** */
+  project: Document,
+): Promise<(T & { _id: ObjectId; questionSnapshot: QuestionSnapshot[] })[]> {
+  const col = await applications();
+  const [docs, versions] = await Promise.all([
+    col.aggregate<T & { _id: ObjectId }>([...head, { $project: project }]).toArray(),
+    col
+      .aggregate<{ _id: QuestionSnapshot[] | null; ids: ObjectId[] }>([
+        ...head,
+        { $group: { _id: "$questionSnapshot", ids: { $push: "$_id" } } },
+      ])
+      .toArray(),
+  ]);
+
+  const snapshots = new Map<string, QuestionSnapshot[]>();
+  for (const version of versions) {
+    for (const id of version.ids) snapshots.set(id.toHexString(), version._id ?? []);
+  }
+
+  /* ใบที่เข้ามาระหว่างสองคำสั่ง (หรือ `createdAt` เท่ากันตรงขอบ `$limit`) จะไม่อยู่ในชุดรุ่น —
+     อ่านสำเนาของใบพวกนั้นตรง ๆ ไม่ใช่ปล่อยเป็นค่าว่าง ไม่งั้นนามสกุล/เขตงานหายเงียบ ๆ */
+  const missing = docs.filter((d) => !snapshots.has(d._id.toHexString())).map((d) => d._id);
+  if (missing.length) {
+    const late = await col
+      .find({ _id: { $in: missing } }, { projection: { questionSnapshot: 1 } })
+      .toArray();
+    for (const doc of late) snapshots.set(doc._id.toHexString(), doc.questionSnapshot ?? []);
+  }
+
+  return docs.map((doc) => ({
+    ...doc,
+    questionSnapshot: snapshots.get(doc._id.toHexString()) ?? [],
+  }));
+}
+
+/**
  * ฟิลด์ที่ตารางแอดมินใช้จริง — **ที่เหลือไม่ต้องข้ามเน็ตมา**
  *
- * ใบสมัครหนึ่งใบหนักราว 21 KB ซึ่งเกือบทั้งหมดเป็นของที่ตารางไม่แตะ:
- * `documents` / `documentMeta` (สำเนาเอกสาร) · `consent` · `timeline` (ทุกครั้งที่
- * เปลี่ยนสถานะต่อท้ายไปเรื่อย ๆ) · และ `files` ที่ต้องการแค่จำนวน
+ * ใบสมัครหนึ่งใบหนักราว 45 KB (10 ต.ค. 2026) ซึ่งเกือบทั้งหมดเป็นของที่ตารางไม่แตะ:
+ * `legacyRow` (~12 KB แถวดิบของใบที่นำเข้าจาก Google Form) · `documents` / `documentMeta`
+ * (สำเนาเอกสาร) · `consent` · `timeline` (ทุกครั้งที่เปลี่ยนสถานะต่อท้ายไปเรื่อย ๆ)
+ * · และ `files` ที่ต้องการแค่จำนวน — projection แบบระบุฟิลด์ที่ต้องการจึงตัดทั้งหมดนี้ให้เอง
  *
- * **`questionSnapshot` ยังต้องดึงมาทั้งชุด** — `findByRole()` หาข้อที่ต้องการจาก
- * ทั้ง `key` และข้อความของ `label` (ดู `ROLE_MATCHERS` ใน `_lib/form.ts`)
- * การคัดเหลือบางข้อตั้งแต่ในฐานจะทำให้ใบที่จับคู่ด้วย label หาไม่เจอ แล้วคอลัมน์
- * “เขตงาน/พร้อมเริ่ม” จะว่างเงียบ ๆ · ก้อนนี้คือ 86% ของขนาดใบสมัคร และแก้ได้
- * จริงด้วยการเลิกก๊อปฟอร์มทั้งชุดลงทุกใบเท่านั้น (ดู `.claude/docs/registry-history.md`)
+ * `questionSnapshot` ไม่อยู่ในนี้ — มาทาง `readApplicationsWithSnapshot()` ทีละรุ่น
  */
 const SUMMARY_FIELDS = {
   ref: 1,
@@ -1047,8 +1077,7 @@ const SUMMARY_FIELDS = {
   createdAt: 1,
   updatedAt: 1,
   answers: 1,
-  questionSnapshot: 1,
-  /* สรุป Driver Rating ต้องใช้คะแนนที่ให้เองด้วย — คำตอบกับสำเนาคำถามมาอยู่แล้ว */
+  /* สรุป Driver Rating ต้องใช้คะแนนที่ให้เองด้วย — คำตอบมาอยู่แล้ว สำเนาคำถามมาทีละรุ่น */
   rating: 1,
 } as const;
 
@@ -1058,22 +1087,16 @@ const SUMMARY_FIELDS = {
  * 500 ใบล่าสุดของตารางไปแล้ว · ตารางผู้สมัครเอาไปเทียบชื่อ/เบอร์เอง (`findBlacklistHit()`)
  */
 export async function listBlacklist(): Promise<BlacklistEntry[]> {
-  const docs = await (await applications())
-    .find(
-      { blacklist: true },
-      {
-        projection: {
-          ref: 1,
-          status: 1,
-          blacklist: 1,
-          fullName: 1,
-          phone: 1,
-          answers: 1,
-          questionSnapshot: 1,
-        },
-      },
-    )
-    .toArray();
+  const docs = await readApplicationsWithSnapshot<
+    Pick<ApplicationDoc, "ref" | "status" | "blacklist" | "fullName" | "phone" | "answers">
+  >([{ $match: { blacklist: true } }], {
+    ref: 1,
+    status: 1,
+    blacklist: 1,
+    fullName: 1,
+    phone: 1,
+    answers: 1,
+  });
 
   return docs
     .filter((doc) => blacklistOf(doc))
@@ -1081,18 +1104,16 @@ export async function listBlacklist(): Promise<BlacklistEntry[]> {
 }
 
 export async function listApplications(): Promise<ApplicationSummary[]> {
-  const docs = await (await applications())
-    .aggregate<
-      Omit<WithId<ApplicationDoc>, "files" | "documents" | "documentMeta" | "consent" | "timeline"> & {
-        fileCount: number;
-      }
-    >([
-      { $sort: { createdAt: -1 } },
-      { $limit: LIST_LIMIT },
-      // นับไฟล์ในฐานข้อมูล ไม่ต้องส่งรายการไฟล์ทั้งชุดมานับเองที่นี่
-      { $project: { ...SUMMARY_FIELDS, fileCount: { $size: { $ifNull: ["$files", []] } } } },
-    ])
-    .toArray();
+  const docs = await readApplicationsWithSnapshot<
+    Omit<
+      ApplicationDoc,
+      "files" | "documents" | "documentMeta" | "consent" | "timeline" | "questionSnapshot"
+    > & { fileCount: number }
+  >(
+    [{ $sort: { createdAt: -1 } }, { $limit: LIST_LIMIT }],
+    // นับไฟล์ในฐานข้อมูล ไม่ต้องส่งรายการไฟล์ทั้งชุดมานับเองที่นี่
+    { ...SUMMARY_FIELDS, fileCount: { $size: { $ifNull: ["$files", []] } } },
+  );
 
   return docs.map<ApplicationSummary>((doc) => ({
     id: doc._id.toHexString(),
@@ -1108,7 +1129,7 @@ export async function listApplications(): Promise<ApplicationSummary[]> {
     exitReasonNote: exitNoteOf(doc),
     blacklist: blacklistOf(doc),
     rating: summarizeRating({
-      questionSnapshot: doc.questionSnapshot ?? [],
+      questionSnapshot: doc.questionSnapshot,
       answers: doc.answers ?? {},
       rating: ratingOf(doc),
     }),

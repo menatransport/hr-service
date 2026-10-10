@@ -4,8 +4,7 @@ import { FolderOpen } from "lucide-react";
 import { PageHead } from "@/components/desk/page-head";
 import { DataError } from "@/components/ui/data-error";
 import { DocumentExpiryView } from "@/app/recruitment/_components/admin/document-expiry-view";
-import { getDriverRegistry, todayInBangkok } from "@/app/recruitment/_lib/drivers/registry";
-import { collectDocExpiries } from "@/app/recruitment/_lib/drivers/types";
+import { getDocExpiries, todayInBangkok } from "@/app/recruitment/_lib/drivers/registry";
 import type { DocExpiry } from "@/app/recruitment/_lib/drivers/types";
 
 /**
@@ -36,8 +35,7 @@ export default async function DriverDocumentsPage() {
   let error: string | null = null;
 
   try {
-    const registry = await getDriverRegistry();
-    rows = collectDocExpiries(registry.drivers);
+    rows = await getDocExpiries();
   } catch (err) {
     error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
   }

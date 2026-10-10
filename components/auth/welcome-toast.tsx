@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { toastSuccess } from "@/lib/swal";
+import { toastWelcome } from "@/lib/swal";
 
 /**
  * ขนมปังปิ้ง “เข้าสู่ระบบสำเร็จ” ตอนกลับมาจาก Google
@@ -25,7 +25,7 @@ export function WelcomeToast({ name }: { name: string }) {
     if (!welcome || fired.current) return;
     fired.current = true;
 
-    void toastSuccess("เข้าสู่ระบบสำเร็จ", `ยินดีต้อนรับ ${name}`);
+    void toastWelcome(`ยินดีต้อนรับ ${name}!`, "น้องมีนาพร้อมช่วยงาน HR แล้วค่ะ");
 
     const rest = new URLSearchParams(params);
     rest.delete("welcome");

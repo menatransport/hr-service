@@ -189,7 +189,7 @@ export function NotifyModal({
           <button
             type="button"
             onClick={onClose}
-            className="mr-auto rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
+            className="btn-sec mr-auto px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
           >
             {opened ? "เสร็จแล้ว" : "ปิด"}
           </button>
@@ -198,7 +198,7 @@ export function NotifyModal({
             type="button"
             onClick={copyBody}
             disabled={!draft}
-            className="flex items-center gap-2 rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink disabled:opacity-45"
+            className="btn-sec flex items-center gap-2 px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink disabled:opacity-45"
           >
             <Copy size={15} strokeWidth={1.9} aria-hidden />
             คัดลอกเนื้อหา
@@ -208,7 +208,7 @@ export function NotifyModal({
             type="button"
             onClick={openGmail}
             disabled={!canOpen}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="btn-pri flex items-center gap-2 px-4 py-2 text-13 font-medium disabled:opacity-45"
           >
             <ExternalLink size={15} strokeWidth={2} aria-hidden />
             {opened ? "เปิด Gmail อีกครั้ง" : `เปิด Gmail (${to.length + cc.length})`}

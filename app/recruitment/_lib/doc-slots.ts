@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Collection, WithId } from "mongodb";
 
-import { getDb } from "@/lib/mongo";
+import { hrCol } from "@/lib/db";
 import { DEFAULT_DOC_SLOTS, isLockedDocSlot, type DocSlot } from "./form";
 import { RecruitmentError } from "./questions";
 
@@ -16,8 +16,6 @@ import { RecruitmentError } from "./questions";
  * ลบช่องแล้วใบเก่าไม่เสียหาย — ไฟล์แต่ละไฟล์พกชื่อช่องของตัวเองไว้ (`ApplicationFile.label`)
  */
 
-const COLLECTION = "recruitment_doc_slot";
-
 interface DocSlotDoc {
   slot: string;
   order: number;
@@ -29,15 +27,9 @@ interface DocSlotDoc {
   updatedBy: string;
 }
 
-let indexesReady: Promise<void> | undefined;
-
-async function slots(): Promise<Collection<DocSlotDoc>> {
-  const col = (await getDb()).collection<DocSlotDoc>(COLLECTION);
-  indexesReady ??= col
-    .createIndexes([{ key: { slot: 1 }, name: "slot_unique", unique: true }])
-    .then(() => undefined);
-  await indexesReady;
-  return col;
+/** ดัชนี (`slot_unique`) ประกาศที่ `lib/db/registry.mjs` */
+function slots(): Promise<Collection<DocSlotDoc>> {
+  return hrCol<DocSlotDoc>("docSlots");
 }
 
 function toDocSlot(doc: WithId<DocSlotDoc>): DocSlot {

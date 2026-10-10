@@ -657,7 +657,7 @@ function Empty({
         <button
           type="button"
           onClick={onClearSearch}
-          className="cursor-pointer rounded-field border border-line px-3 py-1.5 text-12 text-mut transition-colors hover:border-primary/40 hover:text-ink"
+          className="btn-sec cursor-pointer px-3 py-1.5 text-12 text-mut transition-colors hover:border-primary/40 hover:text-ink"
         >
           ล้างคำค้นหา
         </button>

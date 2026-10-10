@@ -1,37 +1,38 @@
 import { IdentityProvider } from "@/components/auth/identity-provider";
-import { PayrollSidebar } from "@/components/payroll/payroll-nav";
-import { PayrollTopBar } from "@/components/payroll/payroll-topbar";
+import { PayrollNavList } from "@/components/payroll/payroll-nav";
+import { AppShell } from "@/components/shell/app-shell";
 import { getDeskIdentity } from "@/lib/auth/session";
 
 /**
- * กรอบของโมดูลค่าจ้างและสวัสดิการ — แถบบน + แถบข้าง คนละเมนูกับ `/desk`
+ * กรอบของโมดูลค่าจ้างและสวัสดิการ — `AppShell` ชุดเดียวกับ `/desk` (สไตล์ menaIT V.2 โทน teal)
  *
- * **แยกจาก `/desk` โดยตั้งใจ** ด้วยเหตุผลเดียวกับศูนย์กลางสรรหา: คนที่ทำเงินเดือน
- * อยู่ทั้งสัปดาห์ไม่ได้ยุ่งกับคิวคำร้องของ พจส. เอาสองเมนูมารวมกันจะยาวขึ้นทั้งคู่
- * โดยไม่มีใครได้ประโยชน์ · เข้าจากเมนู “ฝ่ายค่าจ้างและสวัสดิการ” ในแถบข้างของ `/desk`
+ * ทั้ง `/payroll` คือเมนู “Pay Roll” ของกลุ่ม HR MASTER — เมนูของระบบค่าจ้างเอง
+ * (ภาพรวมรอบจ่าย · รับข้อมูล) เป็น subgroup ใต้ Pay Roll ในแถบข้าง (`children` ใน `lib/modules.ts`)
+ * กางเองเมื่ออยู่ในหน้าเหล่านี้ จึงไม่ต้องมีหัวข้อพับ “เมนูทั้งหมดของระบบค่าจ้าง” ซ้ำอีก
+ * · หน้าใหม่ใต้ `/payroll` ที่ยังไม่ลงทะเบียนนับเป็น “ภาพรวมรอบจ่าย” (จับด้วย path ขึ้นต้น) ไม่ตกไป `fallback`
+ *
+ * ไม่มีกระดิ่งแจ้งเตือน — กระดิ่งอ่านคำร้องของ พจส. จาก NCAC ซึ่งคนทำเงินเดือนไม่ได้ยุ่งด้วย
  *
  * `proxy.ts` ต้องครอบ `/payroll/:path*` ไว้ (เพิ่มแล้วใน matcher) — หน้านี้เห็นเงินเดือน
  * ของพนักงานทุกคน เป็นข้อมูลที่อ่อนไหวที่สุดในระบบ ห้ามมีหน้าไหนใต้กรอบนี้เปิดสาธารณะ
  */
-export default async function PayrollLayout({
-  children,
-}: LayoutProps<"/payroll">) {
+export default async function PayrollLayout({ children }: LayoutProps<"/payroll">) {
   const identity = await getDeskIdentity();
 
   return (
     <IdentityProvider identity={identity}>
-      <div className="page-canvas flex min-h-dvh flex-col">
-        <PayrollTopBar identity={identity} />
-        <div className="flex min-h-0 flex-1">
-          <PayrollSidebar />
-          {/*
-            ห้ามใส่ transform/animation ที่ <main> — จะกลายเป็น containing block
-            ของ `position: fixed` ทำให้กล่องแจ้งเตือนหลุดตำแหน่ง
-            (บทเรียนเดียวกับ `app/desk/layout.tsx`)
-          */}
-          <main className="min-w-0 flex-1 px-5 py-6 lg:px-8">{children}</main>
-        </div>
-      </div>
+      <AppShell
+        user={{
+          name: identity.name,
+          role: identity.role,
+          department: identity.department,
+          employeeId: identity.employeeId,
+          imageUrl: identity.imageUrl,
+        }}
+        fallback={<PayrollNavList />}
+      >
+        {children}
+      </AppShell>
     </IdentityProvider>
   );
 }

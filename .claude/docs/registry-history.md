@@ -5,7 +5,7 @@
 >
 > | ชั้น | ไฟล์ |
 > |---|---|
-> | ต่อ `Boom_ETL` (อ่านอย่างเดียว) | `lib/mongo.ts` → `getBoomEtlDb()` |
+> | ต่อ `Boom_ETL` (อ่านอย่างเดียว) | `lib/db` → `etlCol()` (ชื่อใน `lib/db/registry.mjs`) |
 > | ชนิดข้อมูล + ตัวช่วยแสดงผล (client ใช้ได้) | `lib/drivers/types.ts` |
 > | อ่าน/ประกอบข้อมูล (server เท่านั้น) | `lib/drivers/registry.ts` |
 > | ตาราง + ตัวกรอง | `components/recruitment/admin/driver-registry-view.tsx` |
@@ -331,6 +331,13 @@ mena-next-lb มากที่สุด (ชื่อ collection ตรงก�
 บางข้อจะทำให้ใบที่จับคู่ด้วย label หาไม่เจอแล้วคอลัมน์ว่างเงียบ ๆ ·
 แก้ได้จริงทางเดียวคือเลิกก๊อปฟอร์มลงทุกใบ (เก็บ `formVersion` แล้ว join
 หรือ denormalize 4 ฟิลด์ที่ตารางใช้ตอนบันทึก) — **ยังไม่ได้ทำ**
+
+✅ **อาการช้าแก้แล้วโดยไม่แตะข้อมูล (10 ต.ค. 2569)** — `readApplicationsWithSnapshot()` ใน
+`_lib/applications.ts` อ่านใบสมัครโดยไม่เอา snapshot + `$group` snapshot ที่ไม่ซ้ำทีละชุดแบบขนาน
+แล้วเติมกลับให้ทุกใบครบเหมือนเดิม (ทุกใบใช้ฟอร์มชุดเดียวกัน จึงเหลือ ~31KB ครั้งเดียวแทน ~8MB)
+`listApplications` 1.03s → ~0.2s · **ห้ามใช้ `$facet` รวมสองชุด** (เอกสารผลลัพธ์ชน 16MB ได้)
+· ทะเบียนก็แยกตัวอ่านต่อหน้าแล้ว: `getDriverList()` (หน้า drivers) · `getDocExpiries()` (ศูนย์เอกสาร)
+— **หน้าใหม่ห้ามเรียก `getDriverRegistry()` ทั้งก้อน** (8MB, ~2s)
 
 ### index ที่มีอยู่ตอนนี้
 

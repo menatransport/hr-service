@@ -192,7 +192,7 @@ export function ResignReasonsView({ initial }: { initial: ResignMaster }) {
             <button
               type="button"
               onClick={() => setEditing({ kind: "category", category: null })}
-              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-field border border-line px-3 py-2 text-13 transition-colors hover:border-primary/40 hover:text-primary sm:flex-none"
+              className="btn-sec flex flex-1 cursor-pointer items-center justify-center gap-1.5 px-3 py-2 text-13 transition-colors hover:border-primary/40 hover:text-primary sm:flex-none"
             >
               <FolderPlus size={15} strokeWidth={1.8} aria-hidden />
               เพิ่มหมวด
@@ -203,7 +203,7 @@ export function ResignReasonsView({ initial }: { initial: ResignMaster }) {
                 setEditing({ kind: "reason", reason: null, categoryId: sortedCats[0]?.id ?? "" })
               }
               disabled={!sortedCats.length}
-              className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+              className="btn-pri flex flex-1 cursor-pointer items-center justify-center gap-1.5 px-3.5 py-2 text-13 font-medium disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
             >
               <Plus size={15} strokeWidth={2} aria-hidden />
               เพิ่มรหัส

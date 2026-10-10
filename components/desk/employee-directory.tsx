@@ -1,9 +1,10 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
-import { Building2, MapPin, SearchX, Users, X } from "lucide-react";
+import { Building2, MapPin, Users, X } from "lucide-react";
 
 import { EmployeeCard } from "@/components/desk/employee-card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { SearchField, Select } from "@/components/ui/field";
 import type { Employee } from "@/lib/types";
 
@@ -132,7 +133,7 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
        * `-mx-8 px-8` ดันพื้น `bg-canvas` ให้กินเต็มรางซ้าย-ขวาของ `<main>`
        * ไม่งั้นการ์ดจะโผล่ลอดข้างแถบตอนเลื่อน · `z-20` ต่ำกว่า topbar (`z-30`)
        */}
-      <div className="flex flex-col gap-3 lg:sticky lg:top-14 lg:z-20 lg:-mx-8 lg:bg-canvas lg:px-8 lg:pt-1 lg:pb-3">
+      <div className="flex flex-col gap-3 lg:sticky lg:top-(--shell-header-h) lg:z-20 lg:-mx-8 lg:bg-canvas lg:px-8 lg:pt-1 lg:pb-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
           <SearchField
             value={query}
@@ -295,21 +296,14 @@ function EmptyResult({
     : "ไม่มีพนักงานที่ตรงกับตัวกรองที่เลือกไว้";
 
   return (
-    <div className="flex animate-fade-in flex-col items-center gap-2.5 rounded-box border border-dashed border-line bg-base-100 px-5 py-12 text-center">
-      <SearchX size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
-      <p className="text-sm font-semibold">ไม่พบพนักงานที่ตรงกับที่ค้นหา</p>
-      <p className="max-w-[46ch] text-12-5 leading-[1.7] text-mut text-pretty">
-        {reason}
-      </p>
-
-      {/* ทางตันต้องมีทางกลับด้วยคลิกเดียว — ไม่งั้นผู้ใช้ต้องไล่ล้างเองทีละช่อง */}
-      <button
-        type="button"
-        onClick={onClear}
-        className="mt-1.5 cursor-pointer rounded-full border border-line bg-base-100 px-4 py-2 text-12-5 text-ink transition-colors hover:border-primary/40 hover:text-primary"
-      >
-        ล้างตัวกรองทั้งหมด
-      </button>
-    </div>
+    // ทางตันต้องมีทางกลับด้วยคลิกเดียว — ไม่งั้นผู้ใช้ต้องไล่ล้างเองทีละช่อง
+    <EmptyState
+      title="ไม่พบพนักงานที่ตรงกับที่ค้นหา"
+      hint={reason}
+      bubble="หาไม่เจอเลย…"
+      onClear={onClear}
+      clearLabel="ล้างตัวกรองทั้งหมด"
+      className="rounded-box border border-dashed border-line bg-base-100"
+    />
   );
 }

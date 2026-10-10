@@ -333,7 +333,7 @@ export function CandidateInsights({
               type="button"
               onClick={onClearAll}
               title={`กลับไปดูเฉพาะ${STATUS_LABEL.pending_contact}`}
-              className="rounded-field border border-line bg-base-100 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
+              className="btn-sec px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
             >
               ล้างตัวกรอง
             </button>
@@ -754,7 +754,7 @@ function InterviewCalendar({
         <button
           type="button"
           onClick={() => setAnchor(today.slice(0, 7))}
-          className="rounded-field border border-line px-2.5 py-1 text-12 text-mut transition-colors hover:border-primary/40 hover:text-ink"
+          className="btn-sec px-2.5 py-1 text-12 text-mut transition-colors hover:border-primary/40 hover:text-ink"
         >
           วันนี้
         </button>

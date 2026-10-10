@@ -2,7 +2,9 @@
  * ใส่ใบสมัครตัวอย่าง 5 ใบ ลง hr_service."recruitment_regist_answer"
  *
  *   node seed_recruitment_candidates.mjs          → ล้างตัวอย่างเดิมแล้วใส่ใหม่
- *   node seed_recruitment_candidates.mjs --clean  → ลบเฉพาะตัวอย่าง (ฟิลด์ `sample: true`)
+ *   node seed_recruitment_candidates.mjs --clean  → ลบเฉพาะตัวอย่าง (ฟิลด์ `sample: true`) *
+ * ⚠️ เขียนได้เฉพาะ `hr_service_dev` — ใส่ `--db hr_service_dev` (หรือ `MONGO_DB=hr_service_dev`)
+ *    จะลงฐานจริงต้องใส่ `--force` เอง (ดู `seedTargetDb()` ใน `db_env.mjs`)
  *
  * **คำถามอ่านจากคลังคำถามจริงในฐานข้อมูล** (`recruitment_regist_question`)
  * ไม่ได้ก๊อปมาแปะไว้ที่นี่ — ใบตัวอย่างจึงมี `questionSnapshot` เหมือนใบที่ผู้สมัคร
@@ -15,25 +17,18 @@
  *
  * ทุกใบมีฟิลด์ `sample: true` ติดไว้ ลบทีหลังได้โดยไม่แตะใบจริงแม้แต่ใบเดียว
  */
-import fs from "node:fs";
 import { MongoClient } from "mongodb";
+
+import { loadEnv, seedTargetDb } from "./db_env.mjs";
+import { HR } from "./lib/db/registry.mjs";
 
 /* ---------------------------------------------------------------- env */
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+const env = loadEnv();
 
-const ANSWERS = "recruitment_regist_answer";
-const QUESTIONS = "recruitment_regist_question";
-const COUNTERS = "recruitment_counters";
+const ANSWERS = HR.applications.name;
+const QUESTIONS = HR.questions.name;
+const COUNTERS = HR.recruitmentCounters.name;
 
 /* ------------------------------------------------------------ ผู้สมัคร */
 
@@ -794,9 +789,10 @@ function answerFor(question, person, rng) {
 /* ------------------------------------------------------------------ main */
 
 const clean = process.argv.includes("--clean");
+const dbName = seedTargetDb(env);
 const client = new MongoClient(env.MONGO_URI, { serverSelectionTimeoutMS: 15_000 });
 await client.connect();
-const db = client.db(env.MONGO_DB || "hr_service");
+const db = client.db(dbName);
 const answers = db.collection(ANSWERS);
 
 const removed = await answers.deleteMany({ sample: true });

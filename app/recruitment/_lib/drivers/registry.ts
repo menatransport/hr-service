@@ -1,12 +1,13 @@
-import type { Collection } from "mongodb";
+import type { Collection, Document, Filter } from "mongodb";
 
-import { getBoomEtlDb, getDb } from "@/lib/mongo";
+import { etlCol, hrCol } from "@/lib/db";
 import { deleteDriverDocumentFile } from "./documents";
 import { mediaKeyOf } from "@/lib/media";
 import { deleteMedia } from "@/lib/s3";
 import { pickResignReason } from "@/app/recruitment/_lib/resign-reasons/store";
 import { isExitType } from "@/app/recruitment/_lib/resign-reasons/types";
 import {
+  collectDocExpiries,
   isDriverDocType,
   isWorkStatusCode,
   ownerTypeLabel,
@@ -14,6 +15,7 @@ import {
   siteLabel,
   siteOfBranch,
   vehicleMixLabel,
+  type DocExpiry,
   type DriverDocument,
   type DriverRecord,
   type DriverRegistry,
@@ -38,22 +40,6 @@ import {
  * ปนอยู่ จึงอ่านสดจาก `Boom_ETL` ได้เลย ไม่ต้อง sync ซ้ำอีกชุด · ถ้าอ่านไม่ได้
  * ก็แค่ไม่มีข้อมูลเสริม รายชื่อยังขึ้นครบ (`enrichmentFailed`)
  */
-
-const DRIVERS = "master_driver";
-const VEHICLES = "vehicles";
-const WORK_STATUS = "employee_work_status";
-
-/**
- * สถานะรายวันที่ฝ่ายบุคคลกรอกเองบนหน้าติดตามฝึกงาน — **อยู่ใน `hr_service`**
- *
- * แยกคอลเลกชันไม่ได้ยัดลงเอกสารใน `master_driver` เหมือน `statusOverride`
- * เพราะของนี้โตทุกวันต่อคน (คนละ 1 เอกสารต่อวัน) เอกสารเดียวจะบวมไม่รู้จบ
- * และตอนอ่านหน้าอื่นก็ต้องลากมาด้วยทั้งที่ไม่ได้ใช้
- *
- * `_id` = `<drivercode>_<YYYY-MM-DD>` — คน+วันเป็นคีย์ตรง ๆ กดซ้ำจึง `upsert`
- * ทับใบเดิมเสมอ ไม่มีทางเกิดสองใบของวันเดียวกัน โดยไม่ต้องทำ unique index เอง
- */
-const TRAINEE_DAILY = "trainee_daily";
 
 /** ทะเบียนมีราว 2,600 แถว · ดึงครบทีเดียวแล้วกรองฝั่ง client เหมือนสมุดรายชื่อพนักงาน */
 const LIST_LIMIT = 5_000;
@@ -332,24 +318,79 @@ function toWorkStatus(doc: Record<string, unknown>): DriverWorkStatus {
  *
  * ยิงสองคำสั่งพร้อมกัน ไม่ใช่ `$lookup` — สองคอลเลกชันนี้อยู่คนละ db กับรายชื่อหลัก
  * (`hr_service` กับ `Boom_ETL`) aggregate ข้าม db ไม่ได้อยู่แล้ว
+ *
+ * `work` บอกว่าต้องการสถานะงานไหม — **`months` คือก้อนใหญ่สุดของทั้งทะเบียน**
+ * (ราว 3 KB ต่อคน · 4.4 MB ทั้งคอลเลกชัน) หน้าที่ไม่ได้วาดปฏิทินจึงต้องไม่ขอมา:
+ * `"full"` = ปฏิทินรายวันครบ (หน้ารายคน) · `"none"` = ไม่อ่านเลย (ศูนย์เอกสาร) ·
+ * ตารางรายชื่อที่ต้องการแค่สถานะล่าสุดใช้ `loadLatestEnrichmentAll()`
  */
-async function loadEnrichment(vehicleRefs: string[], driverCodes: string[]) {
-  const db = await getBoomEtlDb();
+type WorkDetail = "full" | "none";
+
+/** ฟิลด์ของ `vehicles` ที่ `toVehicle()` อ่านจริง — เลขตัวถัง ไฟแนนซ์ ฯลฯ ไม่ต้องข้ามเน็ตมา */
+const VEHICLE_FIELDS = {
+  code: 1,
+  plate_no: 1,
+  vehicle_type: 1,
+  vehicle_type_extra: 1,
+  brand: 1,
+  model: 1,
+  fleet: 1,
+  plant: 1,
+} as const;
+
+const WORK_LATEST_FIELDS = { employee_code: 1, latest_status: 1, latest_work_date: 1 } as const;
+
+async function loadEnrichment(
+  vehicleRefs: string[],
+  driverCodes: string[],
+  work: WorkDetail = "full",
+) {
+  const [vehicleCol, workCol] = await Promise.all([etlCol("vehicles"), etlCol("workStatus")]);
 
   const [vehicleDocs, workDocs] = await Promise.all([
     vehicleRefs.length
-      ? db
-          .collection(VEHICLES)
-          .find({ $or: [{ code: { $in: vehicleRefs } }, { plate_no: { $in: vehicleRefs } }] })
+      ? vehicleCol
+          .find(
+            { $or: [{ code: { $in: vehicleRefs } }, { plate_no: { $in: vehicleRefs } }] },
+            { projection: VEHICLE_FIELDS },
+          )
           .toArray()
       : Promise.resolve([]),
-    driverCodes.length
-      ? db.collection(WORK_STATUS).find({ employee_code: { $in: driverCodes } }).toArray()
+    driverCodes.length && work !== "none"
+      ? workCol
+          .find(
+            { employee_code: { $in: driverCodes } },
+            { projection: { ...WORK_LATEST_FIELDS, months: 1 } },
+          )
+          .toArray()
       : Promise.resolve([]),
   ]);
 
+  return { vehicles: toVehicleMap(vehicleDocs), work: toWorkMap(workDocs) };
+}
+
+/**
+ * รถกับสถานะล่าสุดของ **ทุกคัน/ทุกคน** — สำหรับตารางรายชื่อที่ขอทั้งทะเบียนอยู่แล้ว
+ *
+ * ไม่ต้องรอรหัสจาก `master_driver` ก่อน จึงยิงพร้อมกันได้ทั้งสามคำสั่ง (แบบ `$in` ต้องรอกัน
+ * เป็นทอด ≈ +90 ms) · ผลการจับคู่เท่ากับ `loadEnrichment()` ทุกแถว — คันที่ `code`/ทะเบียน
+ * ตรงกับรหัสที่อ้างถูกดึงมาด้วยทั้งสองแบบ ส่วนคันที่ไม่มีใครอ้างก็แค่ค้างอยู่ใน Map เฉย ๆ
+ * (ตรวจ 10 ต.ค. 2026: `code` `plate_no` `employee_code` ไม่มีค่าซ้ำ ลำดับการอ่านจึงไม่มีผล)
+ */
+async function loadLatestEnrichmentAll() {
+  const [vehicleCol, workCol] = await Promise.all([etlCol("vehicles"), etlCol("workStatus")]);
+
+  const [vehicleDocs, workDocs] = await Promise.all([
+    vehicleCol.find({}, { projection: VEHICLE_FIELDS }).toArray(),
+    workCol.find({}, { projection: WORK_LATEST_FIELDS }).toArray(),
+  ]);
+
+  return { vehicles: toVehicleMap(vehicleDocs), work: toWorkMap(workDocs) };
+}
+
+function toVehicleMap(docs: Record<string, unknown>[]): Map<string, DriverVehicle> {
   const vehicles = new Map<string, DriverVehicle>();
-  for (const doc of vehicleDocs) {
+  for (const doc of docs) {
     const vehicle = toVehicle(doc);
     if (vehicle.code) vehicles.set(vehicle.code, vehicle);
     // ทะเบียนใส่ทีหลังและไม่ทับของเดิม — เลขรถเป็นคีย์ที่ตรงตัวกว่าเมื่อมีทั้งคู่
@@ -357,11 +398,11 @@ async function loadEnrichment(vehicleRefs: string[], driverCodes: string[]) {
       vehicles.set(vehicle.plateNo, vehicle);
     }
   }
+  return vehicles;
+}
 
-  return {
-    vehicles,
-    work: new Map(workDocs.map((doc) => [str(doc.employee_code), toWorkStatus(doc)])),
-  };
+function toWorkMap(docs: Record<string, unknown>[]): Map<string, DriverWorkStatus> {
+  return new Map(docs.map((doc) => [str(doc.employee_code), toWorkStatus(doc)]));
 }
 
 /* --------------------------------------------- บันทึกรายวันที่กรอกเอง */
@@ -379,28 +420,23 @@ interface TraineeDailyDoc {
 
 const dailyId = (drivercode: string, dateISO: string) => `${drivercode}_${dateISO}`;
 
-let dailyIndexesReady: Promise<void> | undefined;
-
 /**
- * คอลเลกชัน `trainee_daily` พร้อม index — **ทุกที่ที่แตะต้องผ่านตัวนี้**
+ * คอลเลกชัน `trainee_daily` — สถานะรายวันที่ฝ่ายบุคคลกรอกเองบนหน้าติดตามฝึกงาน
+ * **อยู่ใน `hr_service`** · ทุกที่ที่แตะต้องผ่านตัวนี้
  *
- * ขาอ่านหาแบบ `{ drivercode: { $in: [...] } }` แล้วคัดต่อด้วย `dateISO` ·
- * ไม่มี index = COLLSCAN ทุกครั้งที่เปิดหน้าติดตามฝึกงาน ซึ่งตอนนี้ยังไม่รู้สึก
- * เพราะเพิ่งเริ่มเก็บ แต่คอลเลกชันนี้โตวันละหนึ่งใบต่อคนที่ยังฝึกอยู่
+ * แยกคอลเลกชันไม่ได้ยัดลงเอกสารใน `master_driver` เหมือน `statusOverride`
+ * เพราะของนี้โตทุกวันต่อคน (คนละ 1 เอกสารต่อวัน) เอกสารเดียวจะบวมไม่รู้จบ
+ * และตอนอ่านหน้าอื่นก็ต้องลากมาด้วยทั้งที่ไม่ได้ใช้
  *
- * สร้างครั้งเดียวต่อโปรเซส (แพตเทิร์นเดียวกับ `applications()` ของฝั่งใบสมัคร) —
- * `createIndexes` เป็น no-op ถ้ามีอยู่แล้ว จึงปลอดภัยที่จะเรียกทุกครั้งที่บูต
+ * `_id` = `<drivercode>_<YYYY-MM-DD>` — คน+วันเป็นคีย์ตรง ๆ กดซ้ำจึง `upsert`
+ * ทับใบเดิมเสมอ ไม่มีทางเกิดสองใบของวันเดียวกัน โดยไม่ต้องทำ unique index เอง
+ *
+ * ขาอ่านหาแบบ `{ drivercode: { $in: [...] } }` แล้วคัดต่อด้วย `dateISO` — ดัชนี `driver_date`
+ * ที่ครอบ query นี้ประกาศไว้ที่ `lib/db/registry.mjs` (ไม่มี = COLLSCAN ทุกครั้งที่เปิดหน้า
+ * และคอลเลกชันนี้โตวันละหนึ่งใบต่อคนที่ยังฝึกอยู่)
  */
-async function traineeDaily(): Promise<Collection<TraineeDailyDoc>> {
-  const db = await getDb();
-  const col = db.collection<TraineeDailyDoc>(TRAINEE_DAILY);
-
-  dailyIndexesReady ??= col
-    .createIndexes([{ key: { drivercode: 1, dateISO: 1 }, name: "driver_date" }])
-    .then(() => undefined);
-  await dailyIndexesReady;
-
-  return col;
+function traineeDaily(): Promise<Collection<TraineeDailyDoc>> {
+  return hrCol<TraineeDailyDoc>("traineeDaily");
 }
 
 /**
@@ -600,25 +636,17 @@ function latestSyncedAt(docs: MasterDriverDoc[]): string | null {
 
 /* ------------------------------------------------------------------ API */
 
+/**
+ * ทะเบียนทั้งก้อน **รวมปฏิทินรายวันของทุกคน** (~8 MB) — ไม่มีหน้าไหนใช้แล้ว
+ * ตารางรายชื่อใช้ `getDriverList()` · ศูนย์เอกสารใช้ `getDocExpiries()` · ติดตามฝึกงานใช้
+ * `getTraineeBoard()` · **หน้าใหม่ให้ทำตัวอ่านที่ขอเฉพาะของที่วาด อย่ากลับมาใช้ตัวนี้**
+ */
 export async function getDriverRegistry(): Promise<DriverRegistry> {
-  let docs: MasterDriverDoc[];
-
-  try {
-    const db = await getDb();
-    docs = await db
-      .collection<MasterDriverDoc>(DRIVERS)
-      .find({})
-      .sort({ drivercode: 1 })
-      .limit(LIST_LIMIT)
-      .toArray();
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    throw new DriverRegistryError(`อ่านทะเบียนประวัติจากฐานข้อมูลไม่สำเร็จ — ${reason}`);
-  }
+  const docs = await readMasterDrivers({}, {});
 
   const today = todayInBangkok();
-  const vehicleRefs = [...new Set(docs.map((d) => str(d.vehicleCode)).filter(Boolean))];
-  const driverCodes = [...new Set(docs.map((d) => str(d.drivercode)).filter(Boolean))];
+  const vehicleRefs = uniq(docs.map((d) => str(d.vehicleCode)));
+  const driverCodes = uniq(docs.map((d) => str(d.drivercode)));
 
   /*
    * ยิงพร้อมกัน — สองชุดนี้อยู่คนละ db และไม่ได้ขึ้นกัน การรอทีละอันคือการ
@@ -650,6 +678,130 @@ export async function getDriverRegistry(): Promise<DriverRegistry> {
   };
 }
 
+/** อ่าน `master_driver` ตามเงื่อนไข — ห่อ error เป็นข้อความเดียวกับ `getDriverRegistry()` */
+async function readMasterDrivers(
+  filter: Filter<MasterDriverDoc>,
+  projection: Document,
+): Promise<MasterDriverDoc[]> {
+  try {
+    return await (await hrCol<MasterDriverDoc>("drivers"))
+      .find(filter, { projection })
+      .sort({ drivercode: 1 })
+      .limit(LIST_LIMIT)
+      .toArray();
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new DriverRegistryError(`อ่านทะเบียนประวัติจากฐานข้อมูลไม่สำเร็จ — ${reason}`);
+  }
+}
+
+const uniq = (values: string[]) => [...new Set(values.filter(Boolean))];
+
+/**
+ * ฟิลด์ของ `master_driver` ที่ `toRecord()` / `latestSyncedAt()` อ่าน **ยกเว้น `documents`**
+ * — `_id` `etlSource` `etlSyncedAt` ของ sync ไม่มีใครอ่าน (ราว 18% ของคอลเลกชัน)
+ * **เพิ่มฟิลด์ที่ `toRecord()` อ่านเมื่อไหร่ ต้องเพิ่มที่นี่ด้วย** ไม่งั้นตารางจะได้ค่าว่างเงียบ ๆ
+ */
+const LIST_FIELDS = {
+  _id: 0,
+  drivercode: 1,
+  driverName: 1,
+  photoUrl: 1,
+  statusOverride: 1,
+  idCardExpiryDate: 1,
+  resignation: 1,
+  mediaPurgedAt: 1,
+  ownerType: 1,
+  branch: 1,
+  vehicleCode: 1,
+  startDate: 1,
+  licenseExpiryDate: 1,
+  phone: 1,
+  active: 1,
+  syncedAt: 1,
+} as const;
+
+/**
+ * ทะเบียนสำหรับ **ตารางรายชื่อ** `/recruitment/admin/drivers` — ทุกคน แต่ไม่มีปฏิทิน
+ *
+ * ตารางใช้แค่ `work.latestStatus` · เดิมหน้านั้นเรียก `getDriverRegistry()` แล้วค่อยตัด
+ * `days`/`months`/`manualDays`/`documents` ทิ้งก่อนส่งลง client — ตัดหลังอ่านไม่ช่วยฝั่ง
+ * เซิร์ฟเวอร์เลย ยังลาก `months` ทุกคน (4.4 MB) ข้ามเน็ตมาแล้วแกะทิ้งทุกครั้งที่เปิดหน้า
+ * (วัดได้ 2.1–2.5 วินาที · 10 ต.ค. 2026) · ตัวนี้ไม่ขอของพวกนั้นตั้งแต่ใน query
+ * แต่คืนรูป `DriverRegistry` เดิม — `work.days` `{}` · `manualDays` `{}` · `documents` `[]`
+ * ตรงกับที่ตัดเองเดิมทุกช่อง หน้าจอจึงเหมือนเดิม
+ *
+ * **ไม่มี `manualDays` → `manualFailed` เป็น `false` เสมอ** — ตารางนี้ไม่มีช่องกรอกรายวัน
+ * ห้ามเอาไปใช้กับหน้าที่ให้กรอก (หน้าติดตามฝึกงานมี `getTraineeBoard()` ของตัวเอง)
+ */
+export async function getDriverList(): Promise<DriverRegistry> {
+  /* เริ่มอ่าน ETL ก่อนแล้วค่อยรอ — `.catch` ติดไว้ตั้งแต่ตอนสร้าง ถ้ารายชื่อหลักพังแล้วโยนออกไป
+     promise นี้จะไม่กลายเป็น unhandled rejection · ข้อมูลเสริมพังไม่ล้มทั้งทะเบียน */
+  const enrichment = loadLatestEnrichmentAll().catch(() => null);
+  const docs = await readMasterDrivers({}, LIST_FIELDS);
+  const enriched = await enrichment;
+
+  const today = todayInBangkok();
+  const enrichmentFailed = !enriched;
+  const vehicles = enriched?.vehicles ?? new Map<string, DriverVehicle>();
+  const work = enriched?.work ?? new Map<string, DriverWorkStatus>();
+
+  return {
+    drivers: docs
+      .filter((doc) => str(doc.drivercode))
+      .map((doc) => toRecord(doc, today, vehicles, work, new Map())),
+    syncedAt: latestSyncedAt(docs),
+    enrichmentFailed,
+    manualFailed: false,
+  };
+}
+
+/** ฟิลด์ของ `master_driver` ที่ `collectDocExpiries()` ใช้ (ผ่าน `toRecord()`) */
+const EXPIRY_FIELDS = {
+  _id: 0,
+  drivercode: 1,
+  driverName: 1,
+  phone: 1,
+  branch: 1,
+  vehicleCode: 1,
+  licenseExpiryDate: 1,
+  idCardExpiryDate: 1,
+  active: 1,
+  statusOverride: 1,
+} as const;
+
+/**
+ * วันหมดอายุเอกสารของ พจส. ที่ยังปฏิบัติงาน — ข้อมูลของศูนย์เอกสาร `/recruitment/admin/documents`
+ *
+ * หน้านั้นต้องการแค่ชื่อ เบอร์ สาขา ทะเบียนรถ กับสองวันที่ · เดิมอ่านทะเบียนทั้งก้อน
+ * (`getDriverRegistry()` 8 MB รวมปฏิทินทุกคน) แล้วทิ้งเกือบหมด · ตัวนี้:
+ * - คัดเฉพาะคนที่ **อาจ** ยังทำงานตั้งแต่ใน query (`active: true` หรือมี `statusOverride`)
+ *   — เป็นชุดที่กว้างกว่าจริงโดยตั้งใจ ตัวตัดสินจริงยังเป็น `driver.active` ใน
+ *   `collectDocExpiries()` (ค่าที่ `statusOverride` ทับแล้ว) **ห้ามเปลี่ยนไปเชื่อ `active` ของ ETL**
+ * - ไม่อ่านสถานะงาน/ของที่กรอกเองเลย · รถอ่านเฉพาะของคนที่เหลือ
+ *
+ * คืน `DocExpiry[]` ไม่ใช่ `DriverRecord[]` — เรกคอร์ดที่ประกอบจาก projection นี้มีช่องว่าง
+ * (รูป วันเริ่มงาน ฯลฯ) ถ้าหลุดออกไปจะอ่านเหมือน “ไม่มีข้อมูล” ทั้งที่แค่ไม่ได้ขอมา
+ */
+export async function getDocExpiries(): Promise<DocExpiry[]> {
+  const docs = await readMasterDrivers(
+    { $or: [{ active: true }, { statusOverride: { $exists: true } }] },
+    EXPIRY_FIELDS,
+  );
+  const today = todayInBangkok();
+
+  /* รถพังแค่คอลัมน์ทะเบียนว่าง — ปฏิทินวันหมดอายุยังใช้ได้ครบ */
+  const vehicles = await loadEnrichment(uniq(docs.map((d) => str(d.vehicleCode))), [], "none")
+    .then((e) => e.vehicles)
+    .catch(() => new Map<string, DriverVehicle>());
+
+  return collectDocExpiries(
+    docs
+      .filter((doc) => str(doc.drivercode))
+      .map((doc) => toRecord(doc, today, vehicles, new Map(), new Map())),
+  );
+}
+
 /** ประวัติรายคน — `code` คือ `drivercode` ตรง ๆ · คืน `null` ถ้าไม่มีรหัสนี้ในทะเบียน */
 export async function getDriver(code: string): Promise<DriverRecord | null> {
   const drivercode = code.trim();
@@ -658,8 +810,7 @@ export async function getDriver(code: string): Promise<DriverRecord | null> {
   let doc: MasterDriverDoc | null;
 
   try {
-    const db = await getDb();
-    doc = await db.collection<MasterDriverDoc>(DRIVERS).findOne({ drivercode });
+    doc = await (await hrCol<MasterDriverDoc>("drivers")).findOne({ drivercode });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new DriverRegistryError(`อ่านประวัติคนขับจากฐานข้อมูลไม่สำเร็จ — ${reason}`);
@@ -761,10 +912,8 @@ export async function setDriverStatus(
 
     /* รหัสต้องมีอยู่จริงใน Reason Code Master และยังเปิดใช้ — ยกเว้นรหัสเดิมของ
        ระเบียนนี้ที่ถูกปิดใช้ไปทีหลัง (กำลังแก้วันที่/หมายเหตุของข้อมูลเก่า) */
-    const db = await getDb();
-    const current = await db
-      .collection<MasterDriverDoc>(DRIVERS)
-      .findOne({ drivercode }, { projection: { resignation: 1 } });
+    const drivers = await hrCol<MasterDriverDoc>("drivers");
+    const current = await drivers.findOne({ drivercode }, { projection: { resignation: 1 } });
     const held = str((current?.resignation as { reasonCode?: unknown } | undefined)?.reasonCode);
     const reason = await pickResignReason(input.reasonCode, held);
     if (!reason) throw new DriverRegistryError("ต้องเลือกเหตุผลการพ้นสภาพจากรหัสที่เปิดใช้อยู่");
@@ -789,10 +938,8 @@ export async function setDriverStatus(
   }
 
   try {
-    const db = await getDb();
-    const result = await db
-      .collection<MasterDriverDoc>(DRIVERS)
-      .updateOne({ drivercode }, update);
+    const drivers = await hrCol<MasterDriverDoc>("drivers");
+    const result = await drivers.updateOne({ drivercode }, update);
     if (!result.matchedCount) return null;
   } catch (err) {
     if (err instanceof DriverRegistryError) throw err;
@@ -845,12 +992,10 @@ export async function setTraineeDaily(
   const note = (input.note ?? "").trim();
 
   try {
-    const db = await getDb();
+    const drivers = await hrCol<MasterDriverDoc>("drivers");
 
     // ต้องมีรหัสนี้ในทะเบียนจริง — ไม่งั้นพิมพ์รหัสอะไรมาก็สร้างแถวผีได้
-    const exists = await db
-      .collection<MasterDriverDoc>(DRIVERS)
-      .countDocuments({ drivercode }, { limit: 1 });
+    const exists = await drivers.countDocuments({ drivercode }, { limit: 1 });
     if (!exists) return null;
 
     const collection = await traineeDaily();
@@ -906,8 +1051,7 @@ export async function setDriverPhoto(
   if (!drivercode) return null;
 
   try {
-    const db = await getDb();
-    const collection = db.collection<MasterDriverDoc>(DRIVERS);
+    const collection = await hrCol<MasterDriverDoc>("drivers");
 
     const before = await collection.findOneAndUpdate(
       { drivercode },
@@ -979,10 +1123,8 @@ export async function setDriverIdCardExpiry(
       };
 
   try {
-    const db = await getDb();
-    const result = await db
-      .collection<MasterDriverDoc>(DRIVERS)
-      .updateOne({ drivercode }, update);
+    const drivers = await hrCol<MasterDriverDoc>("drivers");
+    const result = await drivers.updateOne({ drivercode }, update);
     if (!result.matchedCount) return null;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -1042,8 +1184,7 @@ export async function attachDriverDocument(
   };
 
   try {
-    const db = await getDb();
-    const collection = db.collection<MasterDriverDoc>(DRIVERS);
+    const collection = await hrCol<MasterDriverDoc>("drivers");
 
     const result = await collection.updateOne({ drivercode }, { $push: { documents: entry } });
     if (!result.matchedCount) return null;
@@ -1088,8 +1229,7 @@ export async function detachDriverDocument(
   let key = "";
 
   try {
-    const db = await getDb();
-    const collection = db.collection<MasterDriverDoc>(DRIVERS);
+    const collection = await hrCol<MasterDriverDoc>("drivers");
 
     /* อ่านแถวก่อนถอด — ต้องรู้ `key` ของไฟล์บน S3 ที่จะลบตามไป */
     const before = await collection.findOneAndUpdate(

@@ -103,7 +103,7 @@ export function NewCaseButton() {
 
     setOpen(false);
     setForm(emptyForm);
-    router.push(`/desk`);
+    router.push(`/desk/cases`);
     router.refresh();
   }
 
@@ -112,7 +112,7 @@ export function NewCaseButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
+        className="btn-pri flex items-center gap-1.5 px-3.5 py-2 text-13 font-medium"
       >
         <MessageSquarePlus size={16} strokeWidth={1.8} aria-hidden />
         แจ้งเรื่องเอง
@@ -198,7 +198,7 @@ export function NewCaseButton() {
                     type="button"
                     onClick={close}
                     disabled={busy}
-                    className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
+                    className="btn-sec px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
                   >
                     ยกเลิก
                   </button>

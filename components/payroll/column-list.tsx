@@ -280,7 +280,7 @@ function ColumnDetail({ column, total }: { column: ColumnProfile; total: number 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            className="flex items-center gap-1.5 rounded-field border border-line bg-base-100 px-3 py-1.5 text-12-5 font-medium transition-colors hover:border-primary/40 hover:text-primary"
+            className="btn-sec flex items-center gap-1.5 px-3 py-1.5 text-12-5 font-medium transition-colors hover:border-primary/40 hover:text-primary"
           >
             <WandSparkles size={13} strokeWidth={1.8} aria-hidden />
             {column.fix}

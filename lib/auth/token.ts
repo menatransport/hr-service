@@ -16,11 +16,11 @@ export const STATE_COOKIE = "hrs.oauth_state";
 export const NEXT_COOKIE = "hrs.oauth_next";
 
 /**
- * ปลายทางหลังล็อกอินที่ยอมรับ — **ต้องเป็นเส้นทางภายในของ desk เท่านั้น**
+ * ปลายทางหลังล็อกอินที่ยอมรับ — **ต้องเป็นเส้นทางภายในของ home / desk เท่านั้น**
  * (`//evil.com` เป็น path ที่ถูกต้องตามไวยากรณ์แต่พาออกนอกเว็บ จึงต้องกันด้วย)
  */
 export function safeNextPath(value: string | null | undefined): string | null {
-  if (!value || !value.startsWith("/desk") || value.startsWith("//")) return null;
+  if (!value || !/^\/(home|desk)(?=[/?#]|$)/.test(value)) return null;
   return value;
 }
 

@@ -216,7 +216,7 @@ export function RecordCategoryManager({
           type="button"
           disabled={busy || !adding.trim()}
           onClick={add}
-          className="flex flex-none items-center gap-1.5 rounded-field bg-primary px-3.5 py-2.5 text-12-5 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+          className="btn-pri flex flex-none items-center gap-1.5 px-3.5 py-2.5 text-12-5 font-medium disabled:opacity-45"
         >
           <Plus size={14} strokeWidth={2} aria-hidden />
           เพิ่ม

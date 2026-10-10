@@ -83,10 +83,17 @@ interface Draft {
 
 const emptyDraft: Draft = { group: "", name: "" };
 
-export function MasterButton({ kind }: { kind: MasterKind }) {
+export function MasterButton({
+  kind,
+  autoOpen = false,
+}: {
+  kind: MasterKind;
+  /** เปิดกล่องค้างไว้ตั้งแต่แรก — ทางเข้าจากเมนู HR MASTER บนหน้า Home */
+  autoOpen?: boolean;
+}) {
   const router = useRouter();
   const meta = KIND[kind];
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [rows, setRows] = useState<MasterItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,6 +121,14 @@ export function MasterButton({ kind }: { kind: MasterKind }) {
       setLoadError(err instanceof Error ? err.message : failMessage);
     }
   }, [kind, failMessage]);
+
+  /* เปิดค้างมาจาก `autoOpen` — โหลดรายการให้ครั้งเดียว (ปกติโหลดตอนกดปุ่ม) */
+  const autoLoaded = useRef(false);
+  useEffect(() => {
+    if (!autoOpen || autoLoaded.current) return;
+    autoLoaded.current = true;
+    void reload();
+  }, [autoOpen, reload]);
 
   /** ตัวกลางของทุกคำสั่งที่เขียนจริง — ยิง → อ่านรายการใหม่ → รีเฟรชหน้าเบื้องหลัง */
   const write = useCallback(
@@ -147,7 +162,7 @@ export function MasterButton({ kind }: { kind: MasterKind }) {
           setOpen(true);
           void reload();
         }}
-        className="flex items-center gap-1.5 rounded-field border border-line bg-base-100 px-3.5 py-2 text-13 font-medium text-mut transition-colors hover:border-ink/30 hover:text-ink"
+        className="btn-sec flex items-center gap-1.5 px-3.5 py-2 text-13 font-medium text-mut transition-colors hover:border-ink/30 hover:text-ink"
       >
         <Tags size={16} strokeWidth={1.8} aria-hidden />
         {meta.label}
@@ -379,7 +394,7 @@ function MasterPanel({
             type="button"
             onClick={startAdd}
             disabled={busy || editing === "new"}
-            className="ml-auto flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="btn-pri ml-auto flex items-center gap-1.5 px-3.5 py-2 text-13 font-medium disabled:opacity-40"
           >
             <Plus size={15} strokeWidth={2.2} aria-hidden />
             เพิ่มรายการ
@@ -596,7 +611,7 @@ function DraftCard({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
+          className="btn-sec px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
         >
           ยกเลิก
         </button>

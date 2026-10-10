@@ -68,7 +68,7 @@ export function ResignDocumentsButton({
         className={
           variant === "icon"
             ? "inline-flex size-8 items-center justify-center rounded-selector border border-line text-mut transition-colors hover:border-alert/40 hover:text-alert"
-            : "inline-flex items-center gap-2 rounded-field border border-line bg-base-100 px-3 py-2 text-13 transition-colors hover:border-alert/40 hover:text-alert"
+            : "btn-sec inline-flex items-center gap-2 px-3 py-2 text-13 transition-colors hover:border-alert/40 hover:text-alert"
         }
       >
         <FilePenLine size={14} strokeWidth={1.9} aria-hidden />
@@ -144,14 +144,14 @@ function ResignDocumentMaker({ driver, onClose }: { driver: DriverRecord; onClos
           <button
             type="button"
             onClick={onClose}
-            className="rounded-field border border-line px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40"
+            className="btn-sec px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40"
           >
             ปิด
           </button>
           <button
             type="button"
             onClick={print}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2.5 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
+            className="btn-pri flex items-center gap-2 px-4 py-2.5 text-13 font-medium"
           >
             <Printer size={14} strokeWidth={2} aria-hidden />
             พิมพ์ / บันทึก PDF · {doc.label}

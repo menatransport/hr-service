@@ -185,7 +185,7 @@ export function RequisitionForm({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
+            className="btn-sec px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
           >
             ยกเลิก
           </button>
@@ -193,7 +193,7 @@ export function RequisitionForm({
             type="button"
             onClick={save}
             disabled={!ready || busy}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="btn-pri flex items-center gap-2 px-4 py-2 text-13 font-medium disabled:opacity-45"
           >
             <Check size={16} strokeWidth={2} aria-hidden />
             {busy ? "กำลังบันทึก…" : "บันทึกคำขอ"}

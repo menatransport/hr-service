@@ -31,7 +31,7 @@ function HubView() {
             /* ผู้สมัครเป็นแท็บของหน้าขอสรรหาแล้ว — ชี้ตรงไปที่แท็บนั้น ไม่ผ่าน
                เส้นทางเก่าที่เหลือไว้แค่ redirect (ดู `admin/candidates/page.tsx`) */
             href={`${ADMIN_ROOT}/requisitions?tab=candidates`}
-            className="rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
+            className="btn-pri px-3.5 py-2 text-13 font-medium"
           >
             ไปที่ผู้สมัคร
           </Link>

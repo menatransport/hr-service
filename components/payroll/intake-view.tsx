@@ -157,7 +157,7 @@ export function IntakeView() {
             <button
               type="button"
               onClick={clear}
-              className="ml-auto flex items-center gap-1 rounded-field border border-line px-2.5 py-1.5 text-12-5 text-mut transition-colors hover:border-alert/40 hover:text-alert"
+              className="btn-sec ml-auto flex items-center gap-1 px-2.5 py-1.5 text-12-5 text-mut transition-colors hover:border-alert/40 hover:text-alert"
             >
               <X size={13} strokeWidth={1.9} aria-hidden />
               เอาไฟล์ออก
@@ -194,7 +194,7 @@ export function IntakeView() {
               className={`mt-1 rounded-field px-3.5 py-2 text-13 font-medium transition-opacity ${
                 locked
                   ? "cursor-not-allowed border border-line text-mut"
-                  : "bg-primary text-primary-content hover:opacity-90"
+                  : "btn-pri"
               }`}
             >
               เลือกไฟล์
@@ -321,7 +321,7 @@ export function IntakeView() {
               <button
                 type="button"
                 onClick={clear}
-                className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:border-alert/40 hover:text-alert"
+                className="btn-sec px-3.5 py-2 text-13 text-mut transition-colors hover:border-alert/40 hover:text-alert"
               >
                 ยกเลิก
               </button>
@@ -331,7 +331,7 @@ export function IntakeView() {
                 className={`flex items-center gap-1.5 rounded-field px-4 py-2 text-13 font-medium transition-opacity ${
                   blocked
                     ? "cursor-not-allowed border border-line text-mut opacity-60"
-                    : "bg-primary text-primary-content hover:opacity-90"
+                    : "btn-pri"
                 }`}
               >
                 ไปขั้นจับคู่คอลัมน์

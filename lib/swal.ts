@@ -2,6 +2,8 @@
 
 import Swal, { type SweetAlertOptions } from "sweetalert2";
 
+import { mascotSvg } from "@/lib/mascot";
+
 /**
  * ชั้นแจ้งเตือนของทั้งระบบ (SweetAlert2)
  *
@@ -44,19 +46,17 @@ const ICON: Record<Tone, SweetAlertOptions["icon"]> = {
   info: "info",
 };
 
-/** ปุ่มใช้คลาสเดียวกับปุ่มในฟุตเตอร์ของ `case-modal.tsx` — กล่องจึงดูเป็นระบบเดียวกัน */
-const BTN_BASE =
-  "rounded-field px-4 py-2 text-13 font-medium transition-opacity hover:opacity-90";
+/** ปุ่มชุดเดียวกับ UI Kit (`btn-*` ใน `globals.css`) — กล่องจึงดูเป็นระบบเดียวกับฟุตเตอร์โมดัล */
+const BTN_BASE = "px-5 py-2.5 text-13 font-medium";
 
 const CONFIRM_CLASS: Record<Tone, string> = {
-  primary: `${BTN_BASE} bg-primary text-primary-content`,
-  danger: `${BTN_BASE} bg-alert text-ink-content`,
-  warn: `${BTN_BASE} bg-sla text-ink-content`,
-  info: `${BTN_BASE} bg-primary text-primary-content`,
+  primary: `${BTN_BASE} btn-pri`,
+  danger: `${BTN_BASE} btn-danger`,
+  warn: `${BTN_BASE} btn-warn`,
+  info: `${BTN_BASE} btn-pri`,
 };
 
-const CANCEL_CLASS =
-  "rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink";
+const CANCEL_CLASS = `${BTN_BASE} btn-sec text-ink`;
 
 /**
  * ค่าที่ทุกกล่องใช้ร่วมกัน
@@ -113,11 +113,45 @@ export function toastInfo(title: string, text?: string) {
   return toastBase.fire({ icon: "info", title, text });
 }
 
+/** ทักทายหลังล็อกอิน — toast เดียวในระบบที่มีน้องมีนาโบกมือ (`welcome-toast.tsx`) */
+export function toastWelcome(title: string, text?: string) {
+  return toastBase.fire({
+    icon: "success",
+    iconHtml: `<span class="mascot" style="display:block">${mascotSvg({
+      uid: "welcome",
+      size: 44,
+      label: "น้องมีนา",
+    })}</span>`,
+    title,
+    text,
+    customClass: { popup: "hrs-swal hrs-swal-toast", icon: "hrs-swal-mascot" },
+  });
+}
+
 /* ------------------------------------------------------------------- กล่องกลาง */
 
-/** สำเร็จแบบที่ต้องให้ผู้ใช้รับรู้แน่ ๆ (เช่น สร้างเคสใหม่) — นอกนั้นใช้ `toastSuccess` */
+/**
+ * สำเร็จแบบที่ต้องให้ผู้ใช้รับรู้แน่ ๆ (เช่น สร้างเคสใหม่) — นอกนั้นใช้ `toastSuccess`
+ * ไอคอนเป็นน้องมีนาหน้าดีใจแทนเครื่องหมายถูก — จุดเดียวในชุดกล่องที่มีมาสคอต
+ */
 export function alertSuccess(title: string, text?: string) {
-  return base.fire({ icon: "success", title, text, confirmButtonText: "เรียบร้อย" });
+  return base.fire({
+    icon: "success",
+    iconHtml: `<span class="mascot mascot-bob" style="display:block">${mascotSvg({
+      uid: "swal",
+      size: 96,
+      mood: "happy",
+      label: "สำเร็จ",
+    })}</span>`,
+    title,
+    text,
+    confirmButtonText: "เรียบร้อย",
+    customClass: {
+      popup: "hrs-swal",
+      icon: "hrs-swal-mascot",
+      confirmButton: CONFIRM_CLASS.primary,
+    },
+  });
 }
 
 export function alertError(title: string, text?: string) {

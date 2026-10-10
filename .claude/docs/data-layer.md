@@ -1,6 +1,6 @@
 # Data layer — NCAC API + MongoDB
 
-> Read when: touching `lib/ncac/**`, `lib/cases.ts`, `lib/record-cases.ts`, `app/api/**`,
+> Read when: touching `lib/ncac/**`, `lib/cases.ts`, `lib/record-cases.ts`, `lib/db/**`, `app/api/**`,
 > save/write paths, or a 405/404 on a case page.
 >
 > **สองแหล่งข้อมูล แยกขาดจากกัน** — คำร้องของ พจส. อยู่บน **NCAC** (อ่านต่อข้างล่าง) ·
@@ -179,15 +179,42 @@ On success, call `router.refresh()` so server components refetch. `CaseModal` re
 `draft`/`saved` when `hrCase.updatedAt` changes, by **adjusting state during render, not in a
 `useEffect`** (the `react-hooks/set-state-in-effect` rule errors if you move it into an effect).
 
+## Mongo registry — `lib/db/` (10 ต.ค. 2026)
+
+**ชื่อ database / collection / GridFS bucket / ดัชนี อยู่ที่ `lib/db/registry.mjs` ที่เดียว** — `.mjs` + JSDoc
+เพื่อให้ทั้งโค้ดแอป (TS) และสคริปต์ `node *.mjs` ที่รากใช้ชุดเดียวกัน
+
+| ใช้ | ได้อะไร |
+|---|---|
+| `hrCol<T>("recordCases")` | `Collection<T>` ใน `hr_service` — คีย์จาก `HR` · คอลเลกชัน `external` (`newyearSurvey` ของ ncacdb) ได้ชนิดอ่านอย่างเดียว |
+| `etlCol<T>("vehicles")` | `Boom_ETL` แบบ `Pick<Collection, find/findOne/aggregate/countDocuments/distinct/estimatedDocumentCount>` — **เขียนแล้ว compile ไม่ผ่าน** |
+| `hrBucket("recordAttachments")` | `GridFSBucket` |
+| `nextSeq(counterKey, id, by)` (`lib/db/counters.ts`) | ตัวนับ atomic (`$inc` + upsert) คืน **ค่าหลังเลื่อน** · จองเป็นก้อนแล้วเลขแรก = `end - by + 1` |
+
+- **ดัชนีประกาศใน `INDEXES` ไม่ใช่ในไฟล์ store** — `hrCol()` ตัวแรกของโปรเซสจุด `ensureIndexesOnce()` แบบไม่รอ:
+  `createIndexes` ทุกตัวที่ประกาศ (มีแล้ว = no-op) · ล้มแล้วล้าง cache ลองใหม่หลัง 60 วินาที (ของเดิมสามไฟล์
+  cache promise ที่ reject ไว้ ล้มครั้งเดียวพังทั้งโปรเซส) · ข้าม `external` และ `Boom_ETL` · ไม่ลบอะไร ·
+  ปิดด้วย `MONGO_AUTO_INDEX=0`
+- **ชื่อ/คีย์ดัชนีต้องตรงกับของจริงเป๊ะ** — `createIndexes` คีย์เดิมแต่ชื่อใหม่ error บน production ·
+  `kind_1_group_1_order_1` กับ `drivercode_1` เป็นชื่ออัตโนมัติของ `createIndex()` แบบไม่ตั้งชื่อ ห้าม "จัดให้สวย"
+- `node ensure_db.mjs` — เทียบของจริงกับที่ประกาศ **อ่านอย่างเดียว** (missing / extra / conflict + คอลเลกชันที่ไม่อยู่
+  ในทะเบียน) · `--apply` สร้างเฉพาะตัวที่ขาด ไม่แตะ conflict ไม่ลบ · ตรวจ 10 ต.ค. 2026: ครบ 23 ตัว ขาด 0 เกิน 0 ·
+  นอกทะเบียน: `master_complaint` (ของเก่า) และ bucket `driver_documents` (ว่าง ย้ายไป S3 แล้ว)
+- `node check_db_names.mjs` — นอก `lib/db/` ห้ามมีสตริงชื่อคอลเลกชัน, `.collection("…")`/`.db("…")` ด้วยสตริง
+  ตรง ๆ และ `import "@/lib/mongo"` · `lib/mongo.ts` เหลือแค่ client ตัวเดียว (+ `getDb()`) ให้ `lib/db` ใช้
+- **ไม่มี `import "server-only"`** โดยตั้งใจ — `form-import.ts` ต้องรันนอก Next ได้ (`npx tsx`)
+- สคริปต์ที่รากอ่าน env ผ่าน `db_env.mjs` · **`seed_*.mjs` เขียนได้เฉพาะ `hr_service_dev`** (`--db hr_service_dev`
+  หรือ `MONGO_DB=hr_service_dev`) ฐานจริงต้องใส่ `--force` เอง และพิมพ์ปลายทางก่อนเสมอ
+
 ## บันทึกเคสส่วนกลาง — MongoDB (คนละแหล่งกับ NCAC)
 
 `/desk/record-cases` **ไม่ได้แตะ NCAC เลย** — เก็บบน MongoDB ของบริษัทโดยตรง
 (`MONGO_URI` / `MONGO_DB` ใน `.env.local` · ไม่ได้ตั้ง = หน้าขึ้น `DataError` ไม่ใช่หน้าว่าง)
 
 ```
-MongoDB  ──►  lib/mongo.ts  ──►  lib/record-cases.ts  ──►  RecordCase
-(record_cases)  (client เดียว     (อ่าน/เขียน + ตรวจข้อมูล)    (ชนิดใน lib/record-case-flow.ts
-                 cache บน global)          │                     ซึ่ง client import ได้)
+MongoDB  ──►  lib/db (hrCol)  ──►  lib/record-cases.ts  ──►  RecordCase
+(record_cases)  (client เดียวใน    (อ่าน/เขียน + ตรวจข้อมูล)    (ชนิดใน lib/record-case-flow.ts
+                 lib/mongo.ts)            │                     ซึ่ง client import ได้)
                                            ├──► app/desk/record-cases/page.tsx  (server component)
                                            └──► app/api/record-cases/**         (client ยิงผ่านเส้นนี้)
 ```

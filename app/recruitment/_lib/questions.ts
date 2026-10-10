@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
-import { getDb } from "@/lib/mongo";
+import { hrCol } from "@/lib/db";
 import { DEFAULT_QUESTIONS, type QuestionDraft } from "./default-questions";
 import { LOCKED_KEYS } from "./form";
 import {
@@ -32,8 +32,6 @@ import {
  * ตรง ๆ (`LOCKED_KEYS` สำหรับชื่อ/เบอร์ · `SUMMARY_KEYS` สำหรับคอลัมน์ในตาราง)
  */
 
-const COLLECTION = "recruitment_regist_question";
-
 export class RecruitmentError extends Error {}
 
 /* ------------------------------------------------------------------ รูปในฐานข้อมูล */
@@ -55,20 +53,9 @@ interface QuestionDoc {
   updatedBy: string;
 }
 
-let indexesReady: Promise<void> | undefined;
-
-async function questions(): Promise<Collection<QuestionDoc>> {
-  const db = await getDb();
-  const col = db.collection<QuestionDoc>(COLLECTION);
-  // สร้างครั้งเดียวต่อกระบวนการ — `createIndexes` ซ้ำ ๆ ทุก request เปลืองรอบเปล่า
-  indexesReady ??= col
-    .createIndexes([
-      { key: { key: 1 }, name: "key_unique", unique: true },
-      { key: { section: 1, order: 1 }, name: "section_order" },
-    ])
-    .then(() => undefined);
-  await indexesReady;
-  return col;
+/** ดัชนี (`key_unique` `section_order`) ประกาศที่ `lib/db/registry.mjs` */
+function questions(): Promise<Collection<QuestionDoc>> {
+  return hrCol<QuestionDoc>("questions");
 }
 
 const SECTION_RANK = new Map<string, number>(

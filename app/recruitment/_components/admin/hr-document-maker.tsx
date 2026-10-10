@@ -577,7 +577,7 @@ export function HrDocumentMaker({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-field border border-line px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40"
+              className="btn-sec px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40"
             >
               ปิด
             </button>
@@ -585,7 +585,7 @@ export function HrDocumentMaker({
               type="button"
               onClick={() => void print()}
               disabled={printing}
-              className="flex items-center gap-2 rounded-field bg-primary px-4 py-2.5 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="btn-pri flex items-center gap-2 px-4 py-2.5 text-13 font-medium disabled:opacity-60"
             >
               {printing ? (
                 <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
@@ -680,7 +680,7 @@ export function HrDocumentMaker({
                     <button
                       type="button"
                       onClick={() => setEditing("answers")}
-                      className="flex items-center justify-center gap-2 rounded-field border border-line px-3 py-2.5 text-13 transition-colors hover:border-primary/40 hover:text-primary"
+                      className="btn-sec flex items-center justify-center gap-2 px-3 py-2.5 text-13 transition-colors hover:border-primary/40 hover:text-primary"
                     >
                       <SquarePen size={14} strokeWidth={2} aria-hidden />
                       แก้ไขใบสมัคร
@@ -688,7 +688,7 @@ export function HrDocumentMaker({
                     <button
                       type="button"
                       onClick={() => setEditing("documents")}
-                      className="flex items-center justify-center gap-2 rounded-field border border-line px-3 py-2.5 text-13 transition-colors hover:border-primary/40 hover:text-primary"
+                      className="btn-sec flex items-center justify-center gap-2 px-3 py-2.5 text-13 transition-colors hover:border-primary/40 hover:text-primary"
                     >
                       <FileStack size={14} strokeWidth={2} aria-hidden />
                       เอกสารและข้อมูล

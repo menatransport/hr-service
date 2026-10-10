@@ -44,9 +44,31 @@ before running — without `API_NCAC_URL`, case pages render `DataError`, not a 
 | `.claude/docs/design-system.md` | Color, font, spacing, tokens, dark theme, UI rules, charts |
 | `.claude/docs/forms.md` | Any input · Radix dropdowns · the in-dropdown search box |
 | `.claude/docs/domain.md` | Case status, roles, form lock rules, SLA, timeline, reference data |
-| `.claude/docs/data-layer.md` | `lib/ncac/**` `lib/cases.ts` `app/api/**`, writes, 405/404 issues |
+| `.claude/docs/data-layer.md` | `lib/ncac/**` `lib/cases.ts` `lib/db/**` `app/api/**`, writes, 405/404 issues |
 | `.claude/docs/routes-ui.md` | Adding/changing pages, layouts, `/desk`, `case-modal.tsx`, notifications |
 | `.claude/docs/requisitions.md` | "ขอสรรหา" — สเปกหน้า `/recruitment/admin/requisitions` + การเชื่อม ขอสรรหา↔ผู้สมัคร↔ฝึกงาน (ยังไม่ได้สร้างหน้าจริง) |
+
+## 🧰 Agent skills (`.claude/skills/` — gitignored, install per machine)
+
+| Skill | Use when |
+|---|---|
+| `react-best-practices` (Vercel) | Writing/reviewing components, pages, data fetching — waterfalls, bundle size, re-renders |
+| `mongodb-schema-design` | Changing collection structure, embed vs reference, validation, migrations, indexes to drop |
+| `mongodb-query-optimizer` | A Mongo-backed page/API is slow — indexes, `explain`, aggregation shape |
+| `mongodb-connection` | Touching `lib/mongo.ts` — pool, timeouts, serverless reuse |
+| `mongodb-natural-language-querying` | Writing read-only queries/pipelines (needs MongoDB MCP; without it, write by hand) |
+
+Reinstall (installed 9 Oct 2026 from vercel-labs/agent-skills `063bee9`, mongodb/agent-skills `c370a63`):
+
+```bash
+git clone --depth 1 https://github.com/vercel-labs/agent-skills.git /tmp/vs
+git clone --depth 1 https://github.com/mongodb/agent-skills.git /tmp/ms
+mkdir -p .claude/skills && cp -r /tmp/vs/skills/react-best-practices .claude/skills/
+for s in connection schema-design query-optimizer natural-language-querying; do cp -r /tmp/ms/skills/mongodb-$s .claude/skills/; done
+```
+
+Skills are general advice — **this file and `.claude/docs/*` win** when they disagree (e.g. NCAC data is
+read through its API, never restructured from here; only our own Mongo collections are ours to change).
 
 ## Two sources, strictly separated
 
@@ -78,7 +100,7 @@ as the dropdown base · **no shadcn, and no copying prebuilt components from any
    →  accounts.google.com
    →  GET /api/auth/callback/google   (ตรวจ state → แลก code เป็น id_token)
    →  POST /auth/login/google ของ NCAC (backend ตรวจ token + โดเมนเอง)
-   →  คุกกี้ `hrs.session` (HMAC-SHA256, อายุ 8 ชม.)  →  /desk?welcome=1
+   →  คุกกี้ `hrs.session` (HMAC-SHA256, อายุ 8 ชม.)  →  /home?welcome=1
 ```
 
 | ไฟล์ | หน้าที่ |
@@ -87,7 +109,7 @@ as the dropdown base · **no shadcn, and no copying prebuilt components from any
 | `lib/auth/session.ts` | `getDeskIdentity()` `getActorEmployeeId()` (server เท่านั้น) |
 | `lib/auth/google.ts` | สร้าง authorize URL + แลก code · `callbackUrl()` ทับได้ด้วย `APP_URL` |
 | `lib/auth/identity.ts` | ชนิด `DeskIdentity` + ค่าสำรอง (import ได้ทั้งสองฝั่ง) |
-| `proxy.ts` | ด่าน: `/desk/**` ไม่มี session → เด้งไป `/?next=…` · เขียนข้อมูลผ่าน `/api/**` → 401 |
+| `proxy.ts` | ด่าน: `/home` `/desk/**` ไม่มี session → เด้งไป `/?next=…` · เขียนข้อมูลผ่าน `/api/**` → 401 |
 
 - **ห้าม import `deskUser` ในหน้าจออีก** — server ใช้ `getDeskIdentity()` · client ใช้
   `useDeskIdentity()` (`components/auth/identity-provider.tsx` ที่ `app/desk/layout.tsx`
@@ -131,6 +153,9 @@ as the dropdown base · **no shadcn, and no copying prebuilt components from any
   ห้าม `import Swal` ตรง ๆ ในคอมโพเนนต์ และห้ามยิง `fetch` ไป `/api/**` เองโดยไม่ผ่าน
   `requestJson()` ใน `lib/http.ts` · ผู้เรียกต้องแยก `cancelled` ออกจาก `failed` เสมอ
   (แบบหลังยิงไปแล้วจริง จึงเป็นจุดที่ต้องคืนค่าหน้าจอกลับ)
+- **ชื่อ MongoDB (collection/db/ดัชนี) มาจาก `lib/db/registry.mjs` เท่านั้น** — เข้าถึงผ่าน `hrCol()`/`hrBucket()` ·
+  **`Boom_ETL` อ่านผ่าน `etlCol()` เท่านั้น** (เขียนไม่ได้) · ห้าม import `lib/mongo.ts` นอก `lib/db` ·
+  ยืนยันด้วย `node check_db_names.mjs` (exit 0) · ชื่อ/คีย์ดัชนีห้ามเปลี่ยนเอง เทียบของจริงด้วย `node ensure_db.mjs`
 
 ## Commands
 

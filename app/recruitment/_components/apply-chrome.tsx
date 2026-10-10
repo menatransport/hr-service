@@ -155,7 +155,7 @@ export function ActionBar({
             type="button"
             onClick={onNext}
             disabled={busy}
-            className="flex h-13 flex-1 items-center justify-center gap-2 rounded-box bg-primary text-15 font-semibold text-primary-content transition-all duration-150 hover:opacity-90 active:scale-[0.985] disabled:opacity-60"
+            className="btn-pri flex h-13 flex-1 items-center justify-center gap-2 text-15 font-semibold transition-all duration-150 active:scale-[0.985] disabled:opacity-60"
           >
             {busy ? (
               <Loader2 size={16} strokeWidth={2.2} aria-hidden className="animate-spin" />

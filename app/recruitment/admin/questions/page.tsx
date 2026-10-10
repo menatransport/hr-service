@@ -43,7 +43,7 @@ export default async function QuestionsPage() {
             href="/recruitment/apply"
             target="_blank"
             rel="noreferrer"
-            className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-ink"
+            className="btn-sec px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-ink"
           >
             เปิดฟอร์มจริง
           </Link>

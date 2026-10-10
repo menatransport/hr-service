@@ -2,41 +2,32 @@ import { Suspense } from "react";
 
 import { IdentityProvider } from "@/components/auth/identity-provider";
 import { WelcomeToast } from "@/components/auth/welcome-toast";
-import { DeskSidebar } from "@/components/desk/sidebar";
-import { DeskTopBar } from "@/components/desk/topbar";
 import { getDeskIdentity } from "@/lib/auth/session";
 
 /**
- * HR / office-staff shell — the sidebar layout from wireframe `1c`.
- * The same sidebar serves HR and corporate staff; only the visible menu
- * entries differ, so nothing here is role-specific.
+ * ชั้นนอกสุดของ `/desk` — ตัวตนผู้ใช้กับ toast ต้อนรับเท่านั้น **ไม่มีแถบบน/แถบข้าง**
+ *
+ * เชลล์ (แถบบน + แถบข้างของโมดูล) อยู่ที่ `(module)/layout.tsx` · หน้าหลักย้ายไป `/home`
+ * (`app/home`) แล้ว — `/desk` เปล่า ๆ เด้งไป `/home` ด้วย redirect ใน `next.config.ts`
  *
  * ตัวตนของผู้ใช้ถูกอ่านจากคุกกี้ session ที่นี่ที่เดียว แล้วส่งลงไปทั้งฝั่ง server
- * (topbar) และฝั่ง client (`IdentityProvider`) — หน้าไหนก็ตามใต้ `/desk` จะมี
- * session แน่นอน เพราะ `middleware.ts` กันไว้ให้แล้ว
+ * และฝั่ง client (`IdentityProvider`) — หน้าไหนก็ตามใต้ `/desk` จะมี session แน่นอน
+ * เพราะ `proxy.ts` กันไว้ให้แล้ว
+ *
+ * **ห้ามวาง `loading.tsx` ไว้ระดับนี้** — มันจะครอบเชลล์ของโมดูลทั้งก้อน ตอนกดเมนูจาก
+ * Home แถบข้างจะยังไม่ขึ้นในจังหวะเดียวกับการเปลี่ยนหน้า แล้วเมนูจะไม่ “บิน” ไปเป็นแถบข้าง
+ * (view transition ต้องเห็นชื่อเดียวกันทั้งหน้าเก่าและหน้าใหม่ในคอมมิตเดียว)
  */
 export default async function DeskLayout({ children }: LayoutProps<"/desk">) {
   const identity = await getDeskIdentity();
 
   return (
     <IdentityProvider identity={identity}>
-      <div className="page-canvas flex min-h-dvh flex-col">
-        {/* `useSearchParams` ต้องอยู่ใต้ Suspense เสมอ — ตัวนี้ไม่วาดอะไรอยู่แล้ว */}
-        <Suspense fallback={null}>
-          <WelcomeToast name={identity.firstName} />
-        </Suspense>
-
-        <DeskTopBar identity={identity} />
-        <div className="flex min-h-0 flex-1">
-          <DeskSidebar />
-          {/*
-            ห้ามใส่ transform/animation ที่ <main> — จะกลายเป็น containing block
-            ของ `position: fixed` ทำให้ modal ในหน้าเคสหลุดตำแหน่ง
-            ถ้าอยากมี entrance animation ให้ใส่ที่ตัวเนื้อหาของแต่ละหน้า
-          */}
-          <main className="min-w-0 flex-1 px-5 py-6 lg:px-8">{children}</main>
-        </div>
-      </div>
+      {/* `useSearchParams` ต้องอยู่ใต้ Suspense เสมอ — ตัวนี้ไม่วาดอะไรอยู่แล้ว */}
+      <Suspense fallback={null}>
+        <WelcomeToast name={identity.firstName} />
+      </Suspense>
+      {children}
     </IdentityProvider>
   );
 }

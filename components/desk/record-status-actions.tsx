@@ -39,7 +39,7 @@ export const statusActionIcon: Record<RecordStatus, IconType> = {
  * ที่เหลือเป็นเส้นขอบ ตาจะได้วิ่งไปหาปุ่มหลักก่อนโดยไม่ต้องอ่านครบทุกปุ่ม
  */
 export const statusActionTone: Record<RecordStatus, string> = {
-  completed: "border border-transparent bg-primary text-primary-content hover:opacity-90",
+  completed: "btn-pri border border-transparent",
   rejected: "border border-alert/35 text-alert hover:bg-alert/10",
   pending: "border border-line text-mut hover:border-ink/30 hover:text-ink",
 };

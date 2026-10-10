@@ -4,7 +4,7 @@ import { BookUser, Info, RefreshCw } from "lucide-react";
 import { PageHead } from "@/components/desk/page-head";
 import { DriverRegistryView } from "@/app/recruitment/_components/admin/driver-registry-view";
 import { DataError } from "@/components/ui/data-error";
-import { getDriverRegistry } from "@/app/recruitment/_lib/drivers/registry";
+import { getDriverList } from "@/app/recruitment/_lib/drivers/registry";
 import { formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
 import type { DriverRegistry } from "@/app/recruitment/_lib/drivers/types";
 
@@ -14,6 +14,9 @@ import type { DriverRegistry } from "@/app/recruitment/_lib/drivers/types";
  * อ่านจาก `hr_service.master_driver` ซึ่ง `sync_master_driver.mjs` เป็นคนเติม
  * จาก `Boom_ETL.main_driver` · ถ้าคอลเลกชันยังว่าง หน้านี้จะบอกให้ไปรัน sync
  * **ไม่ใช่ขึ้นตารางเปล่า** ซึ่งอ่านเป็น “บริษัทไม่มีคนขับสักคน”
+ *
+ * อ่านผ่าน `getDriverList()` — ไม่มีปฏิทินรายวัน/ของที่กรอกเอง/แฟ้มเอกสาร ตั้งแต่ใน query
+ * (ตารางใช้แค่ `work.latestStatus`) · ประวัติรายคนอ่านใหม่จาก `getDriverProfile()` เอง
  *
  * `force-dynamic` เพราะทั้งหน้าคิดจากวันที่ของวันนี้ (ใบขับขี่เหลือกี่วัน อายุงานเท่าไร)
  * ถ้าปล่อยให้ cache ไว้ ตัวเลข “เหลือ 3 วัน” จะค้างอยู่อย่างนั้นข้ามสัปดาห์
@@ -30,7 +33,7 @@ export default async function DriversRegistryPage() {
   let error: string | null = null;
 
   try {
-    registry = slimForList(await getDriverRegistry());
+    registry = await getDriverList();
   } catch (err) {
     error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
   }
@@ -57,26 +60,6 @@ export default async function DriversRegistryPage() {
       )}
     </div>
   );
-}
-
-/**
- * ตัดของที่ตารางรายชื่อไม่ได้ใช้ทิ้งก่อนส่งลง client
- *
- * `getDriverRegistry()` คืนสถานะรายวันทุกวันของทุกคน + ของที่กรอกเอง + แฟ้มเอกสาร
- * (~6.9 MB) แต่ `DriverRegistryView` ใช้แค่ `work.latestStatus` — ส่งไปทั้งก้อน
- * คือให้เบราว์เซอร์ดาวน์โหลดและ hydrate ของที่ไม่มีวันถูกวาด ทุกครั้งที่เปิดหน้านี้
- * · ประวัติรายคนอ่านใหม่จาก `getDriverProfile()` อยู่แล้ว ไม่ได้พึ่งก้อนนี้
- */
-function slimForList(registry: DriverRegistry): DriverRegistry {
-  return {
-    ...registry,
-    drivers: registry.drivers.map((d) => ({
-      ...d,
-      work: d.work ? { ...d.work, days: {}, months: [] } : null,
-      manualDays: {},
-      documents: [],
-    })),
-  };
 }
 
 /**

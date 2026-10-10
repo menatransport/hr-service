@@ -251,7 +251,7 @@ export function QuestionEditor({
           <button
             type="button"
             onClick={() => setPreviewOpen(true)}
-            className="me-auto flex items-center gap-1.5 rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-ink"
+            className="btn-sec me-auto flex items-center gap-1.5 px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-ink"
           >
             <Eye size={14} strokeWidth={1.8} aria-hidden />
             ดูพรีวิว
@@ -260,7 +260,7 @@ export function QuestionEditor({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
+            className="btn-sec px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
           >
             ยกเลิก
           </button>
@@ -268,7 +268,7 @@ export function QuestionEditor({
             type="button"
             onClick={save}
             disabled={saving || !label.trim() || !!keyError}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="btn-pri flex items-center gap-2 px-4 py-2 text-13 font-medium disabled:opacity-50"
           >
             {saving ? (
               <Loader2 size={13} strokeWidth={2} aria-hidden className="animate-spin" />
@@ -479,7 +479,7 @@ function PreviewModal({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
+          className="btn-sec px-3.5 py-2 text-13 text-mut transition-colors hover:text-ink"
         >
           ปิดพรีวิว
         </button>

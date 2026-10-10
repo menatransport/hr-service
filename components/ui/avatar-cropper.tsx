@@ -380,7 +380,7 @@ export function AvatarCropper({
             type="button"
             onClick={save}
             disabled={busy || !image}
-            className="flex cursor-pointer items-center gap-2 rounded-selector bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="btn-pri flex cursor-pointer items-center gap-2 px-4 py-2 text-13 font-medium disabled:opacity-50"
           >
             {busy ? (
               <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />

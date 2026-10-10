@@ -9,23 +9,15 @@
  * กฎทั้ง bucket** — สคริปต์จึงอ่านกฎเดิมก่อน แล้วแทนเฉพาะกฎที่ `ID` ตรงกับของเรา กฎของ
  * ระบบอื่นต้องอยู่ครบเหมือนเดิม · รันซ้ำได้ปลอดภัย
  */
-import fs from "node:fs";
 import {
   GetBucketLifecycleConfigurationCommand,
   PutBucketLifecycleConfigurationCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+import { loadEnv } from "./db_env.mjs";
+
+const env = loadEnv();
 
 const RULE = {
   ID: "hr-service-mass-image-drafts-1d",

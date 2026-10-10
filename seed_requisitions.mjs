@@ -3,7 +3,9 @@
  * ต่อผู้สมัครหนึ่งคน** ที่มีอยู่จริงในฐานข้อมูล
  *
  *   node seed_requisitions.mjs          → ล้างตัวอย่างเดิมแล้วใส่ใหม่
- *   node seed_requisitions.mjs --clean  → ลบเฉพาะตัวอย่าง (ฟิลด์ `sample: true`)
+ *   node seed_requisitions.mjs --clean  → ลบเฉพาะตัวอย่าง (ฟิลด์ `sample: true`) *
+ * ⚠️ เขียนได้เฉพาะ `hr_service_dev` — ใส่ `--db hr_service_dev` (หรือ `MONGO_DB=hr_service_dev`)
+ *    จะลงฐานจริงต้องใส่ `--force` เอง (ดู `seedTargetDb()` ใน `db_env.mjs`)
  *
  * **ทุกอย่างอ่านจากของจริงในฐานข้อมูล ไม่ได้ก๊อปมาแปะไว้ที่นี่:**
  * - ผู้สมัคร ← `recruitment_regist_answer` (ทั้งชื่อ เลขที่ใบ และสถานะปัจจุบัน)
@@ -24,26 +26,19 @@
  *
  * ทุกใบมีฟิลด์ `sample: true` ติดไว้ ลบทีหลังได้โดยไม่แตะคำขอจริงแม้แต่ใบเดียว
  */
-import fs from "node:fs";
 import { MongoClient } from "mongodb";
+
+import { loadEnv, seedTargetDb } from "./db_env.mjs";
+import { DB, ETL, HR } from "./lib/db/registry.mjs";
 
 /* ---------------------------------------------------------------- env */
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+const env = loadEnv();
 
-const REQUISITIONS = "recruitment_requests";
-const APPLICATIONS = "recruitment_regist_answer";
-const COUNTERS = "recruitment_counters";
-const DRIVERS = "master_driver";
+const REQUISITIONS = HR.requisitions.name;
+const APPLICATIONS = HR.applications.name;
+const COUNTERS = HR.recruitmentCounters.name;
+const DRIVERS = HR.drivers.name;
 
 /* ------------------------------------------------------- ชุดค่าที่หมุนใช้ */
 
@@ -86,11 +81,12 @@ function daysBefore(iso, n) {
 /* --------------------------------------------------------------- main */
 
 const clean = process.argv.includes("--clean");
+const dbName = seedTargetDb(env);
 
 const client = new MongoClient(env.MONGO_URI);
 await client.connect();
 
-const db = client.db(env.MONGO_DB || "hr_service");
+const db = client.db(dbName);
 const col = db.collection(REQUISITIONS);
 
 const removed = await col.deleteMany({ sample: true });
@@ -133,8 +129,8 @@ if (drivers.length < 20) {
 }
 
 const vehicles = await client
-  .db("Boom_ETL")
-  .collection("vehicles")
+  .db(DB.etl)
+  .collection(ETL.vehicles)
   .find(
     { active: true, code: { $nin: [null, ""] }, plant: { $nin: [null, ""] } },
     { projection: { code: 1, plate_no: 1, brand: 1, plant: 1 } },

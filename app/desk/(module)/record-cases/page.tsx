@@ -9,7 +9,9 @@ export const metadata = { title: "บันทึกเคส" };
 /** อ่านจาก MongoDB ทุกครั้งที่เปิดหน้า — เคสถูกบันทึก/เปลี่ยนสถานะตลอดเวลา */
 export const dynamic = "force-dynamic";
 
-export default async function RecordCasesPage() {
+/** `?manage=categories` = ทางเข้าจากเมนู “ประเภทบันทึกเคส” ของ HR MASTER บนหน้า Home */
+export default async function RecordCasesPage(props: PageProps<"/desk/record-cases">) {
+  const { manage } = await props.searchParams;
   let records: RecordCase[] = [];
   let categories: RecordCategory[] = [];
   let error: string | null = null;
@@ -27,5 +29,11 @@ export default async function RecordCasesPage() {
     );
   }
 
-  return <RecordCaseView records={records} categories={categories} />;
+  return (
+    <RecordCaseView
+      records={records}
+      categories={categories}
+      manageCategories={manage === "categories"}
+    />
+  );
 }

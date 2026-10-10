@@ -20,25 +20,18 @@
  *   `documents`                                   เอกสารในแฟ้มประวัติ — ตัวไฟล์อยู่ใน GridFS
  *                                                 (`app/api/drivers/[code]/documents/route.ts`)
  */
-import fs from "node:fs";
 import { MongoClient } from "mongodb";
+
+import { hrDbName, loadEnv } from "./db_env.mjs";
+import { DB, ETL, HR, INDEXES } from "./lib/db/registry.mjs";
 
 /* ---------------------------------------------------------------- env */
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+const env = loadEnv();
 
-const SOURCE_DB = "Boom_ETL";
-const SOURCE_COLLECTION = "main_driver";
-const TARGET_COLLECTION = "master_driver";
+const SOURCE_DB = DB.etl;
+const SOURCE_COLLECTION = ETL.mainDriver;
+const TARGET_COLLECTION = HR.drivers.name;
 
 /* -------------------------------------------------------- แปลงฟิลด์ ETL → master_driver */
 
@@ -68,9 +61,10 @@ const client = new MongoClient(env.MONGO_URI, { serverSelectionTimeoutMS: 15_000
 await client.connect();
 
 const source = client.db(SOURCE_DB).collection(SOURCE_COLLECTION);
-const target = client.db(env.MONGO_DB || "hr_service").collection(TARGET_COLLECTION);
+const target = client.db(hrDbName(env)).collection(TARGET_COLLECTION);
 
-await target.createIndex({ drivercode: 1 }, { unique: true });
+/* คีย์ upsert ของ sync — สเปกเดียวกับของจริงบนฐาน (`drivercode_1` unique) มีอยู่แล้ว = no-op */
+await target.createIndexes([...INDEXES.drivers]);
 
 const rawDocs = await source.find({}).toArray();
 console.log(`อ่านจาก ${SOURCE_DB}.${SOURCE_COLLECTION} ได้ ${rawDocs.length} รายการ (read-only)`);

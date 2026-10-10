@@ -4,7 +4,6 @@ import { Fragment, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  Bookmark,
   ChevronRight,
   ChevronsUpDown,
   Paperclip,
@@ -22,6 +21,7 @@ import {
   QuickStatusActions,
   useRecordStatusChange,
 } from "@/components/desk/record-status-actions";
+import { EmptyState } from "@/components/ui/empty-state";
 import { SearchField, Select, type SelectOption } from "@/components/ui/field";
 import { Pager } from "@/components/ui/pager";
 import { RecordStatusBadge } from "@/components/ui/record-status-badge";
@@ -144,16 +144,19 @@ function sortValue(r: RecordCase, key: SortKey, categories: RecordCategory[]): s
 export function RecordCaseView({
   records,
   categories,
+  manageCategories = false,
 }: {
   records: RecordCase[];
   categories: RecordCategory[];
+  /** เปิดกล่องจัดการประเภทค้างไว้ตั้งแต่แรก — ทางเข้าจากเมนู HR MASTER บนหน้า Home */
+  manageCategories?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [department, setDepartment] = useState("all");
   const [category, setCategory] = useState("all");
   const [creating, setCreating] = useState(false);
-  const [managingCategories, setManagingCategories] = useState(false);
+  const [managingCategories, setManagingCategories] = useState(manageCategories);
   /** เคสที่กำลังแก้ไข — เก็บเป็น id แล้วหาใหม่จาก props เหมือนแผงที่กางอยู่ */
   const [editingId, setEditingId] = useState<string | null>(null);
   /** เคสที่กางรายละเอียดอยู่ — ทีละใบเดียว หน้าจอจะได้ไม่ยาวจนหาคิวไม่เจอ */
@@ -258,7 +261,7 @@ export function RecordCaseView({
               <button
                 type="button"
                 onClick={() => setManagingCategories(true)}
-                className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3.5 py-2 text-13 text-mut transition-colors hover:border-ink/30 hover:text-ink"
+                className="btn-sec flex items-center gap-2 px-3.5 py-2 text-13 text-mut transition-colors hover:border-ink/30 hover:text-ink"
               >
                 <Settings2 size={15} strokeWidth={1.8} aria-hidden />
                 จัดการประเภทเคส
@@ -266,7 +269,7 @@ export function RecordCaseView({
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
+                className="btn-pri flex items-center gap-2 px-4 py-2 text-13 font-medium"
               >
                 <Plus size={16} strokeWidth={2} aria-hidden />
                 บันทึกเคสใหม่
@@ -828,26 +831,16 @@ function Th({
 
 function Empty({ total, onClear }: { total: number; onClear?: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 px-5 py-14 text-center">
-      <Bookmark size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
-      <p className="text-sm font-semibold">
-        {total ? "ไม่มีเคสที่ตรงกับเงื่อนไข" : "ยังไม่มีบันทึกเคส"}
-      </p>
-      <p className="max-w-[46ch] text-12-5 leading-[1.7] text-mut text-pretty">
-        {total
+    <EmptyState
+      title={total ? "ไม่มีเคสที่ตรงกับเงื่อนไข" : "ยังไม่มีบันทึกเคส"}
+      bubble={total ? undefined : "เริ่มบันทึกเรื่องแรกกันเลย!"}
+      hint={
+        total
           ? "ลองล้างตัวกรองหรือเปลี่ยนคำค้นหา"
-          : "กด “บันทึกเคสใหม่” เพื่อบันทึกเรื่องแรกเข้าระบบ"}
-      </p>
-      {onClear ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="rounded-full border border-line px-3.5 py-1.5 text-12-5 transition-colors hover:border-ink/30 hover:text-ink"
-        >
-          ล้างตัวกรอง
-        </button>
-      ) : null}
-    </div>
+          : "กด “บันทึกเคสใหม่” เพื่อบันทึกเรื่องแรกเข้าระบบ"
+      }
+      onClear={onClear}
+    />
   );
 }
 

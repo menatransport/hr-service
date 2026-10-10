@@ -47,7 +47,7 @@ const boxSize: Record<FieldSize, string> = {
   lg: "rounded-box px-3.5 py-3 text-13-5",
 };
 const enabled =
-  "border-line hover:border-primary/40 focus:border-primary/60 placeholder:text-mut";
+  "field-ring border-line hover:border-primary/40 focus:border-primary/60 data-[state=open]:border-primary/60 placeholder:text-mut";
 // พื้นสีเทาบอกว่าแก้ไม่ได้อยู่แล้ว ตัวอักษรจึงคงสี ink ไว้ให้อ่านง่าย
 const disabledBox =
   "border-line bg-base-200 text-ink cursor-not-allowed placeholder:text-mut";

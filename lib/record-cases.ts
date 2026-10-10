@@ -1,7 +1,8 @@
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
 import { DEPARTMENTS } from "./case-flow";
-import { getDb } from "./mongo";
+import { hrCol } from "./db";
+import { nextSeq } from "./db/counters";
 import { isKnownRecordCategory } from "./record-categories";
 import { recordFileExists } from "./record-files";
 import {
@@ -35,9 +36,6 @@ import {
  * | `record_counters` | ตัวนับเลขที่เคสรายเดือน (แถวเดียวต่อเดือน — เปลี่ยนจากรายปี 26 ส.ค. 2026) |
  */
 
-const CASES = "record_cases";
-const COUNTERS = "record_counters";
-
 /** จำนวนที่ดึงมาแสดงบนหน้าจอ — ค้นหา/กรองทำฝั่ง client บนชุดนี้ */
 const LIST_LIMIT = 500;
 
@@ -62,33 +60,9 @@ interface RecordDoc {
   updatedAt: string;
 }
 
-async function cases(): Promise<Collection<RecordDoc>> {
-  const db = await getDb();
-  const col = db.collection<RecordDoc>(CASES);
-  await ensureIndexes(col);
-  return col;
-}
-
-/**
- * ดัชนีถูกสร้างครั้งเดียวต่อโปรเซส — `createIndexes` เป็น no-op ถ้ามีอยู่แล้ว
- * แต่ยิงทุกคำขอก็เสียเวลา round-trip เปล่า ๆ
- *
- * ล้มเหลวแล้วไม่โยนต่อโดยตั้งใจ (เช่นผู้ใช้ฐานข้อมูลไม่มีสิทธิ์สร้างดัชนี) —
- * ดัชนีเป็นเรื่องความเร็ว ไม่ใช่ความถูกต้อง ห้ามทำให้ทั้งหน้าพังเพราะเรื่องนี้
- */
-let indexed = false;
-async function ensureIndexes(col: Collection<RecordDoc>) {
-  if (indexed) return;
-  indexed = true;
-  try {
-    await col.createIndexes([
-      { key: { createdAt: -1 }, name: "createdAt_desc" },
-      { key: { status: 1, createdAt: -1 }, name: "status_createdAt" },
-      { key: { code: 1 }, name: "code_unique", unique: true },
-    ]);
-  } catch (err) {
-    console.warn("[record-cases] สร้างดัชนีไม่สำเร็จ —", err);
-  }
+/** ดัชนี (`createdAt_desc` `status_createdAt` `code_unique`) ประกาศที่ `lib/db/registry.mjs` */
+function cases(): Promise<Collection<RecordDoc>> {
+  return hrCol<RecordDoc>("recordCases");
 }
 
 function toRecordCase(doc: WithId<RecordDoc>): RecordCase {
@@ -140,18 +114,9 @@ function currentYymm(): string {
  * จะทำให้อ้างอิงเดิมหาไม่เจอ
  */
 async function nextCode(): Promise<string> {
-  const db = await getDb();
   const yymm = currentYymm();
-
-  const counter = await db
-    .collection<{ _id: string; seq: number }>(COUNTERS)
-    .findOneAndUpdate(
-      { _id: `record_cases:${yymm}` },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" },
-    );
-
-  return `ER-${yymm}-${String(counter?.seq ?? 1).padStart(3, "0")}`;
+  const seq = await nextSeq("recordCounters", `record_cases:${yymm}`);
+  return `ER-${yymm}-${String(seq).padStart(3, "0")}`;
 }
 
 /* --------------------------------------------------------------- ตรวจข้อมูลเข้า */
