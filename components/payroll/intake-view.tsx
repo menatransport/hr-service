@@ -32,6 +32,7 @@ import {
   type IntakeStage,
 } from "@/lib/payroll/intake-status";
 import { HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
+import { classify, KIND_LABEL } from "@/lib/payroll/classify";
 import {
   INTAKE_ITEMS,
   itemsByOwner,
@@ -404,8 +405,41 @@ export function IntakeView({ canPass }: { canPass: boolean }) {
             no={3}
             done={activeRecord.stage === "passed"}
             title={`ตรวจคุณภาพ — ${active.title}`}
-            meta={`${active.owner} · กำหนดวันที่ ${active.dueDay}`}
+            meta={`${active.owner} · ${active.category} · กำหนดวันที่ ${active.dueDay}`}
           />
+
+          {/* บอกคนตรวจก่อนเปิดไฟล์ว่าช่องไหนลงสลิปทิศไหน และเงินเข้าใคร — ของที่ผสม
+              กับรอยืนยันคือจุดที่เคยจ่ายผิดทิศได้โดยไม่มีอะไรเตือน */}
+          {(() => {
+            const cls = classify(active.id);
+            if (!cls) return null;
+            return (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-12 text-mut">
+                <span className="font-medium text-ink">{KIND_LABEL[cls.kind]}</span>
+                {cls.posted.map((p) => (
+                  <span
+                    key={p.column}
+                    className={`rounded-field border px-1.5 py-px font-mono text-11 ${
+                      p.effect === "หัก"
+                        ? "border-alert/40 text-alert"
+                        : p.effect === "รอยืนยัน"
+                          ? "border-warning/50 text-warning"
+                          : "border-primary/30 text-primary"
+                    }`}
+                  >
+                    {p.effect} · {p.column}
+                  </span>
+                ))}
+                {cls.payeeColumn !== "รหัสพนักงาน" ? (
+                  <span className="text-alert">เงินเข้าช่อง “{cls.payeeColumn}” ไม่ใช่รหัสพนักงาน</span>
+                ) : null}
+                {cls.dataMonthOffset ? (
+                  <span>ข้อมูลเป็นของ {Math.abs(cls.dataMonthOffset.months)} เดือนก่อนรอบจ่าย</span>
+                ) : null}
+                {cls.formOf ? <span>ฟอร์มเดียวกับ #{cls.formOf}</span> : null}
+              </div>
+            );
+          })()}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-field bg-base-200/60 px-3.5 py-2.5">
             <span

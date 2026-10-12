@@ -46,3 +46,4 @@ next-env.d.ts
 
 # สำรองข้อมูลจาก MongoDB — มีข้อมูลส่วนบุคคล ห้าม commit
 /backups/
+.verify/

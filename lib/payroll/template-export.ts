@@ -1,5 +1,12 @@
 import { Workbook, type DataValidation, type Worksheet } from "exceljs";
 
+import {
+  classify,
+  DEFAULT_PAYEE_COLUMN,
+  effectOf,
+  KIND_LABEL,
+  type MoneyEffect,
+} from "./classify";
 import { periodLabel, type PeriodRef } from "./period";
 import { INTAKE_ITEMS, findItem, type IntakeItem } from "./registry";
 import {
@@ -30,6 +37,22 @@ const GREEN = "FF0F766E";
 const GREEN_MIST = "FFF4F9F8";
 const DRAFT = "FF7F6000";
 const DRAFT_MIST = "FFFFF2CC";
+
+/* สีหัวคอลัมน์ตามผลต่อสลิป — คนกรอกต้องเห็นตั้งแต่ตอนกรอกว่าช่องไหนคือเงินหัก
+   เพราะไฟล์ 3 ตัวมีทั้งเพิ่มและหักในแถวเดียวกัน (#12 #19 #20) ถ้าหัวสีเดียวกันหมด
+   คนกรอกจะใส่ค่าวินัยกับเบี้ยขยันสลับช่องกันได้โดยไม่มีอะไรเตือน */
+const EFFECT_FILL: Record<MoneyEffect, string> = {
+  เพิ่ม: "FF1B5E20",
+  หัก: "FFB3261E",
+  อ้างอิง: "FF4A6572",
+  รอยืนยัน: "FF7F6000",
+};
+const EFFECT_LABEL: Record<MoneyEffect, string> = {
+  เพิ่ม: "เงินเพิ่ม — ลงสลิปเป็นรายได้",
+  หัก: "เงินหัก — ลงสลิปเป็นรายหัก",
+  อ้างอิง: "อ้างอิง — ใช้ตรวจ ไม่ลงสลิป",
+  รอยืนยัน: "รอยืนยัน — ยังไม่รู้ว่าเพิ่มหรือหัก ห้ามใช้จ่ายจริง",
+};
 
 const WHITE = "FFFFFFFF";
 const INK = "FF15201D";
@@ -77,11 +100,16 @@ function writeFormSheet(sheet: Worksheet, item: IntakeItem, spec: TemplateSpec) 
 
   const head = sheet.getRow(1);
   head.height = 34;
-  head.eachCell((cell) => {
+  head.eachCell((cell, index) => {
+    const effect = effectOf(item.id, spec.columns[index - 1]);
     cell.font = { name: FONT, size: 10, bold: true, color: { argb: WHITE } };
-    cell.fill = solid(spec.confirmed ? GREEN : DRAFT);
+    /* ช่องเงินใช้สีตามทิศทาง ช่องอื่นใช้สีสถานะฟอร์ม (ยืนยัน/ร่าง) เหมือนเดิม */
+    cell.fill = solid(
+      effect ? EFFECT_FILL[effect] : spec.confirmed ? GREEN : DRAFT,
+    );
     cell.border = box;
     cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    if (effect) cell.note = EFFECT_LABEL[effect];
   });
 
   spec.columns.forEach((column, index) => {
@@ -192,6 +220,13 @@ function writeReadMe(sheet: Worksheet, period: PeriodRef, items: IntakeItem[]) {
     ["ชีตที่หัวตารางเป็นสีเหลือง = ยังไม่ได้เห็นไฟล์ต้นฉบับ", true],
     ["ขอให้เจ้าของข้อมูลตรวจคอลัมน์แล้วยืนยันก่อนใช้จริง", false],
     ["", false],
+    ["สีหัวคอลัมน์บอกว่าตัวเลขช่องนั้นไปไหน", true],
+    [`• เขียวเข้ม  ${EFFECT_LABEL["เพิ่ม"]}`, false],
+    [`• แดง  ${EFFECT_LABEL["หัก"]}`, false],
+    [`• เทาน้ำเงิน  ${EFFECT_LABEL["อ้างอิง"]}`, false],
+    [`• เหลืองเข้ม  ${EFFECT_LABEL["รอยืนยัน"]}`, false],
+    ["ถ้ามีช่องรวม ระบบใช้ช่องรวม ช่องย่อยเป็นอ้างอิง — ถ้า Tiger Soft ต้องแยกรหัส แจ้ง HR C&B", false],
+    ["", false],
     ["รายการในไฟล์นี้", true],
   ];
 
@@ -207,8 +242,17 @@ function writeReadMe(sheet: Worksheet, period: PeriodRef, items: IntakeItem[]) {
 
   for (const item of items) {
     const spec = templateOf(item.id);
+    const cls = classify(item.id);
+    /* บอกตั้งแต่หน้าแรกว่าเงินเข้าใคร ถ้าไม่ใช่คนในช่องรหัสพนักงาน — 3 รายการ
+       (ค่าครูฝึก ×2 · เพื่อนแนะนำเพื่อน) เงินเข้าอีกคนที่อยู่คนละช่อง */
+    const payee =
+      cls && cls.payeeColumn !== DEFAULT_PAYEE_COLUMN
+        ? ` · เงินเข้าช่อง “${cls.payeeColumn}”`
+        : "";
     const row = sheet.addRow([
       `${item.id}  ${item.title}  —  ${item.owner} · ส่งวันที่ ${item.dueDay} · ${
+        item.category
+      } · ${cls ? KIND_LABEL[cls.kind] : ""}${payee} · ${
         spec?.confirmed ? "ยืนยันแล้ว" : "ร่าง รอยืนยัน"
       }`,
     ]);

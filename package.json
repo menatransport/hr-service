@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:payroll": "tsx --tsconfig tsconfig.json scripts/verify-payroll-templates.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",
@@ -35,6 +36,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

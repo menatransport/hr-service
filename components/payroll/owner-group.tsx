@@ -12,6 +12,7 @@ import {
   tallyOwner,
   type IntakeRecord,
 } from "@/lib/payroll/intake-status";
+import { kindOf, type ItemKind } from "@/lib/payroll/classify";
 import type { IntakeItem, IntakeOwner } from "@/lib/payroll/registry";
 import { dueDaysOf } from "@/lib/payroll/registry";
 import type { PeriodRef } from "@/lib/payroll/period";
@@ -138,6 +139,8 @@ export function OwnerGroup({
 
                   <span className="min-w-0 flex-1 truncate text-13">{item.title}</span>
 
+                  <KindChip kind={kindOf(item.id)} />
+
                   {/* ลายเซ็นสองชุด: ใครอัปโหลด และใครตรวจผ่าน — **ต้องเห็นทั้งคู่**
                       เพราะเป็นคนละคนคนละเวลา ถ้าเหลือชุดเดียวจะตอบไม่ได้ว่าของที่
                       ผ่านไปแล้วใครเป็นคนส่งมา หรือใครเป็นคนรับผิดชอบการผ่าน
@@ -201,6 +204,26 @@ export function OwnerGroup({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+/* ป้ายทิศทางเงินของรายการ — "ผสม" กับ "รอยืนยัน" ต้องเด่น เพราะเป็นสองกลุ่มที่
+   คนตรวจต้องเปิดดูรายช่องก่อนรับเข้ารอบ ไม่ใช่ดูแค่ยอดรวม */
+const KIND_TONE: Record<ItemKind, string> = {
+  ฐาน: "border-line text-mut",
+  เพิ่ม: "border-primary/30 text-primary",
+  หัก: "border-alert/40 text-alert",
+  ผสม: "border-alert/40 bg-alert/8 text-alert font-medium",
+  รอยืนยัน: "border-warning/50 bg-warning/10 text-warning font-medium",
+};
+
+function KindChip({ kind }: { kind: ItemKind }) {
+  return (
+    <span
+      className={`hidden rounded-field border px-1.5 py-px text-11 sm:inline ${KIND_TONE[kind]}`}
+    >
+      {kind}
+    </span>
   );
 }
 
