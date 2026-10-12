@@ -25,11 +25,13 @@ import {
   emptyRecord,
   lateDays,
   needsChasing,
+  needsReview,
   STAGE_LABEL,
   STAGE_TONE,
   type IntakeRecord,
   type IntakeStage,
 } from "@/lib/payroll/intake-status";
+import { HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
 import {
   INTAKE_ITEMS,
   itemsByOwner,
@@ -57,12 +59,16 @@ import { confirm, toastError, toastInfo, toastSuccess } from "@/lib/swal";
  * **จุดตัดสินอยู่ที่ขั้น 3 เท่านั้น** ผ่านแล้วเข้ารอบ ไม่ผ่านตีกลับพร้อมเหตุผล
  * ส่วนขั้น 4–7 (รวมยอด · กระทบยอด · ส่ง Tiger Soft · ปิดรอบ) อยู่คนละหน้า
  *
+ * **การอัปโหลดกับการรับเข้ารอบเป็นสองการกระทำ** — อัปโหลดเสร็จบันทึกเป็น
+ * “อัปโหลดแล้ว” ทันที (ไม่ต้องรอใคร ไม่หายถ้าปิดจอ) แล้วค้างรอ HR มากดผ่านเอง
+ * ของเดิมกดผ่านทีเดียวแล้วเขียนทั้งสองสถานะต่อกัน ซึ่งเท่ากับไม่มีขั้นรอตรวจจริง
+ *
  * **ตัวอ่านไฟล์ยังเป็นของตัวอย่าง** (`SAMPLE_PROFILE`) และบอกไว้บนหน้าตรง ๆ —
  * ของจริงจะเป็น `POST /api/payroll/parse` แล้วคืน `FileProfile` หน้าตาเดียวกัน
  * วันนั้นแก้แค่ฟังก์ชัน `read()` ไม่ต้องแตะคอมโพเนนต์ลูก · ส่วน**สถานะรายรอบ
  * ต่อ MongoDB จริงแล้ว** ผ่าน `/api/payroll/intake`
  */
-export function IntakeView() {
+export function IntakeView({ canPass }: { canPass: boolean }) {
   const [period, setPeriod] = useState<PeriodRef>(CURRENT_PERIOD);
   const [records, setRecords] = useState<Map<string, IntakeRecord>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -138,12 +144,14 @@ export function IntakeView() {
   const summary = useMemo(() => {
     let passed = 0;
     let chasing = 0;
+    let review = 0;
     for (const item of INTAKE_ITEMS) {
       const record = records.get(item.id) ?? emptyRecord(item.id);
       if (record.stage === "passed") passed += 1;
       if (needsChasing(item, period, record, now)) chasing += 1;
+      if (needsReview(record)) review += 1;
     }
-    return { passed, chasing };
+    return { passed, chasing, review };
   }, [records, period, now]);
 
   function clearFile() {
@@ -158,7 +166,16 @@ export function IntakeView() {
     clearFile();
   }
 
-  function read(next: File) {
+  /**
+   * รับไฟล์เข้ามา — **บันทึกสถานะ “อัปโหลดแล้ว” ทันที ไม่รอให้ใครกดอะไรต่อ**
+   *
+   * ของเดิมสถานะถูกเขียนตอนกดรับเข้ารอบเท่านั้น ซึ่งแปลว่าคนที่อัปโหลดเสร็จแล้ว
+   * ปิดจอไป ทะเบียนยังขึ้น “รอส่ง” อยู่ดี แล้ว HR ก็โทรตามของที่มาถึงแล้ว
+   *
+   * `rows`/`columns` ส่งเป็นอาร์กิวเมนต์ ไม่ได้อ่านจาก state เพราะ `setProfile`
+   * ยังไม่มีผลใน tick นี้ — อ่าน state ตรงนี้จะได้ค่าของไฟล์ก่อนหน้า
+   */
+  async function read(next: File) {
     if (!active) return;
     if (!next.name.toLowerCase().endsWith(".xlsx")) {
       void toastError("รองรับเฉพาะไฟล์ .xlsx");
@@ -171,12 +188,28 @@ export function IntakeView() {
 
     setFile(next);
     /* ของจริงจะเป็น `await fetch("/api/payroll/parse", …)` ตรงนี้ */
-    setProfile(SAMPLE_PROFILE);
-    setSelected(defaultSelection(SAMPLE_PROFILE));
+    const read = SAMPLE_PROFILE;
+    const picked = defaultSelection(read);
+    setProfile(read);
+    setSelected(picked);
     void toastInfo(
       "แสดงผลวิเคราะห์ตัวอย่าง",
       "ยังไม่ได้ต่อกับตัวอ่านไฟล์จริง ตัวเลขที่เห็นจึงไม่ได้มาจากไฟล์ที่เพิ่งเลือก",
     );
+
+    const saved = await save("submitted", {
+      fileName: next.name,
+      rows: read.totalRows,
+      columns: picked.size,
+    });
+    if (saved) {
+      void toastSuccess(
+        "บันทึกว่าอัปโหลดแล้ว",
+        canPass
+          ? "ตรวจคอลัมน์ด้านล่าง แล้วกดรับเข้ารอบ"
+          : `รอ${HR_DEPARTMENT_LABEL}ตรวจแล้วกดรับเข้ารอบ`,
+      );
+    }
   }
 
   function toggle(letter: string) {
@@ -201,8 +234,8 @@ export function IntakeView() {
           stage,
           fileName: extra.fileName ?? file?.name,
           returnedReason: extra.returnedReason,
-          rows: profile?.totalRows,
-          columns: selected.size || undefined,
+          rows: extra.rows ?? profile?.totalRows,
+          columns: extra.columns ?? (selected.size || undefined),
         }),
       });
       const json = (await res.json()) as IntakeRecord | { error: string };
@@ -229,7 +262,7 @@ export function IntakeView() {
       (column) => column.isKey && selected.has(column.letter) && column.empty > 0,
     ) ?? null;
 
-  const blocked = Boolean(brokenKey) || selected.size === 0 || saving;
+  const blocked = Boolean(brokenKey) || selected.size === 0 || saving || !canPass;
   const activeRecord = active
     ? (records.get(active.id) ?? emptyRecord(active.id))
     : null;
@@ -302,6 +335,11 @@ export function IntakeView() {
           </span>
 
           <dl className="ml-auto flex flex-wrap gap-x-4 gap-y-1 text-12-5">
+            <Count
+              label="รอ HR ตรวจ"
+              value={summary.review}
+              tone={summary.review ? "text-warning" : undefined}
+            />
             <Count label="ตรวจผ่านแล้ว" value={summary.passed} tone="text-primary" />
             <Count label="ทั้งหมด" value={total} />
           </dl>
@@ -392,10 +430,25 @@ export function IntakeView() {
               </span>
             ) : null}
 
-            {activeRecord.updatedBy ? (
+            {activeRecord.receivedBy ? (
+              <span className="text-11-5 text-mut">โดย {activeRecord.receivedBy}</span>
+            ) : activeRecord.updatedBy ? (
               <span className="text-11-5 text-mut">
-                {activeRecord.receivedAt ? "โดย" : "แก้ไขล่าสุดโดย"}{" "}
-                {activeRecord.updatedBy}
+                แก้ไขล่าสุดโดย {activeRecord.updatedBy}
+              </span>
+            ) : null}
+
+            {/* ลายเซ็นคนตรวจ — ตัวที่ตอบได้ว่าใครรับผิดชอบว่าของชิ้นนี้ใช้ได้ */}
+            {activeRecord.passedBy ? (
+              <span className="font-mono text-11-5 text-primary tabular-nums">
+                ผ่าน{" "}
+                {new Date(activeRecord.passedAt ?? "").toLocaleString("th-TH", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}{" "}
+                โดย {activeRecord.passedBy}
               </span>
             ) : null}
 
@@ -642,7 +695,9 @@ export function IntakeView() {
                         confirmText: "รับเข้ารอบ",
                       });
                       if (!okToGo) return;
-                      await save("submitted");
+                      /* เขียนครั้งเดียว — สถานะ `submitted` ถูกบันทึกไว้ตอนอัปโหลดแล้ว
+                         เขียนทับอีกจะรีเซ็ต `receivedAt` เป็นเวลาที่ตรวจ ทำให้
+                         ของที่มาช้ากลายเป็นมาตรงกำหนดโดยไม่มีใครรู้ */
                       const saved = await save("passed");
                       if (saved) {
                         void toastSuccess("รับเข้ารอบแล้ว", active.title);
@@ -661,7 +716,12 @@ export function IntakeView() {
                   </button>
                 </span>
 
-                {brokenKey ? (
+                {!canPass ? (
+                  <p role="status" className="basis-full text-12 text-mut text-pretty">
+                    บัญชีนี้รับเข้ารอบไม่ได้ — ขั้นตัดสินว่าผ่านเป็นของ
+                    {HR_DEPARTMENT_LABEL} เท่านั้น · อัปโหลดไฟล์และตีกลับให้แก้ยังทำได้ตามปกติ
+                  </p>
+                ) : brokenKey ? (
                   <p role="status" className="basis-full text-12 text-sla text-pretty">
                     รับเข้ารอบไม่ได้ — คอลัมน์ “{brokenKey.header}” ใช้จับคู่พนักงาน
                     แต่ยังมีช่องว่าง {brokenKey.empty} แถว ตีกลับให้แก้ที่ไฟล์ต้นทางก่อน

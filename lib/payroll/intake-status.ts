@@ -7,15 +7,17 @@ import { BE_OFFSET, type PeriodRef } from "./period";
  * สี่สถานะนี้คือขั้น 2–3 ของกระบวนการเป้าหมาย ไม่ได้คิดขึ้นใหม่:
  * ฝ่ายอัปโหลด → ตรวจคุณภาพ → ผ่าน หรือ ตีกลับให้แก้ แล้ววนกลับมาส่งใหม่
  *
- * **ไม่มีสถานะ “กำลังตรวจ”** เพราะการตรวจคุณภาพทำทันทีตอนรับไฟล์ ไม่ใช่งานที่
- * ค้างคิวให้คนมาทำทีหลัง — ถ้าวันหนึ่งมีขั้นที่คนต้องอนุมัติด้วยค่อยเพิ่มตอนนั้น
+ * **`submitted` คือ “อัปโหลดแล้ว รอ HR ตรวจ”** ไม่ใช่สถานะชั่วคราวที่ผ่านไปเฉย ๆ —
+ * ไฟล์ถูกบันทึกเป็นสถานะนี้ทันทีที่ฝ่ายเจ้าของข้อมูลอัปโหลด แล้วค้างอยู่จนกว่า HR
+ * จะมาตัดสิน ของที่ผ่านคือของที่จะกลายเป็นเงินในสลิป จึงต้องมีคนรับผิดชอบการผ่าน
+ * แยกจากคนส่ง (ใครผ่านได้ดูที่ `approver.ts`)
  */
 
 export type IntakeStage = "waiting" | "submitted" | "returned" | "passed";
 
 export const STAGE_LABEL: Record<IntakeStage, string> = {
   waiting: "รอส่ง",
-  submitted: "ส่งแล้ว",
+  submitted: "อัปโหลดแล้ว",
   returned: "ตีกลับให้แก้",
   passed: "ตรวจผ่าน",
 };
@@ -44,6 +46,12 @@ export interface IntakeRecord {
   fileName?: string;
   /** ISO — เวลาที่รับไฟล์ล่าสุดเข้าระบบ */
   receivedAt?: string;
+  /** ชื่อคนที่อัปโหลดไฟล์ล่าสุด */
+  receivedBy?: string;
+  /** ISO — เวลาที่ HR กดรับเข้ารอบ · **คนละเวลากับ `receivedAt`** */
+  passedAt?: string;
+  /** ชื่อ HR ที่ตรวจแล้วรับเข้ารอบ */
+  passedBy?: string;
   /** เหตุผลที่ตีกลับ ต้องมีเสมอเมื่อ stage เป็น returned */
   returnedReason?: string;
   rows?: number;
@@ -51,6 +59,12 @@ export interface IntakeRecord {
   updatedAt: string;
   updatedBy: string;
 }
+
+/*
+ * **แยก `receivedBy` กับ `passedBy` ไม่ใช้ `updatedBy` ตัวเดียว** — ถ้าใช้ตัวเดียว
+ * ชื่อคนอัปโหลดจะถูกชื่อ HR ทับทิ้งตอนกดผ่าน แล้วหน้าจอจะบอกผิดว่า HR เป็นคนส่งไฟล์
+ * ซึ่งเป็นข้อมูลเดียวที่ใช้ตามงานได้จริง · `updatedBy` ยังอยู่ ไว้บอกว่า “ใครแตะล่าสุด”
+ */
 
 export const emptyRecord = (itemId: string): IntakeRecord => ({
   itemId,
@@ -91,10 +105,14 @@ const startOfDay = (value: Date) =>
   new Date(value.getFullYear(), value.getMonth(), value.getDate());
 
 /**
- * ของชิ้นนี้ต้องตามหรือยัง — เกินกำหนดแล้วแต่ยังไม่ผ่าน
+ * ของชิ้นนี้ **ต้องตามจากฝ่ายเจ้าของข้อมูล** หรือยัง
  *
- * ของที่ `returned` นับว่าต้องตามเสมอ แม้ยังไม่เลยกำหนด เพราะลูกบอลอยู่ที่ผู้ส่ง
- * และรอบจะปิดไม่ได้จนกว่าจะแก้กลับมา
+ * ตัวเลขนี้ตอบคำถามเดียวคือ “ต้องโทรตามใคร” จึงนับเฉพาะของที่ลูกบอลอยู่ที่ผู้ส่ง:
+ * - `returned` นับเสมอ แม้ยังไม่เลยกำหนด เพราะเขาต้องแก้แล้วส่งใหม่
+ * - `waiting` นับเมื่อเลยกำหนด
+ * - **`submitted` ไม่นับ** เพราะไฟล์มาถึงแล้ว ลูกบอลอยู่ที่ HR ไม่ใช่ที่เขา —
+ *   ถ้านับรวม คนทำเงินเดือนจะโทรตามของที่ตัวเองยังไม่ได้ตรวจ · ของที่รอตรวจ
+ *   ไปอยู่ในตัวนับ `awaitingReview` แยก ไม่ได้หายไปจากหน้าจอ
  */
 export function needsChasing(
   item: IntakeItem,
@@ -102,10 +120,14 @@ export function needsChasing(
   record: IntakeRecord,
   now: Date,
 ): boolean {
-  if (record.stage === "passed") return false;
+  if (record.stage === "passed" || record.stage === "submitted") return false;
   if (record.stage === "returned") return true;
   return lateDays(item, period, record, now) > 0;
 }
+
+/** รอ HR ตรวจ — ไฟล์มาถึงแล้วแต่ยังไม่มีใครตัดสิน */
+export const needsReview = (record: IntakeRecord): boolean =>
+  record.stage === "submitted";
 
 export interface OwnerTally {
   total: number;
@@ -113,8 +135,10 @@ export interface OwnerTally {
   submitted: number;
   returned: number;
   waiting: number;
-  /** จำนวนรายการที่ต้องตาม — เกินกำหนดหรือถูกตีกลับ */
+  /** จำนวนรายการที่ต้องตามจากฝ่าย — เกินกำหนดหรือถูกตีกลับ */
   chasing: number;
+  /** จำนวนรายการที่อัปโหลดแล้วแต่ยังรอ HR ตรวจ */
+  awaitingReview: number;
   /** ช้าที่สุดกี่วันในกลุ่มนี้ (0 = ไม่มีอะไรช้า) */
   worstLate: number;
 }
@@ -132,6 +156,7 @@ export function tallyOwner(
     returned: 0,
     waiting: 0,
     chasing: 0,
+    awaitingReview: 0,
     worstLate: 0,
   };
 
@@ -139,6 +164,7 @@ export function tallyOwner(
     const record = records.get(item.id) ?? emptyRecord(item.id);
     sum[record.stage] += 1;
     if (needsChasing(item, period, record, now)) sum.chasing += 1;
+    if (needsReview(record)) sum.awaitingReview += 1;
     if (record.stage !== "passed") {
       sum.worstLate = Math.max(sum.worstLate, lateDays(item, period, record, now));
     }

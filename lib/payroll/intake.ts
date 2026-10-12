@@ -40,6 +40,9 @@ const toRecord = (doc: IntakeDoc): IntakeRecord => ({
   stage: doc.stage,
   fileName: doc.fileName,
   receivedAt: doc.receivedAt,
+  receivedBy: doc.receivedBy,
+  passedAt: doc.passedAt,
+  passedBy: doc.passedBy,
   returnedReason: doc.returnedReason,
   rows: doc.rows,
   columns: doc.columns,
@@ -70,6 +73,10 @@ export interface SaveIntakeInput {
  * **`receivedAt` ตั้งเฉพาะตอนที่ไฟล์เข้ามาจริง** (`submitted`) และไม่แตะอีกเลยเมื่อ
  * สถานะเปลี่ยนเป็น `passed` — เพราะความช้าวัดจากวันที่ของมาถึง ไม่ใช่วันที่ตรวจเสร็จ
  * ส่วน `returned` ล้าง `receivedAt` ทิ้ง เพราะของถูกตีกลับไปแล้ว ยังไม่นับว่าได้รับ
+ *
+ * **ผ่านได้เฉพาะของที่อัปโหลดแล้ว** — กันการกดผ่านของที่ยังไม่มีไฟล์เข้ามาเลย
+ * (ยิง API ตรงก็ทำไม่ได้ ไม่ใช่แค่ปุ่มบนหน้าจอถูกปิด) · ของที่ถูกตีกลับต้องส่งใหม่
+ * ให้กลายเป็น `submitted` ก่อน จึงจะผ่านได้ ไม่ใช่กดผ่านทับเหตุผลที่ตีกลับไว้
  */
 export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> {
   if (!findItem(input.itemId)) {
@@ -77,6 +84,21 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
   }
   if (input.stage === "returned" && !input.returnedReason?.trim()) {
     throw new Error("ตีกลับต้องระบุเหตุผล ไม่งั้นผู้ส่งไม่รู้ว่าต้องแก้อะไร");
+  }
+
+  const collection = await intakes();
+
+  if (input.stage === "passed") {
+    const current = await collection.findOne({
+      _id: keyOf(input.period, input.itemId),
+    });
+    if (current?.stage !== "submitted") {
+      throw new Error(
+        current?.stage === "passed"
+          ? "รายการนี้รับเข้ารอบไปแล้ว"
+          : "รับเข้ารอบไม่ได้ — ยังไม่มีไฟล์อัปโหลดเข้ามาในรอบนี้",
+      );
+    }
   }
 
   const now = new Date().toISOString();
@@ -93,21 +115,35 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
   if (typeof input.rows === "number") set.rows = input.rows;
   if (typeof input.columns === "number") set.columns = input.columns;
 
-  if (input.stage === "submitted") set.receivedAt = now;
+  /* ทุกสถานะที่ไม่ใช่ `passed` ต้องล้างลายเซ็นการผ่านทิ้ง — ของที่ผ่านแล้วถูกตีกลับ
+     หรือส่งไฟล์ใหม่ทับ แปลว่าการผ่านครั้งก่อนไม่ใช้แล้ว ถ้าค้างไว้จะอ่านได้ว่า
+     ของที่กำลังรอตรวจมีคนผ่านไปแล้ว */
+  if (input.stage === "submitted") {
+    set.receivedAt = now;
+    set.receivedBy = input.updatedBy;
+  }
+  if (input.stage === "passed") {
+    set.passedAt = now;
+    set.passedBy = input.updatedBy;
+  } else {
+    unset.passedAt = "";
+    unset.passedBy = "";
+  }
   if (input.stage === "returned") {
     set.returnedReason = input.returnedReason!.trim();
     unset.receivedAt = "";
+    unset.receivedBy = "";
   } else {
     unset.returnedReason = "";
   }
   if (input.stage === "waiting") {
     unset.receivedAt = "";
+    unset.receivedBy = "";
     unset.fileName = "";
     unset.rows = "";
     unset.columns = "";
   }
 
-  const collection = await intakes();
   const doc = await collection.findOneAndUpdate(
     { _id: keyOf(input.period, input.itemId) },
     Object.keys(unset).length ? { $set: set, $unset: unset } : { $set: set },

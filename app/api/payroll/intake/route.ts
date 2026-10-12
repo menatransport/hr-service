@@ -1,15 +1,19 @@
 import type { NextRequest } from "next/server";
 
-import { badRequest, fail, ok, unauthorized } from "@/app/api/_lib/respond";
+import { badRequest, fail, forbidden, ok, unauthorized } from "@/app/api/_lib/respond";
 import { getDeskIdentity, readSessionUser } from "@/lib/auth/session";
 import type { IntakeStage } from "@/lib/payroll/intake-status";
 import { listIntake, saveIntake } from "@/lib/payroll/intake";
+import { canPassIntake, HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
 
 /**
  * สถานะการรับข้อมูลของรอบจ่าย (`payroll_intake` ใน MongoDB)
  *
  * `GET   /api/payroll/intake?period=2026-09` — ทุกแถวของรอบนั้น
  * `PATCH /api/payroll/intake` — `{ period, itemId, stage, ... }` บันทึกชิ้นเดียว
+ *
+ * **`stage: "passed"` ต้องเป็น HR** (ดู `approver.ts`) ส่วนขั้นอื่นใครก็ทำได้ —
+ * ฝ่ายเจ้าของข้อมูลต้องอัปโหลดไฟล์ของตัวเองได้ แต่ต้องไม่ตัดสินว่าของตัวเองผ่าน
  *
  * **ไม่มีเส้นที่อ่านข้ามรอบ** โดยตั้งใจ — หน้าจอทำงานทีละรอบเสมอ และการเปิดให้
  * ดึงทั้งคอลเลกชันได้คือจุดที่รายงานย้อนหลังจะเริ่มลากข้อมูลเกินจำเป็นในอนาคต
@@ -62,6 +66,15 @@ export async function PATCH(request: NextRequest) {
     }
 
     const identity = await getDeskIdentity();
+
+    /* **การรับเข้ารอบถูกกันที่เซิร์ฟเวอร์ ไม่ใช่แค่ปิดปุ่ม** — ปุ่มที่ปิดไว้บนหน้าจอ
+       กันได้แค่คนที่กดผ่านหน้าจอ · ขั้นอื่น (อัปโหลด/ตีกลับ) ใครก็ทำได้ตามเดิม
+       เพราะฝ่ายเจ้าของข้อมูลต้องส่งไฟล์เองได้ */
+    if (body.stage === "passed" && !canPassIntake(identity)) {
+      return forbidden(
+        `รับเข้ารอบได้เฉพาะ${HR_DEPARTMENT_LABEL} — บัญชีนี้สังกัด ${identity.department || "หน่วยงานที่ไม่ระบุ"}`,
+      );
+    }
 
     return ok(
       await saveIntake({

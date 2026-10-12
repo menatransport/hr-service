@@ -94,6 +94,13 @@ export function OwnerGroup({
           </span>
         ) : null}
 
+        {/* คนละตัวนับกับ “ต้องตาม” — อันนี้ลูกบอลอยู่ที่ HR ไม่ใช่ที่ฝ่ายนี้ */}
+        {sum.awaitingReview > 0 ? (
+          <span className="rounded-field bg-warning/15 px-2 py-0.5 text-12 font-medium text-warning">
+            รอตรวจ {sum.awaitingReview}
+          </span>
+        ) : null}
+
         <span className="ml-auto flex items-center gap-2.5">
           <span className="font-mono text-12-5 tabular-nums">
             <span className="font-semibold text-primary">{sum.passed}</span>
@@ -131,17 +138,35 @@ export function OwnerGroup({
 
                   <span className="min-w-0 flex-1 truncate text-13">{item.title}</span>
 
-                  {/* ใครส่ง/ตีกลับ และเมื่อไหร่ — ของที่ยังไม่เคยแตะจะไม่มีอะไรตรงนี้
-                      `receivedAt` ถูกล้างตอนตีกลับ จึงต้องถอยไปใช้ `updatedAt` แทน
-                      ไม่งั้นแถวที่ถูกตีกลับจะไม่บอกว่าใครตีกลับเมื่อไหร่ */}
-                  {record.updatedBy ? (
-                    <span className="flex items-center gap-1.5 text-11-5 text-mut">
-                      <span className="font-mono tabular-nums">
-                        {record.receivedAt ? "ส่ง" : "ตีกลับ"}{" "}
-                        {stamp(record.receivedAt ?? record.updatedAt)}
-                      </span>
-                      <span>โดย {record.updatedBy}</span>
-                    </span>
+                  {/* ลายเซ็นสองชุด: ใครอัปโหลด และใครตรวจผ่าน — **ต้องเห็นทั้งคู่**
+                      เพราะเป็นคนละคนคนละเวลา ถ้าเหลือชุดเดียวจะตอบไม่ได้ว่าของที่
+                      ผ่านไปแล้วใครเป็นคนส่งมา หรือใครเป็นคนรับผิดชอบการผ่าน
+                      แถวที่ถูกตีกลับใช้ `updatedAt/updatedBy` เพราะ `receivedAt`
+                      ถูกล้างไปแล้วตอนตีกลับ */}
+                  {record.receivedBy ? (
+                    <Stamp
+                      verb="อัปโหลด"
+                      at={record.receivedAt}
+                      by={record.receivedBy}
+                    />
+                  ) : null}
+
+                  {record.passedBy ? (
+                    <Stamp
+                      verb="ผ่าน"
+                      at={record.passedAt}
+                      by={record.passedBy}
+                      tone="text-primary"
+                    />
+                  ) : null}
+
+                  {record.stage === "returned" && record.updatedBy ? (
+                    <Stamp
+                      verb="ตีกลับ"
+                      at={record.updatedAt}
+                      by={record.updatedBy}
+                      tone="text-sla"
+                    />
                   ) : null}
 
                   {/* ช้ากี่วันสำคัญกว่าวันครบกำหนด — คนอ่านตัดสินใจจากส่วนต่าง ไม่ใช่จากวันที่ */}
@@ -176,6 +201,28 @@ export function OwnerGroup({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+/** `อัปโหลด 9 ต.ค. 14:30 โดย สมหญิง` — ใครทำอะไรเมื่อไหร่ในบรรทัดเดียว */
+function Stamp({
+  verb,
+  at,
+  by,
+  tone = "text-mut",
+}: {
+  verb: string;
+  at: string | undefined;
+  by: string;
+  tone?: string;
+}) {
+  return (
+    <span className={`flex items-center gap-1.5 text-11-5 ${tone}`}>
+      <span className="font-mono tabular-nums">
+        {verb} {stamp(at ?? "")}
+      </span>
+      <span>โดย {by}</span>
+    </span>
   );
 }
 

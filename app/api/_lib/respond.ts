@@ -30,3 +30,8 @@ export function badRequest(message: string) {
 export function unauthorized(message: string) {
   return NextResponse.json({ error: message }, { status: 401 });
 }
+
+/** ล็อกอินแล้วแต่ไม่มีสิทธิ์ทำสิ่งนี้ — **คนละเรื่องกับ 401** อย่าเอาไปเด้งหน้าล็อกอิน */
+export function forbidden(message: string) {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
