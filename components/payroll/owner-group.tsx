@@ -131,8 +131,6 @@ export function OwnerGroup({
 
                   <span className="min-w-0 flex-1 truncate text-13">{item.title}</span>
 
-                  <span className="text-12 text-mut">{item.sender}</span>
-
                   {/* ใครส่ง/ตีกลับ และเมื่อไหร่ — ของที่ยังไม่เคยแตะจะไม่มีอะไรตรงนี้
                       `receivedAt` ถูกล้างตอนตีกลับ จึงต้องถอยไปใช้ `updatedAt` แทน
                       ไม่งั้นแถวที่ถูกตีกลับจะไม่บอกว่าใครตีกลับเมื่อไหร่ */}

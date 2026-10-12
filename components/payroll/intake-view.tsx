@@ -366,7 +366,7 @@ export function IntakeView() {
             no={3}
             done={activeRecord.stage === "passed"}
             title={`ตรวจคุณภาพ — ${active.title}`}
-            meta={`${active.owner} · ผู้ส่ง ${active.sender} · กำหนดวันที่ ${active.dueDay}`}
+            meta={`${active.owner} · กำหนดวันที่ ${active.dueDay}`}
           />
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-field bg-base-200/60 px-3.5 py-2.5">
@@ -609,7 +609,7 @@ export function IntakeView() {
                     disabled={saving}
                     onClick={async () => {
                       const reason = window.prompt(
-                        `ตีกลับ “${active.title}” ให้ ${active.sender} แก้ — บอกให้ชัดว่าต้องแก้อะไร`,
+                        `ตีกลับ “${active.title}” ให้ ${active.owner} แก้ — บอกให้ชัดว่าต้องแก้อะไร`,
                         brokenKey
                           ? `คอลัมน์ “${brokenKey.header}” ยังมีช่องว่าง ${brokenKey.empty} แถว`
                           : "",
@@ -619,7 +619,7 @@ export function IntakeView() {
                         returnedReason: reason.trim(),
                       });
                       if (saved) {
-                        void toastSuccess("ตีกลับแล้ว", `แจ้ง ${active.sender} ให้แก้แล้วส่งใหม่`);
+                        void toastSuccess("ตีกลับแล้ว", `แจ้ง ${active.owner} ให้แก้แล้วส่งใหม่`);
                         clearFile();
                       }
                     }}
