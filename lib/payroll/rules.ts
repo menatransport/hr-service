@@ -76,8 +76,8 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
 
   const out: CheckResult[] = [];
   const { profile, rows } = parsed;
-  /* เลขแถวจริงที่ตัวอ่านบันทึกไว้ — ถ้าไม่มี (ข้อมูลสมมติ) ค่อยนับต่อจากหัวตาราง */
-  const rowNo = (i: number) => String(parsed.rowNumbers?.[i] ?? profile.headerRow + 1 + i);
+  /* เลขแถวจริงที่ตัวอ่านบันทึกไว้ — ไม่มีทางคำนวณเองจาก index ได้ เพราะแถวว่างคั่นกลางถูกตัดทิ้ง */
+  const rowNo = (i: number) => String(parsed.rowNumbers[i]);
 
   /* ── ไฟล์เปล่า ───────────────────────────────────────────────── */
   if (rows.length === 0) {

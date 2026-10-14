@@ -48,7 +48,9 @@ function parsed(itemId: string, rows: Record<string, string>[]): ParsedFile {
     }
     return out;
   });
-  return { profile, rows: byLetter };
+  /* แถวต่อเนื่องใต้หัวตาราง — เทสต์ที่ต้องการแถวไม่ต่อเนื่องให้เขียนทับ `rowNumbers` เอง */
+  const rowNumbers = rows.map((_, i) => profile.headerRow + 1 + i);
+  return { profile, rows: byLetter, rowNumbers };
 }
 
 const ids = (results: ReturnType<typeof runChecks>) => results.map((r) => r.id).sort();
