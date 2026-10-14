@@ -12,6 +12,7 @@ import {
 
 import { PageHead } from "@/components/desk/page-head";
 import { ColumnList } from "@/components/payroll/column-list";
+import { ChecksPanel } from "@/components/payroll/checks-panel";
 import { OwnerGroup } from "@/components/payroll/owner-group";
 import { PeriodPicker } from "@/components/payroll/period-picker";
 import {
@@ -42,11 +43,11 @@ import {
 } from "@/lib/payroll/registry";
 import {
   defaultSelection,
-  SAMPLE_PROFILE,
   tally,
   type FileProfile,
 } from "@/lib/payroll/profile";
-import { confirm, toastError, toastInfo, toastSuccess } from "@/lib/swal";
+import type { CheckResult, CheckTally } from "@/lib/payroll/rules";
+import { confirm, toastError, toastSuccess } from "@/lib/swal";
 
 /**
  * หน้ารับข้อมูล — **รอบหนึ่งเดือน แยกตามเจ้าของข้อมูล**
@@ -65,10 +66,9 @@ import { confirm, toastError, toastInfo, toastSuccess } from "@/lib/swal";
  * “อัปโหลดแล้ว” ทันที (ไม่ต้องรอใคร ไม่หายถ้าปิดจอ) แล้วค้างรอ HR มากดผ่านเอง
  * ของเดิมกดผ่านทีเดียวแล้วเขียนทั้งสองสถานะต่อกัน ซึ่งเท่ากับไม่มีขั้นรอตรวจจริง
  *
- * **ตัวอ่านไฟล์ยังเป็นของตัวอย่าง** (`SAMPLE_PROFILE`) และบอกไว้บนหน้าตรง ๆ —
- * ของจริงจะเป็น `POST /api/payroll/parse` แล้วคืน `FileProfile` หน้าตาเดียวกัน
- * วันนั้นแก้แค่ฟังก์ชัน `read()` ไม่ต้องแตะคอมโพเนนต์ลูก · ส่วน**สถานะรายรอบ
- * ต่อ MongoDB จริงแล้ว** ผ่าน `/api/payroll/intake`
+ * **ไฟล์ถูกอ่านจริงที่ `POST /api/payroll/parse`** แล้วได้ทั้งโปรไฟล์คอลัมน์และผลตรวจ
+ * ด่าน 1 (`checks`) · ผลตรวจถูกบันทึกกับแถวสถานะ และ **ด่านที่สอง (HR กดผ่าน) ถูกบังคับ
+ * ที่เซิร์ฟเวอร์** — ถ้ายังมีข้อผิดพลาดค้าง HR ข้ามได้ต้องเขียนเหตุผลเท่านั้น
  */
 export function IntakeView({
   canPass,
@@ -96,6 +96,7 @@ export function IntakeView({
   const [active, setActive] = useState<IntakeItem | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [profile, setProfile] = useState<FileProfile | null>(null);
+  const [checks, setChecks] = useState<CheckResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortMode, setSortMode] = useState<"file" | "risk">("file");
   const [filterMode, setFilterMode] = useState<"all" | "issue">("all");
@@ -173,6 +174,7 @@ export function IntakeView({
   function clearFile() {
     setFile(null);
     setProfile(null);
+    setChecks([]);
     setSelected(new Set());
     if (inputRef.current) inputRef.current.value = "";
   }
@@ -203,20 +205,61 @@ export function IntakeView({
     }
 
     setFile(next);
-    /* ของจริงจะเป็น `await fetch("/api/payroll/parse", …)` ตรงนี้ */
-    const read = SAMPLE_PROFILE;
-    const picked = defaultSelection(read);
-    setProfile(read);
-    setSelected(picked);
-    void toastInfo(
-      "แสดงผลวิเคราะห์ตัวอย่าง",
-      "ยังไม่ได้ต่อกับตัวอ่านไฟล์จริง ตัวเลขที่เห็นจึงไม่ได้มาจากไฟล์ที่เพิ่งเลือก",
-    );
 
+    const body = new FormData();
+    body.append("file", next);
+    body.append("period", code);
+    body.append("itemId", active.id);
+
+    let json:
+      | {
+          profile: FileProfile;
+          checks: CheckResult[];
+          tally: CheckTally;
+          file: { fileId: string };
+        }
+      | { error: string; file?: { fileId: string } };
+    let res: Response;
+    try {
+      res = await fetch("/api/payroll/parse", { method: "POST", body });
+      json = await res.json();
+    } catch {
+      void toastError("อ่านไฟล์ไม่สำเร็จ", "ติดต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง");
+      clearFile();
+      return;
+    }
+
+    if (!res.ok || !("profile" in json)) {
+      const error = "error" in json ? json.error : undefined;
+      /* 422 = ไฟล์ถูกเก็บไว้แล้วแต่อ่านไม่ออก — บอกผู้ใช้ตรง ๆ ว่าระบบได้ไฟล์ไปแล้ว
+         ไม่ทำเหมือนไม่มีอะไรเกิดขึ้น เพราะ HR ต้องไปเปิดไฟล์นั้นดูได้ */
+      if (res.status === 422 && "file" in json && json.file) {
+        void toastError(
+          "รับไฟล์ไว้แล้ว แต่อ่านเนื้อหาไม่สำเร็จ",
+          `${error ?? ""} · ไฟล์ถูกเก็บไว้ในระบบ (เลขไฟล์ ${json.file.fileId}) ให้ ${HR_DEPARTMENT_LABEL} เปิดดูได้`.trim(),
+        );
+      } else {
+        void toastError("อ่านไฟล์ไม่สำเร็จ", error);
+      }
+      clearFile();
+      return;
+    }
+
+    setProfile(json.profile);
+    setChecks(json.checks);
+    const picked = defaultSelection(json.profile);
+    setSelected(picked);
+
+    /* **ส่ง `blocking` ไม่ใช่ `errors`** — `errors` นับทุกข้อที่ severity เป็น error รวมของ
+       ที่ยัง `pending` ซึ่งไม่ใช่ความผิดของไฟล์และต้องไม่ขวางการผ่าน */
     const saved = await save("submitted", {
       fileName: next.name,
-      rows: read.totalRows,
+      rows: json.profile.totalRows,
       columns: picked.size,
+      fileId: json.file.fileId,
+      errors: json.tally.blocking,
+      warnings: json.tally.warnings,
+      pendingChecks: json.tally.pending,
     });
     if (saved) {
       void toastSuccess(
@@ -252,6 +295,11 @@ export function IntakeView({
           returnedReason: extra.returnedReason,
           rows: extra.rows ?? profile?.totalRows,
           columns: extra.columns ?? (selected.size || undefined),
+          fileId: extra.fileId,
+          errors: extra.errors,
+          warnings: extra.warnings,
+          pendingChecks: extra.pendingChecks,
+          overrideReason: extra.overrideReason,
         }),
       });
       const json = (await res.json()) as IntakeRecord | { error: string };
@@ -271,17 +319,21 @@ export function IntakeView({
     }
   }
 
-  /* คอลัมน์คีย์ที่ยังมีช่องว่าง = รับเข้ารอบไม่ได้ ไม่ใช่แค่เตือน — คอลัมน์อื่นว่างได้
-     (แปลว่าคนนั้นไม่มีรายการนั้น) แต่รหัสพนักงานว่างแปลว่าเงินก้อนนั้นไม่รู้จะเข้าใคร */
+  /* คอลัมน์คีย์ที่ยังมีช่องว่าง — ใช้เป็นเหตุผลตั้งต้นตอนตีกลับ (แปลว่าเงินก้อนนั้น
+     ไม่รู้จะเข้าใคร) · การกันผ่านเป็นหน้าที่ของด่าน 1 ไม่ใช่ตัวแปรนี้ */
   const brokenKey =
     profile?.columns.find(
       (column) => column.isKey && selected.has(column.letter) && column.empty > 0,
     ) ?? null;
 
-  const blocked = Boolean(brokenKey) || selected.size === 0 || saving || !canPass;
+  /* ข้อผิดพลาดไม่ได้ปิดปุ่ม — HR ข้ามได้ถ้าเขียนเหตุผล (ถามตอนกด) · ที่ปิดปุ่มคือ
+     ยังไม่มีอะไรให้รับ หรือบัญชีนี้ไม่มีสิทธิ์ · ตัวกันจริงอยู่ที่เซิร์ฟเวอร์ */
+  const blocked = selected.size === 0 || saving || !canPass;
+
   const activeRecord = active
     ? (records.get(active.id) ?? emptyRecord(active.id))
     : null;
+  const openErrors = activeRecord?.errors ?? 0;
 
   return (
     <div className="animate-rise flex flex-col gap-5">
@@ -661,7 +713,7 @@ export function IntakeView({
                   </span>
                   <span className="text-13 text-pretty">
                     {counts.error
-                      ? "คอลัมน์ที่ต้องดูก่อน — รับเข้ารอบทั้งไฟล์เลยไม่ได้"
+                      ? "คอลัมน์ที่ต้องดูก่อน"
                       : "ไม่มีคอลัมน์ที่ติดขัด รับเข้ารอบได้เลย"}
                   </span>
                 </span>
@@ -673,6 +725,8 @@ export function IntakeView({
                   <Count label="ทั้งหมด" value={counts.total} />
                 </dl>
               </div>
+
+              <ChecksPanel checks={checks} />
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="text-12 text-mut">เรียงตาม</span>
@@ -757,6 +811,22 @@ export function IntakeView({
                     disabled={blocked}
                     onClick={async () => {
                       const late = lateDays(active, period, activeRecord, now);
+                      /* ยังมีข้อผิดพลาดค้าง = ข้ามได้ แต่ต้องเขียนเหตุผล และเหตุผลถูกเก็บถาวร
+                         กับแถวนี้ · เซิร์ฟเวอร์ตรวจซ้ำเอง ไม่เชื่อว่าหน้าจอถามมาแล้ว */
+                      let overrideReason: string | undefined;
+                      if (openErrors > 0) {
+                        const typed = window.prompt(
+                          `“${active.title}” ยังมีข้อผิดพลาด ${openErrors} ข้อจากการตรวจด่านแรก — ถ้าจะรับเข้ารอบทั้งอย่างนี้ ให้เขียนเหตุผลว่าทำไมยอดถึงใช้ได้ (ระบบเก็บไว้กับรายการนี้)`,
+                        );
+                        if (!typed?.trim()) {
+                          void toastError(
+                            "ยังไม่ได้รับเข้ารอบ",
+                            "ต้องเขียนเหตุผลก่อนจึงข้ามข้อผิดพลาดได้",
+                          );
+                          return;
+                        }
+                        overrideReason = typed.trim();
+                      }
                       const okToGo = await confirm({
                         title: `รับ “${active.title}” เข้ารอบ ${periodLabel(period)}`,
                         text:
@@ -769,7 +839,7 @@ export function IntakeView({
                       /* เขียนครั้งเดียว — สถานะ `submitted` ถูกบันทึกไว้ตอนอัปโหลดแล้ว
                          เขียนทับอีกจะรีเซ็ต `receivedAt` เป็นเวลาที่ตรวจ ทำให้
                          ของที่มาช้ากลายเป็นมาตรงกำหนดโดยไม่มีใครรู้ */
-                      const saved = await save("passed");
+                      const saved = await save("passed", { overrideReason });
                       if (saved) {
                         void toastSuccess("รับเข้ารอบแล้ว", active.title);
                         setActive(null);
@@ -792,10 +862,10 @@ export function IntakeView({
                     บัญชีนี้รับเข้ารอบไม่ได้ — ขั้นตัดสินว่าผ่านเป็นของ
                     {HR_DEPARTMENT_LABEL} เท่านั้น · อัปโหลดไฟล์และตีกลับให้แก้ยังทำได้ตามปกติ
                   </p>
-                ) : brokenKey ? (
+                ) : openErrors > 0 ? (
                   <p role="status" className="basis-full text-12 text-sla text-pretty">
-                    รับเข้ารอบไม่ได้ — คอลัมน์ “{brokenKey.header}” ใช้จับคู่พนักงาน
-                    แต่ยังมีช่องว่าง {brokenKey.empty} แถว ตีกลับให้แก้ที่ไฟล์ต้นทางก่อน
+                    ไฟล์นี้ยังมีข้อผิดพลาด {openErrors} ข้อ — ตีกลับให้แก้ที่ไฟล์ต้นทางก่อนจะดีที่สุด
+                    ถ้ายืนยันว่ายอดถูกแล้ว กดรับเข้ารอบได้ แต่ต้องเขียนเหตุผลกำกับ
                   </p>
                 ) : selected.size === 0 ? (
                   <p role="status" className="basis-full text-12 text-mut">

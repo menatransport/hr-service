@@ -2,6 +2,7 @@ import type { Collection } from "mongodb";
 
 import { getDb } from "../mongo";
 import type { IntakeRecord, IntakeStage } from "./intake-status";
+import { assertPassAllowed } from "./intake-gate";
 import { findItem } from "./registry";
 
 /**
@@ -46,6 +47,12 @@ const toRecord = (doc: IntakeDoc): IntakeRecord => ({
   returnedReason: doc.returnedReason,
   rows: doc.rows,
   columns: doc.columns,
+  fileId: doc.fileId,
+  errors: doc.errors,
+  warnings: doc.warnings,
+  pendingChecks: doc.pendingChecks,
+  checkedAt: doc.checkedAt,
+  overrideReason: doc.overrideReason,
   updatedAt: doc.updatedAt,
   updatedBy: doc.updatedBy,
 });
@@ -64,6 +71,12 @@ export interface SaveIntakeInput {
   returnedReason?: string;
   rows?: number;
   columns?: number;
+  fileId?: string;
+  errors?: number;
+  warnings?: number;
+  pendingChecks?: number;
+  /** เหตุผลที่ HR ข้ามด่าน 1 — ใช้เฉพาะตอน `passed` ที่ไฟล์ยังมีข้อผิดพลาดค้าง */
+  overrideReason?: string;
   updatedBy: string;
 }
 
@@ -99,6 +112,9 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
           : "รับเข้ารอบไม่ได้ — ยังไม่มีไฟล์อัปโหลดเข้ามาในรอบนี้",
       );
     }
+    /* ด่านที่สอง — ตัดสินจากผลตรวจที่ **เก็บไว้กับแถว** ไม่ใช่จากตัวเลขที่ client ส่งมา
+       ตอนกดผ่าน ไม่งั้นยิง API ตรงพร้อม errors: 0 ก็ผ่านได้ */
+    assertPassAllowed(toRecord(current), input.overrideReason);
   }
 
   const now = new Date().toISOString();
@@ -114,6 +130,28 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
   if (input.fileName?.trim()) set.fileName = input.fileName.trim();
   if (typeof input.rows === "number") set.rows = input.rows;
   if (typeof input.columns === "number") set.columns = input.columns;
+
+  /* ผลตรวจด่าน 1 ติดมากับไฟล์ — เขียนเฉพาะตอนไฟล์เข้ามาใหม่ (`submitted`)
+     ส่วนขั้นอื่นห้ามรับค่าจาก client ไปทับ ไม่งั้นกดผ่านพร้อมส่ง errors: 0 ได้ */
+  if (input.stage === "submitted") {
+    if (input.fileId?.trim()) set.fileId = input.fileId.trim();
+    if (typeof input.errors === "number") set.errors = input.errors;
+    if (typeof input.warnings === "number") set.warnings = input.warnings;
+    if (typeof input.pendingChecks === "number") set.pendingChecks = input.pendingChecks;
+    if (typeof input.errors === "number") set.checkedAt = now;
+    /* ไฟล์ใหม่ = ผลตรวจใหม่ — เหตุผลที่เคยข้ามด่านกับไฟล์เก่าใช้กับไฟล์นี้ไม่ได้ */
+    unset.overrideReason = "";
+    if (typeof input.errors !== "number") {
+      unset.errors = "";
+      unset.warnings = "";
+      unset.pendingChecks = "";
+      unset.checkedAt = "";
+    }
+    if (!input.fileId?.trim()) unset.fileId = "";
+  }
+  if (input.stage === "passed" && input.overrideReason?.trim()) {
+    set.overrideReason = input.overrideReason.trim();
+  }
 
   /* ทุกสถานะที่ไม่ใช่ `passed` ต้องล้างลายเซ็นการผ่านทิ้ง — ของที่ผ่านแล้วถูกตีกลับ
      หรือส่งไฟล์ใหม่ทับ แปลว่าการผ่านครั้งก่อนไม่ใช้แล้ว ถ้าค้างไว้จะอ่านได้ว่า
@@ -142,7 +180,14 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
     unset.fileName = "";
     unset.rows = "";
     unset.columns = "";
+    unset.fileId = "";
+    unset.errors = "";
+    unset.warnings = "";
+    unset.pendingChecks = "";
+    unset.checkedAt = "";
   }
+  /* เหตุผลข้ามด่านอยู่ได้เฉพาะแถวที่ผ่าน — ตีกลับแล้วส่งใหม่ต้องเริ่มด่านใหม่ */
+  if (input.stage !== "passed") unset.overrideReason = "";
 
   const doc = await collection.findOneAndUpdate(
     { _id: keyOf(input.period, input.itemId) },

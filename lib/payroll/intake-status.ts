@@ -56,6 +56,16 @@ export interface IntakeRecord {
   returnedReason?: string;
   rows?: number;
   columns?: number;
+  /** ไฟล์ที่เก็บไว้ใน GridFS — ไว้ย้อนดูว่าของที่ผ่านมาจากไฟล์หน้าตาแบบไหน */
+  fileId?: string;
+  /** ผลตรวจด่าน 1 ของไฟล์ล่าสุด — `undefined` = ยังไม่เคยตรวจ ไม่ใช่ตรวจแล้วไม่พบอะไร */
+  errors?: number;
+  warnings?: number;
+  /** ข้อที่ยังรอฝ่ายยืนยันกติกา — ไม่ใช่ความผิดของไฟล์ จึงไม่บล็อก */
+  pendingChecks?: number;
+  checkedAt?: string;
+  /** เหตุผลที่ HR ข้ามด่าน 1 — มีเมื่อไหร่แปลว่าผ่านไปโดยยังมีข้อผิดพลาดค้าง */
+  overrideReason?: string;
   updatedAt: string;
   updatedBy: string;
 }

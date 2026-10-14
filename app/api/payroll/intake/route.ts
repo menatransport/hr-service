@@ -101,6 +101,13 @@ export async function PATCH(request: NextRequest) {
           typeof body.returnedReason === "string" ? body.returnedReason : undefined,
         rows: typeof body.rows === "number" ? body.rows : undefined,
         columns: typeof body.columns === "number" ? body.columns : undefined,
+        fileId: typeof body.fileId === "string" ? body.fileId : undefined,
+        errors: typeof body.errors === "number" ? body.errors : undefined,
+        warnings: typeof body.warnings === "number" ? body.warnings : undefined,
+        pendingChecks:
+          typeof body.pendingChecks === "number" ? body.pendingChecks : undefined,
+        overrideReason:
+          typeof body.overrideReason === "string" ? body.overrideReason : undefined,
         updatedBy: identity.name,
       }),
     );
