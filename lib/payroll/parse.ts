@@ -43,7 +43,15 @@ const text = (value: CellValue): string => {
      `"123456"` อยู่แล้ว ส่วนทศนิยมจริงปล่อยให้เป็นทศนิยมตามเดิม */
   if (typeof value === "number") return String(value);
   if (typeof value === "object") {
-    const rich = value as { text?: unknown; result?: unknown; richText?: { text: string }[] };
+    const rich = value as {
+      text?: unknown;
+      result?: unknown;
+      error?: unknown;
+      richText?: { text: string }[];
+    };
+    /* ค่าผิดพลาดของสูตร (#N/A ฯลฯ) ต้องเห็นเป็นค่า ไม่ใช่ช่องว่าง — มันไม่ใช่ศูนย์และไม่ใช่
+       ค่าว่าง ด่านตรวจต้องจับเป็น "ผิดชนิด" ไม่ใช่ "ว่าง รอยืนยัน" */
+    if (typeof rich.error === "string") return rich.error;
     if (Array.isArray(rich.richText)) return rich.richText.map((t) => t.text).join("");
     if (typeof rich.text === "string") return rich.text;
     if (rich.result !== undefined) return text(rich.result as CellValue);
@@ -54,6 +62,10 @@ const text = (value: CellValue): string => {
 
 const typeOf = (raw: CellValue, value: string): CellType => {
   if (!value.trim()) return "empty";
+  /* เซลล์สูตรเก็บเป็น {formula, result} — ตัดสินชนิดจากผลลัพธ์ เหมือนที่ text() อ่านผลลัพธ์ */
+  if (raw && typeof raw === "object" && !(raw instanceof Date) && "result" in raw) {
+    return typeOf((raw as { result?: CellValue }).result ?? null, value);
+  }
   if (raw instanceof Date) return "date";
   if (typeof raw === "number") return "number";
   /* ตัวเลขที่เก็บเป็นข้อความยังนับเป็นข้อความ — ความต่างนี้คือสิ่งที่ด่านตรวจต้องจับ */
@@ -116,6 +128,8 @@ export async function profileWorkbook(
   const letters = new Set(headers.keys());
   const rows: Record<string, string>[] = [];
   const raws: Record<string, CellValue>[] = [];
+  /* เลขแถวจริงในไฟล์ของแต่ละแถวข้อมูล — แถวว่างคั่นกลางถูกตัดทิ้ง index ใน rows จึงไม่ใช่เลขแถว */
+  const rowNumbers: number[] = [];
 
   for (let r = headerRow + 1; r <= sheet.rowCount; r += 1) {
     const row = sheet.getRow(r);
@@ -136,12 +150,13 @@ export async function profileWorkbook(
     if (any) {
       rows.push(asText);
       raws.push(asRaw);
+      rowNumbers.push(r);
     }
   }
 
   const ordered = [...letters].sort(byColumnLetter);
   const columns = ordered.map((letter) =>
-    profileColumn(letter, headers.get(letter) ?? "", rows, raws, headerRow),
+    profileColumn(letter, headers.get(letter) ?? "", rows, raws, rowNumbers),
   );
 
   return {
@@ -200,7 +215,7 @@ function profileColumn(
   header: string,
   rows: Record<string, string>[],
   raws: Record<string, CellValue>[],
-  headerRow: number,
+  rowNumbers: number[],
 ): ColumnProfile {
   const counts: Record<CellType, number> = { number: 0, text: 0, date: 0, empty: 0 };
   const seen = new Set<string>();
@@ -230,7 +245,7 @@ function profileColumn(
       const actual = typeOf(raws[i][letter], value);
       if (value && actual !== type) {
         badCells.push({
-          row: String(headerRow + 1 + i),
+          row: String(rowNumbers[i]),
           value,
           reason: `คอลัมน์นี้เป็น${type === "number" ? "ตัวเลข" : type === "date" ? "วันที่" : "ข้อความ"} แต่ค่านี้ไม่ใช่`,
         });

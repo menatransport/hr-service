@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Workbook } from "exceljs";
+import { Workbook, type CellValue } from "exceljs";
 
 import { headerLetter, profileWorkbook } from "@/lib/payroll/parse";
 
 /** สร้างไฟล์ .xlsx จริงในหน่วยความจำ — ไม่พึ่งไฟล์ตัวอย่างในเครื่องใคร */
 async function book(
-  sheets: { name: string; rows: (string | number | null)[][] }[],
+  sheets: { name: string; rows: CellValue[][] }[],
 ): Promise<ArrayBuffer> {
   const wb = new Workbook();
   for (const sheet of sheets) {
@@ -122,4 +122,52 @@ test("ไฟล์ที่ไม่ใช่ .xlsx จริงต้องไ�
     () => profileWorkbook(notXlsx, "a.xlsx"),
     /อ่านไฟล์ไม่ได้/,
   );
+});
+
+test("เลขแถวของเซลล์ผิดต้องตรงกับแถวใน Excel แม้มีแถวว่างคั่นอยู่ข้างบน", async () => {
+  const data = await book([
+    {
+      name: "s",
+      rows: [["จำนวนเงิน"], [100], [], [200], [], ["ไม่มี"], [300]],
+    },
+  ]);
+  const { profile } = await profileWorkbook(data, "a.xlsx");
+  assert.equal(profile.columns[0].badCells?.[0].row, "6");
+});
+
+test("เซลล์สูตรที่ได้ผลเป็นตัวเลขนับเป็นตัวเลข ไม่ใช่ข้อความ", async () => {
+  const data = await book([
+    {
+      name: "s",
+      rows: [
+        ["จำนวนเงิน", "x"],
+        [{ formula: "A1+1", result: 100 }, "a"],
+        [{ formula: "A1+1", result: 200 }, "b"],
+      ],
+    },
+  ]);
+  const { profile, rows } = await profileWorkbook(data, "a.xlsx");
+  assert.equal(profile.columns[0].type, "number");
+  assert.equal(profile.columns[0].mismatch, 0);
+  assert.equal(rows[0].A, "100");
+});
+
+test("เซลล์ที่เป็นค่าผิดพลาดจากสูตร (#N/A) ไม่ใช่ช่องว่าง แต่เป็นค่าผิดชนิด", async () => {
+  const data = await book([
+    {
+      name: "s",
+      rows: [
+        ["จำนวนเงิน"],
+        [100],
+        [{ error: "#N/A" }],
+        [300],
+      ],
+    },
+  ]);
+  const { profile } = await profileWorkbook(data, "a.xlsx");
+  const col = profile.columns[0];
+  assert.equal(col.empty, 0);
+  assert.equal(col.mismatch, 1);
+  assert.equal(col.state, "error");
+  assert.equal(col.badCells?.[0].value, "#N/A");
 });
