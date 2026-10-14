@@ -38,6 +38,7 @@ export function OwnerGroup({
   activeId,
   onPick,
   templateHref,
+  action,
 }: {
   owner: IntakeOwner;
   items: IntakeItem[];
@@ -50,6 +51,8 @@ export function OwnerGroup({
   onPick: (item: IntakeItem) => void;
   /** ลิงก์ดาวน์โหลดแบบฟอร์มของรายการหนึ่ง */
   templateHref: (item: IntakeItem) => string;
+  /** ปุ่มประจำกลุ่ม (เช่น แจ้งฝ่ายทางอีเมล) — วางข้างหัวกล่อง ไม่ซ้อนในปุ่มพับ */
+  action?: React.ReactNode;
 }) {
   const sum = tallyOwner(items, period, records, now);
   const dueDays = dueDaysOf(owner);
@@ -68,12 +71,16 @@ export function OwnerGroup({
   });
 
   return (
-    <section className="overflow-hidden rounded-box border border-line bg-base-100">
+    <section
+      id={`owner-${owner}`}
+      className="overflow-hidden rounded-box border border-line bg-base-100 scroll-mt-4"
+    >
+      <div className="flex items-center transition-colors hover:bg-base-200/50">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-left transition-colors hover:bg-base-200/50"
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-left"
       >
         <ChevronDown
           size={15}
@@ -110,6 +117,8 @@ export function OwnerGroup({
           <Bar passed={sum.passed} total={sum.total} />
         </span>
       </button>
+      {action ? <div className="flex-none pr-3">{action}</div> : null}
+      </div>
 
       {open ? (
         <ul className="border-t border-line">

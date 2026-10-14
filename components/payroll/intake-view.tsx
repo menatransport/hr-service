@@ -13,6 +13,7 @@ import {
 import { PageHead } from "@/components/desk/page-head";
 import { ColumnList } from "@/components/payroll/column-list";
 import { ChecksPanel } from "@/components/payroll/checks-panel";
+import { NotifyButton } from "@/components/payroll/notify-panel";
 import { OwnerGroup } from "@/components/payroll/owner-group";
 import { PeriodPicker } from "@/components/payroll/period-picker";
 import {
@@ -158,6 +159,29 @@ export function IntakeView({
   );
 
   const total = items.length;
+
+  /* `?owner=` ในลิงก์จากอีเมลเลื่อนมาที่กลุ่มนั้นเท่านั้น ไม่ให้สิทธิ์อะไร —
+     ขอบเขตมาจาก session (`items` กรองแล้ว) ฝ่ายที่ไม่ใช่ของตัวเองไม่มีกล่องให้เลื่อนไปหา */
+  useEffect(() => {
+    if (loading) return;
+    const owner = new URLSearchParams(window.location.search).get("owner");
+    if (!owner) return;
+    document.getElementById(`owner-${owner}`)?.scrollIntoView({ block: "start" });
+  }, [loading]);
+
+  /* ฝ่ายที่ยังมีของรอส่งหรือถูกตีกลับ — ของที่ส่งแล้วรอตรวจไม่นับ ลูกบอลอยู่ที่ HR */
+  const unsentOwners = useMemo(
+    () =>
+      owners.filter((owner) =>
+        items.some((item) => {
+          if (item.owner !== owner) return false;
+          const stage = (records.get(item.id) ?? emptyRecord(item.id)).stage;
+          return stage === "waiting" || stage === "returned";
+        }),
+      ),
+    [owners, items, records],
+  );
+
   const summary = useMemo(() => {
     let passed = 0;
     let chasing = 0;
@@ -404,6 +428,15 @@ export function IntakeView({
             <Count label="ทั้งหมด" value={total} />
           </dl>
 
+          {canPass && !locked && unsentOwners.length > 0 ? (
+            <NotifyButton
+              periodCode={code}
+              onlyOwners={unsentOwners}
+              label="แจ้งทุกฝ่ายที่ยังไม่ส่ง"
+              warnMultiple
+            />
+          ) : null}
+
           <a
             href={`/api/payroll/intake/template?period=${code}`}
             className="flex items-center gap-1.5 rounded-field border border-line px-2.5 py-1.5 text-12-5 text-mut transition-colors hover:border-primary/40 hover:text-ink"
@@ -472,6 +505,15 @@ export function IntakeView({
               activeId={active?.id ?? null}
               onPick={pick}
               templateHref={templateHref}
+              action={
+                canPass ? (
+                  <NotifyButton
+                    periodCode={code}
+                    owner={owner}
+                    label="แจ้งฝ่ายนี้ทางอีเมล"
+                  />
+                ) : undefined
+              }
             />
           ))
         )}
