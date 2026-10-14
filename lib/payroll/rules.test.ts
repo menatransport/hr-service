@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { classify, postedColumns, type MoneyEffect } from "@/lib/payroll/classify";
+import { classify, MONEY_COLUMNS, postedColumns, type MoneyEffect } from "@/lib/payroll/classify";
 import type { FileProfile } from "@/lib/payroll/profile";
 import type { ParsedFile } from "@/lib/payroll/parse";
-import { runChecks, summarize } from "@/lib/payroll/rules";
-import { templateOf } from "@/lib/payroll/template-spec";
+import { make, runChecks, summarize, WAITING_OWNER } from "@/lib/payroll/rules";
+import { DAY_CODES, templateOf } from "@/lib/payroll/template-spec";
 
 /**
  * ไฟล์สมมติที่หัวคอลัมน์ตรงสเปกของรายการนั้น แล้วค่อยทำให้ผิดทีละข้อในแต่ละเทสต์
@@ -245,8 +245,44 @@ test("กฎรอยืนยันไม่เคยทำให้ blocking �
     const row: Record<string, string> = {};
     for (const c of spec.columns) row[c] = c.includes("รหัส") ? "1" : "";
     const results = runChecks(id, parsed(id, [row]));
-    for (const r of results.filter((x) => x.status === "pending")) {
+    const pendings = results.filter((x) => x.status === "pending");
+    assert.ok(pendings.length > 0, `${id} ต้องมีผลตรวจรอยืนยันอย่างน้อยหนึ่งข้อ`);
+    for (const r of pendings) {
       assert.equal(r.blocking, false, `${id}/${r.id} ต้องไม่บล็อก`);
     }
+  }
+});
+
+test("ผลตรวจที่ severity เป็น error แต่ status เป็น pending ผ่าน make() แล้วต้องไม่บล็อก", () => {
+  const r = make({ id: "x", severity: "error", status: "pending", title: "", detail: "" });
+  assert.equal(r.blocking, false);
+  assert.equal(make({ id: "x", severity: "error", status: "active", title: "", detail: "" }).blocking, true);
+});
+
+test("รหัสวันที่เป็นตัวเลข 0.50 / .5 / 0.5 เทียบเชิงตัวเลข ไม่ถูกนับเป็นรหัสไม่รู้จัก", () => {
+  for (const v of ["0.50", ".5", "0.5", "0.750"]) {
+    const file = parsed("01", [{ [payeeCol("01")]: "1", "1": v }]);
+    assert.ok(!ids(runChecks("01", file)).includes("daycode.unknown"), v);
+  }
+  const bad = parsed("01", [{ [payeeCol("01")]: "1", "1": "0.6" }]);
+  assert.ok(ids(runChecks("01", bad)).includes("daycode.unknown"));
+});
+
+test("ทุกรายการที่มีช่องรอยืนยันต้องมีชื่อฝ่ายเจ้าของคำตอบ", () => {
+  for (const [id, cols] of Object.entries(MONEY_COLUMNS)) {
+    if (Object.values(cols).includes("รอยืนยัน")) {
+      assert.ok(WAITING_OWNER[id], `รายการ ${id} ไม่มีชื่อฝ่ายที่ต้องตอบ`);
+    }
+  }
+});
+
+test("ข้อความรหัสไม่รู้จักนับจำนวนรหัสจาก DAY_CODES จริง", () => {
+  DAY_CODES.push({ code: "ZZTEST", meaning: "" });
+  try {
+    const file = parsed("01", [{ [payeeCol("01")]: "1", "1": "QQ" }]);
+    const found = runChecks("01", file).find((r) => r.id === "daycode.unknown");
+    assert.ok(found?.detail.includes(`${DAY_CODES.length} ตัว`));
+  } finally {
+    DAY_CODES.pop();
   }
 });

@@ -39,7 +39,7 @@ const ROW_LIMIT = 20;
 /** ค่าผิดพลาดของ Excel — ตัวอ่านไฟล์ส่งมาเป็นข้อความตามชื่อ ไม่ใช่ช่องว่าง */
 const EXCEL_ERRORS = new Set(["#N/A", "#REF!", "#VALUE!", "#NAME?", "#DIV/0!", "#NULL!", "#NUM!"]);
 
-const make = (
+export const make = (
   r: Omit<CheckResult, "blocking">,
 ): CheckResult => ({ ...r, blocking: r.severity === "error" && r.status === "active" });
 
@@ -57,6 +57,19 @@ const numberOf = (value: string): number | null => {
   /* ตัวเลขล้วนเท่านั้น — Number() ยอม "1e3" "0x10" "0b11" ซึ่งในช่องเงินคือเซลล์ที่ผิด */
   if (!/^[+-]?\d+(\.\d+)?$/.test(cleaned)) return null;
   return Number(cleaned);
+};
+
+/** ฝ่ายที่ต้องตอบทิศทางเงินของแต่ละรายการที่ยังรอยืนยัน — ต้องครบทุกรายการที่ `MONEY_COLUMNS` ระบุ "รอยืนยัน" (มีเทสต์ตรวจ) */
+export const WAITING_OWNER: Record<string, string> = {
+  "14": "บัญชีกรุงเทพ",
+  "15": "บัญชีกรุงเทพ",
+  "17": "ยานยนต์",
+  "18": "ยานยนต์",
+};
+
+const TIGERSOFT_PENDING: Record<string, string> = {
+  "08": "เงินรางวัลมี 4 ช่องย่อย",
+  "23": "ค่าน้ำกับค่าไฟแยกกันสองช่อง",
 };
 
 export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
@@ -264,7 +277,10 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
      ยังว่าง = **เรายังไม่รู้ว่าวันนั้นได้เงินหรือไม่** ห้ามบล็อกและห้ามปล่อยเงียบ
      ต้องขึ้นบนจอว่ารออะไรจากใคร */
   if (hasDayGrid(spec.columns)) {
-    const known = new Map(DAY_CODES.map((d) => [d.code.toUpperCase(), d.meaning]));
+    /* รหัสที่เป็นตัวเลข (0.5 · 0.75 · 0.25) เทียบเชิงตัวเลข — "0.50" กับ ".5" คือครึ่งวันเหมือนกัน */
+    const dayKey = (code: string) =>
+      /^(\d+\.?\d*|\.\d+)$/.test(code) ? String(Number(code)) : code.toUpperCase();
+    const known = new Map(DAY_CODES.map((d) => [dayKey(d.code), d.meaning]));
     const dayLetters = spec.columns
       .filter((c) => /^\d+$/.test(c))
       .map((c) => headerLetter(profile, c))
@@ -277,7 +293,7 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
       for (const letter of dayLetters) {
         const code = row[letter]?.trim();
         if (!code) continue;
-        const meaning = known.get(code.toUpperCase());
+        const meaning = known.get(dayKey(code));
         if (meaning === undefined) {
           const at = unknown.get(code) ?? [];
           if (at.length < 3) at.push(rowNo(i));
@@ -295,7 +311,7 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
           severity: "error",
           status: "active",
           title: `มีรหัสวันที่ไม่รู้จัก ${unknown.size} รหัส`,
-          detail: `${[...unknown.keys()].slice(0, 8).join(" · ")} — ไม่อยู่ในชุดรหัส 24 ตัวที่ระบบรู้จัก · ระวังอย่าใช้รหัสของเครื่องลงเวลา TA100 ปนมา เพราะ "A" ของสองชุดแปลไม่เหมือนกัน`,
+          detail: `${[...unknown.keys()].slice(0, 8).join(" · ")} — ไม่อยู่ในชุดรหัส ${DAY_CODES.length} ตัวที่ระบบรู้จัก · ระวังอย่าใช้รหัสของเครื่องลงเวลา TA100 ปนมา เพราะ "A" ของสองชุดแปลไม่เหมือนกัน`,
           rows: [...unknown.values()].flat().slice(0, ROW_LIMIT),
         }),
       );
@@ -315,12 +331,6 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
   }
 
   /* ── ทิศทางเงินที่ยังไม่ยืนยัน ──────────────────────────────────── */
-  const WAITING_OWNER: Record<string, string> = {
-    "14": "บัญชีกรุงเทพ",
-    "15": "บัญชีกรุงเทพ",
-    "17": "ยานยนต์",
-    "18": "ยานยนต์",
-  };
   const unconfirmed = Object.entries(MONEY_COLUMNS[itemId] ?? {})
     .filter(([, effect]) => effect === "รอยืนยัน")
     .map(([column]) => column);
@@ -337,10 +347,6 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
   }
 
   /* ── รูปแบบที่ Tiger Soft รับ ────────────────────────────────────── */
-  const TIGERSOFT_PENDING: Record<string, string> = {
-    "08": "เงินรางวัลมี 4 ช่องย่อย",
-    "23": "ค่าน้ำกับค่าไฟแยกกันสองช่อง",
-  };
   if (TIGERSOFT_PENDING[itemId]) {
     out.push(
       make({
