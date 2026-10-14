@@ -76,7 +76,7 @@ test("ไฟล์ที่อ่านไม่ออกไม่ถูกน�
   };
   assert.equal(isUnreadable(unreadable), true);
   assert.equal(isUnreadable(readable), false);
-  assert.equal(isUnreadable({ ...emptyRecord("04") }), false, "ยังไม่ส่ง ไม่ใช่อ่านไม่ออก");
+  assert.equal(isUnreadable({ ...emptyRecord("07") }), false, "ยังไม่ส่ง ไม่ใช่อ่านไม่ออก");
   assert.equal(
     isUnreadable({ ...unreadable, unreadable: undefined, rows: undefined, columns: undefined }),
     false,
@@ -85,14 +85,14 @@ test("ไฟล์ที่อ่านไม่ออกไม่ถูกน�
 
   const records = allPassed();
   records.set("02", unreadable);
-  records.set("03", readable);
+  records.set("06", readable);
   const summary = summarizePeriod(period, records, now);
   assert.equal(summary.ready, false);
   assert.equal(summary.blockers.length, 2);
   const b02 = summary.blockers.find((b) => b.includes("02"));
-  const b03 = summary.blockers.find((b) => b.includes("03"));
+  const b06 = summary.blockers.find((b) => b.includes("06"));
   assert.ok(b02?.includes("อ่านไฟล์ไม่ได้"));
-  assert.ok(!b03?.includes("อ่านไฟล์ไม่ได้"));
+  assert.ok(!b06?.includes("อ่านไฟล์ไม่ได้"));
   assert.equal(summary.owners.reduce((n, o) => n + o.unreadable, 0), 1);
 });
 
@@ -205,7 +205,7 @@ test("Excel สรุปมีสองชีตและบอกชัดว�
   assert.equal(rowOf("13").getCell(4).text, "ตรวจผ่าน");
   assert.equal(rowOf("02").getCell(10).text, "อ่านไฟล์ไม่ได้");
   assert.equal(rowOf("01").getCell(4).text, "รอส่ง");
-  assert.equal(rowOf("03").getCell(10).text, "0");
+  assert.equal(rowOf("06").getCell(10).text, "0");
 });
 
 test("สรุปของฝ่ายเดียวไม่พูดว่ารอบครบ และบอกว่าตัวเลขนี้ไม่ใช่ทั้งรอบ", async () => {

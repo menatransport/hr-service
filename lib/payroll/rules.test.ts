@@ -4,7 +4,13 @@ import assert from "node:assert/strict";
 import { classify, MONEY_COLUMNS, postedColumns, type MoneyEffect } from "@/lib/payroll/classify";
 import type { FileProfile } from "@/lib/payroll/profile";
 import type { ParsedFile } from "@/lib/payroll/parse";
-import { INTAKE_ITEMS } from "@/lib/payroll/registry";
+import {
+  findItem,
+  findRetired,
+  INTAKE_ITEMS,
+  MERGE_COLUMN,
+  RETIRED_ITEMS,
+} from "@/lib/payroll/registry";
 import {
   make,
   runChecks,
@@ -156,11 +162,11 @@ test("ช่องเงินหายจากไฟล์ที่สเป�
 });
 
 test("ช่องเงินหายจากแบบฟอร์มร่าง = ขึ้นให้เห็นแต่ไม่บล็อก", () => {
-  assert.equal(templateOf("03")!.confirmed, false);
-  const money = moneyCol("03", "เพิ่ม");
-  const file = parsed("03", [{ [payeeCol("03")]: "1", [money]: "5" }]);
+  assert.equal(templateOf("06")!.confirmed, false);
+  const money = moneyCol("06", "เพิ่ม");
+  const file = parsed("06", [{ [payeeCol("06")]: "1", [money]: "5" }]);
   file.profile.columns = file.profile.columns.filter((c) => c.header !== money);
-  const found = runChecks("03", file).find((r) => r.id === "money.column-missing");
+  const found = runChecks("06", file).find((r) => r.id === "money.column-missing");
   assert.equal(found?.status, "pending");
   assert.equal(found?.blocking, false);
 });
@@ -249,7 +255,7 @@ test("รายการที่รอ Tiger Soft เคาะช่องร�
 });
 
 test("กฎรอยืนยันไม่เคยทำให้ blocking เพิ่มขึ้น ไม่ว่ารายการไหน", () => {
-  for (const id of ["14", "15", "17", "18", "08", "23"]) {
+  for (const id of ["14", "17", "08", "23"]) {
     const spec = templateOf(id)!;
     const row: Record<string, string> = {};
     for (const c of spec.columns) row[c] = c.includes("รหัส") ? "1" : "";
@@ -345,8 +351,8 @@ test("validateRuleColumns: ตารางรายวันขาดวัน�
 
 test("validateRuleColumns: รายการไม่มีสเปก / ตารางชื่อฝ่ายไม่ตรงกับรายการที่รอยืนยัน ต้องถูกจับ", () => {
   const noSpec = realSources();
-  noSpec.columnsOf = (id) => (id === "05" ? null : templateOf(id)?.columns ?? null);
-  assert.ok(validateRuleColumns(noSpec).some((p) => p.includes("#05")));
+  noSpec.columnsOf = (id) => (id === "06" ? null : templateOf(id)?.columns ?? null);
+  assert.ok(validateRuleColumns(noSpec).some((p) => p.includes("#06")));
 
   const staleOwner = realSources();
   staleOwner.waitingOwner = { ...WAITING_OWNER, "01": "ใครสักคน" };
@@ -359,4 +365,73 @@ test("validateRuleColumns: รายการไม่มีสเปก / ต�
   const badTiger = realSources();
   badTiger.tigersoftPending = { ...TIGERSOFT_PENDING, "99": "x" };
   assert.ok(validateRuleColumns(badTiger).some((p) => p.includes("#99")));
+});
+
+/* ---- ฟอร์มรวม: แถวต้องบอกได้ว่าเป็นของเดิมใบไหน ---- */
+
+test("ฟอร์มรวม: ช่องที่แยกกลุ่มว่าง = บล็อก และบอกว่าต้องเป็นค่าอะไรได้บ้าง", () => {
+  const merge = MERGE_COLUMN["02"];
+  const file = parsed("02", [
+    { [payeeCol("02")]: "1", [merge.column]: merge.values[0], จำนวนเงิน: "100" },
+    { [payeeCol("02")]: "2", [merge.column]: "", จำนวนเงิน: "100" },
+  ]);
+  const found = runChecks("02", file).find((r) => r.id === "merge.group-blank");
+  assert.equal(found?.blocking, true);
+  assert.deepEqual(found?.rows, ["3"], "บอกเลขแถวจริงในชีต");
+  assert.ok(found?.detail.includes(merge.values[0]));
+});
+
+test("ฟอร์มรวม: ค่าที่ไม่อยู่ในรายการ = บล็อก ไม่ใช่รับไว้เงียบ ๆ", () => {
+  const merge = MERGE_COLUMN["17"];
+  const file = parsed("17", [{ [payeeCol("17")]: "1", [merge.column]: "ศรีราชา" }]);
+  const found = runChecks("17", file).find((r) => r.id === "merge.group-unknown");
+  assert.equal(found?.blocking, true);
+  assert.ok(found?.detail.includes("ศรีราชา"));
+});
+
+test("ฟอร์มรวม: กรอกครบและสะกดตรง = ไม่มีผลตรวจเรื่องกลุ่มเลย", () => {
+  for (const [itemId, merge] of Object.entries(MERGE_COLUMN)) {
+    const rows = merge.values.map((value, i) => ({
+      [payeeCol(itemId)]: String(i + 1),
+      [merge.column]: value,
+    }));
+    const results = runChecks(itemId, parsed(itemId, rows));
+    assert.equal(
+      results.filter((r) => r.id.startsWith("merge.")).length,
+      0,
+      `${itemId} ไม่ควรมีผลตรวจเรื่องกลุ่ม`,
+    );
+  }
+});
+
+test("ทุกฟอร์มรวมมีช่องแยกกลุ่มอยู่ในสเปกจริง และรายการเดิมถูกปลดระวางไว้", () => {
+  for (const [itemId, merge] of Object.entries(MERGE_COLUMN)) {
+    assert.ok(
+      templateOf(itemId)!.columns.includes(merge.column),
+      `#${itemId} ต้องมีช่อง ${merge.column}`,
+    );
+    assert.ok(
+      RETIRED_ITEMS.some((r) => r.mergedInto === itemId),
+      `#${itemId} ต้องมีรายการเดิมที่ถูกรวมเข้ามา`,
+    );
+  }
+});
+
+test("รายการที่ปลดระวางแล้วไม่อยู่ในทะเบียน ไม่มีฟอร์ม และอัปโหลดไม่ได้", () => {
+  for (const retired of RETIRED_ITEMS) {
+    assert.equal(findItem(retired.id), undefined, `#${retired.id} ต้องไม่อยู่ในทะเบียนแล้ว`);
+    assert.equal(templateOf(retired.id), undefined, `#${retired.id} ต้องไม่มีแบบฟอร์มแล้ว`);
+    assert.ok(findItem(retired.mergedInto), `#${retired.id} ต้องชี้ไปรายการที่ยังมีอยู่`);
+    /* ยิงเข้ามาตรง ๆ ต้องได้ผลตรวจที่บล็อก ไม่ใช่เงียบ */
+    const results = runChecks(retired.id, parsed("02", [{ [payeeCol("02")]: "1" }]));
+    assert.equal(results[0]?.id, "item.unknown");
+    assert.equal(results[0]?.blocking, true);
+  }
+});
+
+test("เลขของรายการที่ปลดระวางไม่ถูกเอาไปใช้ซ้ำ และยังแปลเป็นชื่อเดิมได้", () => {
+  for (const retired of RETIRED_ITEMS) {
+    assert.equal(findRetired(retired.id)?.title, retired.title);
+    assert.ok(!INTAKE_ITEMS.some((i) => i.id === retired.id));
+  }
 });

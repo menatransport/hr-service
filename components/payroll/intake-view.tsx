@@ -40,6 +40,7 @@ import { unmappedOwners } from "@/lib/payroll/owner-directory";
 import { visibleItems } from "@/lib/payroll/scope-filter";
 import { classify, KIND_LABEL } from "@/lib/payroll/classify";
 import {
+  MERGE_COLUMN,
   OWNER_ORDER,
   type IntakeItem,
 } from "@/lib/payroll/registry";
@@ -637,7 +638,11 @@ export function IntakeView({
                 {cls.dataMonthOffset ? (
                   <span>ข้อมูลเป็นของ {Math.abs(cls.dataMonthOffset.months)} เดือนก่อนรอบจ่าย</span>
                 ) : null}
-                {cls.formOf ? <span>ฟอร์มเดียวกับ #{cls.formOf}</span> : null}
+                {MERGE_COLUMN[active.id] ? (
+                  <span>
+                    ฟอร์มรวม — ต้องระบุช่อง “{MERGE_COLUMN[active.id].column}” ทุกแถว
+                  </span>
+                ) : null}
               </div>
             );
           })()}

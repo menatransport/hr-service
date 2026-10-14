@@ -1,6 +1,6 @@
 import { classify, MONEY_COLUMNS, postedColumns } from "./classify";
 import { headerLetter, normalizeHeader, type ParsedFile } from "./parse";
-import { INTAKE_ITEMS } from "./registry";
+import { INTAKE_ITEMS, MERGE_COLUMN } from "./registry";
 import { DAY_CODES, hasDayGrid, templateOf } from "./template-spec";
 
 /**
@@ -63,9 +63,7 @@ const numberOf = (value: string): number | null => {
 /** ฝ่ายที่ต้องตอบทิศทางเงินของแต่ละรายการที่ยังรอยืนยัน — ต้องครบทุกรายการที่ `MONEY_COLUMNS` ระบุ "รอยืนยัน" (มีเทสต์ตรวจ) */
 export const WAITING_OWNER: Record<string, string> = {
   "14": "บัญชีกรุงเทพ",
-  "15": "บัญชีกรุงเทพ",
   "17": "ยานยนต์",
-  "18": "ยานยนต์",
 };
 
 export const TIGERSOFT_PENDING: Record<string, string> = {
@@ -137,6 +135,60 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
         detail: `ช่องที่ไม่อยู่ในแบบฟอร์ม: ${extra.slice(0, 8).join(" · ")}${extra.length > 8 ? " …" : ""} — ระบบไม่อ่านช่องพวกนี้ ถ้าเป็นข้อมูลที่ต้องใช้ต้องแจ้งก่อน`,
       }),
     );
+  }
+
+  /* ── ฟอร์มรวม: แถวนี้เป็นของเดิมใบไหน ────────────────────────────
+     รวมสี่ฟอร์มเป็นใบเดียวแล้ว ช่องนี้คือสิ่งเดียวที่บอกว่าแถวเป็นของลูกค้า/ศูนย์/กลุ่มไหน
+     ปล่อยให้ว่างหรือพิมพ์เป็นคำที่ไม่รู้จัก = การรวมฟอร์มทำให้ข้อมูลหาย ซึ่งแย่กว่าแยกไฟล์ */
+  const merge = MERGE_COLUMN[itemId];
+  if (merge) {
+    const letter = headerLetter(profile, merge.column);
+    if (!letter) {
+      out.push(
+        make({
+          id: "merge.column-missing",
+          severity: "error",
+          status: "active",
+          title: `ไม่พบช่อง ${merge.column}`,
+          detail: `ฟอร์มนี้รวมหลายใบเข้าด้วยกัน ช่อง "${merge.column}" คือสิ่งที่บอกว่าแถวไหนเป็นของใคร — ไม่มีช่องนี้ก็แยกไม่ออก`,
+        }),
+      );
+    } else {
+      const blank: string[] = [];
+      const unknown = new Map<string, string[]>();
+      rows.forEach((row, i) => {
+        const value = row[letter]?.trim() ?? "";
+        if (!value) blank.push(rowNo(i));
+        else if (!merge.values.includes(value)) {
+          unknown.set(value, [...(unknown.get(value) ?? []), rowNo(i)]);
+        }
+      });
+
+      if (blank.length) {
+        out.push(
+          make({
+            id: "merge.group-blank",
+            severity: "error",
+            status: "active",
+            title: `ช่อง ${merge.column} ว่าง ${blank.length} แถว`,
+            detail: `เลือกหนึ่งใน ${merge.values.join(" · ")} ให้ครบทุกแถว — แถวที่ไม่ระบุจะไม่รู้ว่าเป็นของใคร`,
+            rows: blank.slice(0, ROW_LIMIT),
+          }),
+        );
+      }
+      if (unknown.size) {
+        out.push(
+          make({
+            id: "merge.group-unknown",
+            severity: "error",
+            status: "active",
+            title: `ช่อง ${merge.column} มีค่าที่ไม่รู้จัก ${unknown.size} แบบ`,
+            detail: `พบ ${[...unknown.keys()].map((v) => `"${v}"`).join(" · ")} — ต้องเป็นหนึ่งใน ${merge.values.join(" · ")} (สะกดให้ตรง) ถ้ามีรายใหม่จริง ต้องเพิ่มในทะเบียนก่อน`,
+            rows: [...unknown.values()].flat().slice(0, ROW_LIMIT),
+          }),
+        );
+      }
+    }
   }
 
   /* ── เงินเข้าใคร ──────────────────────────────────────────────── */

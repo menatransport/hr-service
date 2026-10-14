@@ -4,7 +4,7 @@ import { findItem, INTAKE_ITEMS, type IntakeOwner } from "./registry";
 import { templateOf } from "./template-spec";
 
 /**
- * แปลงไฟล์ของแต่ละฝ่ายให้เป็น **ตารางเดียวกันทั้ง 25 รายการ**
+ * แปลงไฟล์ของแต่ละฝ่ายให้เป็น **ตารางเดียวกันทุกรายการ**
  *
  * ## ปัญหาที่แก้
  *
@@ -42,6 +42,7 @@ export type DimensionKey =
   | "personPhone"
   | "personPosition"
   | "personStatus"
+  | "personType"
   | "startDate"
   | "payeeId"
   | "payeeName"
@@ -66,6 +67,7 @@ export const DIMENSION_LABEL: Record<DimensionKey, string> = {
   personPhone: "เบอร์โทร",
   personPosition: "ตำแหน่ง",
   personStatus: "สถานะพนักงาน",
+  personType: "ประเภทพนักงาน",
   startDate: "วันเริ่มงาน",
   payeeId: "รหัสผู้รับเงิน",
   payeeName: "ชื่อผู้รับเงิน",
@@ -88,7 +90,7 @@ export const DIMENSION_LABEL: Record<DimensionKey, string> = {
 /**
  * หัวคอลัมน์ในฟอร์ม → ชื่อมิติมาตรฐาน
  *
- * **ต้องครอบคลุมทุกหัวคอลัมน์ที่ไม่ใช่ช่องวัด/ช่องรายวันของทั้ง 25 ฟอร์ม** —
+ * **ต้องครอบคลุมทุกหัวคอลัมน์ที่ไม่ใช่ช่องวัด/ช่องรายวันของทุกฟอร์ม** —
  * `validateNormalization()` จะฟ้องถ้ามีหัวคอลัมน์ไหนตกหล่น เพราะคอลัมน์ที่แปลงไม่ได้
  * คือข้อมูลที่หายไปเงียบ ๆ ตอนรวมตาราง ไม่ใช่แค่เรื่องความสวยงาม
  */
@@ -104,6 +106,7 @@ export const DIMENSION_OF: Record<string, DimensionKey> = {
   ตำแหน่ง: "personPosition",
   สถานะ: "personStatus",
   สถานะผู้ถูกแนะนำ: "personStatus",
+  "ประเภท พจส.": "personType",
   วันเริ่มงาน: "startDate",
 
   /* คนที่เงินเข้า */
@@ -119,6 +122,7 @@ export const DIMENSION_OF: Record<string, DimensionKey> = {
   ผู้ว่าจ้าง: "customer",
   แพล้นท์: "plant",
   สาขา: "site",
+  ศูนย์: "site",
   สถานที่ทำงาน: "site",
   แผนก: "department",
   แผนกที่บันทึกข้อมูล: "department",

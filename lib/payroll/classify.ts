@@ -51,9 +51,6 @@ export const MONEY_COLUMNS: Record<string, Record<string, MoneyEffect>> = {
     "ทำงานจริง(วัน)": "อ้างอิง",
   },
   "02": { "จำนวน OT (ชม.)": "อ้างอิง", จำนวนเงิน: "เพิ่ม" },
-  "03": { "จำนวน OT (ชม.)": "อ้างอิง", จำนวนเงิน: "เพิ่ม" },
-  "04": { "จำนวน OT (ชม.)": "อ้างอิง", จำนวนเงิน: "เพิ่ม" },
-  "05": { "จำนวน OT (ชม.)": "อ้างอิง", จำนวนเงิน: "เพิ่ม" },
   "06": { จำนวนเงิน: "เพิ่ม" },
   "07": {
     "รวมวันทำงาน(วัน)": "อ้างอิง",
@@ -102,13 +99,11 @@ export const MONEY_COLUMNS: Record<string, Record<string, MoneyEffect>> = {
   /* เบิกสำรอง — ชื่อช่องอ่านได้สองทาง: "จ่ายเงินสำรองให้" (มีเลขที่บัญชีไว้โอน)
      หรือ "หักคืนเงินที่เบิกไปแล้ว" (บัญชีส่งมาให้ HR หัก) · บัญชีกรุงเทพเป็นคนตอบ */
   "14": { "ยอดเงิน(บาท)": "รอยืนยัน" },
-  "15": { "ยอดเงิน(บาท)": "รอยืนยัน" },
   "16": { "ฝึกครบ 10 วัน": "อ้างอิง", จำนวนเงิน: "เพิ่ม" },
   /* ค่าปะ-เปลี่ยนยาง — มีช่อง "เลขที่ใบแจ้งซ่อม/รับสภาพหนี้" ซึ่งชี้ว่าอาจเป็น
      หนี้ที่ พจส. ต้องรับผิดชอบ (หัก) แต่ชื่อฟอร์มอ่านเหมือนเบิกคืนค่าซ่อมที่จ่ายไปก่อน
      (เพิ่ม) · ยานยนต์เป็นคนตอบ */
   "17": { "เลขไมล์เดิม": "อ้างอิง", "เลขไมล์ปัจจุบัน": "อ้างอิง", จำนวนเงิน: "รอยืนยัน" },
-  "18": { "เลขไมล์เดิม": "อ้างอิง", "เลขไมล์ปัจจุบัน": "อ้างอิง", จำนวนเงิน: "รอยืนยัน" },
   "19": {
     "คะแนน (ผ่านรอบที่ 1-2)": "อ้างอิง",
     "เงินรางวัล(บาท)": "เพิ่ม",
@@ -174,21 +169,6 @@ export const PAYEE_COLUMN: Record<string, string> = {
 export const DEFAULT_PAYEE_COLUMN = "รหัสพนักงาน";
 
 /**
- * รายการที่ใช้แบบฟอร์มเดียวกันเป๊ะ (คอลัมน์ตรงกันทุกช่อง) — ค่าคือรายการที่เป็นต้นแบบ
- *
- * **รวมเฉพาะฟอร์ม ไม่รวมแถวในทะเบียน** เพราะคนส่งคนละคน กำหนดส่งแยกกัน และเลขรายการ
- * เป็นคีย์สถานะอยู่แล้ว · ตอนนี้ยังไม่ได้เติมคอลัมน์แยก (ผู้ว่าจ้าง/ศูนย์/กลุ่ม) ลงฟอร์ม
- * เพราะเป็นการเปลี่ยนสัญญาคอลัมน์กับฝ่ายที่ส่ง ต้องคุยก่อน — ที่นี่แค่บันทึกว่าซ้ำ
- */
-export const FORM_FAMILY: Record<string, string> = {
-  "03": "02",
-  "04": "02",
-  "05": "02",
-  "14": "15",
-  "18": "17",
-};
-
-/**
  * เดือนของข้อมูล ห่างจากรอบที่จ่ายกี่เดือน (ลบ = ข้อมูลเก่ากว่ารอบจ่าย)
  *
  * **มีหลักฐานแค่ 2 รายการ** จากชื่อไฟล์จริง · รายการที่ไม่อยู่ในนี้แปลว่า "ไม่พบ
@@ -232,8 +212,6 @@ export interface ItemClassification {
   kind: ItemKind;
   posted: { column: string; effect: MoneyEffect }[];
   payeeColumn: string;
-  /** รายการต้นแบบถ้าฟอร์มซ้ำกับรายการอื่น */
-  formOf: string | null;
   dataMonthOffset: { months: number; evidence: string } | null;
 }
 
@@ -245,7 +223,6 @@ export function classify(itemId: string): ItemClassification | null {
     kind: kindOf(itemId),
     posted: postedColumns(itemId),
     payeeColumn: PAYEE_COLUMN[itemId] ?? DEFAULT_PAYEE_COLUMN,
-    formOf: FORM_FAMILY[itemId] ?? null,
     dataMonthOffset: DATA_MONTH_OFFSET[itemId] ?? null,
   };
 }
@@ -290,16 +267,6 @@ export function validateClassification(): string[] {
       problems.push(`#${item.id} ช่องเงินเข้าใคร “${payee}” ไม่มีในสเปก`);
     }
 
-    const family = FORM_FAMILY[item.id];
-    if (family) {
-      const base = templateOf(family);
-      const same =
-        base && base.columns.length === spec.columns.length &&
-        base.columns.every((c, i) => c === spec.columns[i]);
-      if (!same) {
-        problems.push(`#${item.id} บอกว่าใช้ฟอร์มเดียวกับ #${family} แต่คอลัมน์ไม่ตรงกันแล้ว`);
-      }
-    }
   }
 
   for (const id of Object.keys(MONEY_COLUMNS)) {

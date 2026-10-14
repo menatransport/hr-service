@@ -143,7 +143,7 @@ async function main() {
       }
     }
     console.log(
-      `รูปมาตรฐาน: ${dims + measures + days} ช่องใน 25 ฟอร์ม แปลงได้ครบ — ` +
+      `รูปมาตรฐาน: ${dims + measures + days} ช่องใน ${INTAKE_ITEMS.length} ฟอร์ม แปลงได้ครบ — ` +
         `ช่องมิติ ${dims} ช่องจาก ${names.size} ชื่อ ยุบเหลือ ${keys.size} ชื่อมาตรฐาน · ` +
         `ช่องที่วัด ${measures} ช่อง · ช่องรายวัน ${days} ช่อง\n`,
     );

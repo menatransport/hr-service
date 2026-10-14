@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { DeskIdentity } from "@/lib/auth/identity";
 import type { IntakeRecord } from "@/lib/payroll/intake-status";
 import { filterRecords, visibleItems } from "@/lib/payroll/scope-filter";
+import { INTAKE_ITEMS, itemsByOwner } from "@/lib/payroll/registry";
 
 const identity = (departmentId: string, authenticated = true): DeskIdentity => ({
   employeeId: "00001",
@@ -26,14 +27,14 @@ const record = (itemId: string): IntakeRecord => ({
   updatedBy: "ทดสอบ ระบบ",
 });
 
-test("ฝ่ายจัดส่งเห็น 12 รายการของตัวเอง ไม่เห็นของฝ่ายอื่น", () => {
+test("ฝ่ายจัดส่งเห็นเฉพาะรายการของตัวเอง ไม่เห็นของฝ่ายอื่น", () => {
   const items = visibleItems(identity("15"));
-  assert.equal(items.length, 12);
+  assert.equal(items.length, itemsByOwner("จัดส่ง ลาดกระบัง").length);
   assert.ok(items.every((i) => i.owner === "จัดส่ง ลาดกระบัง"));
 });
 
-test("HR เห็นทั้ง 25 รายการ", () => {
-  assert.equal(visibleItems(identity("24")).length, 25);
+test("HR เห็นทุกรายการในทะเบียน", () => {
+  assert.equal(visibleItems(identity("24")).length, INTAKE_ITEMS.length);
 });
 
 test("หน่วยงานที่ไม่อยู่ในทะเบียนผู้รับผิดชอบ เห็นศูนย์รายการ — ไม่ใช่เห็นทั้งหมด", () => {
