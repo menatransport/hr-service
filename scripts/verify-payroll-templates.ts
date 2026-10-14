@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { validateClassification, classify, KIND_LABEL, type ItemKind } from "@/lib/payroll/classify";
+import { columnRole, validateNormalization } from "@/lib/payroll/normalize";
 import { CURRENT_PERIOD } from "@/lib/payroll/period";
 import type { ParsedFile } from "@/lib/payroll/parse";
 import { CATEGORY_ORDER, INTAKE_ITEMS, itemsByCategory } from "@/lib/payroll/registry";
@@ -98,6 +99,9 @@ async function main() {
   /* กฎที่อ้างคอลัมน์ต้องอ้างคอลัมน์ที่มีจริงในสเปก — สะกดเพี้ยนตัวเดียว กฎจะเงียบไปเฉย ๆ
      โดยไม่มีใครรู้ ซึ่งอันตรายกว่ากฎที่ดังผิด */
   problems.push(...validateRuleColumns());
+  /* ทุกคอลัมน์ของทุกฟอร์มต้องแปลงเป็นรูปมาตรฐานได้ — ช่องที่แปลงไม่ได้คือข้อมูลที่
+     จะหายเงียบ ๆ ตอนรวมตารางข้ามฝ่าย ไม่ใช่แค่เรื่องความเรียบร้อย */
+  problems.push(...validateNormalization());
 
   /* ลองเรียกกฎของทุกรายการกับไฟล์สมมติที่ว่างทุกช่อง แล้วเช็กว่ากฎที่รายการนั้น **ควรมี**
      (อ่านจากข้อมูล: ตารางรายวัน · ช่องรอยืนยัน · ตาราง Tiger Soft · ช่องเงิน) ส่งผลออกมาครบ —
@@ -120,6 +124,31 @@ async function main() {
   }
 
   const kinds: Record<ItemKind, number> = { ฐาน: 0, เพิ่ม: 0, หัก: 0, ผสม: 0, รอยืนยัน: 0 };
+  {
+    /* สรุปว่ารูปมาตรฐานครอบคลุมแค่ไหน — ตัวเลขนี้คือสิ่งที่บอกได้ว่า "รวมตารางได้จริง" */
+    let dims = 0;
+    let measures = 0;
+    let days = 0;
+    const names = new Set<string>();
+    const keys = new Set<string>();
+    for (const item of INTAKE_ITEMS) {
+      for (const header of templateOf(item.id)?.columns ?? []) {
+        const role = columnRole(item.id, header);
+        if (role?.role === "มิติ") {
+          dims += 1;
+          names.add(header);
+          keys.add(role.key);
+        } else if (role?.role === "ค่าที่วัด") measures += 1;
+        else if (role?.role === "รายวัน") days += 1;
+      }
+    }
+    console.log(
+      `รูปมาตรฐาน: ${dims + measures + days} ช่องใน 25 ฟอร์ม แปลงได้ครบ — ` +
+        `ช่องมิติ ${dims} ช่องจาก ${names.size} ชื่อ ยุบเหลือ ${keys.size} ชื่อมาตรฐาน · ` +
+        `ช่องที่วัด ${measures} ช่อง · ช่องรายวัน ${days} ช่อง\n`,
+    );
+  }
+
   console.log("หมวด → รายการ (ประเภทเงิน)");
   for (const category of CATEGORY_ORDER) {
     const rows = itemsByCategory(category).map((item) => {
