@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-import { badRequest, fail, forbidden, ok, unauthorized } from "@/app/api/_lib/respond";
+import { forbidden, ok, unauthorized } from "@/app/api/_lib/respond";
 import { getDeskIdentity, readSessionUser } from "@/lib/auth/session";
 import { saveIntakeFile } from "@/lib/payroll/intake-files";
-import { validateIntakeUpload } from "@/lib/payroll/intake-upload";
+import { checkContentLength, parseFailureBody, validateIntakeUpload } from "@/lib/payroll/intake-upload";
 import { profileWorkbook } from "@/lib/payroll/parse";
 import { runChecks, summarize } from "@/lib/payroll/rules";
 import { canUploadItem } from "@/lib/payroll/scope";
@@ -24,9 +25,13 @@ export async function POST(request: NextRequest) {
       return unauthorized("หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
     }
 
+    /* ก่อน formData() — ตัวมันอ่านทั้งก้อนเข้าหน่วยความจำ */
+    const size = checkContentLength(request.headers.get("content-length"));
+    if (!size.ok) return message(size.message, size.status);
+
     const form = await request.formData().catch(() => null);
     const file = form?.get("file");
-    if (!(file instanceof File)) return badRequest("ไม่พบไฟล์ที่แนบมา");
+    if (!(file instanceof File)) return message("ไม่พบไฟล์ที่แนบมา", 400);
 
     const checked = validateIntakeUpload({
       period: form?.get("period"),
@@ -36,7 +41,7 @@ export async function POST(request: NextRequest) {
       size: file.size,
       head: new Uint8Array(await file.slice(0, 4).arrayBuffer()),
     });
-    if (!checked.ok) return badRequest(checked.message);
+    if (!checked.ok) return message(checked.message, checked.status);
     const { period, itemId } = checked;
 
     const identity = await getDeskIdentity();
@@ -48,11 +53,21 @@ export async function POST(request: NextRequest) {
 
     const stored = await saveIntakeFile(file, { period, itemId, uploadedBy: identity.name });
 
-    const parsed = await profileWorkbook(await file.arrayBuffer(), file.name);
+    /* เก็บแล้ว — จากนี้ไฟล์อ่านไม่ออกคือปัญหาของไฟล์ (422) และต้องบอก fileId กลับไปด้วย */
+    let parsed;
+    try {
+      parsed = await profileWorkbook(await file.arrayBuffer(), file.name);
+    } catch (err) {
+      return NextResponse.json(parseFailureBody(err, stored), { status: 422 });
+    }
     const checks = runChecks(itemId, parsed);
 
     return ok({ profile: parsed.profile, checks, tally: summarize(checks), file: stored });
   } catch (err) {
-    return fail(err);
+    /* ฐานข้อมูล/GridFS ล้ม — ไม่ส่ง err.message ของ driver ออกไปให้ผู้ใช้ */
+    console.error("[api] payroll parse", err);
+    return message("ระบบเก็บหรืออ่านไฟล์ไม่สำเร็จ — ลองใหม่อีกครั้ง หากยังไม่ได้ให้แจ้งผู้ดูแลระบบ", 500);
   }
 }
+
+const message = (error: string, status: number) => NextResponse.json({ error }, { status });

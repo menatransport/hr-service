@@ -28,12 +28,11 @@ export interface StoredIntakeFile {
   size: number;
 }
 
-export interface OpenedIntakeFile {
+export interface IntakeFileInfo {
   name: string;
   type: string;
   /** รายการ (itemId) ที่ไฟล์นี้ถูกส่งมา — route ใช้เทียบกับขอบเขตของผู้เปิด */
   itemId: string;
-  stream: Readable;
 }
 
 async function bucket(): Promise<GridFSBucket> {
@@ -51,24 +50,31 @@ export async function saveIntakeFile(
   });
   await new Promise<void>((resolve, reject) => {
     upload.on("finish", () => resolve());
-    upload.on("error", reject);
+    upload.on("error", (err) => {
+      /* ทิ้งชิ้นส่วนที่เขียนไปแล้ว ไม่ให้ chunks กำพร้าค้างใน bucket */
+      upload.abort().catch(() => {}).finally(() => reject(err));
+    });
     upload.end(data);
   });
   return { fileId: upload.id.toHexString(), name: file.name, size: data.byteLength };
 }
 
-/** เปิดไฟล์เพื่อส่งต่อ — `null` เมื่อรหัสไม่ถูกรูปแบบหรือไม่มีไฟล์นั้น */
-export async function openIntakeFile(fileId: string): Promise<OpenedIntakeFile | null> {
+/** อ่านเฉพาะข้อมูลไฟล์ (ยังไม่เปิดสตรีม) — `null` เมื่อรหัสไม่ถูกรูปแบบหรือไม่มีไฟล์นั้น */
+export async function findIntakeFile(fileId: string): Promise<IntakeFileInfo | null> {
   if (!ObjectId.isValid(fileId)) return null;
   const gfs = await bucket();
-  const id = new ObjectId(fileId);
-  const [meta] = await gfs.find({ _id: id }, { limit: 1 }).toArray();
+  const [meta] = await gfs.find({ _id: new ObjectId(fileId) }, { limit: 1 }).toArray();
   if (!meta) return null;
   const itemId = (meta.metadata as { itemId?: unknown } | undefined)?.itemId;
   return {
     name: meta.filename,
     type: XLSX_TYPE,
     itemId: typeof itemId === "string" ? itemId : "",
-    stream: gfs.openDownloadStream(id),
   };
+}
+
+/** เปิดสตรีมดาวน์โหลด — เรียกหลังตรวจสิทธิ์จาก `findIntakeFile` แล้วเท่านั้น */
+export async function openIntakeStream(fileId: string): Promise<Readable> {
+  const gfs = await bucket();
+  return gfs.openDownloadStream(new ObjectId(fileId));
 }

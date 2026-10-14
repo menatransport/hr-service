@@ -43,9 +43,45 @@ export interface IntakeUploadInput {
 
 export type IntakeUploadCheck =
   | { ok: true; period: string; itemId: string }
-  | { ok: false; message: string };
+  | { ok: false; status: 400 | 413; message: string };
 
-const reject = (message: string): IntakeUploadCheck => ({ ok: false, message });
+const reject = (message: string, status: 400 | 413 = 400): IntakeUploadCheck => ({
+  ok: false,
+  status,
+  message,
+});
+
+const tooBigMessage = `ไฟล์ใหญ่เกิน ${MAX_INTAKE_FILE_BYTES / 1024 / 1024} MB — แยกเป็นหลายไฟล์หรือลบชีตที่ไม่เกี่ยวออกก่อน`;
+
+/** เผื่อส่วนหัว multipart (boundary, ชื่อฟิลด์, period, itemId) — ไม่ใช่ตัวไฟล์ */
+export const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
+/**
+ * เช็ก `Content-Length` **ก่อน** `request.formData()` — formData() อ่านทั้งก้อนเข้าหน่วยความจำ
+ * ก่อนที่จะรู้ `file.size` ได้ ด่านขนาดหลังจากนั้นจึงกัน exceljs แต่ไม่กันหน่วยความจำ
+ * ไม่มีหัวข้อนี้ (chunked) หรืออ่านเป็นตัวเลขไม่ได้ = เช็กตรงนี้ไม่ได้ ปล่อยให้ด่านหลังจัดการ
+ */
+export function checkContentLength(
+  header: string | null,
+): { ok: true } | { ok: false; status: 413; message: string } {
+  const length = header === null ? NaN : Number(header);
+  if (Number.isFinite(length) && length > MAX_INTAKE_FILE_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return { ok: false, status: 413, message: tooBigMessage };
+  }
+  return { ok: true };
+}
+
+/**
+ * ไฟล์ถูกเก็บแล้วแต่อ่านไม่ออก = ปัญหาจากไฟล์ที่ส่งมา (422) ไม่ใช่เซิร์ฟเวอร์พัง
+ * และต้องคืน `file` ไปด้วย ไม่งั้นผู้ส่งไม่รู้ว่าไฟล์ที่เก็บไว้ชื่อรหัสอะไร
+ */
+export function parseFailureBody<F>(err: unknown, file: F): { error: string; file: F } {
+  const error =
+    err instanceof Error && err.message
+      ? err.message
+      : "อ่านไฟล์ไม่ได้ — ตรวจว่าเป็นไฟล์ Excel (.xlsx) ที่บันทึกจาก Excel จริง";
+  return { error, file };
+}
 
 export function validateIntakeUpload(input: IntakeUploadInput): IntakeUploadCheck {
   const { period, itemId, fileName, fileType, size, head } = input;
@@ -62,9 +98,7 @@ export function validateIntakeUpload(input: IntakeUploadInput): IntakeUploadChec
     return reject("ไฟล์นี้ไม่ใช่ Excel จริง — เปลี่ยนนามสกุลเฉย ๆ ใช้ไม่ได้ ต้องบันทึกจาก Excel");
   }
   if (size > MAX_INTAKE_FILE_BYTES) {
-    return reject(
-      `ไฟล์ใหญ่เกิน ${MAX_INTAKE_FILE_BYTES / 1024 / 1024} MB — แยกเป็นหลายไฟล์หรือลบชีตที่ไม่เกี่ยวออกก่อน`,
-    );
+    return reject(tooBigMessage, 413);
   }
   if (!looksLikeZip(head)) {
     return reject("ไฟล์นี้ไม่ใช่ Excel จริง — เปลี่ยนนามสกุลเฉย ๆ ใช้ไม่ได้ ต้องบันทึกจาก Excel");

@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  checkContentLength,
   looksLikeZip,
+  MULTIPART_OVERHEAD_BYTES,
+  parseFailureBody,
   MAX_INTAKE_FILE_BYTES,
   validateIntakeUpload,
   XLSX_TYPE,
@@ -78,4 +81,33 @@ test("looksLikeZip", () => {
   assert.equal(looksLikeZip(ZIP_HEAD), true);
   assert.equal(looksLikeZip(TEXT_HEAD), false);
   assert.equal(looksLikeZip(new Uint8Array([0x50, 0x4b])), false);
+});
+
+test("ไฟล์ใหญ่เกินตอบ 413 และด่านอื่นตอบ 400", () => {
+  const big = validateIntakeUpload({ ...good, size: MAX_INTAKE_FILE_BYTES + 1 });
+  assert.ok(!big.ok && big.status === 413);
+  const csv = validateIntakeUpload({ ...good, fileName: "a.csv" });
+  assert.ok(!csv.ok && csv.status === 400);
+});
+
+test("Content-Length เกินเพดาน + ส่วนเผื่อ multipart ถูกปฏิเสธ 413 ก่อนอ่านตัวคำขอ", () => {
+  const limit = MAX_INTAKE_FILE_BYTES + MULTIPART_OVERHEAD_BYTES;
+  const over = checkContentLength(String(limit + 1));
+  assert.ok(!over.ok && over.status === 413);
+  if (!over.ok) assert.match(over.message, /10 MB/);
+  assert.deepEqual(checkContentLength(String(limit)), { ok: true });
+});
+
+test("Content-Length ไม่มี/อ่านเป็นตัวเลขไม่ได้ = ปล่อยผ่านให้ด่านหลังตัดสิน", () => {
+  assert.deepEqual(checkContentLength(null), { ok: true });
+  assert.deepEqual(checkContentLength("abc"), { ok: true });
+});
+
+test("parse ล้มหลังเก็บไฟล์ — ตัวตอบ 422 มีทั้งข้อความอ่านรู้เรื่องและ fileId", () => {
+  const stored = { fileId: "abc123", name: "a.xlsx", size: 10 };
+  const body = parseFailureBody(new Error("อ่านไฟล์ไม่ได้ — ไม่ใช่ Excel"), stored);
+  assert.deepEqual(body, { error: "อ่านไฟล์ไม่ได้ — ไม่ใช่ Excel", file: stored });
+  const fallback = parseFailureBody("boom", stored);
+  assert.match(fallback.error, /อ่านไฟล์ไม่ได้/);
+  assert.equal(fallback.file.fileId, "abc123");
 });
