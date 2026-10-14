@@ -135,6 +135,66 @@ test("รหัสเดียวซ้ำหลายแถว = เตือ�
   assert.equal(found?.severity, "warn");
 });
 
+test("ช่องเงินหายจากไฟล์ที่สเปกยืนยันแล้ว = บล็อก ไม่ข้ามเงียบ", () => {
+  const money = moneyCol("13", "หัก");
+  const file = parsed("13", [{ [payeeCol("13")]: "1", [money]: "5" }]);
+  file.profile.columns = file.profile.columns.filter((c) => c.header !== money);
+  const found = runChecks("13", file).find((r) => r.id === "money.column-missing");
+  assert.equal(found?.blocking, true);
+  assert.ok(found?.detail.includes(money));
+});
+
+test("ช่องเงินหายจากแบบฟอร์มร่าง = ขึ้นให้เห็นแต่ไม่บล็อก", () => {
+  assert.equal(templateOf("03")!.confirmed, false);
+  const money = moneyCol("03", "เพิ่ม");
+  const file = parsed("03", [{ [payeeCol("03")]: "1", [money]: "5" }]);
+  file.profile.columns = file.profile.columns.filter((c) => c.header !== money);
+  const found = runChecks("03", file).find((r) => r.id === "money.column-missing");
+  assert.equal(found?.status, "pending");
+  assert.equal(found?.blocking, false);
+});
+
+test("รหัสเป็นค่าผิดพลาดของ Excel = บล็อก บอกเลขแถว และไม่นับเป็นรหัสซ้ำ", () => {
+  const money = moneyCol("13", "หัก");
+  const file = parsed("13", [
+    { [payeeCol("13")]: "123456", [money]: "5" },
+    { [payeeCol("13")]: "#N/A", [money]: "5" },
+    { [payeeCol("13")]: "#N/A", [money]: "5" },
+  ]);
+  const results = runChecks("13", file);
+  const found = results.find((r) => r.id === "payee.error-value");
+  assert.equal(found?.blocking, true);
+  assert.deepEqual(found?.rows, ["3", "4"]);
+  assert.ok(!ids(results).includes("payee.duplicate"));
+});
+
+test("เลขแถวใช้เลขจริงในชีต ไม่ใช่ลำดับในอาร์เรย์ เมื่อมีแถวว่างคั่น", () => {
+  const money = moneyCol("13", "หัก");
+  const file = parsed("13", [
+    { [payeeCol("13")]: "1", [money]: "5" },
+    { [payeeCol("13")]: "", [money]: "5" },
+  ]);
+  file.rowNumbers = [2, 7];
+  const found = runChecks("13", file).find((r) => r.id === "payee.blank");
+  assert.deepEqual(found?.rows, ["7"]);
+});
+
+test("ช่องเงินที่เป็นเลขฐานอื่นหรือเลขยกกำลังไม่ใช่ตัวเลข แต่ 1,200.50 ใช่", () => {
+  const money = moneyCol("13", "หัก");
+  for (const bad of ["0x10", "1e3", "0b11", "0o7"]) {
+    const file = parsed("13", [{ [payeeCol("13")]: "1", [money]: bad }]);
+    assert.ok(ids(runChecks("13", file)).includes("money.not-number"), bad);
+  }
+  const ok = parsed("13", [{ [payeeCol("13")]: "1", [money]: "1,200.50" }]);
+  assert.ok(!ids(runChecks("13", ok)).includes("money.not-number"));
+});
+
+test("ช่องเงินที่ยังรอยืนยันทิศทาง ไม่ตรวจเครื่องหมาย แม้เป็นค่าติดลบ", () => {
+  const col = moneyCol("17", "รอยืนยัน");
+  const file = parsed("17", [{ [payeeCol("17")]: "1", [col]: "-200" }]);
+  assert.ok(!ids(runChecks("17", file)).includes("money.negative"));
+});
+
 test("summarize นับแยก error / warn / pending / blocking", () => {
   const tally = summarize([
     { id: "a", severity: "error", status: "active", title: "", detail: "", blocking: true },

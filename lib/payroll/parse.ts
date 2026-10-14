@@ -17,6 +17,8 @@ export interface ParsedFile {
   profile: FileProfile;
   /** คีย์เป็นตัวอักษรคอลัมน์ ตรงกับ `ColumnProfile.letter` · ค่าเป็นข้อความที่ trim แล้ว */
   rows: Record<string, string>[];
+  /** เลขแถวจริงในชีตของแต่ละแถวใน `rows` (ขนานกัน) — แถวว่างคั่นกลางถูกตัดทิ้ง จึงบวกจาก index ไม่ได้ */
+  rowNumbers?: number[];
 }
 
 /** หัวคอลัมน์ในไฟล์จริงมีช่องว่างเกินและ non-breaking space ปนมาเสมอ */
@@ -169,6 +171,7 @@ export async function profileWorkbook(
       columns,
     },
     rows,
+    rowNumbers,
   };
 }
 

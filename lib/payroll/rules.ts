@@ -36,6 +36,9 @@ export interface CheckTally {
 
 const ROW_LIMIT = 20;
 
+/** ค่าผิดพลาดของ Excel — ตัวอ่านไฟล์ส่งมาเป็นข้อความตามชื่อ ไม่ใช่ช่องว่าง */
+const EXCEL_ERRORS = new Set(["#N/A", "#REF!", "#VALUE!", "#NAME?", "#DIV/0!", "#NULL!", "#NUM!"]);
+
 const make = (
   r: Omit<CheckResult, "blocking">,
 ): CheckResult => ({ ...r, blocking: r.severity === "error" && r.status === "active" });
@@ -51,9 +54,9 @@ export function summarize(results: CheckResult[]): CheckTally {
 
 const numberOf = (value: string): number | null => {
   const cleaned = value.replace(/,/g, "").replace(/\s/g, "").replace(/฿/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
+  /* ตัวเลขล้วนเท่านั้น — Number() ยอม "1e3" "0x10" "0b11" ซึ่งในช่องเงินคือเซลล์ที่ผิด */
+  if (!/^[+-]?\d+(\.\d+)?$/.test(cleaned)) return null;
+  return Number(cleaned);
 };
 
 export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
@@ -73,7 +76,8 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
 
   const out: CheckResult[] = [];
   const { profile, rows } = parsed;
-  const rowNo = (i: number) => String(profile.headerRow + 1 + i);
+  /* เลขแถวจริงที่ตัวอ่านบันทึกไว้ — ถ้าไม่มี (ข้อมูลสมมติ) ค่อยนับต่อจากหัวตาราง */
+  const rowNo = (i: number) => String(parsed.rowNumbers?.[i] ?? profile.headerRow + 1 + i);
 
   /* ── ไฟล์เปล่า ───────────────────────────────────────────────── */
   if (rows.length === 0) {
@@ -134,6 +138,22 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
       }),
     );
   } else {
+    const errored = rows
+      .map((r, i) => (EXCEL_ERRORS.has(r[payeeLetter]?.trim() ?? "") ? rowNo(i) : null))
+      .filter(Boolean) as string[];
+    if (errored.length) {
+      out.push(
+        make({
+          id: "payee.error-value",
+          severity: "error",
+          status: "active",
+          title: `ช่อง ${cls.payeeColumn} เป็นค่าผิดพลาดของ Excel ${errored.length} แถว`,
+          detail: `เซลล์เหล่านี้แสดง #N/A หรือค่าผิดพลาดอื่นแทนรหัส จับคู่กับใครไม่ได้ — แก้สูตรหรือกรอกรหัสจริงในไฟล์ก่อนส่งใหม่`,
+          rows: errored.slice(0, ROW_LIMIT),
+        }),
+      );
+    }
+
     const blank = rows.map((r, i) => (r[payeeLetter]?.trim() ? null : rowNo(i))).filter(Boolean) as string[];
     if (blank.length) {
       out.push(
@@ -151,7 +171,7 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
     const counts = new Map<string, number>();
     for (const row of rows) {
       const key = row[payeeLetter]?.trim();
-      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+      if (key && !EXCEL_ERRORS.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     const dup = [...counts.entries()].filter(([, n]) => n > 1);
     if (dup.length) {
@@ -170,7 +190,20 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
   /* ── ช่องเงิน ─────────────────────────────────────────────────── */
   for (const { column, effect } of postedColumns(itemId)) {
     const letter = headerLetter(profile, column);
-    if (!letter) continue;
+    if (!letter) {
+      out.push(
+        make({
+          id: "money.column-missing",
+          severity: "error",
+          status: spec.confirmed ? "active" : "pending",
+          title: `ไม่พบช่องเงิน ${column}`,
+          detail: spec.confirmed
+            ? `ไม่มีช่อง "${column}" ในไฟล์ ระบบจึงอ่านยอดเงินของรายการนี้ไม่ได้ — ดาวน์โหลดแบบฟอร์มจากระบบแล้วกรอกบนฟอร์มนั้น`
+            : `แบบฟอร์มของรายการนี้ยังเป็นร่าง (${spec.source}) จึงยังบังคับไม่ได้ — แต่ถ้าไม่มีช่อง "${column}" ระบบจะอ่านยอดเงินของรายการนี้ไม่ได้`,
+        }),
+      );
+      continue;
+    }
 
     const values = rows.map((r, i) => ({ raw: r[letter]?.trim() ?? "", at: rowNo(i) }));
     const filled = values.filter((v) => v.raw);
