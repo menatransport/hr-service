@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Mail, TriangleAlert, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, Copy, Mail, TriangleAlert } from "lucide-react";
 
+import { ModalShell } from "@/components/ui/modal-shell";
+import { gmailCompose } from "@/lib/payroll/notify-compose";
 import type { NotifyDraft } from "@/lib/payroll/notify";
 import type { IntakeOwner } from "@/lib/payroll/registry";
-import { toastError, toastSuccess } from "@/lib/swal";
+import { toastError, toastSuccess, toastWarn } from "@/lib/swal";
 
 /**
  * แจ้งฝ่ายทางอีเมล — **ระบบไม่ส่งเมลเอง** (เหตุผลอยู่ที่หัว `lib/payroll/notify.ts`)
@@ -21,46 +23,19 @@ interface NotifyResponse {
   drafts: NotifyDraft[];
 }
 
-/**
- * เพดานความยาว URL หน้าเขียนเมล (หลัง encode) — ภาษาไทยกิน 9 ตัวอักษรต่อ 1 ตัว
- * เกินเพดานนี้ใช้เนื้อฉบับย่อแทน แล้วบอกให้ใช้ปุ่มคัดลอกเอาฉบับเต็ม
- */
-const URL_LIMIT = 7000;
-
-function gmailUrl(draft: NotifyDraft, senderEmail: string | null, short: boolean) {
-  const build = (body: string) => {
-    const params = new URLSearchParams({
-      view: "cm",
-      fs: "1",
-      to: draft.to.join(","),
-      su: draft.subject,
-      body,
-    });
-    if (draft.cc.length) params.set("cc", draft.cc.join(","));
-    if (senderEmail) params.set("authuser", senderEmail);
-    /* `+` → `%20` ให้เป็น URL encoding ล้วน ๆ (เหตุผลเดียวกับ `notify-modal.tsx`) */
-    return `https://mail.google.com/mail/?${params.toString().replace(/\+/g, "%20")}`;
-  };
-  const full = build(draft.body);
-  if (!short && full.length <= URL_LIMIT) return { url: full, shortened: false };
-  return { url: build(draft.shortBody), shortened: true };
-}
-
 export function NotifyButton({
   periodCode,
   owner,
   onlyOwners,
   label,
-  warnMultiple = false,
 }: {
   periodCode: string;
   /** ระบุ = แจ้งฝ่ายเดียว · ไม่ระบุ = ดึงทุกฝ่ายแล้วกรองด้วย `onlyOwners` */
   owner?: IntakeOwner;
   onlyOwners?: IntakeOwner[];
   label: string;
-  /** ขึ้นคำเตือนบนปุ่มว่าจะมีหลายแท็บ */
-  warnMultiple?: boolean;
 }) {
+  const trigger = useRef<HTMLButtonElement>(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<NotifyResponse | null>(null);
 
@@ -95,78 +70,98 @@ export function NotifyButton({
   return (
     <>
       <button
+        ref={trigger}
         type="button"
         onClick={load}
         disabled={loading}
-        title={
-          warnMultiple
-            ? "จะเปิดหน้าเขียนเมลของ Gmail ทีละฝ่าย หลายแท็บ — เปิดทีละแท็บตามที่กด"
-            : undefined
-        }
         className="flex items-center gap-1.5 rounded-field border border-line px-2.5 py-1.5 text-12-5 text-mut transition-colors hover:border-primary/40 hover:text-ink disabled:opacity-50"
       >
         <Mail size={13} strokeWidth={1.9} aria-hidden />
         {loading ? "กำลังร่างอีเมล…" : label}
-        {warnMultiple ? <span className="text-11-5">(หลายแท็บ)</span> : null}
       </button>
 
-      {data ? <DraftDialog data={data} onClose={() => setData(null)} /> : null}
+      {data ? (
+        <DraftDialog
+          data={data}
+          onClose={() => {
+            setData(null);
+            /* คืนโฟกัสให้ปุ่มที่เปิด — `ModalShell` ย้ายโฟกัสเข้ากล่องตอนเปิดแต่ไม่คืนตอนปิด */
+            trigger.current?.focus();
+          }}
+        />
+      ) : null}
     </>
   );
 }
 
 function DraftDialog({ data, onClose }: { data: NotifyResponse; onClose: () => void }) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="ร่างอีเมลแจ้งฝ่าย"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-box border border-line bg-base-100 p-4 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-14 font-semibold">ร่างอีเมลแจ้งฝ่าย</h2>
-            <p className="mt-0.5 text-12-5 text-mut text-pretty">
-              ระบบไม่ได้ส่งเมลให้ — กด “เปิด Gmail” แล้วตรวจก่อนกดส่งจากบัญชีของคุณเอง
-              ผู้รับจะต้องเข้าสู่ระบบก่อนจึงจะเห็นรายการของฝ่ายตัวเอง
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="ปิด"
-            className="rounded-field p-1 text-mut hover:text-ink"
-          >
-            <X size={16} aria-hidden />
-          </button>
-        </div>
+  /* ฝ่ายที่กด “เปิด Gmail” สำเร็จแล้ว — เปิดหน้าเขียนเมล **ไม่ใช่** ส่งเมล
+     ผู้ใช้ยังต้องกดส่งในแท็บนั้นเอง จึงนับได้แค่ “เปิดแล้ว” */
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  const markOpened = (owner: string) =>
+    setOpened((was) => new Set(was).add(owner));
 
-        <ul className="mt-3 space-y-2.5">
-          {data.drafts.map((draft) => (
-            <DraftRow key={draft.owner} draft={draft} senderEmail={data.senderEmail} />
-          ))}
-        </ul>
-      </div>
-    </div>
+  return (
+    <ModalShell
+      title="ร่างอีเมลแจ้งฝ่าย"
+      onClose={onClose}
+      width="640px"
+      tone="plain"
+      subtitle={
+        <>
+          <span className="font-mono tabular-nums">
+            เปิดแล้ว {opened.size}/{data.drafts.length}
+          </span>
+          <span>
+            ระบบไม่ได้ส่งเมลให้ — “เปิด Gmail” แค่เปิดหน้าเขียนเมลที่กรอกไว้แล้ว
+            ต้องกดส่งเองในแท็บนั้น
+          </span>
+        </>
+      }
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-field border border-line px-3 py-1.5 text-13 text-mut hover:text-ink"
+        >
+          ปิด
+        </button>
+      }
+    >
+      <p className="text-12-5 text-mut text-pretty">
+        ผู้รับต้องเข้าสู่ระบบก่อนจึงจะเห็นรายการของฝ่ายตัวเอง
+      </p>
+      <ul className="space-y-2.5">
+        {data.drafts.map((draft) => (
+          <DraftRow
+            key={draft.owner}
+            draft={draft}
+            senderEmail={data.senderEmail}
+            opened={opened.has(draft.owner)}
+            onOpened={() => markOpened(draft.owner)}
+          />
+        ))}
+      </ul>
+    </ModalShell>
   );
 }
 
 function DraftRow({
   draft,
   senderEmail,
+  opened,
+  onOpened,
 }: {
   draft: NotifyDraft;
   senderEmail: string | null;
+  opened: boolean;
+  onOpened: () => void;
 }) {
   const noRecipient = draft.to.length === 0;
+  /* คำนวณตอน render เพื่อบอกก่อนกด ไม่ใช่รู้หลังเปิดไปแล้ว */
+  const { url, shortened } = gmailCompose(draft, senderEmail);
 
   function open() {
-    const { url, shortened } = gmailUrl(draft, senderEmail, false);
     const win = window.open(url, "_blank");
     if (!win) {
       void toastError(
@@ -175,10 +170,11 @@ function DraftRow({
       );
       return;
     }
+    onOpened();
     if (shortened) {
-      void toastSuccess(
-        "เปิด Gmail แล้ว (เนื้อฉบับย่อ)",
-        "รายการเยอะเกินจะส่งผ่านลิงก์ได้ครบ — กด “คัดลอก” เพื่อเอาฉบับเต็มไปวางแทน",
+      void toastWarn(
+        "เปิดได้แค่เนื้อเมลฉบับย่อ",
+        "รายการเยอะเกินจะส่งผ่านลิงก์ได้ครบ — ใช้ “คัดลอก” เพื่อเอาฉบับเต็มไปวางแทน",
       );
     }
   }
@@ -192,38 +188,43 @@ function DraftRow({
     }
   }
 
+  const primary =
+    "flex items-center gap-1 rounded-field bg-primary px-2.5 py-1 text-12 font-medium text-primary-content";
+  const secondary =
+    "flex items-center gap-1 rounded-field border border-line px-2 py-1 text-12 text-mut hover:text-ink";
+
+  const copyButton = (
+    <button type="button" onClick={copy} className={shortened ? primary : secondary}>
+      <Copy size={12} aria-hidden />
+      คัดลอก
+    </button>
+  );
+  const openButton = (
+    <button type="button" onClick={open} className={shortened ? secondary : primary}>
+      <Mail size={12} aria-hidden />
+      {opened ? "เปิด Gmail อีกครั้ง" : shortened ? "เปิด Gmail (ฉบับย่อ)" : "เปิด Gmail"}
+    </button>
+  );
+
   return (
     <li className="rounded-box border border-line p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-13 font-semibold">{draft.owner}</span>
-        {draft.directoryMissing ? (
-          <span className="flex items-center gap-1 rounded-field bg-warning/15 px-2 py-0.5 text-12 font-medium text-warning">
-            <TriangleAlert size={12} aria-hidden />
-            ยังไม่ได้ผูกรหัสหน่วยงาน — ต้องกรอกผู้รับเอง
-          </span>
-        ) : noRecipient ? (
-          <span className="flex items-center gap-1 rounded-field bg-warning/15 px-2 py-0.5 text-12 font-medium text-warning">
-            <TriangleAlert size={12} aria-hidden />
-            ไม่พบหัวหน้าหรือผู้จัดการที่มีอีเมลใช้ได้ — ต้องกรอกผู้รับเอง
+        {opened ? (
+          <span className="flex items-center gap-1 rounded-field bg-soft px-2 py-0.5 text-12 font-medium text-primary">
+            <Check size={12} aria-hidden />
+            เปิดแล้ว
           </span>
         ) : null}
+        {draft.directoryMissing ? (
+          <Badge>ยังไม่ได้ผูกรหัสหน่วยงาน — ต้องกรอกผู้รับเอง</Badge>
+        ) : noRecipient ? (
+          <Badge>ไม่พบหัวหน้าหรือผู้จัดการที่มีอีเมลใช้ได้ — ต้องกรอกผู้รับเอง</Badge>
+        ) : null}
+        {shortened ? <Badge>เนื้อยาวเกินลิงก์ จะเปิดฉบับย่อ</Badge> : null}
         <span className="ml-auto flex gap-2">
-          <button
-            type="button"
-            onClick={copy}
-            className="flex items-center gap-1 rounded-field border border-line px-2 py-1 text-12 text-mut hover:text-ink"
-          >
-            <Copy size={12} aria-hidden />
-            คัดลอก
-          </button>
-          <button
-            type="button"
-            onClick={open}
-            className="flex items-center gap-1 rounded-field bg-primary px-2.5 py-1 text-12 font-medium text-primary-content"
-          >
-            <Mail size={12} aria-hidden />
-            เปิด Gmail
-          </button>
+          {shortened ? copyButton : openButton}
+          {shortened ? openButton : copyButton}
         </span>
       </div>
 
@@ -246,5 +247,14 @@ function DraftRow({
         </p>
       ) : null}
     </li>
+  );
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1 rounded-field bg-warning/15 px-2 py-0.5 text-12 font-medium text-warning">
+      <TriangleAlert size={12} aria-hidden />
+      {children}
+    </span>
   );
 }

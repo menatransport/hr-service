@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { IntakeView } from "@/components/payroll/intake-view";
 import { getDeskIdentity } from "@/lib/auth/session";
 import { canPassIntake } from "@/lib/payroll/approver";
+import { initialPeriod } from "@/lib/payroll/period";
 
 export const metadata: Metadata = {
   title: "กระดานรับไฟล์",
@@ -14,7 +15,20 @@ export const metadata: Metadata = {
  * (ของจริงกันที่ API)
  * (ปลอมได้ก็ได้แค่ปุ่มที่กดแล้ว API ตอบ 403 เพราะฝั่ง `PATCH` ตรวจซ้ำอีกชั้น)
  */
-export default async function PayrollIntakePage() {
+export default async function PayrollIntakePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string | string[] }>;
+}) {
   const identity = await getDeskIdentity();
-  return <IntakeView canPass={canPassIntake(identity)} identity={identity} />;
+  /* `?period=` จากลิงก์ในอีเมลแจ้งฝ่าย — รอบในเมลกับรอบที่หน้าเปิดต้องเป็นรอบเดียวกัน
+     (อ่านที่เซิร์ฟเวอร์เพื่อให้ HTML ตั้งต้นตรงกับฝั่ง client ไม่ติด hydration mismatch) */
+  const { period } = await searchParams;
+  return (
+    <IntakeView
+      canPass={canPassIntake(identity)}
+      identity={identity}
+      initialPeriod={initialPeriod(Array.isArray(period) ? period[0] : period)}
+    />
+  );
 }

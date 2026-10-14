@@ -66,3 +66,19 @@ export function isFuture({ year, month }: PeriodRef): boolean {
 export function isSelectable(period: PeriodRef): boolean {
   return !isLocked(period) && !isFuture(period);
 }
+
+/** `2026-09` → รอบ (พ.ศ.) · รูปแบบไม่ตรงคืน `null` */
+export function periodFromCode(code: string | null | undefined): PeriodRef | null {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(code ?? "");
+  if (!match) return null;
+  return { year: Number(match[1]) + BE_OFFSET, month: Number(match[2]) - 1 };
+}
+
+/**
+ * รอบเริ่มต้นของหน้า เมื่อมี `?period=` มาจากลิงก์ในอีเมล — รูปแบบผิดหรือเลือกไม่ได้
+ * (ปิดแล้ว/ยังมาไม่ถึง) ให้ถอยกลับไปรอบปัจจุบัน ไม่ใช่พาไปเปิดรอบที่ทำอะไรไม่ได้
+ */
+export function initialPeriod(code: string | null | undefined): PeriodRef {
+  const wanted = periodFromCode(code);
+  return wanted && isSelectable(wanted) ? wanted : CURRENT_PERIOD;
+}

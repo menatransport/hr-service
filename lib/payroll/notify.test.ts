@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { emptyRecord, type IntakeRecord } from "@/lib/payroll/intake-status";
 import type { UserDto } from "@/lib/ncac/types";
 import { bodyOf, intakeLink, notifyDraft, shortBodyOf, subjectOf } from "@/lib/payroll/notify";
-import { itemsByOwner } from "@/lib/payroll/registry";
+import { itemsByOwner, OWNER_ORDER } from "@/lib/payroll/registry";
 
 const period = { year: 2569, month: 8 };
 const now = new Date(2026, 8, 12);
@@ -67,7 +67,7 @@ test("ของที่ส่งแล้วไม่ถูกทวงซ้�
   assert.ok(!sendSection.includes(items[0].title), "ของที่ผ่านแล้วต้องไม่อยู่ในรายการที่ต้องส่ง");
   assert.ok(!sendSection.includes(items[1].title), "ของที่ตีกลับไปอยู่หมวดของมันเอง");
   assert.ok(body.includes("ของที่รับเข้ารอบแล้ว ไม่ต้องส่งซ้ำ"));
-  assert.ok(body.includes(`- ${items[1].title}: ยอดไม่ตรง`), "ต้องบอกเหตุผลที่ตีกลับไว้ในเมล");
+  assert.ok(body.includes(`- #${items[1].id} ${items[1].title}: ยอดไม่ตรง`), "ต้องบอกเหตุผลที่ตีกลับไว้ในเมล");
   assert.ok(
     body.indexOf("ของที่ตีกลับให้แก้") > 0 &&
       body.indexOf("ของที่ตีกลับให้แก้") < body.indexOf("ของที่รับเข้ารอบแล้ว"),
@@ -94,22 +94,31 @@ test("ไม่มีอะไรค้างเลย เนื้อเมล�
     items.map((i) => [i.id, { ...emptyRecord(i.id), stage: "passed" as const }]),
   );
   const body = bodyOf({ owner: "ยานยนต์", period, items, records, link: "x", now });
-  assert.ok(!body.includes("ของที่ต้องส่งในรอบนี้\n\n\n"));
   assert.ok(body.includes("ไม่มีรายการค้างส่ง"));
+  assert.ok(!body.includes("เปิดรอบแล้ว ส่งข้อมูลเข้าระบบได้ที่ลิงก์นี้"), "ต้องไม่ชวนส่งในเมลที่ไม่มีอะไรค้าง");
 });
 
-test("ไม่มี emoji และไม่ขึ้นต้นทุกบรรทัดด้วย กรุณา", () => {
-  const body = bodyOf({
-    owner: "HR C&B",
-    period,
-    items: itemsByOwner("HR C&B"),
-    records: new Map(),
-    link: "x",
-    now,
-  });
-  assert.equal(/[\u{1F300}-\u{1FAFF}]/u.test(body), false);
-  const lines = body.split("\n").filter(Boolean);
-  assert.ok(lines.filter((l) => l.startsWith("กรุณา")).length < lines.length / 4);
+test("รายการนำหน้าด้วยรหัสในทะเบียน ไม่ใช่เลขลำดับ", () => {
+  const items = itemsByOwner("ยานยนต์");
+  const body = bodyOf({ owner: "ยานยนต์", period, items, records: new Map(), link: "x", now });
+  for (const item of items) assert.ok(body.includes(`#${item.id} ${item.title}`));
+  assert.ok(!/^1\. /m.test(body));
+});
+
+test("ไม่มี emoji ในเนื้อเมลของทุกฝ่าย และไม่ขึ้นต้นทุกบรรทัดด้วย กรุณา", () => {
+  for (const owner of OWNER_ORDER) {
+    const body = bodyOf({
+      owner,
+      period,
+      items: itemsByOwner(owner),
+      records: new Map(),
+      link: "x",
+      now,
+    });
+    assert.equal(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(body), false, owner);
+    const lines = body.split("\n").filter(Boolean);
+    assert.ok(lines.filter((l) => l.startsWith("กรุณา")).length < lines.length / 4, owner);
+  }
 });
 
 test("เนื้อย่อสำหรับ URL ที่ยาวเกิน ยังมีลิงก์และไม่มีรายการยาว", () => {

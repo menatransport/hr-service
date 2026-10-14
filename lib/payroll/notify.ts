@@ -55,15 +55,17 @@ const recordOf = (records: Map<string, IntakeRecord>, item: IntakeItem) =>
   records.get(item.id) ?? emptyRecord(item.id);
 
 /** ท่อนต้นเมล — ชื่อเรื่อง ลิงก์ และเรื่องการล็อกอิน (ชุดเดียวกันทั้งฉบับเต็มและฉบับย่อ) */
-function openingOf({
-  owner,
-  period,
-  link,
-}: Pick<BodyArgs, "owner" | "period" | "link">): string[] {
+function openingOf(
+  { owner, period, link }: Pick<BodyArgs, "owner" | "period" | "link">,
+  nothingToSend = false,
+): string[] {
   return [
     `ทะเบียนรับข้อมูลเงินเดือน รอบ ${periodLabel(period)} — ${owner}`,
     "",
-    "เปิดรอบแล้ว ส่งข้อมูลเข้าระบบได้ที่ลิงก์นี้",
+    /* ไม่มีอะไรค้างแล้วจะชวน “ส่งข้อมูล” ต่อไม่ได้ — เมลกลายเป็นแจ้งสถานะแทน */
+    nothingToSend
+      ? "รอบนี้ไม่มีรายการค้างส่งแล้ว ดูสถานะของแต่ละรายการได้ที่ลิงก์นี้"
+      : "เปิดรอบแล้ว ส่งข้อมูลเข้าระบบได้ที่ลิงก์นี้",
     link,
     "",
     `ลิงก์นี้ต้องเข้าสู่ระบบด้วยบัญชีบริษัทก่อน แล้วจะเห็นเฉพาะรายการของ${owner}`,
@@ -74,7 +76,8 @@ function openingOf({
  * เนื้อเมลข้อความล้วน — **ไม่มีลายเซ็นผู้ส่ง** เพราะเมลออกจากบัญชีของผู้ใช้เอง
  * Gmail เติมลายเซ็นของเจ้าตัวให้ตอนเปิดหน้าเขียน
  *
- * รายการเรียงตามทะเบียน (ไม่เรียงตามสถานะ) เพื่อให้เลขลำดับในเมลตรงกับที่คนเห็นในหน้าจอ
+ * รายการเรียงตามทะเบียน (ไม่เรียงตามสถานะ) และนำหน้าด้วยรหัสในทะเบียน (`#01`) ตรงกับที่
+ * หน้าจอและแบบฟอร์มแสดง ไม่ใช้เลขลำดับ 1..n ที่คนอ่านปนกับรหัสได้
  * หัวข้อที่ไม่มีรายการจะไม่ถูกพิมพ์ทิ้งไว้เปล่า ๆ
  */
 export function bodyOf({ owner, period, items, records, link, now }: BodyArgs): string {
@@ -93,34 +96,34 @@ export function bodyOf({ owner, period, items, records, link, now }: BodyArgs): 
     } else toSend.push(item);
   }
 
-  const lines = openingOf({ owner, period, link });
+  const lines = openingOf({ owner, period, link }, toSend.length === 0 && returned.length === 0);
 
   lines.push("", "ของที่ต้องส่งในรอบนี้");
   if (toSend.length === 0) {
-    lines.push("ตอนนี้ไม่มีรายการค้างส่ง");
+    lines.push("ไม่มีรายการค้างส่ง");
   } else {
-    toSend.forEach((item, i) => {
+    toSend.forEach((item) => {
       const late = lateDays(item, period, recordOf(records, item), now);
       const overdue = late > 0 ? ` (เลยกำหนดมาแล้ว ${late} วัน)` : "";
       lines.push(
-        `${i + 1}. ${item.title} — ภายในวันที่ ${dueDate(item, period).getDate()} ${month}${overdue}`,
+        `#${item.id} ${item.title} — ภายในวันที่ ${dueDate(item, period).getDate()} ${month}${overdue}`,
       );
     });
   }
 
   if (returned.length) {
     lines.push("", "ของที่ตีกลับให้แก้ (ส่งใหม่ได้เลย)");
-    for (const { item, reason } of returned) lines.push(`- ${item.title}: ${reason}`);
+    for (const { item, reason } of returned) lines.push(`- #${item.id} ${item.title}: ${reason}`);
   }
 
   if (submitted.length) {
     lines.push("", "ของที่ส่งแล้ว รอตรวจ");
-    for (const item of submitted) lines.push(`- ${item.title}`);
+    for (const item of submitted) lines.push(`- #${item.id} ${item.title}`);
   }
 
   if (passed.length) {
     lines.push("", "ของที่รับเข้ารอบแล้ว ไม่ต้องส่งซ้ำ");
-    for (const item of passed) lines.push(`- ${item.title}`);
+    for (const item of passed) lines.push(`- #${item.id} ${item.title}`);
   }
 
   lines.push(

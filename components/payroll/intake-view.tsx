@@ -17,7 +17,6 @@ import { NotifyButton } from "@/components/payroll/notify-panel";
 import { OwnerGroup } from "@/components/payroll/owner-group";
 import { PeriodPicker } from "@/components/payroll/period-picker";
 import {
-  CURRENT_PERIOD,
   isLocked,
   periodCode,
   periodLabel,
@@ -74,9 +73,12 @@ import { confirm, toastError, toastSuccess } from "@/lib/swal";
 export function IntakeView({
   canPass,
   identity,
+  initialPeriod,
 }: {
   canPass: boolean;
   identity: DeskIdentity;
+  /** รอบที่เปิดตอนเข้าหน้า — มาจาก `?period=` ในลิงก์ (ตรวจแล้วที่ `page.tsx`) */
+  initialPeriod: PeriodRef;
 }) {
   /* ซ่อนบนหน้าจอเพื่อให้อ่านง่าย — การกันจริงอยู่ที่ API (`scope-filter.ts`) */
   const items = useMemo(() => visibleItems(identity), [identity]);
@@ -86,7 +88,7 @@ export function IntakeView({
   );
   const unmapped = unmappedOwners();
 
-  const [period, setPeriod] = useState<PeriodRef>(CURRENT_PERIOD);
+  const [period, setPeriod] = useState<PeriodRef>(initialPeriod);
   const [records, setRecords] = useState<Map<string, IntakeRecord>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -432,8 +434,7 @@ export function IntakeView({
             <NotifyButton
               periodCode={code}
               onlyOwners={unsentOwners}
-              label="แจ้งทุกฝ่ายที่ยังไม่ส่ง"
-              warnMultiple
+              label="ดูร่างอีเมลทุกฝ่ายที่ยังไม่ส่ง"
             />
           ) : null}
 
@@ -506,7 +507,7 @@ export function IntakeView({
               onPick={pick}
               templateHref={templateHref}
               action={
-                canPass ? (
+                canPass && !locked ? (
                   <NotifyButton
                     periodCode={code}
                     owner={owner}
