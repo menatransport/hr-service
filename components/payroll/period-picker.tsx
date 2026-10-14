@@ -7,10 +7,12 @@ import {
   CURRENT_PERIOD,
   isFuture,
   isLocked,
+  periodCode,
   periodLabel,
   TH_MONTHS,
   type PeriodRef,
 } from "@/lib/payroll/period";
+import type { PeriodStatus } from "@/lib/payroll/period-state";
 
 /**
  * ตัวเลือกรอบจ่าย — ปี พ.ศ. หนึ่งแถว เดือน 12 ปุ่ม
@@ -19,19 +21,27 @@ import {
  * บ่อยกว่าที่คิด ปุ่มที่เห็นทั้งปีกดครั้งเดียวถึง ส่วนดรอปดาวน์ต้องกดเปิดแล้วค่อยเลือก
  * และซ่อนสถานะของเดือนอื่นไปหมด
  *
- * รอบที่ปิดแล้วกับรอบที่ยังมาไม่ถึงขึ้นเป็นปุ่มจาง ๆ ที่กดไม่ได้ **ไม่ใช่ซ่อนทิ้ง** —
+ * รอบที่ปิดแล้วกับรอบที่ยังไม่เปิดขึ้นเป็นปุ่มจาง ๆ ที่กดไม่ได้ **ไม่ใช่ซ่อนทิ้ง** —
  * การเห็นว่าเดือนไหนปิดไปแล้วคือข้อมูลที่คนใช้ต้องการ ไม่ใช่สิ่งที่ต้องปกปิด
+ *
+ * **สถานะรอบมาจาก `statusOf` ซึ่งอ่านจากฐานข้อมูล** ถ้าไม่ได้ส่งมา (หน้าที่ยังไม่ได้
+ * ต่อกับ API รอบ) จะถอยไปใช้ค่าคงที่ในโค้ดแบบเดิม — ไม่ใช่ปล่อยให้กดได้ทุกเดือน
  */
 export function PeriodPicker({
   value,
   onChange,
+  statusOf,
 }: {
   value: PeriodRef;
   onChange: (next: PeriodRef) => void;
+  /** สถานะจริงของรอบจากฐานข้อมูล — ไม่ส่งมา = ใช้ค่าคงที่ในโค้ด */
+  statusOf?: (code: string) => PeriodStatus | undefined;
 }) {
   /* ปีที่กำลังเปิดดู แยกจากปีของรอบที่เลือกไว้ — เลื่อนดูปีอื่นได้โดยไม่เสียรอบที่เลือก */
   const [viewYear, setViewYear] = useState(value.year);
-  const locked = isLocked(value);
+  const statusAt = (p: PeriodRef): PeriodStatus =>
+    statusOf?.(periodCode(p)) ?? (isLocked(p) ? "locked" : isFuture(p) ? "unopened" : "open");
+  const locked = statusAt(value) === "locked";
 
   return (
     <div className="flex flex-col gap-3">
@@ -78,9 +88,12 @@ export function PeriodPicker({
       >
         {TH_MONTHS.map((name, index) => {
           const candidate: PeriodRef = { year: viewYear, month: index };
-          const closed = isLocked(candidate);
-          const future = isFuture(candidate);
-          const disabled = closed || future;
+          const status = statusAt(candidate);
+          const closed = status === "locked";
+          const future = status === "unopened";
+          /* รอบที่ปิดแล้วยัง "เลือกดู" ได้ — ปิดแค่การเขียน ไม่ใช่ปิดการมองเห็น
+             ส่วนรอบที่ยังไม่เปิดไม่มีอะไรให้ดู จึงกดไม่ได้ */
+          const disabled = future;
           const active = value.year === viewYear && value.month === index;
 
           return (
@@ -91,9 +104,9 @@ export function PeriodPicker({
               aria-pressed={active}
               title={
                 closed
-                  ? "รอบนี้ปิดแล้ว อัปโหลดทับไม่ได้"
+                  ? "รอบนี้ปิดแล้ว เปิดดูได้ แต่ส่งของเข้าไม่ได้"
                   : future
-                    ? "ยังไม่ถึงรอบนี้"
+                    ? "รอบนี้ยังไม่เปิดรับข้อมูล"
                     : undefined
               }
               onClick={() => onChange(candidate)}
@@ -102,7 +115,9 @@ export function PeriodPicker({
                   ? "border-primary bg-primary font-medium text-primary-content"
                   : disabled
                     ? "cursor-not-allowed border-line bg-base-100 text-mut/45"
-                    : "border-line bg-base-100 text-ink hover:border-primary/40 hover:text-primary"
+                    : closed
+                      ? "border-line bg-base-100 text-mut hover:border-primary/40"
+                      : "border-line bg-base-100 text-ink hover:border-primary/40 hover:text-primary"
               }`}
             >
               {name}

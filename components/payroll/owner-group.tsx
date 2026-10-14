@@ -14,7 +14,7 @@ import {
 } from "@/lib/payroll/intake-status";
 import { kindOf, type ItemKind } from "@/lib/payroll/classify";
 import type { IntakeCategory, IntakeItem, IntakeOwner } from "@/lib/payroll/registry";
-import { dueDaysOf } from "@/lib/payroll/registry";
+import { CATEGORY_ORDER, dueDaysOf } from "@/lib/payroll/registry";
 import type { PeriodRef } from "@/lib/payroll/period";
 
 /**
@@ -74,15 +74,18 @@ export function OwnerGroup({
     return a.id.localeCompare(b.id);
   });
 
-  /* หมวดเรียงตามชิ้นที่ด่วนที่สุดในหมวดนั้น ไม่ใช่ตามลำดับหมวดในทะเบียน — หมวดที่มีของ
-     ค้างนานสุดจึงอยู่บนสุดเหมือนกับที่รายชิ้นเรียงอยู่ และของในหมวดคงลำดับความด่วนเดิม */
+  /* **หมวดเรียงตามลำดับที่เจ้าของงานกำหนดไว้ใน `CATEGORY_ORDER` เสมอ** ไม่เรียงตาม
+     ความด่วน — ลำดับที่ขยับไปมาตามสถานะทำให้คนที่เปิดหน้านี้ทุกเดือนต้องไล่หาใหม่ทุกครั้ง
+     ส่วนความด่วนยังเห็นได้จากตัวนับบนหัวหมวด และลำดับของรายชิ้นข้างในหมวด */
   const byCategory = new Map<IntakeCategory, IntakeItem[]>();
   for (const item of sorted) {
     const bucket = byCategory.get(item.category);
     if (bucket) bucket.push(item);
     else byCategory.set(item.category, [item]);
   }
-  const groups = [...byCategory].map(([category, items]) => ({ category, items }));
+  const groups = CATEGORY_ORDER.filter((category) => byCategory.has(category)).map(
+    (category) => ({ category, items: byCategory.get(category)! }),
+  );
 
   return (
     <section

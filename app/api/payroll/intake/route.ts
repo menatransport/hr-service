@@ -12,7 +12,8 @@ import {
 } from "@/lib/payroll/intake";
 import { canPassIntake, HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
 import { stageWriteCheck } from "@/lib/payroll/intake-gate";
-import { writablePeriod } from "@/lib/payroll/period";
+
+import { writablePeriodState } from "@/lib/payroll/periods";
 import { filterRecords } from "@/lib/payroll/scope-filter";
 import { canUploadItem } from "@/lib/payroll/scope";
 
@@ -84,7 +85,7 @@ export async function PATCH(request: NextRequest) {
 
     /* **รอบที่ปิดแล้วหรือยังมาไม่ถึง ตัดสินอะไรไม่ได้** — ของเดิมรับ YYYY-MM อะไรก็ได้
        ยิงตรงเข้ารอบที่ปิดแล้วก็กดผ่านได้ ทั้งที่หน้าจอปิดปุ่มไว้ */
-    const open = writablePeriod(period);
+    const open = await writablePeriodState(period);
     if (!open.ok) return badRequest(open.message);
 
     const identity = await getDeskIdentity();

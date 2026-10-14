@@ -8,7 +8,8 @@ import { saveIntakeFile } from "@/lib/payroll/intake-files";
 import { checkContentLength, parseFailureBody, validateIntakeUpload } from "@/lib/payroll/intake-upload";
 import { profileWorkbook } from "@/lib/payroll/parse";
 import { runChecks, summarize } from "@/lib/payroll/rules";
-import { writablePeriod } from "@/lib/payroll/period";
+
+import { writablePeriodState } from "@/lib/payroll/periods";
 import { canUploadItem } from "@/lib/payroll/scope";
 
 /**
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     /* **รอบที่ปิดแล้วหรือยังมาไม่ถึง เขียนไม่ได้ — กันที่นี่ ไม่ใช่แค่บนหน้าจอ**
        ของเดิมรับ YYYY-MM อะไรก็ได้ ยิงตรงด้วย 2026-03 (ปิดแล้ว) หรือ 2099-01
        (รอบที่ไม่มีจริง) ก็ได้แถวในคอลเลกชันที่ไม่มีหน้าไหนแสดง */
-    const open = writablePeriod(period);
+    const open = await writablePeriodState(period);
     if (!open.ok) return message(open.message, 400);
 
     const identity = await getDeskIdentity();

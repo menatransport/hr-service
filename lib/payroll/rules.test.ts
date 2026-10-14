@@ -228,7 +228,8 @@ test("รหัสวันที่ไม่อยู่ในชุด 24 ต�
 });
 
 test("รหัสวันที่อยู่ในชุดแต่ยังไม่รู้ความหมาย = รอยืนยัน ไม่บล็อก", () => {
-  const file = parsed("01", [{ [payeeCol("01")]: "1", "1": "Aส" }]);
+  /* "Aค" ยังไม่รู้ความหมาย ส่วน "Aส" ยืนยันไปแล้วเมื่อ 14 ต.ค. 2569 */
+  const file = parsed("01", [{ [payeeCol("01")]: "1", "1": "Aค" }]);
   const found = runChecks("01", file).find((r) => r.id === "daycode.meaning-pending");
   assert.equal(found?.status, "pending");
   assert.equal(found?.blocking, false);
@@ -436,31 +437,50 @@ test("เลขของรายการที่ปลดระวางไ�
   }
 });
 
-/* ---- รหัสวัน: เบาะแสต้องไม่กลายเป็นคำยืนยัน ---- */
+/* ---- รหัสวัน: ที่ยืนยันแล้วต้องไม่ถูกทวงซ้ำ ที่ยังไม่รู้ต้องไม่เงียบ ---- */
 
-test("รหัสที่มีเบาะแสยังนับเป็นรอยืนยัน ไม่ถูกเอาไปคิดวันทำงาน", () => {
-  const withCandidate = DAY_CODES.filter((d) => d.candidate);
-  assert.ok(withCandidate.length > 0);
-  for (const d of withCandidate) {
-    assert.ok(d.evidence, `${d.code} มีเบาะแสต้องบอกที่มาด้วย`);
-    if (!d.meaning) continue;
-    /* รหัสที่ยืนยันแล้วจะมีเบาะแสด้วยก็ได้ แต่ต้องไม่ขัดกัน */
-    assert.notEqual(d.meaning, "", d.code);
+test("รหัสที่ยืนยันความหมายแล้วต้องบอกที่มาได้ และไม่ขึ้นเป็นรอยืนยันอีก", () => {
+  const confirmed = DAY_CODES.filter((d) => d.meaning);
+  assert.equal(confirmed.length, 15, "ยืนยันแล้ว 15 จาก 24 รหัส");
+
+  const spec = templateOf("01")!;
+  for (const day of confirmed) {
+    const row: Record<string, string> = { [payeeCol("01")]: "1" };
+    for (const c of spec.columns) if (/^\d+$/.test(c)) row[c] = day.code;
+    const results = runChecks("01", parsed("01", [row]));
+    assert.equal(
+      results.some((r) => r.id === "daycode.meaning-pending"),
+      false,
+      `${day.code} ยืนยันแล้ว ไม่ควรขึ้นรอยืนยัน`,
+    );
+    assert.equal(
+      results.some((r) => r.id === "daycode.unknown"),
+      false,
+      `${day.code} ต้องอยู่ในชุดรหัสที่รู้จัก`,
+    );
   }
-  const pendingWithCandidate = withCandidate.filter((d) => !d.meaning);
-  assert.ok(pendingWithCandidate.length >= 6, "ควรมีรหัสที่ได้เบาะแสจากไฟล์ต้นฉบับ");
 });
 
-test("ผลตรวจรหัสรอยืนยัน บอกเบาะแสไปด้วย แต่ยังเป็น pending ไม่บล็อก", () => {
-  const code = DAY_CODES.find((d) => !d.meaning && d.candidate)!;
+test("รหัสที่ความหมายมาจากไฟล์ต้นฉบับ ต้องบันทึกที่มาไว้ด้วย", () => {
+  for (const code of ["Aส", "Aป", "Aน", "Aด", "ก", "ป", "ลซ", "ลข", "ลพ"]) {
+    const day = DAY_CODES.find((d) => d.code === code)!;
+    assert.ok(day.meaning, `${code} ต้องมีความหมายแล้ว`);
+    assert.ok(day.evidence, `${code} ต้องบอกที่มาของความหมาย`);
+  }
+});
+
+test("รหัสที่ยังไม่รู้ความหมาย ยังขึ้นเป็นรอยืนยัน ไม่บล็อก และไม่เงียบ", () => {
+  const unknown = DAY_CODES.filter((d) => !d.meaning).map((d) => d.code);
+  assert.deepEqual(unknown, ["Aค", "Aซ", "Aล", "AX", "ลส", "กด", "กม", "ย", "จ"]);
+
   const spec = templateOf("01")!;
   const row: Record<string, string> = { [payeeCol("01")]: "1" };
-  for (const c of spec.columns) if (/^\d+$/.test(c)) row[c] = code.code;
+  for (const c of spec.columns) if (/^\d+$/.test(c)) row[c] = unknown[0];
 
   const found = runChecks("01", parsed("01", [row])).find(
     (r) => r.id === "daycode.meaning-pending",
   );
   assert.equal(found?.status, "pending");
   assert.equal(found?.blocking, false);
-  assert.ok(found?.detail.includes(code.candidate!), found?.detail);
+  assert.ok(found?.detail.includes(unknown[0]));
 });

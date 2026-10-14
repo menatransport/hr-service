@@ -16,6 +16,7 @@ import { ChecksPanel } from "@/components/payroll/checks-panel";
 import { NotifyButton } from "@/components/payroll/notify-panel";
 import { OwnerGroup } from "@/components/payroll/owner-group";
 import { PeriodPicker } from "@/components/payroll/period-picker";
+import { PeriodAdmin, usePeriodStates } from "@/components/payroll/period-admin";
 import {
   isLocked,
   periodCode,
@@ -113,7 +114,10 @@ export function IntakeView({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const code = periodCode(period);
-  const locked = isLocked(period);
+  const periods = usePeriodStates();
+  /* รอบที่ปิดแล้วอ่านจากฐานข้อมูลก่อน — ค่าคงที่ในโค้ดเหลือเป็นค่าสำรองตอน API ยังไม่ตอบ */
+  const periodStatus = periods.statusOf(code);
+  const locked = periodStatus ? periodStatus !== "open" : isLocked(period);
   const counts = useMemo(() => (profile ? tally(profile) : null), [profile]);
 
   /* วันปัจจุบันถูกคิดครั้งเดียวต่อการโหลดรอบ ไม่ใช่ทุก render — ไม่งั้นตัวเลข
@@ -448,10 +452,20 @@ export function IntakeView({
         />
         <PeriodPicker
           value={period}
+          statusOf={periods.statusOf}
           onChange={(next) => {
             setPeriod(next);
             setActive(null);
             clearFile();
+          }}
+        />
+        <PeriodAdmin
+          period={period}
+          state={periods.states.find((s) => s.code === code)}
+          canPass={canPass}
+          onChanged={() => {
+            void periods.reload();
+            setReloadAt(Date.now());
           }}
         />
       </section>
