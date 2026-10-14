@@ -57,23 +57,31 @@ test("ของที่ผ่านโดยข้ามด่าน 1 ถู�
 });
 
 test("ไฟล์ที่อ่านไม่ออกไม่ถูกนับรวมเป็น “ข้อผิดพลาด 1 ข้อ” ของไฟล์ที่อ่านได้", () => {
-  /* แถวแบบที่ POST /api/payroll/parse เขียนเมื่ออ่านไฟล์ไม่ออก: errors = 1 ปลอม ไม่มี rows/columns */
+  /* แถวแบบที่ POST /api/payroll/parse เขียนเมื่ออ่านไฟล์ไม่ออก — ธงบนแถวบอกตรง ๆ
+     ไม่ใช่เดาจากการที่ไม่มี rows/columns */
   const unreadable: IntakeRecord = {
     ...emptyRecord("02"),
     stage: "submitted",
     errors: 1,
+    unreadable: true,
     checkedAt: "2026-09-12T03:00:00.000Z",
   };
   /* ไฟล์ที่อ่านได้และมีข้อผิดพลาดจริง 1 ข้อ */
   const readable: IntakeRecord = {
     ...unreadable,
     itemId: "03",
+    unreadable: false,
     rows: 40,
     columns: 5,
   };
   assert.equal(isUnreadable(unreadable), true);
   assert.equal(isUnreadable(readable), false);
   assert.equal(isUnreadable({ ...emptyRecord("04") }), false, "ยังไม่ส่ง ไม่ใช่อ่านไม่ออก");
+  assert.equal(
+    isUnreadable({ ...unreadable, unreadable: undefined, rows: undefined, columns: undefined }),
+    false,
+    "แถวเก่าที่ยังไม่มีธงนี้ ไม่เดาว่าอ่านไม่ออก",
+  );
 
   const records = allPassed();
   records.set("02", unreadable);
@@ -137,6 +145,7 @@ test("Excel สรุปมีสองชีตและบอกชัดว�
     ...emptyRecord("02"),
     stage: "submitted",
     errors: 1,
+    unreadable: true,
     checkedAt: "2026-09-12T03:00:00.000Z",
     fileName: "เสีย.xlsx",
   });

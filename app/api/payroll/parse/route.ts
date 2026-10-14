@@ -3,11 +3,12 @@ import { NextResponse } from "next/server";
 
 import { forbidden, ok, unauthorized } from "@/app/api/_lib/respond";
 import { getDeskIdentity, readSessionUser } from "@/lib/auth/session";
-import { saveIntake } from "@/lib/payroll/intake";
+import { IntakeStageConflict, PASSED_UPLOAD_MESSAGE, readIntake, saveIntake } from "@/lib/payroll/intake";
 import { saveIntakeFile } from "@/lib/payroll/intake-files";
 import { checkContentLength, parseFailureBody, validateIntakeUpload } from "@/lib/payroll/intake-upload";
 import { profileWorkbook } from "@/lib/payroll/parse";
 import { runChecks, summarize } from "@/lib/payroll/rules";
+import { writablePeriod } from "@/lib/payroll/period";
 import { canUploadItem } from "@/lib/payroll/scope";
 
 /**
@@ -45,11 +46,24 @@ export async function POST(request: NextRequest) {
     if (!checked.ok) return message(checked.message, checked.status);
     const { period, itemId } = checked;
 
+    /* **รอบที่ปิดแล้วหรือยังมาไม่ถึง เขียนไม่ได้ — กันที่นี่ ไม่ใช่แค่บนหน้าจอ**
+       ของเดิมรับ YYYY-MM อะไรก็ได้ ยิงตรงด้วย 2026-03 (ปิดแล้ว) หรือ 2099-01
+       (รอบที่ไม่มีจริง) ก็ได้แถวในคอลเลกชันที่ไม่มีหน้าไหนแสดง */
+    const open = writablePeriod(period);
+    if (!open.ok) return message(open.message, 400);
+
     const identity = await getDeskIdentity();
     if (!canUploadItem(identity, itemId)) {
       return forbidden(
         `รายการนี้ไม่ใช่ของ${identity.department || "หน่วยงานของบัญชีนี้"} — ส่งได้เฉพาะรายการที่ฝ่ายตัวเองรับผิดชอบ`,
       );
+    }
+
+    /* **ตรวจก่อนเก็บไฟล์** — ใบที่รับเข้ารอบแล้วรับไฟล์ใหม่ทับไม่ได้ ถ้าปฏิเสธหลัง
+       เก็บไฟล์ จะเหลือไฟล์ใน GridFS ที่ไม่มีแถวไหนอ้างถึง · `saveIntake` กันซ้ำอีกชั้น
+       เผื่อมีคนกดผ่านพอดีระหว่างสองบรรทัดนี้ */
+    if ((await readIntake(period, itemId))?.stage === "passed") {
+      return message(PASSED_UPLOAD_MESSAGE, 409);
     }
 
     const stored = await saveIntakeFile(file, { period, itemId, uploadedBy: identity.name });
@@ -73,9 +87,14 @@ export async function POST(request: NextRequest) {
           errors: 1,
           warnings: 0,
           pendingChecks: 0,
+          /* ธงบอกตรง ๆ ว่าไฟล์อ่านไม่ออก — หน้าสรุปเคยต้องเดาจากการที่ไม่มี rows/columns */
+          unreadable: true,
           updatedBy: identity.name,
         });
       } catch (saveErr) {
+        if (saveErr instanceof IntakeStageConflict) {
+          return message(saveErr.message, saveErr.status);
+        }
         console.error("[api] payroll parse 422 save", saveErr);
       }
       return NextResponse.json(parseFailureBody(err, stored), { status: 422 });
@@ -98,9 +117,15 @@ export async function POST(request: NextRequest) {
       errors: tally.blocking,
       warnings: tally.warnings,
       pendingChecks: tally.pending,
+      /* ผลตรวจเต็มชุดถูกเก็บไว้กับแถว — ด่าน 2 ของคนที่เปิดหน้าทีหลังอ่านจากที่นี่
+         ไม่ได้ parse ไฟล์ใน GridFS ใหม่ทุกครั้งที่เปิดหน้า */
+      checks,
       updatedBy: identity.name,
       });
     } catch (saveErr) {
+      if (saveErr instanceof IntakeStageConflict) {
+        return message(saveErr.message, saveErr.status);
+      }
       console.error("[api] payroll parse save", saveErr);
       return NextResponse.json(
         {

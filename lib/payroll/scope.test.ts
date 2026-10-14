@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 
 import type { DeskIdentity } from "@/lib/auth/identity";
 import {
+  CONFIRMED_OWNER_DEPARTMENT_ID,
   departmentIdOf,
   ownersOfDepartment,
-  unmappedOwners,
+  resolveOwnerDepartments,
+  unmappedIn,
 } from "@/lib/payroll/owner-directory";
 import { canSeeOwner, canUploadItem, ownerScope } from "@/lib/payroll/scope";
 
@@ -30,10 +32,13 @@ test("หน่วยงานที่ยืนยันรหัสแล้�
   assert.deepEqual(ownersOfDepartment("15"), ["จัดส่ง ลาดกระบัง"]);
 });
 
+/* อ่านตารางที่ยืนยันแล้วตรง ๆ ไม่ผ่าน `OWNER_DEPARTMENT_ID` — ตัวนั้นรวมค่า env
+   ของเครื่องที่รันเทสต์เข้ามาด้วย เทสต์จะแดงเพราะ shell ไม่ใช่เพราะโค้ดผิด */
 test("ฝ่ายบัญชีสองฝ่ายยังไม่มีรหัสหน่วยงาน — ต้องเป็น null ไม่ใช่เดาเลข", () => {
-  assert.equal(departmentIdOf("บัญชี กรุงเทพ"), null);
-  assert.equal(departmentIdOf("บัญชี ลาดกระบัง"), null);
-  assert.deepEqual(unmappedOwners().sort(), ["บัญชี กรุงเทพ", "บัญชี ลาดกระบัง"]);
+  const ids = resolveOwnerDepartments(CONFIRMED_OWNER_DEPARTMENT_ID, {});
+  assert.equal(ids["บัญชี กรุงเทพ"], null);
+  assert.equal(ids["บัญชี ลาดกระบัง"], null);
+  assert.deepEqual(unmappedIn(ids).sort(), ["บัญชี กรุงเทพ", "บัญชี ลาดกระบัง"]);
 });
 
 test("HR เห็นทุกฝ่าย", () => {

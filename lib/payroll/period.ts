@@ -82,3 +82,38 @@ export function initialPeriod(code: string | null | undefined): PeriodRef {
   const wanted = periodFromCode(code);
   return wanted && isSelectable(wanted) ? wanted : CURRENT_PERIOD;
 }
+
+/**
+ * รอบที่ **เขียนข้อมูลได้** — ต้องเรียกที่เซิร์ฟเวอร์ทุกเส้นที่เขียนทะเบียน
+ *
+ * `isLocked`/`isSelectable` เดิมถูกใช้แค่ในหน้าจอ ซึ่งกันได้เฉพาะคนที่กดผ่านหน้าจอ —
+ * ยิง `POST /api/payroll/parse` หรือ `PATCH /api/payroll/intake` ตรง ๆ ด้วย
+ * `2026-03` (รอบที่ปิดแล้ว) หรือ `2099-01` (รอบที่ไม่มีจริง) ก็อัปโหลดเข้าได้
+ * และได้แถวขยะในคอลเลกชันที่ไม่มีใครเห็นบนหน้าจอ
+ *
+ * ยังอ่านจาก `LOCKED_PERIODS` + `CURRENT_PERIOD` ตามเดิม **ไม่สร้างคอลเลกชัน
+ * `payroll_periods`** ซึ่งเป็นงานที่ตั้งใจพักไว้
+ */
+export type WritablePeriod =
+  | { ok: true; period: PeriodRef }
+  | { ok: false; message: string };
+
+export function writablePeriod(code: string | null | undefined): WritablePeriod {
+  const period = periodFromCode(code);
+  if (!period) {
+    return { ok: false, message: "ระบุ period เป็นรูปแบบ YYYY-MM เช่น 2026-09" };
+  }
+  if (isLocked(period)) {
+    return {
+      ok: false,
+      message: `รอบ ${periodLabel(period)} ปิดแล้ว — เปิดดูย้อนหลังได้ แต่ส่งของเข้ารอบนี้ไม่ได้อีก`,
+    };
+  }
+  if (isFuture(period)) {
+    return {
+      ok: false,
+      message: `รอบ ${periodLabel(period)} ยังมาไม่ถึง — ส่งของเข้าได้เมื่อถึงรอบนั้นแล้ว`,
+    };
+  }
+  return { ok: true, period };
+}
