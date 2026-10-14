@@ -55,5 +55,6 @@ next-env.d.ts
 # ไฟล์ของ Claude / agent และสคริปต์ seed — เก็บไว้ในเครื่อง ไม่ขึ้น git (Bew สั่ง 10 ต.ค. 2569)
 /.claude/
 /AGENTS.md
+/CLAUDE.md
 /seed_*.mjs
 /.perf/
