@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { GMAIL_URL_LIMIT, gmailCompose, type ComposeDraft } from "@/lib/payroll/notify-compose";
+import {
+  GMAIL_URL_LIMIT,
+  gmailCompose,
+  parseRecipients,
+  type ComposeDraft,
+} from "@/lib/payroll/notify-compose";
 
 const draft = (body: string): ComposeDraft => ({
   to: ["a@x.co"],
@@ -32,4 +37,23 @@ test("เนื้อยาวเกินเพดาน ใช้ฉบับ�
 test("ไม่มี cc ไม่ใส่พารามิเตอร์ cc", () => {
   const { url } = gmailCompose({ ...draft("x"), cc: [] }, null);
   assert.ok(!url.includes("cc="));
+});
+
+/* ---- ผู้รับที่คนพิมพ์เอง ---- */
+
+test("แยกผู้รับได้ทุกตัวคั่น และตัดตัวซ้ำโดยคงลำดับที่พิมพ์", () => {
+  const { emails, invalid } = parseRecipients("a@x.co, b@x.co; c@x.co\n a@x.co  d@x.co");
+  assert.deepEqual(emails, ["a@x.co", "b@x.co", "c@x.co", "d@x.co"]);
+  assert.deepEqual(invalid, []);
+});
+
+test("ที่อยู่ที่ผิดรูปถูกแยกออกมาบอก ไม่ถูกทิ้งเงียบ", () => {
+  const { emails, invalid } = parseRecipients("ดี@x.co, somchai, b@x, c@x.co");
+  assert.deepEqual(emails, ["ดี@x.co", "c@x.co"]);
+  assert.deepEqual(invalid, ["somchai", "b@x"]);
+});
+
+test("ช่องว่างเปล่า ได้รายชื่อว่าง ไม่ใช่ที่อยู่ว่างหนึ่งตัว", () => {
+  assert.deepEqual(parseRecipients("   \n  ").emails, []);
+  assert.deepEqual(parseRecipients("").invalid, []);
 });

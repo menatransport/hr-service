@@ -52,3 +52,36 @@ export function gmailCompose(
   if (full.length <= GMAIL_URL_LIMIT) return { url: full, shortened: false };
   return { url: build(draft, draft.shortBody, senderEmail), shortened: true };
 }
+
+/**
+ * แยกรายชื่อผู้รับที่คนพิมพ์เองออกเป็นที่อยู่ทีละอัน แล้วบอกว่าอันไหนใช้ไม่ได้
+ *
+ * **คนพิมพ์คั่นด้วยอะไรก็ได้** — จุลภาค อัฒภาค เว้นวรรค หรือขึ้นบรรทัดใหม่ (คนก็อป
+ * รายชื่อจาก Excel มาจะได้ขึ้นบรรทัดใหม่มาด้วย) · ที่อยู่ซ้ำตัดออกให้ แต่เรียงตามที่พิมพ์
+ *
+ * กฎตรวจตั้งใจให้หลวม: มี `@` หนึ่งตัว มีอะไรอยู่สองข้าง และฝั่งโดเมนมีจุดคั่น
+ * — พอจะจับคนพิมพ์ตกหรือวางผิดช่อง แต่ไม่ไปเถียงกับที่อยู่แปลก ๆ ที่ใช้ได้จริง
+ * (ตัวตัดสินจริงคือ Gmail กับเมลเซิร์ฟเวอร์ ไม่ใช่หน้าจอนี้)
+ */
+const EMAIL_SHAPE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+export interface RecipientList {
+  /** ที่อยู่ที่ใช้ได้ เรียงตามที่พิมพ์ ตัดตัวซ้ำออกแล้ว */
+  emails: string[];
+  /** ท่อนที่รูปแบบไม่ผ่าน — เอาไปโชว์ให้คนแก้ ไม่ใช่ทิ้งเงียบ */
+  invalid: string[];
+}
+
+export function parseRecipients(value: string): RecipientList {
+  const emails: string[] = [];
+  const invalid: string[] = [];
+
+  for (const raw of value.split(/[,;\s]+/)) {
+    const piece = raw.trim();
+    if (!piece) continue;
+    if (!EMAIL_SHAPE.test(piece)) invalid.push(piece);
+    else if (!emails.includes(piece)) emails.push(piece);
+  }
+
+  return { emails, invalid };
+}

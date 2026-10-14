@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, Copy, Mail, TriangleAlert } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
-import { gmailCompose } from "@/lib/payroll/notify-compose";
+import { gmailCompose, parseRecipients } from "@/lib/payroll/notify-compose";
 import type { NotifyDraft } from "@/lib/payroll/notify";
 import type { IntakeOwner } from "@/lib/payroll/registry";
 import { toastError, toastSuccess, toastWarn } from "@/lib/swal";
@@ -114,7 +114,7 @@ function DraftDialog({ data, onClose }: { data: NotifyResponse; onClose: () => v
           </span>
           <span>
             ระบบไม่ได้ส่งเมลให้ — “เปิด Gmail” แค่เปิดหน้าเขียนเมลที่กรอกไว้แล้ว
-            ต้องกดส่งเองในแท็บนั้น
+            ต้องกดส่งเองในแท็บนั้น · ผู้รับและสำเนาแก้ได้ในช่องของแต่ละฝ่าย
           </span>
         </>
       }
@@ -157,11 +157,39 @@ function DraftRow({
   opened: boolean;
   onOpened: () => void;
 }) {
-  const noRecipient = draft.to.length === 0;
-  /* คำนวณตอน render เพื่อบอกก่อนกด ไม่ใช่รู้หลังเปิดไปแล้ว */
-  const { url, shortened } = gmailCompose(draft, senderEmail);
+  /* ผู้รับที่มาจากสมุดรายชื่อเป็นแค่ **ค่าเริ่มต้น** — HR แก้ได้ก่อนกดเปิด Gmail
+     เพราะบางฝ่ายยังไม่ได้ผูกรหัสหน่วยงาน (ผู้รับว่าง) บางรอบต้องส่งถึงคนที่ไม่ใช่
+     หัวหน้า/ผู้จัดการ และบางคนอีเมลในระบบใช้ไม่ได้ · ที่แก้อยู่แค่ในกล่องนี้
+     ไม่ได้เขียนกลับเข้าสมุดรายชื่อ ซึ่งเป็นข้อมูลของ NCAC ไม่ใช่ของหน้านี้ */
+  const [toText, setToText] = useState(draft.to.join(", "));
+  const [ccText, setCcText] = useState(draft.cc.join(", "));
+
+  const to = useMemo(() => parseRecipients(toText), [toText]);
+  const cc = useMemo(() => parseRecipients(ccText), [ccText]);
+  const invalid = [...to.invalid, ...cc.invalid];
+
+  /* คำนวณตอน render เพื่อบอกก่อนกด ไม่ใช่รู้หลังเปิดไปแล้ว · ผู้รับที่พิมพ์เองนับความยาว
+     ลิงก์ด้วย ใส่ผู้รับเยอะจึงพลิกไปเป็นฉบับย่อได้ และป้ายจะเปลี่ยนให้เห็นทันที */
+  const { url, shortened } = gmailCompose(
+    { ...draft, to: to.emails, cc: cc.emails },
+    senderEmail,
+  );
 
   function open() {
+    /* ไม่มีผู้รับก็เปิดได้ในทางเทคนิค แต่ได้หน้าเขียนเมลเปล่าที่คนต้องมาพิมพ์เองอยู่ดี
+       — บอกตรงนี้ดีกว่าให้ไปรู้ตัวที่แท็บ Gmail */
+    if (to.emails.length === 0) {
+      void toastWarn("ยังไม่มีผู้รับ", "กรอกอีเมลในช่อง “ถึง” ก่อน แล้วกดเปิดอีกครั้ง");
+      return;
+    }
+    if (invalid.length) {
+      void toastWarn(
+        "อีเมลบางตัวยังไม่ถูกรูปแบบ",
+        `${invalid.join(", ")} — แก้ก่อน ไม่งั้นจะไม่ถูกใส่เป็นผู้รับ`,
+      );
+      return;
+    }
+
     const win = window.open(url, "_blank");
     if (!win) {
       void toastError(
@@ -180,8 +208,14 @@ function DraftRow({
   }
 
   async function copy() {
+    /* ก็อปไปวางใน Gmail เองตอนลิงก์ยาวเกิน — ผู้รับที่แก้ไว้ต้องไปด้วย ไม่งั้นต้องพิมพ์ใหม่ */
+    const header = [
+      `ถึง: ${to.emails.join(", ") || "—"}`,
+      cc.emails.length ? `สำเนา: ${cc.emails.join(", ")}` : null,
+      `หัวเรื่อง: ${draft.subject}`,
+    ].filter(Boolean);
     try {
-      await navigator.clipboard.writeText(`${draft.subject}\n\n${draft.body}`);
+      await navigator.clipboard.writeText(`${header.join("\n")}\n\n${draft.body}`);
       void toastSuccess("คัดลอกแล้ว", draft.owner);
     } catch {
       void toastError("คัดลอกไม่สำเร็จ", "เบราว์เซอร์ไม่อนุญาตให้เข้าถึงคลิปบอร์ด");
@@ -217,9 +251,9 @@ function DraftRow({
           </span>
         ) : null}
         {draft.directoryMissing ? (
-          <Badge>ยังไม่ได้ผูกรหัสหน่วยงาน — ต้องกรอกผู้รับเอง</Badge>
-        ) : noRecipient ? (
-          <Badge>ไม่พบหัวหน้าหรือผู้จัดการที่มีอีเมลใช้ได้ — ต้องกรอกผู้รับเอง</Badge>
+          <Badge>ยังไม่ได้ผูกรหัสหน่วยงาน — กรอกผู้รับเองด้านล่าง</Badge>
+        ) : to.emails.length === 0 ? (
+          <Badge>ยังไม่มีผู้รับ — กรอกเองด้านล่าง</Badge>
         ) : null}
         {shortened ? <Badge>เนื้อยาวเกินลิงก์ จะเปิดฉบับย่อ</Badge> : null}
         <span className="ml-auto flex gap-2">
@@ -228,25 +262,68 @@ function DraftRow({
         </span>
       </div>
 
-      <dl className="mt-1.5 space-y-0.5 text-12 text-mut">
-        <div>
-          <dt className="inline">ถึง: </dt>
-          <dd className="inline break-all">{draft.to.join(", ") || "—"}</dd>
-        </div>
-        {draft.cc.length ? (
-          <div>
-            <dt className="inline">สำเนา: </dt>
-            <dd className="inline break-all">{draft.cc.join(", ")}</dd>
-          </div>
-        ) : null}
-      </dl>
+      <div className="mt-2 space-y-1.5">
+        <RecipientField
+          label="ถึง"
+          value={toText}
+          onChange={setToText}
+          placeholder="somchai@menatransport.co.th, somsri@menatransport.co.th"
+          invalid={to.invalid}
+        />
+        <RecipientField
+          label="สำเนา"
+          value={ccText}
+          onChange={setCcText}
+          placeholder="ว่างไว้ได้ ถ้าไม่ต้องส่งสำเนาใคร"
+          invalid={cc.invalid}
+        />
+      </div>
 
       {draft.skipped.length ? (
         <p className="mt-1.5 text-12 text-warning text-pretty">
           อีเมลของ {draft.skipped.map((s) => s.name).join(", ")} ในระบบใช้ไม่ได้ จึงไม่ถูกใส่เป็นผู้รับ
+          — กรอกที่อยู่ที่ใช้ได้ในช่องด้านบนได้
         </p>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * ช่องกรอกผู้รับ — คั่นหลายคนด้วยอะไรก็ได้ (`parseRecipients` รับทั้งจุลภาค เว้นวรรค
+ * และขึ้นบรรทัดใหม่) ที่อยู่ที่รูปแบบไม่ผ่านขึ้นเตือนใต้ช่องทันที ไม่ใช่รอตอนกดเปิด
+ */
+function RecipientField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  invalid,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  invalid: string[];
+}) {
+  return (
+    <label className="block">
+      <span className="text-12 text-mut">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoComplete="off"
+        className="mt-0.5 w-full rounded-field border border-line bg-transparent px-2 py-1 text-12 text-ink placeholder:text-mut/60 focus:border-primary/50 focus:outline-none"
+      />
+      {invalid.length ? (
+        <span className="mt-0.5 block text-12 text-warning">
+          ยังไม่ถูกรูปแบบ: {invalid.join(", ")}
+        </span>
+      ) : null}
+    </label>
   );
 }
 
