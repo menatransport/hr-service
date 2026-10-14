@@ -7,6 +7,7 @@ import { canPassIntake, HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
 import { listIntake } from "@/lib/payroll/intake";
 import type { IntakeRecord } from "@/lib/payroll/intake-status";
 import { notifyDraft } from "@/lib/payroll/notify";
+import { listSavedRecipients } from "@/lib/payroll/notify-recipients";
 import { BE_OFFSET, type PeriodRef } from "@/lib/payroll/period";
 import { OWNER_ORDER, type IntakeOwner } from "@/lib/payroll/registry";
 
@@ -71,14 +72,20 @@ export async function GET(request: NextRequest) {
       owners = [ownerParam as IntakeOwner];
     }
 
-    /* สมุดรายชื่อกับสถานะรอบอ่านครั้งเดียวแล้วใช้ร่วมกันทุกฝ่าย */
-    const [users, rows] = await Promise.all([listUsers(), listIntake(code)]);
+    /* สมุดรายชื่อ สถานะรอบ และผู้รับที่บันทึกไว้ อ่านครั้งเดียวแล้วใช้ร่วมกันทุกฝ่าย */
+    const [users, rows, saved] = await Promise.all([
+      listUsers(),
+      listIntake(code),
+      listSavedRecipients(),
+    ]);
     const records = new Map<string, IntakeRecord>(rows.map((r) => [r.itemId, r]));
     const origin = originOf(request);
     const now = new Date();
 
     const drafts = await Promise.all(
-      owners.map((owner) => notifyDraft({ owner, period, origin, records, now, users })),
+      owners.map((owner) =>
+        notifyDraft({ owner, period, origin, records, now, users, saved: saved.get(owner) }),
+      ),
     );
 
     /* session ของ NCAC ไม่มีฟิลด์ email — เทียบรหัสพนักงานกับสมุดรายชื่อเอา หาไม่เจอก็ยังใช้ได้

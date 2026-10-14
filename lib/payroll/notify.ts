@@ -1,4 +1,5 @@
 import { resolveRecipients } from "../case-notify";
+import type { SavedRecipients } from "./notify-recipients";
 import type { UserDto } from "../ncac/types";
 import { dueDate, emptyRecord, lateDays, type IntakeRecord } from "./intake-status";
 import { departmentIdOf } from "./owner-directory";
@@ -264,6 +265,12 @@ export interface NotifyDraft {
   directoryMissing: boolean;
   /** คนที่เข้าเกณฑ์ผู้รับแต่อีเมลในระบบใช้ไม่ได้ — ให้หน้าจอเตือน ไม่ใช่หายไปเงียบ ๆ */
   skipped: { name: string; position: string; email: string }[];
+  /**
+   * ผู้รับชุดนี้มาจากที่ HR บันทึกไว้ ไม่ใช่จากสมุดรายชื่อ — หน้าจอต้องบอกให้เห็น
+   * ว่ากำลังใช้ของที่ใครบันทึกไว้เมื่อไหร่ ไม่งั้นเมลที่ส่งผิดคนจะหาสาเหตุไม่เจอ
+   */
+  savedBy?: string;
+  savedAt?: string;
 }
 
 export async function notifyDraft(args: {
@@ -273,23 +280,29 @@ export async function notifyDraft(args: {
   records: Map<string, IntakeRecord>;
   now: Date;
   users: UserDto[];
+  /** ผู้รับที่ HR บันทึกไว้ของฝ่ายนี้ — มีแล้วใช้ทับสมุดรายชื่อ */
+  saved?: SavedRecipients;
 }): Promise<NotifyDraft> {
-  const { owner, period, origin, records, now, users } = args;
+  const { owner, period, origin, records, now, users, saved } = args;
   const link = intakeLink(origin, period, owner);
 
   const departmentId = departmentIdOf(owner);
   const plan = departmentId ? await resolveRecipients(departmentId, users) : null;
   const items = itemsByOwner(owner);
 
+  /* ค่าที่บันทึกไว้ทับสมุดรายชื่อ — เหตุผลอยู่ที่หัว `notify-recipients.ts` */
   return {
     owner,
-    to: plan?.to.map((r) => r.email) ?? [],
-    cc: plan?.cc.map((r) => r.email) ?? [],
+    to: saved ? saved.to : (plan?.to.map((r) => r.email) ?? []),
+    cc: saved ? saved.cc : (plan?.cc.map((r) => r.email) ?? []),
     subject: subjectOf(owner, period, deadlineOf({ owner, period, items, records, now })),
     body: bodyOf({ owner, period, items, records, link, now }),
     shortBody: shortBodyOf({ owner, period, items, records, link, now }),
     link,
     directoryMissing: departmentId === null,
-    skipped: plan?.skipped ?? [],
+    /* ใช้ผู้รับที่บันทึกไว้แล้ว การเตือนว่าสมุดรายชื่อมีอีเมลเสียก็ไม่ใช่เรื่องของร่างนี้อีก */
+    skipped: saved ? [] : (plan?.skipped ?? []),
+    savedBy: saved?.updatedBy,
+    savedAt: saved?.updatedAt,
   };
 }

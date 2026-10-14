@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Check, Copy, Mail, TriangleAlert } from "lucide-react";
+import { Bookmark, BookmarkX, Check, Copy, Mail, TriangleAlert } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import { gmailCompose, parseRecipients } from "@/lib/payroll/notify-compose";
@@ -163,6 +163,11 @@ function DraftRow({
      ไม่ได้เขียนกลับเข้าสมุดรายชื่อ ซึ่งเป็นข้อมูลของ NCAC ไม่ใช่ของหน้านี้ */
   const [toText, setToText] = useState(draft.to.join(", "));
   const [ccText, setCcText] = useState(draft.cc.join(", "));
+  /* ป้าย "บันทึกไว้แล้ว" ต้องขยับตามการกดในกล่องนี้ ไม่ใช่ค้างค่าที่โหลดมาตอนเปิด */
+  const [stamp, setStamp] = useState<{ by: string; at: string } | null>(
+    draft.savedBy && draft.savedAt ? { by: draft.savedBy, at: draft.savedAt } : null,
+  );
+  const [busy, setBusy] = useState(false);
 
   const to = useMemo(() => parseRecipients(toText), [toText]);
   const cc = useMemo(() => parseRecipients(ccText), [ccText]);
@@ -219,6 +224,54 @@ function DraftRow({
       void toastSuccess("คัดลอกแล้ว", draft.owner);
     } catch {
       void toastError("คัดลอกไม่สำเร็จ", "เบราว์เซอร์ไม่อนุญาตให้เข้าถึงคลิปบอร์ด");
+    }
+  }
+
+  /** บันทึกผู้รับของฝ่ายนี้ไว้ใช้รอบหน้า — ทับสมุดรายชื่อจนกว่าจะกดล้าง */
+  async function save() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/payroll/notify/recipients", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ owner: draft.owner, to: toText, cc: ccText }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        saved?: { updatedBy: string; updatedAt: string };
+        error?: string;
+      };
+      if (!res.ok || !json.saved) {
+        void toastError("บันทึกผู้รับไม่สำเร็จ", json.error ?? "ลองใหม่อีกครั้ง");
+        return;
+      }
+      setStamp({ by: json.saved.updatedBy, at: json.saved.updatedAt });
+      void toastSuccess("บันทึกผู้รับแล้ว", `รอบหน้าของ${draft.owner}จะใช้ชุดนี้`);
+    } catch {
+      void toastError("บันทึกผู้รับไม่สำเร็จ", "เชื่อมต่อระบบไม่ได้ ลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** ล้างของที่บันทึกไว้ — ช่องกลับไปเป็นผู้รับจากสมุดรายชื่อที่ API ส่งมาตอนเปิดกล่อง */
+  async function clear() {
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `/api/payroll/notify/recipients?owner=${encodeURIComponent(draft.owner)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        void toastError("ล้างไม่สำเร็จ", json.error ?? "ลองใหม่อีกครั้ง");
+        return;
+      }
+      setStamp(null);
+      void toastSuccess("ล้างผู้รับที่บันทึกไว้แล้ว", "รอบหน้าจะกลับไปใช้สมุดรายชื่อ");
+    } catch {
+      void toastError("ล้างไม่สำเร็จ", "เชื่อมต่อระบบไม่ได้ ลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -279,6 +332,37 @@ function DraftRow({
         />
       </div>
 
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || to.emails.length === 0 || invalid.length > 0}
+          className="flex items-center gap-1 text-12 text-mut transition-colors hover:text-primary disabled:opacity-40"
+        >
+          <Bookmark size={12} aria-hidden />
+          {stamp ? "บันทึกทับของเดิม" : "บันทึกไว้ใช้รอบหน้า"}
+        </button>
+
+        {stamp ? (
+          <>
+            <button
+              type="button"
+              onClick={clear}
+              disabled={busy}
+              className="flex items-center gap-1 text-12 text-mut transition-colors hover:text-sla disabled:opacity-40"
+            >
+              <BookmarkX size={12} aria-hidden />
+              กลับไปใช้สมุดรายชื่อ
+            </button>
+            <span className="text-11-5 text-mut">
+              ใช้ผู้รับที่บันทึกไว้ · {stamp.by} แก้ล่าสุด {when(stamp.at)}
+            </span>
+          </>
+        ) : (
+          <span className="text-11-5 text-mut">ตอนนี้ใช้หัวหน้า/ผู้จัดการจากสมุดรายชื่อ</span>
+        )}
+      </div>
+
       {draft.skipped.length ? (
         <p className="mt-1.5 text-12 text-warning text-pretty">
           อีเมลของ {draft.skipped.map((s) => s.name).join(", ")} ในระบบใช้ไม่ได้ จึงไม่ถูกใส่เป็นผู้รับ
@@ -325,6 +409,13 @@ function RecipientField({
       ) : null}
     </label>
   );
+}
+
+/** `9 ต.ค. 14:30` — สั้นพอจะอยู่ท้ายบรรทัดได้ และบอกเวลาเพราะแก้ซ้ำในวันเดียวกันได้ */
+function when(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return `${at.toLocaleDateString("th-TH", { day: "numeric", month: "short" })} ${at.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
