@@ -329,7 +329,15 @@ function writeRefSheet(sheet: Worksheet) {
     DAY_CODES.map((entry) => entry.code),
     /* รหัสที่ยังไม่รู้ความหมายต้องเห็นชัดว่า "ยังไม่รู้" ไม่ใช่เว้นว่างเฉย ๆ
        ไม่งั้นคนอ่านจะนึกว่าตกหล่นแล้วเดาความหมายกันเอง */
-    DAY_CODES.map((entry) => entry.meaning || "— รอฝ่ายจัดส่งยืนยัน"),
+    /* รหัสที่ยังไม่ยืนยันแต่มีเบาะแส บอกเบาะแสพร้อมที่มา — คนกรอกจะได้ทักท้วงได้ทันที
+       ถ้าเบาะแสผิด แทนที่จะเห็นแค่ "รอยืนยัน" แล้วไม่มีอะไรให้ตอบ */
+    DAY_CODES.map((entry) =>
+      entry.meaning
+        ? entry.meaning
+        : entry.candidate
+          ? `รอยืนยัน — น่าจะ “${entry.candidate}” (${entry.evidence})`
+          : "— รอฝ่ายจัดส่งยืนยัน",
+    ),
   ];
 
   columns.forEach((values, index) => {

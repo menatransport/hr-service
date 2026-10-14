@@ -435,3 +435,32 @@ test("เลขของรายการที่ปลดระวางไ�
     assert.ok(!INTAKE_ITEMS.some((i) => i.id === retired.id));
   }
 });
+
+/* ---- รหัสวัน: เบาะแสต้องไม่กลายเป็นคำยืนยัน ---- */
+
+test("รหัสที่มีเบาะแสยังนับเป็นรอยืนยัน ไม่ถูกเอาไปคิดวันทำงาน", () => {
+  const withCandidate = DAY_CODES.filter((d) => d.candidate);
+  assert.ok(withCandidate.length > 0);
+  for (const d of withCandidate) {
+    assert.ok(d.evidence, `${d.code} มีเบาะแสต้องบอกที่มาด้วย`);
+    if (!d.meaning) continue;
+    /* รหัสที่ยืนยันแล้วจะมีเบาะแสด้วยก็ได้ แต่ต้องไม่ขัดกัน */
+    assert.notEqual(d.meaning, "", d.code);
+  }
+  const pendingWithCandidate = withCandidate.filter((d) => !d.meaning);
+  assert.ok(pendingWithCandidate.length >= 6, "ควรมีรหัสที่ได้เบาะแสจากไฟล์ต้นฉบับ");
+});
+
+test("ผลตรวจรหัสรอยืนยัน บอกเบาะแสไปด้วย แต่ยังเป็น pending ไม่บล็อก", () => {
+  const code = DAY_CODES.find((d) => !d.meaning && d.candidate)!;
+  const spec = templateOf("01")!;
+  const row: Record<string, string> = { [payeeCol("01")]: "1" };
+  for (const c of spec.columns) if (/^\d+$/.test(c)) row[c] = code.code;
+
+  const found = runChecks("01", parsed("01", [row])).find(
+    (r) => r.id === "daycode.meaning-pending",
+  );
+  assert.equal(found?.status, "pending");
+  assert.equal(found?.blocking, false);
+  assert.ok(found?.detail.includes(code.candidate!), found?.detail);
+});
