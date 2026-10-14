@@ -12,7 +12,7 @@ import {
   tallyOwner,
   type IntakeRecord,
 } from "@/lib/payroll/intake-status";
-import { kindOf, type ItemKind } from "@/lib/payroll/classify";
+import { KIND_LABEL, kindOf, type ItemKind } from "@/lib/payroll/classify";
 import type { IntakeCategory, IntakeItem, IntakeOwner } from "@/lib/payroll/registry";
 import { CATEGORY_ORDER, dueDaysOf } from "@/lib/payroll/registry";
 import type { PeriodRef } from "@/lib/payroll/period";
@@ -291,7 +291,11 @@ function GroupHead({
 }
 
 /* ป้ายทิศทางเงินของรายการ — "ผสม" กับ "รอยืนยัน" ต้องเด่น เพราะเป็นสองกลุ่มที่
-   คนตรวจต้องเปิดดูรายช่องก่อนรับเข้ารอบ ไม่ใช่ดูแค่ยอดรวม */
+   คนตรวจต้องเปิดดูรายช่องก่อนรับเข้ารอบ ไม่ใช่ดูแค่ยอดรวม
+
+   **คำบนป้ายต้องเป็นคำนาม ไม่ใช่คำกริยา** — ป้ายเดิมเขียนว่า "เพิ่ม" / "หัก" เฉย ๆ
+   ซึ่งอยู่ในแถวที่มีปุ่มอื่นด้วย คนอ่านจึงเข้าใจว่าเป็นปุ่ม "เพิ่ม(ไฟล์)" (ผู้ใช้สะดุด
+   จริงเมื่อ 14 ต.ค. 2569) · ป้ายนี้บอกว่าเงินของรายการนี้ไปทางไหนในสลิป ไม่ใช่สิ่งที่กดได้ */
 const KIND_TONE: Record<ItemKind, string> = {
   ฐาน: "border-line text-mut",
   เพิ่ม: "border-primary/30 text-primary",
@@ -300,12 +304,22 @@ const KIND_TONE: Record<ItemKind, string> = {
   รอยืนยัน: "border-warning/50 bg-warning/10 text-warning font-medium",
 };
 
+/** คำบนป้าย — สั้นพอจะอยู่ในแถวได้ แต่ยังเป็นคำนามที่อ่านแล้วรู้ว่าพูดถึงเงิน */
+const KIND_CHIP: Record<ItemKind, string> = {
+  ฐาน: "ไม่ใช่เงิน",
+  เพิ่ม: "เงินเพิ่ม",
+  หัก: "เงินหัก",
+  ผสม: "เพิ่ม+หัก",
+  รอยืนยัน: "รอยืนยันทิศทาง",
+};
+
 function KindChip({ kind }: { kind: ItemKind }) {
   return (
     <span
       className={`hidden rounded-field border px-1.5 py-px text-11 sm:inline ${KIND_TONE[kind]}`}
+      title={KIND_LABEL[kind]}
     >
-      {kind}
+      {KIND_CHIP[kind]}
     </span>
   );
 }

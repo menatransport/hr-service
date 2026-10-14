@@ -15,6 +15,7 @@ import { ColumnList } from "@/components/payroll/column-list";
 import { ChecksPanel } from "@/components/payroll/checks-panel";
 import { NotifyButton } from "@/components/payroll/notify-panel";
 import { OwnerGroup } from "@/components/payroll/owner-group";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { PeriodPicker } from "@/components/payroll/period-picker";
 import { PeriodAdmin, usePeriodStates } from "@/components/payroll/period-admin";
 import {
@@ -614,15 +615,21 @@ export function IntakeView({
         )}
       </section>
 
-      {/* ─────────────────────── 3. ตรวจคุณภาพของชิ้นที่เลือก */}
+      {/* ─────────────────────── 3. ตรวจคุณภาพของชิ้นที่เลือก — เป็นกล่องลอย
+          **ไม่ใช่แผงต่อท้ายหน้า** เพราะทะเบียนยาวหลายกล่องฝ่าย กดรายการแล้วแผงไป
+          โผล่ท้ายหน้าซึ่งคนไม่เห็นว่ามีอะไรเกิดขึ้น ต้องเลื่อนลงไปหาเอง (ผู้ใช้ขอเมื่อ
+          14 ต.ค. 2569) · กล่องลอยปิดแล้วกลับมาที่รายการเดิมพอดี ไม่เสียตำแหน่งที่เลื่อนไว้ */}
       {active && activeRecord ? (
-        <section className="flex flex-col gap-3 rounded-box border border-primary/30 bg-base-100 p-4">
-          <StepHead
-            no={3}
-            done={activeRecord.stage === "passed"}
-            title={`ตรวจคุณภาพ — ${active.title}`}
-            meta={`${active.owner} · ${active.category} · กำหนดวันที่ ${active.dueDay}`}
-          />
+        <ModalShell
+          title={`ตรวจคุณภาพ — ${active.title}`}
+          subtitle={`${active.owner} · ${active.category} · กำหนดวันที่ ${active.dueDay}`}
+          width="900px"
+          tone="plain"
+          onClose={() => {
+            setActive(null);
+            clearFile();
+          }}
+        >
 
           {/* บอกคนตรวจก่อนเปิดไฟล์ว่าช่องไหนลงสลิปทิศไหน และเงินเข้าใคร — ของที่ผสม
               กับรอยืนยันคือจุดที่เคยจ่ายผิดทิศได้โดยไม่มีอะไรเตือน */}
@@ -733,14 +740,6 @@ export function IntakeView({
               ดาวน์โหลดแบบฟอร์ม
             </a>
 
-            <button
-              type="button"
-              onClick={() => setActive(null)}
-              className="flex items-center gap-1 rounded-field border border-line px-2.5 py-1 text-12 text-mut transition-colors hover:border-alert/40 hover:text-alert"
-            >
-              <X size={12} strokeWidth={2} aria-hidden />
-              ปิด
-            </button>
           </div>
 
           {activeRecord.stage === "returned" && activeRecord.returnedReason ? (
@@ -1046,7 +1045,7 @@ export function IntakeView({
               <EventTrail events={events} />
             </>
           ) : null}
-        </section>
+        </ModalShell>
       ) : null}
     </div>
   );
