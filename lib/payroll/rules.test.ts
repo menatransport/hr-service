@@ -4,8 +4,17 @@ import assert from "node:assert/strict";
 import { classify, MONEY_COLUMNS, postedColumns, type MoneyEffect } from "@/lib/payroll/classify";
 import type { FileProfile } from "@/lib/payroll/profile";
 import type { ParsedFile } from "@/lib/payroll/parse";
-import { make, runChecks, summarize, WAITING_OWNER } from "@/lib/payroll/rules";
-import { DAY_CODES, templateOf } from "@/lib/payroll/template-spec";
+import { INTAKE_ITEMS } from "@/lib/payroll/registry";
+import {
+  make,
+  runChecks,
+  summarize,
+  TIGERSOFT_PENDING,
+  validateRuleColumns,
+  WAITING_OWNER,
+  type RuleSources,
+} from "@/lib/payroll/rules";
+import { DAY_CODES, hasDayGrid, templateOf } from "@/lib/payroll/template-spec";
 
 /**
  * ไฟล์สมมติที่หัวคอลัมน์ตรงสเปกของรายการนั้น แล้วค่อยทำให้ผิดทีละข้อในแต่ละเทสต์
@@ -285,4 +294,69 @@ test("ข้อความรหัสไม่รู้จักนับจ�
   } finally {
     DAY_CODES.pop();
   }
+});
+
+/* ── validateRuleColumns ─────────────────────────────────────────── */
+
+const realSources = (): RuleSources => ({
+  itemIds: INTAKE_ITEMS.map((i) => i.id),
+  columnsOf: (id) => templateOf(id)?.columns ?? null,
+  payeeOf: (id) => classify(id)!.payeeColumn,
+  moneyColumns: MONEY_COLUMNS,
+  waitingOwner: WAITING_OWNER,
+  tigersoftPending: TIGERSOFT_PENDING,
+});
+
+test("validateRuleColumns: ข้อมูลจริงของโปรเจกต์ผ่าน", () => {
+  assert.deepEqual(validateRuleColumns(), []);
+});
+
+test("validateRuleColumns: ช่องเงินที่กฎเช็กหายไปจากสเปก ต้องถูกจับ", () => {
+  const src = realSources();
+  src.moneyColumns = { ...MONEY_COLUMNS, "13": { ...MONEY_COLUMNS["13"], "ช่องที่ไม่มี(บาท)": "หัก" } };
+  const problems = validateRuleColumns(src);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes("#13") && problems[0].includes("ช่องที่ไม่มี(บาท)"), problems[0]);
+});
+
+test("validateRuleColumns: ช่องอ้างอิงที่ไม่ลงสลิปไม่ถูกนับ (กฎไม่ได้เช็ก)", () => {
+  const src = realSources();
+  src.moneyColumns = { ...MONEY_COLUMNS, "13": { ...MONEY_COLUMNS["13"], "ช่องที่ไม่มี": "อ้างอิง" } };
+  assert.deepEqual(validateRuleColumns(src), []);
+});
+
+test("validateRuleColumns: ช่องเงินเข้าใครสะกดเพี้ยน ต้องถูกจับ", () => {
+  const src = realSources();
+  src.payeeOf = (id) => (id === "10" ? "รหัสครูฝึกx" : classify(id)!.payeeColumn);
+  const problems = validateRuleColumns(src);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes("#10") && problems[0].includes("รหัสครูฝึกx"), problems[0]);
+});
+
+test("validateRuleColumns: ตารางรายวันขาดวันที่ ต้องถูกจับ", () => {
+  const src = realSources();
+  const gridId = INTAKE_ITEMS.map((i) => i.id).find((id) => hasDayGrid(templateOf(id)!.columns))!;
+  src.columnsOf = (id) =>
+    id === gridId ? templateOf(id)!.columns.filter((c) => c !== "17") : templateOf(id)?.columns ?? null;
+  const problems = validateRuleColumns(src);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes(`#${gridId}`) && problems[0].includes("17"), problems[0]);
+});
+
+test("validateRuleColumns: รายการไม่มีสเปก / ตารางชื่อฝ่ายไม่ตรงกับรายการที่รอยืนยัน ต้องถูกจับ", () => {
+  const noSpec = realSources();
+  noSpec.columnsOf = (id) => (id === "05" ? null : templateOf(id)?.columns ?? null);
+  assert.ok(validateRuleColumns(noSpec).some((p) => p.includes("#05")));
+
+  const staleOwner = realSources();
+  staleOwner.waitingOwner = { ...WAITING_OWNER, "01": "ใครสักคน" };
+  assert.ok(validateRuleColumns(staleOwner).some((p) => p.includes("#01")));
+
+  const missingOwner = realSources();
+  missingOwner.waitingOwner = Object.fromEntries(Object.entries(WAITING_OWNER).filter(([id]) => id !== "14"));
+  assert.ok(validateRuleColumns(missingOwner).some((p) => p.includes("#14")));
+
+  const badTiger = realSources();
+  badTiger.tigersoftPending = { ...TIGERSOFT_PENDING, "99": "x" };
+  assert.ok(validateRuleColumns(badTiger).some((p) => p.includes("#99")));
 });

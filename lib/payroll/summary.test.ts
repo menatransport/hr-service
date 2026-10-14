@@ -232,3 +232,48 @@ test("ผ่านโดยข้ามด่านแต่ไม่มีเ�
   }
   assert.equal(cell, "ไม่มีเหตุผลบันทึกไว้");
 });
+
+test("สรุปของฝ่ายเดียวที่ยังไม่ครบ พูดว่า “ยังไม่ครบ” และนับที่เหลือ ไม่พูดว่าผ่านครบ", () => {
+  const mine = INTAKE_ITEMS.filter((i) => i.owner === "ยานยนต์");
+  assert.ok(mine.length >= 2, "เทสต์นี้ต้องมีอย่างน้อย 2 รายการ");
+  const records = new Map(
+    mine.map((i) => [i.id, { ...emptyRecord(i.id), stage: "passed" as const, errors: 0 }]),
+  );
+  records.delete(mine[0].id);
+  const summary = summarizePeriod(period, records, now, mine);
+  assert.equal(summary.scoped, true);
+  assert.equal(summary.ready, false);
+  const line = readinessLine(summary);
+  assert.ok(line.startsWith("รายการของยานยนต์ ยังไม่ครบ"), line);
+  assert.ok(line.includes("เหลือ 1 รายการ"), line);
+  assert.ok(!line.includes("ผ่านครบแล้ว"), line);
+});
+
+test("ผู้ใช้ที่ไม่เห็นรายการเลย ไม่ได้ข้อความ “รายการของ ผ่านครบแล้ว” ที่ชื่อฝ่ายว่าง", () => {
+  const summary = summarizePeriod(period, new Map(), now, []);
+  assert.equal(summary.ready, false, "ไม่มีอะไรให้ตรวจ ไม่ใช่พร้อม");
+  assert.equal(summary.scoped, true);
+  const line = readinessLine(summary);
+  assert.ok(!line.includes("รายการของ "), line);
+  assert.ok(!line.includes("ผ่านครบแล้ว"), line);
+  assert.ok(line.includes("ไม่มีรายการ"), line);
+});
+
+test("เหตุผลข้ามด่านที่เป็นข้อความว่าง Excel ต้องขึ้นข้อความเดียวกับหน้าจอ", async () => {
+  const records = allPassed();
+  records.set("13", {
+    ...emptyRecord("13"),
+    stage: "passed",
+    errors: 2,
+    rows: 3,
+    columns: 3,
+    overrideReason: "",
+  });
+  const { file } = await buildPeriodSummary(summarizePeriod(period, records, now), records);
+  const items = (await open(file)).getWorksheet("รายรายการ")!;
+  let cell = "";
+  for (let r = 6; r <= items.rowCount; r++) {
+    if (items.getRow(r).getCell(1).text === "13") cell = items.getRow(r).getCell(11).text;
+  }
+  assert.equal(cell, "ไม่มีเหตุผลบันทึกไว้");
+});

@@ -129,7 +129,8 @@ export function summarizePeriod(
   return {
     period,
     owners,
-    ready: blockers.length === 0,
+    /* ไม่มีรายการในขอบเขตเลย = ไม่มีอะไรให้ยืนยัน ไม่ใช่ “พร้อม” */
+    ready: rows.length > 0 && blockers.length === 0,
     blockers,
     rows,
     scoped: items.length < INTAKE_ITEMS.length,
@@ -148,6 +149,7 @@ export const statusText = (row: ItemRow): string =>
  */
 export function readinessLine(summary: PeriodSummary): string {
   const left = summary.blockers.length;
+  if (summary.rows.length === 0) return "ไม่มีรายการในความรับผิดชอบของคุณให้สรุปในรอบนี้";
   if (!summary.scoped) {
     return summary.ready
       ? "ทุกรายการตรวจผ่านครบแล้ว"

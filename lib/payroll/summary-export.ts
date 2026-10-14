@@ -188,7 +188,7 @@ function writeItems(
         record?.passedBy ?? "",
         when(record?.passedAt),
         pending,
-        record?.overrideReason ??
+        record?.overrideReason ||
           (stage === "passed" && (record?.errors ?? 0) > 0 ? NO_REASON_TEXT : ""),
       ],
       stage !== "passed",

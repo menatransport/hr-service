@@ -1,5 +1,6 @@
-import { classify, MONEY_COLUMNS, postedColumns } from "./classify";
+import { classify, DEFAULT_PAYEE_COLUMN, MONEY_COLUMNS, PAYEE_COLUMN, postedColumns } from "./classify";
 import { headerLetter, normalizeHeader, type ParsedFile } from "./parse";
+import { INTAKE_ITEMS } from "./registry";
 import { DAY_CODES, hasDayGrid, templateOf } from "./template-spec";
 
 /**
@@ -67,7 +68,7 @@ export const WAITING_OWNER: Record<string, string> = {
   "18": "ยานยนต์",
 };
 
-const TIGERSOFT_PENDING: Record<string, string> = {
+export const TIGERSOFT_PENDING: Record<string, string> = {
   "08": "เงินรางวัลมี 4 ช่องย่อย",
   "23": "ค่าน้ำกับค่าไฟแยกกันสองช่อง",
 };
@@ -360,4 +361,78 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
   }
 
   return out;
+}
+
+/** ข้อมูลที่กฎอ่าน — แยกเป็นพารามิเตอร์เพื่อให้เทสต์ใส่ข้อมูลที่ผิดเข้าไปได้ */
+export interface RuleSources {
+  itemIds: string[];
+  columnsOf: (itemId: string) => string[] | null;
+  payeeOf: (itemId: string) => string;
+  moneyColumns: Record<string, Record<string, string>>;
+  waitingOwner: Record<string, string>;
+  tigersoftPending: Record<string, string>;
+}
+
+const REAL_SOURCES: RuleSources = {
+  itemIds: INTAKE_ITEMS.map((i) => i.id),
+  columnsOf: (id) => templateOf(id)?.columns ?? null,
+  payeeOf: (id) => PAYEE_COLUMN[id] ?? DEFAULT_PAYEE_COLUMN,
+  moneyColumns: MONEY_COLUMNS,
+  waitingOwner: WAITING_OWNER,
+  tigersoftPending: TIGERSOFT_PENDING,
+};
+
+/**
+ * ตรวจว่าทุกช่องที่กฎอ้างถึงมีอยู่จริงในสเปกของรายการที่กฎนั้นใช้ — คืนรายการข้อผิดพลาด ว่างคือผ่าน
+ *
+ * กฎที่อ้างช่องซึ่งไม่มีแล้วจะ **เงียบ** (ไม่เจอช่อง → ข้ามไป) ซึ่งอันตรายกว่ากฎที่ดังผิด
+ * เพราะไม่มีใครเห็นเช็กที่ไม่เคยพูด · ตรวจเฉพาะช่องที่ `runChecks` ใช้จริง:
+ * ช่องเงินเข้าใคร · ช่องเงินที่ลงสลิป · ช่องที่รอยืนยัน · ช่องวันที่ 1–31 ของตารางรายวัน
+ * และตารางชื่อฝ่ายที่ต้องตรงกับรายการที่ยังรอยืนยันจริง
+ */
+export function validateRuleColumns(src: RuleSources = REAL_SOURCES): string[] {
+  const problems: string[] = [];
+  const known = new Set(src.itemIds);
+
+  for (const id of src.itemIds) {
+    const columns = src.columnsOf(id);
+    if (!columns) {
+      problems.push(`#${id} ไม่มีสเปกคอลัมน์ กฎของรายการนี้จึงไม่มีช่องให้อ้าง`);
+      continue;
+    }
+    const have = new Set(columns);
+
+    const payee = src.payeeOf(id);
+    if (!have.has(payee)) problems.push(`#${id} กฎเช็กช่องเงินเข้าใคร “${payee}” แต่สเปกไม่มีช่องนี้`);
+
+    for (const [column, effect] of Object.entries(src.moneyColumns[id] ?? {})) {
+      if (effect === "อ้างอิง") continue;
+      if (!have.has(column)) problems.push(`#${id} กฎเช็กช่องเงิน “${column}” แต่สเปกไม่มีช่องนี้`);
+    }
+
+    if (hasDayGrid(columns)) {
+      const missingDays = Array.from({ length: 31 }, (_, i) => String(i + 1)).filter((d) => !have.has(d));
+      if (missingDays.length) {
+        problems.push(`#${id} ตารางรายวันขาดช่องวันที่ ${missingDays.join(" · ")} กฎรหัสวันจะข้ามวันเหล่านั้นเงียบ ๆ`);
+      }
+    }
+  }
+
+  const pendingIds = new Set(
+    Object.entries(src.moneyColumns)
+      .filter(([, cols]) => Object.values(cols).includes("รอยืนยัน"))
+      .map(([id]) => id),
+  );
+  for (const id of Object.keys(src.waitingOwner)) {
+    if (!known.has(id)) problems.push(`รายชื่อฝ่ายที่รอยืนยันมี #${id} แต่ทะเบียนไม่มีรายการนี้`);
+    else if (!pendingIds.has(id)) problems.push(`รายชื่อฝ่ายที่รอยืนยันมี #${id} แต่รายการนี้ไม่มีช่องที่รอยืนยันแล้ว`);
+  }
+  for (const id of pendingIds) {
+    if (!(id in src.waitingOwner)) problems.push(`#${id} มีช่องรอยืนยันแต่ไม่ได้ระบุว่ารอฝ่ายไหน`);
+  }
+  for (const id of Object.keys(src.tigersoftPending)) {
+    if (!known.has(id)) problems.push(`กฎ Tiger Soft อ้าง #${id} แต่ทะเบียนไม่มีรายการนี้`);
+  }
+
+  return problems;
 }
