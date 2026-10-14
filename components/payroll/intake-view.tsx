@@ -31,11 +31,12 @@ import {
   type IntakeRecord,
   type IntakeStage,
 } from "@/lib/payroll/intake-status";
+import type { DeskIdentity } from "@/lib/auth/identity";
 import { HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
+import { unmappedOwners } from "@/lib/payroll/owner-directory";
+import { visibleItems } from "@/lib/payroll/scope-filter";
 import { classify, KIND_LABEL } from "@/lib/payroll/classify";
 import {
-  INTAKE_ITEMS,
-  itemsByOwner,
   OWNER_ORDER,
   type IntakeItem,
 } from "@/lib/payroll/registry";
@@ -69,7 +70,21 @@ import { confirm, toastError, toastInfo, toastSuccess } from "@/lib/swal";
  * วันนั้นแก้แค่ฟังก์ชัน `read()` ไม่ต้องแตะคอมโพเนนต์ลูก · ส่วน**สถานะรายรอบ
  * ต่อ MongoDB จริงแล้ว** ผ่าน `/api/payroll/intake`
  */
-export function IntakeView({ canPass }: { canPass: boolean }) {
+export function IntakeView({
+  canPass,
+  identity,
+}: {
+  canPass: boolean;
+  identity: DeskIdentity;
+}) {
+  /* ซ่อนบนหน้าจอเพื่อให้อ่านง่าย — การกันจริงอยู่ที่ API (`scope-filter.ts`) */
+  const items = useMemo(() => visibleItems(identity), [identity]);
+  const owners = useMemo(
+    () => OWNER_ORDER.filter((owner) => items.some((item) => item.owner === owner)),
+    [items],
+  );
+  const unmapped = unmappedOwners();
+
   const [period, setPeriod] = useState<PeriodRef>(CURRENT_PERIOD);
   const [records, setRecords] = useState<Map<string, IntakeRecord>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -141,19 +156,19 @@ export function IntakeView({ canPass }: { canPass: boolean }) {
     [code],
   );
 
-  const total = INTAKE_ITEMS.length;
+  const total = items.length;
   const summary = useMemo(() => {
     let passed = 0;
     let chasing = 0;
     let review = 0;
-    for (const item of INTAKE_ITEMS) {
+    for (const item of items) {
       const record = records.get(item.id) ?? emptyRecord(item.id);
       if (record.stage === "passed") passed += 1;
       if (needsChasing(item, period, record, now)) chasing += 1;
       if (needsReview(record)) review += 1;
     }
     return { passed, chasing, review };
-  }, [records, period, now]);
+  }, [items, records, period, now]);
 
   function clearFile() {
     setFile(null);
@@ -298,12 +313,14 @@ export function IntakeView({ canPass }: { canPass: boolean }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <StepHead
             no={2}
-            done={summary.passed === total}
+            done={total > 0 && summary.passed === total}
             title="ของที่ต้องได้ในรอบนี้"
-            meta={`${OWNER_ORDER.length} เจ้าของข้อมูล · ${total} รายการ`}
+            meta={`${owners.length} เจ้าของข้อมูล · ${total} รายการ`}
           />
         </div>
 
+        {items.length > 0 && (
+          <>
         {/* คำตอบก่อนรายละเอียด — รอบนี้ยังขาดอะไร */}
         <div
           className={`flex flex-wrap items-center gap-x-5 gap-y-2 rounded-box border p-3.5 ${
@@ -363,6 +380,8 @@ export function IntakeView({ canPass }: { canPass: boolean }) {
             รีเฟรช
           </button>
         </div>
+          </>
+        )}
 
         {loadError ? (
           <p role="status" className="rounded-box border border-sla/30 bg-sla/6 px-3.5 py-3 text-12-5 text-sla">
@@ -370,14 +389,32 @@ export function IntakeView({ canPass }: { canPass: boolean }) {
           </p>
         ) : null}
 
+        {items.length === 0 && (
+          <div className="rounded-xl border border-base-300 bg-base-100 p-6 text-sm text-mut">
+            <p className="font-medium text-base-content">
+              หน่วยงานของคุณยังไม่มีรายการในทะเบียนรับข้อมูลเงินเดือน
+            </p>
+            <p className="mt-2">
+              ทะเบียนรอบนี้มีผู้รับผิดชอบ {OWNER_ORDER.length} ฝ่าย ({OWNER_ORDER.join(" · ")}) — ถ้าฝ่ายของคุณ
+              ต้องส่งข้อมูลด้วย แจ้ง{HR_DEPARTMENT_LABEL} เพื่อเพิ่มหน่วยงานให้ตรงกับทะเบียน
+            </p>
+            {unmapped.length > 0 && (
+              <p className="mt-2">
+                ตอนนี้ยังไม่ได้ผูกรหัสหน่วยงานของ {unmapped.join(" และ ")} ไว้ — สองฝ่ายนี้ต้องให้
+                {HR_DEPARTMENT_LABEL} ตั้งค่าก่อนจึงจะเข้ามาส่งเองได้
+              </p>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <p className="px-1 text-12-5 text-mut">กำลังอ่านสถานะรอบ {periodLabel(period)}…</p>
         ) : (
-          OWNER_ORDER.map((owner) => (
+          owners.map((owner) => (
             <OwnerGroup
               key={owner}
               owner={owner}
-              items={itemsByOwner(owner)}
+              items={items.filter((item) => item.owner === owner)}
               period={period}
               records={records}
               now={now}

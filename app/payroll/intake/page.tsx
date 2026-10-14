@@ -10,10 +10,11 @@ export const metadata: Metadata = {
 
 /**
  * สิทธิ์ “รับเข้ารอบ” ถูกตัดสินที่เซิร์ฟเวอร์แล้วส่งลงไปเป็น `boolean` ตัวเดียว —
- * หน้าจอไม่ต้องรู้เรื่องรหัสหน่วยงาน และ client ไม่มีทางปลอมสิทธิ์ตัวเอง
+ * client ไม่มีทางปลอมสิทธิ์ตัวเอง · `identity` ส่งลงไปให้หน้าจอซ่อนกลุ่มที่ไม่เห็นเท่านั้น
+ * (ของจริงกันที่ API)
  * (ปลอมได้ก็ได้แค่ปุ่มที่กดแล้ว API ตอบ 403 เพราะฝั่ง `PATCH` ตรวจซ้ำอีกชั้น)
  */
 export default async function PayrollIntakePage() {
   const identity = await getDeskIdentity();
-  return <IntakeView canPass={canPassIntake(identity)} />;
+  return <IntakeView canPass={canPassIntake(identity)} identity={identity} />;
 }

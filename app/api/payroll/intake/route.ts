@@ -5,6 +5,8 @@ import { getDeskIdentity, readSessionUser } from "@/lib/auth/session";
 import type { IntakeStage } from "@/lib/payroll/intake-status";
 import { listIntake, saveIntake } from "@/lib/payroll/intake";
 import { canPassIntake, HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
+import { filterRecords } from "@/lib/payroll/scope-filter";
+import { canUploadItem } from "@/lib/payroll/scope";
 
 /**
  * สถานะการรับข้อมูลของรอบจ่าย (`payroll_intake` ใน MongoDB)
@@ -12,8 +14,9 @@ import { canPassIntake, HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
  * `GET   /api/payroll/intake?period=2026-09` — ทุกแถวของรอบนั้น
  * `PATCH /api/payroll/intake` — `{ period, itemId, stage, ... }` บันทึกชิ้นเดียว
  *
- * **`stage: "passed"` ต้องเป็น HR** (ดู `approver.ts`) ส่วนขั้นอื่นใครก็ทำได้ —
- * ฝ่ายเจ้าของข้อมูลต้องอัปโหลดไฟล์ของตัวเองได้ แต่ต้องไม่ตัดสินว่าของตัวเองผ่าน
+ * **`stage: "passed"` ต้องเป็น HR** (ดู `approver.ts`) ส่วนขั้นอื่นทำได้เฉพาะ
+ * รายการของฝ่ายตัวเอง (HR ทำแทนได้ทุกฝ่าย) — ฝ่ายเจ้าของข้อมูลอัปโหลดไฟล์ตัวเองได้ แต่ไม่ตัดสินว่าของตัวเองผ่าน
+ * `GET` ก็คืนเฉพาะแถวของฝ่ายตัวเองเช่นกัน
  *
  * **ไม่มีเส้นที่อ่านข้ามรอบ** โดยตั้งใจ — หน้าจอทำงานทีละรอบเสมอ และการเปิดให้
  * ดึงทั้งคอลเลกชันได้คือจุดที่รายงานย้อนหลังจะเริ่มลากข้อมูลเกินจำเป็นในอนาคต
@@ -44,7 +47,10 @@ export async function GET(request: NextRequest) {
     if (!isPeriodCode(period)) {
       return badRequest("ระบุ period เป็นรูปแบบ YYYY-MM เช่น 2026-09");
     }
-    return ok(await listIntake(period));
+    /* ขอบเขตมาจาก session เสมอ ไม่รับจาก query string — กรองก่อนส่งออก เพราะแถวพวกนี้
+       มีชื่อคนส่ง ชื่อไฟล์ และเหตุผลที่ตีกลับของฝ่ายอื่น */
+    const identity = await getDeskIdentity();
+    return ok(filterRecords(identity, await listIntake(period)));
   } catch (err) {
     return fail(err);
   }
@@ -73,6 +79,15 @@ export async function PATCH(request: NextRequest) {
     if (body.stage === "passed" && !canPassIntake(identity)) {
       return forbidden(
         `รับเข้ารอบได้เฉพาะ${HR_DEPARTMENT_LABEL} — บัญชีนี้สังกัด ${identity.department || "หน่วยงานที่ไม่ระบุ"}`,
+      );
+    }
+
+    /* **อัปโหลดแทนฝ่ายอื่นไม่ได้** — ของเดิมขั้นที่ไม่ใช่ `passed` ใครก็ทำได้ ซึ่งแปลว่า
+       คนจากฝ่ายหนึ่งยิง API ตรงแล้วเปลี่ยนสถานะของอีกฝ่ายได้ · HR ยังทำแทนได้ตามเดิม
+       เพราะบางเดือนฝ่ายส่งไฟล์มาทางไลน์แล้ว HR เป็นคนเอาขึ้นระบบ */
+    if (!canUploadItem(identity, body.itemId.trim())) {
+      return forbidden(
+        `รายการนี้ไม่ใช่ของ${identity.department || "หน่วยงานของบัญชีนี้"} — ส่งได้เฉพาะรายการที่ฝ่ายตัวเองรับผิดชอบ`,
       );
     }
 
