@@ -1,4 +1,4 @@
-import { Inbox, LayoutGrid } from "lucide-react";
+import { ClipboardCheck, Inbox, LayoutGrid } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 /**
@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
  * ท่าเดียวกับ `lib/recruitment/admin-nav.ts` เพราะถูกอ่านสองที่: แถบข้างซ้าย (client)
  * และการ์ดโมดูลบนหน้าภาพรวม (server) รายการเดียวกันจึงไม่มีทางหลุด sync
  *
- * ตอนนี้เปิดไว้แค่สองเมนูตามที่เจ้าของงานสั่ง (12 ก.ย. 2569) — ภาพรวม กับ รับข้อมูล
+ * ตอนนี้เปิดไว้สามเมนู — ภาพรวม · รับข้อมูล (สองเมนูนี้ตามที่เจ้าของงานสั่ง 12 ก.ย. 2569) · สรุปรอบ (เพิ่มกับงานรับข้อมูลรายเดือน)
  * เมนูอื่น (รวมและตรวจ · กระทบยอดและส่งต่อ · ทะเบียนและค่าตั้ง) ถูกถอดออกทั้งชุด
  * **อย่าเพิ่มกลับมาเองถ้าไม่ได้สั่ง**
  *
@@ -52,6 +52,13 @@ export const payrollNav: PayrollNavGroup[] = [
         icon: Inbox,
         ready: true,
         blurb: "ไฟล์ที่แต่ละฝ่ายส่งเข้ามาในรอบนี้",
+      },
+      {
+        href: `${PAYROLL_ROOT}/summary`,
+        label: "สรุปรอบ",
+        icon: ClipboardCheck,
+        ready: true,
+        blurb: "รอบนี้ครบหรือยัง และไฟล์สรุปไว้ส่งต่อ",
       },
     ],
   },
