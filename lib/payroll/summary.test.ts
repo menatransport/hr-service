@@ -5,7 +5,7 @@ import { Workbook } from "exceljs";
 import { emptyRecord, type IntakeRecord } from "@/lib/payroll/intake-status";
 import { INTAKE_ITEMS } from "@/lib/payroll/registry";
 import { buildPeriodSummary } from "@/lib/payroll/summary-export";
-import { isUnreadable, summarizePeriod } from "@/lib/payroll/summary";
+import { isUnreadable, readinessLine, SCOPED_NOTE, summarizePeriod } from "@/lib/payroll/summary";
 
 const period = { year: 2569, month: 8 };
 const now = new Date(2026, 8, 30);
@@ -162,9 +162,19 @@ test("Excel สรุปมีสองชีตและบอกชัดว�
   /* ชีตรายฝ่าย: หัวตาราง + 6 ฝ่าย */
   const byOwner = book.getWorksheet("สรุปรายฝ่าย")!;
   const head = byOwner.getRow(5).values as string[];
-  assert.deepEqual(head.slice(1, 8), ["ฝ่าย", "ทั้งหมด", "ผ่าน", "รอตรวจ", "ตีกลับ", "รอส่ง", "ช้าสุด (วัน)"]);
+  assert.deepEqual(head.slice(1), ["ฝ่าย", "ทั้งหมด", "ผ่าน", "รอตรวจ", "ตีกลับ", "รอส่ง", "ช้าสุด (วัน)", "ไฟล์อ่านไม่ได้", "ผ่านโดยข้ามด่าน"]);
   assert.equal(byOwner.getRow(6).getCell(1).text, "จัดส่ง ลาดกระบัง");
   assert.equal(byOwner.rowCount, 5 + 6);
+  const ownerRow = (name: string) => {
+    for (let r = 6; r <= byOwner.rowCount; r++) {
+      if (byOwner.getRow(r).getCell(1).text === name) return byOwner.getRow(r);
+    }
+    throw new Error(`ไม่พบฝ่าย ${name}`);
+  };
+  const unreadableOwner = INTAKE_ITEMS.find((i) => i.id === "02")!.owner;
+  const overriddenOwner = INTAKE_ITEMS.find((i) => i.id === "13")!.owner;
+  assert.equal(ownerRow(unreadableOwner).getCell(8).text, "1");
+  assert.equal(ownerRow(overriddenOwner).getCell(9).text, "1");
 
   /* ชีตรายรายการ: ทุกรายการในทะเบียน */
   const items = book.getWorksheet("รายรายการ")!;
@@ -187,4 +197,38 @@ test("Excel สรุปมีสองชีตและบอกชัดว�
   assert.equal(rowOf("02").getCell(10).text, "อ่านไฟล์ไม่ได้");
   assert.equal(rowOf("01").getCell(4).text, "รอส่ง");
   assert.equal(rowOf("03").getCell(10).text, "0");
+});
+
+test("สรุปของฝ่ายเดียวไม่พูดว่ารอบครบ และบอกว่าตัวเลขนี้ไม่ใช่ทั้งรอบ", async () => {
+  const mine = INTAKE_ITEMS.filter((i) => i.owner === "ยานยนต์");
+  const records = new Map(
+    mine.map((i) => [i.id, { ...emptyRecord(i.id), stage: "passed" as const, errors: 0 }]),
+  );
+  const summary = summarizePeriod(period, records, now, mine);
+  assert.equal(summary.scoped, true);
+  assert.equal(summary.ready, true);
+  const line = readinessLine(summary);
+  assert.ok(line.includes("ยานยนต์"));
+  assert.ok(!line.includes("ทุกรายการ"), line);
+  assert.equal(summarizePeriod(period, allPassed(), now).scoped, false);
+
+  const { file } = await buildPeriodSummary(summary, records);
+  const book = await open(file);
+  for (const sheet of book.worksheets) {
+    const text = textOf(sheet);
+    assert.ok(text.includes(SCOPED_NOTE), `${sheet.name} ต้องมีหมายเหตุขอบเขต`);
+    assert.ok(!text.some((t) => t.includes("ทุกรายการตรวจผ่านครบแล้ว")));
+  }
+});
+
+test("ผ่านโดยข้ามด่านแต่ไม่มีเหตุผลบันทึก ช่อง Excel ต้องบอกตรง ๆ ไม่ปล่อยว่าง", async () => {
+  const records = allPassed();
+  records.set("13", { ...emptyRecord("13"), stage: "passed", errors: 2, rows: 3, columns: 3 });
+  const { file } = await buildPeriodSummary(summarizePeriod(period, records, now), records);
+  const items = (await open(file)).getWorksheet("รายรายการ")!;
+  let cell = "";
+  for (let r = 6; r <= items.rowCount; r++) {
+    if (items.getRow(r).getCell(1).text === "13") cell = items.getRow(r).getCell(11).text;
+  }
+  assert.equal(cell, "ไม่มีเหตุผลบันทึกไว้");
 });

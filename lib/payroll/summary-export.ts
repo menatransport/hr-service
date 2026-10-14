@@ -2,7 +2,7 @@ import { Workbook, type Worksheet } from "exceljs";
 
 import { STAGE_LABEL, type IntakeRecord } from "./intake-status";
 import { periodLabel } from "./period";
-import { isUnreadable, type PeriodSummary } from "./summary";
+import { isUnreadable, NO_REASON_TEXT, readinessLine, SCOPED_NOTE, type PeriodSummary } from "./summary";
 
 /**
  * Excel สรุปรอบ — **สรุปให้คนอ่าน ไม่ใช่ไฟล์นำเข้า Tiger Soft**
@@ -54,14 +54,18 @@ function writeHead(sheet: Worksheet, title: string, summary: PeriodSummary) {
   note.font = { name: FONT, size: 10, bold: true, color: { argb: ALERT } };
 
   const state = sheet.getCell(3, 1);
-  state.value = summary.ready
-    ? "สถานะรอบ: ทุกรายการตรวจผ่านครบแล้ว"
-    : `สถานะรอบ: ยังไม่ครบ — เหลือ ${summary.blockers.length} รายการที่ยังไม่ผ่าน`;
+  state.value = `สถานะรอบ: ${readinessLine(summary)}`;
   state.font = {
     name: FONT,
     size: 10,
     color: { argb: summary.ready ? GREEN : ALERT },
   };
+
+  if (summary.scoped) {
+    const scope = sheet.getCell(4, 1);
+    scope.value = SCOPED_NOTE;
+    scope.font = { name: FONT, size: 10, bold: true, color: { argb: ALERT } };
+  }
 }
 
 function writeTable(sheet: Worksheet, headers: string[], widths: number[]) {
@@ -184,7 +188,8 @@ function writeItems(
         record?.passedBy ?? "",
         when(record?.passedAt),
         pending,
-        record?.overrideReason ?? "",
+        record?.overrideReason ??
+          (stage === "passed" && (record?.errors ?? 0) > 0 ? NO_REASON_TEXT : ""),
       ],
       stage !== "passed",
     );

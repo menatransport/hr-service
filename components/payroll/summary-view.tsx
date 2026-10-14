@@ -11,7 +11,7 @@ import { HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
 import type { IntakeRecord } from "@/lib/payroll/intake-status";
 import { isLocked, periodCode, periodLabel, type PeriodRef } from "@/lib/payroll/period";
 import { visibleItems } from "@/lib/payroll/scope-filter";
-import { statusText, summarizePeriod } from "@/lib/payroll/summary";
+import { NO_REASON_TEXT, readinessLine, SCOPED_NOTE, statusText, summarizePeriod } from "@/lib/payroll/summary";
 
 /**
  * หน้าสรุปรอบ — ตอบว่า “รอบนี้ครบหรือยัง” แล้วเปิดทางให้ดาวน์โหลดสรุปเป็น Excel
@@ -135,9 +135,7 @@ export function SummaryView({
                 {passed}/{total}
               </span>
               <span className="text-13 text-pretty">
-                {summary.ready
-                  ? `รอบ ${periodLabel(period)} ครบแล้ว — ทุกรายการตรวจผ่าน`
-                  : `รอบ ${periodLabel(period)} ยังไม่ครบ — เหลือ ${summary.blockers.length} รายการที่ยังไม่ผ่าน`}
+                รอบ {periodLabel(period)}: {readinessLine(summary)}
               </span>
             </span>
 
@@ -162,6 +160,13 @@ export function SummaryView({
               </a>
             </span>
           </div>
+
+          {summary.scoped ? (
+            <p className="flex items-start gap-2 rounded-box border border-warning/40 bg-warning/10 px-3.5 py-2.5 text-12-5 text-pretty">
+              <Info size={14} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none text-warning" />
+              {SCOPED_NOTE}
+            </p>
+          ) : null}
 
           {/* ตารางรายฝ่าย */}
           <section className="overflow-x-auto rounded-box border border-line bg-base-100">
@@ -269,7 +274,7 @@ export function SummaryView({
                       {row.record.overrideReason ? (
                         row.record.overrideReason
                       ) : (
-                        <span className="text-sla">ไม่มีเหตุผลบันทึกไว้</span>
+                        <span className="text-sla">{NO_REASON_TEXT}</span>
                       )}
                     </span>
                   </li>
@@ -278,17 +283,18 @@ export function SummaryView({
             </section>
           ) : null}
 
-          {/* ขั้นถัดไปที่ยังไม่มี — บอกตรง ๆ ว่าทำไม */}
-          <div className="flex items-start gap-2.5 rounded-box border border-line bg-base-200/50 p-3.5 text-12-5 text-mut">
-            <Info size={15} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none" />
-            <p className="text-pretty">
-              ขั้นถัดไปคือทำไฟล์นำเข้า Tiger Soft ซึ่งยังรอสเปกไฟล์จาก HR ค่าจ้างและสวัสดิการ
-              จึงยังไม่มีปุ่มสร้างไฟล์นั้นในหน้านี้ · Excel ที่ดาวน์โหลดจากหน้านี้เป็นไฟล์สรุปไว้ดูเท่านั้น
-              ห้ามนำไปอัปโหลดเข้า Tiger Soft
-            </p>
-          </div>
         </>
       )}
+
+      {/* ขั้นถัดไปที่ยังไม่มี — บอกตรง ๆ ว่าทำไม */}
+      <div className="flex items-start gap-2.5 rounded-box border border-line bg-base-200/50 p-3.5 text-12-5 text-mut">
+        <Info size={15} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none" />
+        <p className="text-pretty">
+          ขั้นถัดไปคือทำไฟล์นำเข้า Tiger Soft ซึ่งยังรอสเปกไฟล์จาก HR ค่าจ้างและสวัสดิการ
+          จึงยังไม่มีปุ่มสร้างไฟล์นั้นในหน้านี้ · Excel ที่ดาวน์โหลดจากหน้านี้เป็นไฟล์สรุปไว้ดูเท่านั้น
+          ห้ามนำไปอัปโหลดเข้า Tiger Soft
+        </p>
+      </div>
     </div>
   );
 }

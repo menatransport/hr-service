@@ -1,6 +1,5 @@
 import {
   emptyRecord,
-  lateDays,
   STAGE_LABEL,
   tallyOwner,
   type IntakeRecord,
@@ -62,8 +61,6 @@ export interface ItemRow {
   record: IntakeRecord;
   unreadable: boolean;
   overridden: boolean;
-  /** บวก = ช้า · ของที่ผ่านแล้วคิดจากวันที่รับจริง */
-  lateDays: number;
 }
 
 export interface PeriodSummary {
@@ -74,6 +71,8 @@ export interface PeriodSummary {
   /** ข้อความหนึ่งบรรทัดต่อหนึ่งรายการที่ยังไม่ผ่าน */
   blockers: string[];
   rows: ItemRow[];
+  /** สรุปแค่บางฝ่าย (ผู้ใช้ที่ไม่ใช่ HR) — ตัวเลขทั้งหมดไม่ใช่ภาพของทั้งรอบ */
+  scoped: boolean;
 }
 
 const blockerText = (item: IntakeItem, record: IntakeRecord): string => {
@@ -103,7 +102,6 @@ export function summarizePeriod(
       record,
       unreadable: record.stage !== "passed" && isUnreadable(record),
       overridden: isOverridden(record),
-      lateDays: lateDays(item, period, record, now),
     };
   });
 
@@ -128,9 +126,41 @@ export function summarizePeriod(
     .filter((row) => row.record.stage !== "passed")
     .map((row) => blockerText(row.item, row.record));
 
-  return { period, owners, ready: blockers.length === 0, blockers, rows };
+  return {
+    period,
+    owners,
+    ready: blockers.length === 0,
+    blockers,
+    rows,
+    scoped: items.length < INTAKE_ITEMS.length,
+  };
 }
 
 /** ข้อความสถานะของรายการหนึ่ง — ไฟล์อ่านไม่ออกไม่ใช้ป้าย “อัปโหลดแล้ว” เฉย ๆ */
 export const statusText = (row: ItemRow): string =>
   row.unreadable ? "อัปโหลดแล้ว (อ่านไฟล์ไม่ได้)" : STAGE_LABEL[row.record.stage];
+
+/**
+ * บรรทัดบอกสถานะรอบ ใช้ทั้งบนหน้าและในไฟล์ Excel
+ *
+ * สรุปของฝ่ายเดียวต้องไม่พูดว่า “รอบครบ” เพราะฝ่ายอื่นอาจยังไม่ส่ง คนอ่านอาจเอาไปบอก
+ * ฝ่ายเงินเดือนว่าพร้อมแล้ว — จึงพูดแค่ว่า “ของฝ่ายนี้” ผ่านครบหรือยัง
+ */
+export function readinessLine(summary: PeriodSummary): string {
+  const left = summary.blockers.length;
+  if (!summary.scoped) {
+    return summary.ready
+      ? "ทุกรายการตรวจผ่านครบแล้ว"
+      : `ยังไม่ครบ — เหลือ ${left} รายการที่ยังไม่ผ่าน`;
+  }
+  const who = summary.owners.map((o) => o.owner).join(" และ ");
+  return summary.ready
+    ? `รายการของ${who} ผ่านครบแล้ว`
+    : `รายการของ${who} ยังไม่ครบ — เหลือ ${left} รายการ`;
+}
+
+/** ขึ้นคู่กับ `readinessLine` เมื่อ `scoped` — ตัวเลขนี้ไม่ใช่ภาพของทั้งรอบ */
+export const SCOPED_NOTE =
+  "ตัวเลขชุดนี้นับเฉพาะรายการของฝ่ายคุณ ยังบอกไม่ได้ว่าทั้งรอบครบหรือยัง — ถ้าจะรู้ว่ารอบพร้อมหรือไม่ ให้ถามฝ่ายค่าจ้างและสวัสดิการ";
+
+export const NO_REASON_TEXT = "ไม่มีเหตุผลบันทึกไว้";
