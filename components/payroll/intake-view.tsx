@@ -22,6 +22,8 @@ import {
   periodLabel,
   type PeriodRef,
 } from "@/lib/payroll/period";
+import { eventLine, type IntakeEvent } from "@/lib/payroll/intake-events";
+import { reviewActions } from "@/lib/payroll/intake-gate";
 import {
   emptyRecord,
   lateDays,
@@ -99,8 +101,10 @@ export function IntakeView({
   const [active, setActive] = useState<IntakeItem | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [profile, setProfile] = useState<FileProfile | null>(null);
-  const [checks, setChecks] = useState<CheckResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [events, setEvents] = useState<IntakeEvent[]>([]);
+  /* กระตุ้นให้โหลดร่องรอยใหม่หลังมีการตัดสิน — ไม่ได้ถูกอ่านที่ไหน */
+  const [trailAt, setTrailAt] = useState(0);
   const [sortMode, setSortMode] = useState<"file" | "risk">("file");
   const [filterMode, setFilterMode] = useState<"all" | "issue">("all");
   const [dragging, setDragging] = useState(false);
@@ -171,6 +175,31 @@ export function IntakeView({
     document.getElementById(`owner-${owner}`)?.scrollIntoView({ block: "start" });
   }, [loading]);
 
+  /* ร่องรอยการตัดสินของใบที่เปิดอยู่ — ตอบว่า "เกิดอะไรขึ้นมาแล้วบ้าง" ซึ่งแถวสถานะ
+     ตอบไม่ได้ เพราะทุกการเขียนทับที่เดิม · โหลดใหม่ทุกครั้งที่เปลี่ยนใบหรือมีการตัดสิน */
+  useEffect(() => {
+    const itemId = active?.id;
+    if (!itemId) return;
+    let alive = true;
+
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/payroll/intake/events?period=${code}&itemId=${itemId}`,
+        );
+        const json = (await res.json()) as IntakeEvent[] | { error: string };
+        if (!alive) return;
+        setEvents(Array.isArray(json) ? json : []);
+      } catch {
+        if (alive) setEvents([]);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [code, active?.id, trailAt]);
+
   /* ฝ่ายที่ยังมีของรอส่งหรือถูกตีกลับ — ของที่ส่งแล้วรอตรวจไม่นับ ลูกบอลอยู่ที่ HR */
   const unsentOwners = useMemo(
     () =>
@@ -200,7 +229,6 @@ export function IntakeView({
   function clearFile() {
     setFile(null);
     setProfile(null);
-    setChecks([]);
     setSelected(new Set());
     if (inputRef.current) inputRef.current.value = "";
   }
@@ -227,6 +255,15 @@ export function IntakeView({
     }
     if (locked) {
       void toastError("รอบนี้ปิดแล้ว", "เลือกรอบที่ยังเปิดอยู่ก่อนจึงจะอัปโหลดได้");
+      return;
+    }
+    /* ใบที่รับเข้ารอบแล้วรับไฟล์ใหม่ทับไม่ได้ — เซิร์ฟเวอร์ตอบ 409 อยู่แล้ว ที่นี่แค่
+       บอกก่อนจะส่งไฟล์ขึ้นไปเสียเวลา และชี้ทางออกให้ตรง */
+    if ((records.get(active.id)?.stage ?? "waiting") === "passed") {
+      void toastError(
+        "รายการนี้รับเข้ารอบไปแล้ว",
+        `ส่งไฟล์ชุดใหม่ทับไม่ได้ — ให้${HR_DEPARTMENT_LABEL}เปิดใบกลับมาก่อน`,
+      );
       return;
     }
 
@@ -278,10 +315,10 @@ export function IntakeView({
     }
 
     setProfile(json.profile);
-    setChecks(json.checks);
     setSelected(defaultSelection(json.profile));
     /* สถานะและผลตรวจถูกบันทึกฝั่งเซิร์ฟเวอร์ในคำขอเดียวกับการอ่านไฟล์ — หน้าจอแค่รับแถวที่ได้มา */
     setRecords((was) => new Map(was).set(json.record.itemId, json.record));
+    setTrailAt(Date.now());
     void toastSuccess(
       "บันทึกว่าอัปโหลดแล้ว",
       canPass
@@ -312,8 +349,6 @@ export function IntakeView({
           stage,
           fileName: extra.fileName ?? file?.name,
           returnedReason: extra.returnedReason,
-          rows: extra.rows ?? profile?.totalRows,
-          columns: extra.columns ?? (selected.size || undefined),
           overrideReason: extra.overrideReason,
         }),
       });
@@ -322,6 +357,7 @@ export function IntakeView({
         throw new Error("error" in json ? json.error : "บันทึกไม่สำเร็จ");
       }
       setRecords((was) => new Map(was).set(json.itemId, json));
+      setTrailAt(Date.now());
       return json;
     } catch (err) {
       void toastError(
@@ -334,6 +370,42 @@ export function IntakeView({
     }
   }
 
+  /* เปิดใบที่รับเข้ารอบแล้วกลับมา — ต้องมีเหตุผล เพราะเป็นการยกเลิกคำตัดสินที่ลงไปแล้ว
+     และทั้งการเปิดกับเหตุผลถูกเก็บในร่องรอยถาวร */
+  async function reopen(item: IntakeItem) {
+    const reason = window.prompt(
+      `เปิด “${item.title}” กลับมาแก้ — ใบนี้รับเข้ารอบไปแล้ว บอกเหตุผลที่ต้องรับไฟล์ชุดใหม่`,
+    );
+    if (!reason?.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/payroll/intake", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          period: code,
+          itemId: item.id,
+          action: "reopen",
+          reason: reason.trim(),
+        }),
+      });
+      const json = (await res.json()) as IntakeRecord | { error: string };
+      if (!res.ok || !("itemId" in json)) {
+        throw new Error("error" in json ? json.error : "เปิดใบกลับมาไม่สำเร็จ");
+      }
+      setRecords((was) => new Map(was).set(json.itemId, json));
+      setTrailAt(Date.now());
+      void toastSuccess("เปิดใบกลับมาแล้ว", `${item.owner} ส่งไฟล์ชุดใหม่ของ “${item.title}” ได้แล้ว`);
+    } catch (err) {
+      void toastError(
+        "เปิดใบกลับมาไม่สำเร็จ",
+        err instanceof Error ? err.message : undefined,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   /* คอลัมน์คีย์ที่ยังมีช่องว่าง — ใช้เป็นเหตุผลตั้งต้นตอนตีกลับ (แปลว่าเงินก้อนนั้น
      ไม่รู้จะเข้าใคร) · การกันผ่านเป็นหน้าที่ของด่าน 1 ไม่ใช่ตัวแปรนี้ */
   const brokenKey =
@@ -341,15 +413,22 @@ export function IntakeView({
       (column) => column.isKey && selected.has(column.letter) && column.empty > 0,
     ) ?? null;
 
-  /* ข้อผิดพลาดไม่ได้ปิดปุ่ม — HR ข้ามได้ถ้าเขียนเหตุผล (ถามตอนกด) · ที่ปิดปุ่มคือ
-     ยังไม่มีอะไรให้รับ หรือบัญชีนี้ไม่มีสิทธิ์ · ตัวกันจริงอยู่ที่เซิร์ฟเวอร์ */
-  const blocked = selected.size === 0 || saving || !canPass;
-
   const activeRecord = active
     ? (records.get(active.id) ?? emptyRecord(active.id))
     : null;
+
+  /* **ผลตรวจมาจากแถวที่เก็บไว้ ไม่ใช่จากไฟล์ที่เพิ่ง parse ในเบราว์เซอร์นี้** —
+     คนที่ตรวจ (HR) กับคนที่อัปโหลดเป็นคนละคนเกือบทุกครั้ง ถ้าแผงนี้อยู่ได้เฉพาะ
+     หลังอัปโหลดในแท็บเดียวกัน HR ก็ไม่มีทางตรวจอะไรได้เลย · เส้น parse เขียนผลตรวจ
+     ลงแถวแล้วคืนแถวนั้นกลับมา ทั้งสองคนจึงอ่านของชุดเดียวกันเสมอ */
+  const storedChecks = activeRecord?.checks ?? [];
   const openErrors = activeRecord?.errors ?? 0;
-  const openBlocking = checks.filter((c) => c.blocking).length;
+  const openBlocking = storedChecks.filter((c) => c.blocking).length;
+  const actions = activeRecord
+    ? reviewActions(activeRecord, canPass)
+    : null;
+  /* ของที่เคยมีไฟล์เข้ามาแล้ว — แผงตรวจและปุ่มตัดสินขึ้นจากแถว ไม่ต้องรออัปโหลดซ้ำ */
+  const hasHistory = !!activeRecord && activeRecord.stage !== "waiting";
 
   return (
     <div className="animate-rise flex flex-col gap-5">
@@ -608,7 +687,20 @@ export function IntakeView({
               </span>
             ) : null}
 
-            {activeRecord.fileName ? (
+            {/* **ไฟล์ที่เก็บไว้เปิดได้จากที่นี่** — ด่าน 2 ต้องเปิดไฟล์จริงดู และคนที่
+                ตรวจไม่ใช่คนที่อัปโหลด เมื่อก่อนไม่มีหน้าไหนลิงก์ไปที่ไฟล์เลย
+                ทางเดียวที่ HR จะดูได้คือเอาไฟล์มาอัปโหลดเองใหม่ ซึ่งเขียนชื่อคนส่ง
+                กับเวลาที่ของมาถึงทับเป็นของตัวเอง */}
+            {activeRecord.fileId ? (
+              <a
+                href={`/api/payroll/files/${activeRecord.fileId}`}
+                className="flex min-w-0 items-center gap-1.5 rounded-field border border-line px-2.5 py-1 text-12 text-mut transition-colors hover:border-primary/40 hover:text-primary"
+                title={activeRecord.fileName ?? "ไฟล์ที่ฝ่ายส่งเข้ามา"}
+              >
+                <Download size={12} strokeWidth={2} aria-hidden />
+                <span className="truncate">{activeRecord.fileName ?? "เปิดไฟล์ที่ส่งมา"}</span>
+              </a>
+            ) : activeRecord.fileName ? (
               <span className="truncate text-11-5 text-mut" title={activeRecord.fileName}>
                 {activeRecord.fileName}
               </span>
@@ -761,8 +853,6 @@ export function IntakeView({
                 </dl>
               </div>
 
-              <ChecksPanel checks={checks} />
-
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="text-12 text-mut">เรียงตาม</span>
                 <Toggle
@@ -800,32 +890,62 @@ export function IntakeView({
                 sortMode={sortMode}
                 filterMode={filterMode}
               />
+            </>
+          ) : null}
+
+          {/* ─────────── ด่าน 2 — อ่านจากแถวที่เก็บไว้ ไม่ใช่จากไฟล์ในเบราว์เซอร์นี้ */}
+          {hasHistory && actions ? (
+            <>
+              {/* **ไม่ให้แผงผลตรวจพูดแทนความจริง** — ไฟล์ที่อ่านไม่ออกไม่มีผลตรวจให้แสดง
+                  และแถวที่เขียนไว้ก่อนจะมีด่าน 1 ก็ไม่มี ถ้าปล่อยให้ `ChecksPanel`
+                  ขึ้นสถานะว่างของมันเอง ทั้งสองกรณีจะอ่านได้ว่า "ตรวจแล้วไม่พบอะไรผิด" */}
+              {activeRecord.unreadable ? (
+                <p
+                  role="status"
+                  className="rounded-box border border-sla/30 bg-sla/6 px-3.5 py-2.5 text-12-5 text-sla text-pretty"
+                >
+                  ระบบอ่านไฟล์นี้ไม่ได้ — ไฟล์ถูกเก็บไว้แล้ว เปิดดูได้จากลิงก์ด้านบน แต่ตีความ
+                  เนื้อหาไม่ได้เลย จึงไม่มีผลตรวจด่านแรก ทางออกคือให้ฝ่ายส่งไฟล์ใหม่
+                </p>
+              ) : activeRecord.checkedAt ? (
+                <ChecksPanel checks={storedChecks} />
+              ) : (
+                <p role="status" className="rounded-box border border-line bg-base-200/50 px-3.5 py-2.5 text-12-5 text-mut text-pretty">
+                  แถวนี้ไม่มีผลตรวจด่านแรกบันทึกไว้ — ให้ฝ่ายอัปโหลดไฟล์ใหม่อีกครั้ง แล้วระบบจะตรวจ
+                  และเก็บผลไว้ให้คนที่มาตรวจทีหลังอ่านได้
+                </p>
+              )}
 
               {/* จุดตัดสินของกระบวนการ — ผ่านเข้ารอบ หรือ ตีกลับให้แก้ */}
               <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
-                <span className="text-12-5 text-mut">
-                  จะรับเข้ารอบ{" "}
-                  <span className="font-mono font-medium text-ink tabular-nums">
-                    {selected.size}
-                  </span>{" "}
-                  คอลัมน์ ·{" "}
-                  <span className="font-mono font-medium text-ink tabular-nums">
-                    {profile.totalRows.toLocaleString("th-TH")}
-                  </span>{" "}
-                  แถว เข้ารอบ{" "}
+                {/* บอกขนาดของไฟล์ที่กำลังตัดสิน — ไฟล์ที่อ่านไม่ออกไม่มีอะไรให้นับ
+                    จึงพูดตรง ๆ ไม่ขึ้นเลขศูนย์ให้เข้าใจผิดว่าไฟล์ว่าง */}
+                <span className="text-12-5 text-mut text-pretty">
+                  {storedFileLine(activeRecord)} · รอบ{" "}
                   <span className="font-medium text-ink">{periodLabel(period)}</span>
                 </span>
 
                 <span className="ml-auto flex flex-wrap gap-2">
+                  {actions.canReopen ? (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => reopen(active)}
+                      className="rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:border-warning/50 hover:text-warning disabled:opacity-50"
+                    >
+                      เปิดใบกลับมาแก้
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
-                    disabled={saving}
+                    disabled={!actions.canReturn || saving}
                     onClick={async () => {
                       const reason = window.prompt(
                         `ตีกลับ “${active.title}” ให้ ${active.owner} แก้ — บอกให้ชัดว่าต้องแก้อะไร`,
                         brokenKey
                           ? `คอลัมน์ “${brokenKey.header}” ยังมีช่องว่าง ${brokenKey.empty} แถว`
-                          : "",
+                          : (storedChecks.find((c) => c.blocking)?.title ?? ""),
                       );
                       if (!reason?.trim()) return;
                       const saved = await save("returned", {
@@ -843,7 +963,7 @@ export function IntakeView({
 
                   <button
                     type="button"
-                    disabled={blocked}
+                    disabled={!actions.canApprove || saving}
                     onClick={async () => {
                       const late = lateDays(active, period, activeRecord, now);
                       /* ยังมีข้อผิดพลาดค้าง = ข้ามได้ แต่ต้องเขียนเหตุผล และเหตุผลถูกเก็บถาวร
@@ -867,7 +987,7 @@ export function IntakeView({
                         text:
                           late > 0
                             ? `ของชิ้นนี้มาช้ากว่ากำหนด ${late} วัน ระบบจะบันทึกไว้ในประวัติของรอบ`
-                            : `${selected.size} คอลัมน์ · ${profile.totalRows.toLocaleString("th-TH")} แถว`,
+                            : `${activeRecord.fileName ?? "ไฟล์ที่ส่งมา"} · ${(activeRecord.rows ?? 0).toLocaleString("th-TH")} แถว`,
                         confirmText: "รับเข้ารอบ",
                       });
                       if (!okToGo) return;
@@ -882,9 +1002,9 @@ export function IntakeView({
                       }
                     }}
                     className={`flex items-center gap-1.5 rounded-field px-4 py-2 text-13 font-medium transition-opacity ${
-                      blocked
-                        ? "cursor-not-allowed border border-line text-mut opacity-60"
-                        : "bg-primary text-primary-content hover:opacity-90"
+                      actions.canApprove && !saving
+                        ? "bg-primary text-primary-content hover:opacity-90"
+                        : "cursor-not-allowed border border-line text-mut opacity-60"
                     }`}
                   >
                     <CircleCheck size={15} strokeWidth={1.9} aria-hidden />
@@ -892,22 +1012,19 @@ export function IntakeView({
                   </button>
                 </span>
 
-                {!canPass ? (
+                {actions.note ? (
                   <p role="status" className="basis-full text-12 text-mut text-pretty">
-                    บัญชีนี้รับเข้ารอบไม่ได้ — ขั้นตัดสินว่าผ่านเป็นของ
-                    {HR_DEPARTMENT_LABEL} เท่านั้น · อัปโหลดไฟล์และตีกลับให้แก้ยังทำได้ตามปกติ
+                    {actions.note}
                   </p>
                 ) : openErrors > 0 ? (
                   <p role="status" className="basis-full text-12 text-sla text-pretty">
                     ไฟล์นี้ยังมีข้อผิดพลาด {openErrors} ข้อ — ตีกลับให้แก้ที่ไฟล์ต้นทางก่อนจะดีที่สุด
                     ถ้ายืนยันว่ายอดถูกแล้ว กดรับเข้ารอบได้ แต่ต้องเขียนเหตุผลกำกับ
                   </p>
-                ) : selected.size === 0 ? (
-                  <p role="status" className="basis-full text-12 text-mut">
-                    ยังไม่ได้เลือกคอลัมน์ไหนเลย
-                  </p>
                 ) : null}
               </div>
+
+              <EventTrail events={events} />
             </>
           ) : null}
         </section>
@@ -917,6 +1034,57 @@ export function IntakeView({
 }
 
 /* ──────────────────────────────────────────────────────── ชิ้นเล็ก ๆ */
+
+/**
+ * บรรทัดบอกขนาดของไฟล์ที่กำลังตัดสิน
+ *
+ * ไฟล์ที่อ่านไม่ออกไม่มีอะไรให้นับ ถ้าขึ้น "0 แถว 0 คอลัมน์" คนอ่านจะเข้าใจว่า
+ * ฝ่ายส่งไฟล์เปล่ามา ซึ่งคนละเรื่องกับไฟล์ที่เปิดไม่ได้ (สิ่งที่ต้องทำต่างกัน)
+ */
+function storedFileLine(record: IntakeRecord): string {
+  if (record.unreadable) {
+    return "ไฟล์ที่ส่งมาอ่านไม่ออก — ต้องให้ฝ่ายส่งไฟล์ใหม่ ไม่ใช่แก้ข้อมูลในไฟล์เดิม";
+  }
+  if (typeof record.rows !== "number") {
+    return "ไฟล์นี้ไม่มีตัวเลขจากการอ่านบันทึกไว้ — เปิดไฟล์ดูก่อนตัดสิน";
+  }
+  return `ไฟล์ที่เก็บไว้มี ${record.rows.toLocaleString("th-TH")} แถว · ${record.columns ?? 0} คอลัมน์`;
+}
+
+/**
+ * ร่องรอยการตัดสินของใบนี้ — **ตอบคำถาม “ใครอนุมัติยอดนี้ ด้วยเหตุผลอะไร”**
+ *
+ * แถวสถานะเก็บแต่สถานะล่าสุด ทุกการเขียนทับที่เดิม พออัปโหลดไฟล์ใหม่ลายเซ็นการผ่าน
+ * ครั้งก่อนก็หายไป · คอลเลกชัน `payroll_intake_events` เก็บทุกการตัดสินแบบเพิ่มได้
+ * เท่านั้น ที่นี่แสดงไม่กี่รายการล่าสุด ซึ่งพอสำหรับคนที่กำลังตรวจใบนี้อยู่
+ */
+function EventTrail({ events }: { events: IntakeEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <section className="flex flex-col gap-1.5 rounded-box border border-line bg-base-200/40 p-3.5">
+      <h3 className="text-12-5 font-semibold text-mut">สิ่งที่เกิดขึ้นกับรายการนี้</h3>
+      <ol className="flex flex-col gap-1.5">
+        {events.map((event) => (
+          <li
+            key={`${event.at}-${event.kind}`}
+            className="flex flex-col gap-0.5 text-12 text-mut"
+          >
+            <span className="font-mono tabular-nums">{eventLine(event)}</span>
+            {event.kind === "passed" && typeof event.errors === "number" ? (
+              <span>
+                {event.errors > 0
+                  ? `รับเข้ารอบทั้งที่ยังมีข้อผิดพลาด ${event.errors} ข้อ`
+                  : "ด่านแรกไม่พบข้อผิดพลาด"}
+                {event.overrideReason ? ` — เหตุผล: ${event.overrideReason}` : ""}
+              </span>
+            ) : null}
+            {event.reason ? <span>เหตุผล: {event.reason}</span> : null}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 function StepHead({
   no,
