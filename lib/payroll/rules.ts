@@ -1,4 +1,4 @@
-import { classify, DEFAULT_PAYEE_COLUMN, MONEY_COLUMNS, PAYEE_COLUMN, postedColumns } from "./classify";
+import { classify, MONEY_COLUMNS, postedColumns } from "./classify";
 import { headerLetter, normalizeHeader, type ParsedFile } from "./parse";
 import { INTAKE_ITEMS } from "./registry";
 import { DAY_CODES, hasDayGrid, templateOf } from "./template-spec";
@@ -376,7 +376,8 @@ export interface RuleSources {
 const REAL_SOURCES: RuleSources = {
   itemIds: INTAKE_ITEMS.map((i) => i.id),
   columnsOf: (id) => templateOf(id)?.columns ?? null,
-  payeeOf: (id) => PAYEE_COLUMN[id] ?? DEFAULT_PAYEE_COLUMN,
+  /* ถามจาก classify ตัวเดียวกับที่ runChecks ใช้ — ห้ามคำนวณซ้ำ ไม่งั้นตรวจคนละช่องกับที่กฎใช้จริง */
+  payeeOf: (id) => classify(id)?.payeeColumn ?? "",
   moneyColumns: MONEY_COLUMNS,
   waitingOwner: WAITING_OWNER,
   tigersoftPending: TIGERSOFT_PENDING,

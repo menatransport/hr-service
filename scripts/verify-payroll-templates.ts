@@ -7,6 +7,7 @@ import type { ParsedFile } from "@/lib/payroll/parse";
 import { CATEGORY_ORDER, INTAKE_ITEMS, itemsByCategory } from "@/lib/payroll/registry";
 import { runChecks, TIGERSOFT_PENDING, validateRuleColumns, WAITING_OWNER, type CheckResult } from "@/lib/payroll/rules";
 import { buildAllTemplates } from "@/lib/payroll/template-export";
+import { MONEY_COLUMNS, postedColumns } from "@/lib/payroll/classify";
 import { DAY_CODES, hasDayGrid, templateOf } from "@/lib/payroll/template-spec";
 
 /**
@@ -21,7 +22,12 @@ function emptyProfileOf(itemId: string): ParsedFile {
   const letter = (i: number) => String.fromCharCode(65 + i);
   const row: Record<string, string> = {};
   const pendingDay = DAY_CODES.find((d) => !d.meaning)?.code;
-  if (hasDayGrid(columns) && pendingDay) row[letter(columns.indexOf("1"))] = pendingDay;
+  /* ⚠️ letter(i) ใช้ได้แค่ A–Z (26 คอลัมน์แรก) — ที่นี่เขียนแค่ช่องวันที่ 1 กับ 2 ซึ่งอยู่ต้น ๆ ของฟอร์มอยู่แล้ว
+     ถ้าฟอร์มไหนมีวันที่ 1 เลยคอลัมน์ Z ต้องเปลี่ยนเป็นตัวอักษรคอลัมน์แบบ Excel (AA, AB …) */
+  if (hasDayGrid(columns)) {
+    if (pendingDay) row[letter(columns.indexOf("1"))] = pendingDay;
+    row[letter(columns.indexOf("2"))] = "ZZZ-ไม่มีในชุดรหัส";
+  }
   return {
     profile: {
       fileName: `${itemId}.xlsx`,
@@ -46,11 +52,28 @@ function emptyProfileOf(itemId: string): ParsedFile {
   };
 }
 
+/**
+ * ผลที่ไฟล์ทดลองของรายการนี้ **ต้อง** ทำให้ออกมา — อ่านจากข้อมูลที่กฎใช้ ไม่เขียนรายชื่อรายการด้วยมือ
+ * ถ้ากฎข้อไหนหายไปจากเส้นทางของรายการนั้น สคริปต์ต้องล้ม ไม่ใช่เงียบ
+ */
+function expectedIds(itemId: string): string[] {
+  const columns = templateOf(itemId)?.columns ?? [];
+  const want = ["payee.blank"];
+  if (postedColumns(itemId).length) want.push("money.all-blank");
+  if (hasDayGrid(columns)) {
+    want.push("daycode.unknown");
+    if (DAY_CODES.some((d) => !d.meaning)) want.push("daycode.meaning-pending");
+  }
+  if (Object.values(MONEY_COLUMNS[itemId] ?? {}).includes("รอยืนยัน")) want.push("money.effect-pending");
+  if (TIGERSOFT_PENDING[itemId]) want.push("tigersoft.shape-pending");
+  return want;
+}
+
 /** กฎที่รายการนี้ยังตัดสินไม่ได้ และคนที่เรารออยู่ — อ่านจากที่เดียวกับที่กฎใช้ ไม่เขียนซ้ำมือ */
 function waitingOn(itemId: string, probe: CheckResult[]): string[] {
   const out: string[] = [];
   const spec = templateOf(itemId);
-  if (spec && !spec.confirmed) out.push("ฝ่ายเจ้าของข้อมูล (แบบฟอร์มร่าง)");
+  if (spec && !spec.confirmed) out.push("ฝ่ายเจ้าของข้อมูล (ไฟล์จริงเพื่อยืนยันแบบฟอร์ม)");
   if (probe.some((r) => r.id === "daycode.meaning-pending")) out.push("ฝ่ายจัดส่ง (รหัสวัน)");
   if (probe.some((r) => r.id === "money.effect-pending")) out.push(WAITING_OWNER[itemId] ?? "ฝ่ายเจ้าของข้อมูล");
   if (TIGERSOFT_PENDING[itemId]) out.push("HR C&B (Tiger Soft)");
@@ -76,14 +99,18 @@ async function main() {
      โดยไม่มีใครรู้ ซึ่งอันตรายกว่ากฎที่ดังผิด */
   problems.push(...validateRuleColumns());
 
-  /* ทุกรายการต้องมีกฎที่ตรวจจริง (active) อย่างน้อยหนึ่งข้อ — รายการที่ไม่มีเลยคือรายการที่
-     ด่าน 1 ปล่อยผ่านทุกอย่าง ซึ่งอ่านจากหน้าจอไม่ออกว่าเป็นเพราะไฟล์ดีหรือเพราะไม่มีกฎ
-     (ลองกับไฟล์สมมติที่ว่างทุกช่อง: กฎของรายการต้องพูดอะไรสักอย่างที่ไม่ใช่แค่ "ไฟล์เปล่า") */
+  /* ลองเรียกกฎของทุกรายการกับไฟล์สมมติที่ว่างทุกช่อง แล้วเช็กว่ากฎที่รายการนั้น **ควรมี**
+     (อ่านจากข้อมูล: ตารางรายวัน · ช่องรอยืนยัน · ตาราง Tiger Soft · ช่องเงิน) ส่งผลออกมาครบ —
+     รายการที่กฎหายไปจะดูเหมือนไฟล์สะอาดบนหน้าจอ ซึ่งแยกไม่ออก
+     ข้อจำกัด: นี่ตรวจว่ากฎ "ยังต่อสายอยู่" ไม่ได้ตรวจว่าเนื้อกฎถูก (เนื้อกฎอยู่ใน rules.test.ts) */
   const probes = new Map<string, CheckResult[]>();
   for (const item of INTAKE_ITEMS) {
     const probe = runChecks(item.id, emptyProfileOf(item.id));
     probes.set(item.id, probe);
-    if (!probe.some((r) => r.status === "active")) problems.push(`#${item.id} ไม่มีกฎตรวจเลย`);
+    const got = new Set(probe.map((r) => r.id));
+    for (const id of expectedIds(item.id)) {
+      if (!got.has(id)) problems.push(`#${item.id} กฎ ${id} ควรทำงานกับไฟล์ทดลองว่าง แต่ไม่ออกมา — กฎนี้อาจหลุดจากรายการ`);
+    }
   }
 
   for (const p of problems) console.log("✗", p);
@@ -107,17 +134,14 @@ async function main() {
       (Object.keys(kinds) as ItemKind[]).map((k) => `${KIND_LABEL[k]} ${kinds[k]}`).join(" · "),
   );
 
-  console.log("\nกฎต่อรายการ: ตรวจจริง = กฎที่บล็อก/เตือนได้ทันที · รอยืนยัน = ขึ้นบนจอแต่ยังไม่บล็อก");
+  console.log("\nรายการที่ยังตัดสินไม่ได้ และรอใคร (ตัวเลขในวงเล็บ = กี่ข้อที่พบจากไฟล์ทดลองว่าง ไม่ใช่จำนวนกฎ)");
   for (const item of INTAKE_ITEMS) {
     const probe = probes.get(item.id)!;
-    const active = probe.filter((r) => r.status === "active").length;
     const waiting = waitingOn(item.id, probe);
-    /* ฟอร์มร่างคือกฎ "ขาดคอลัมน์" ที่ยังบังคับไม่ได้ — ไฟล์สมมติครบทุกช่องจึงไม่เห็น ต้องนับเพิ่มเอง */
-    const draft = templateOf(item.id)?.confirmed === false ? 1 : 0;
-    const pending = probe.filter((r) => r.status === "pending").length + draft;
-    console.log(
-      `  #${item.id} ตรวจจริง ${active} · รอยืนยัน ${pending}` + (waiting.length ? ` ← รอ ${waiting.join(", ")}` : ""),
-    );
+    const draft = templateOf(item.id)?.confirmed === false;
+    const head = `  #${item.id}  ` + (waiting.length ? `รอ ${waiting.join(", ")}` : "ไม่มีเรื่องค้าง");
+    const note = draft ? " · ⚠ ฟอร์มร่าง: ยังไม่ได้บังคับตรวจคอลัมน์เลย" : "";
+    console.log(`${head}${note}  (พบจากไฟล์ทดลองว่าง ${probe.length} ข้อ)`);
   }
 
   const { file, name } = await buildAllTemplates(CURRENT_PERIOD);
