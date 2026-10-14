@@ -32,6 +32,68 @@ test("หัวเรื่องบอกรอบเป็น พ.ศ. แล�
   assert.ok(subject.includes("ยานยนต์"));
 });
 
+test("หัวเรื่องมีวันครบกำหนดเมื่อยังมีของค้าง", () => {
+  const subject = subjectOf("ยานยนต์", period, { count: 3, overdue: 0, firstDueText: "3 ก.ย." });
+  assert.ok(subject.includes("3 ก.ย."), subject);
+});
+
+test("มีของเลยกำหนด หัวเรื่องบอกจำนวนแทนวันครบกำหนด", () => {
+  const subject = subjectOf("ยานยนต์", period, { count: 3, overdue: 2, firstDueText: "3 ก.ย." });
+  assert.ok(subject.includes("เลยกำหนดแล้ว 2 รายการ"), subject);
+});
+
+test("ส่งครบแล้ว หัวเรื่องบอกว่าครบ ไม่ใช่ขอข้อมูล", () => {
+  const subject = subjectOf("ยานยนต์", period, { count: 0, overdue: 0, firstDueText: "" });
+  assert.ok(subject.includes("ครบแล้ว"), subject);
+  assert.ok(!subject.includes("ขอข้อมูล"), subject);
+});
+
+test("ย่อหน้าเปิดบอกจำนวนที่ค้างกับวันครบกำหนดของชิ้นที่ใกล้ที่สุด", () => {
+  const items = itemsByOwner("ยานยนต์");
+  const body = bodyOf({ owner: "ยานยนต์", period, items, records: new Map(), link: "x", now });
+  const opening = body.slice(0, body.indexOf("ของที่ต้องส่งในรอบนี้"));
+  const soonest = Math.min(...items.map((i) => i.dueDay));
+  assert.ok(opening.includes(`${items.length} รายการที่ต้องส่ง`), opening);
+  assert.ok(opening.includes(`วันที่ ${soonest} ก.ย.`), opening);
+});
+
+test("ย่อหน้าเปิดเตือนของที่เลยกำหนด ไม่ปล่อยให้ไปเจอในรายการเอง", () => {
+  const items = itemsByOwner("ยานยนต์");
+  const late = new Date(2026, 8, 28); // ปลายเดือน ของทุกชิ้นเลยกำหนดแล้ว
+  const body = bodyOf({ owner: "ยานยนต์", period, items, records: new Map(), link: "x", now: late });
+  const opening = body.slice(0, body.indexOf("ของที่ต้องส่งในรอบนี้"));
+  assert.ok(opening.includes(`เลยกำหนดมาแล้ว`), opening);
+});
+
+test("เมลบอกว่าส่งแล้วเกิดอะไรขึ้นต่อ และบอกช่องทางถาม", () => {
+  const body = bodyOf({
+    owner: "ยานยนต์",
+    period,
+    items: itemsByOwner("ยานยนต์"),
+    records: new Map(),
+    link: "x",
+    now,
+  });
+  assert.ok(body.includes("ส่งแล้วเกิดอะไรขึ้นต่อ"));
+  assert.ok(body.includes("HR จะตรวจอีกชั้นก่อนรับเข้ารอบ"));
+  assert.ok(body.includes("ตอบเมลนี้มาได้เลย"));
+});
+
+test("เมลขึ้นต้นด้วยคำเรียนถึงฝ่ายนั้น และไม่เดาคำลงท้าย ครับ/ค่ะ ของคนส่ง", () => {
+  for (const owner of OWNER_ORDER) {
+    const body = bodyOf({
+      owner,
+      period,
+      items: itemsByOwner(owner),
+      records: new Map(),
+      link: "x",
+      now,
+    });
+    assert.ok(body.startsWith(`เรียน ผู้รับผิดชอบข้อมูลเงินเดือน — ${owner}`), owner);
+    assert.equal(/ครับ|ค่ะ|คะ/.test(body), false, owner);
+  }
+});
+
 test("เนื้อเมลเป็นข้อความล้วน มีลิงก์ รายการที่ต้องส่ง และวันครบกำหนด", () => {
   const items = itemsByOwner("ยานยนต์");
   const records = new Map<string, IntakeRecord>();
@@ -95,7 +157,9 @@ test("ไม่มีอะไรค้างเลย เนื้อเมล�
   );
   const body = bodyOf({ owner: "ยานยนต์", period, items, records, link: "x", now });
   assert.ok(body.includes("ไม่มีรายการค้างส่ง"));
-  assert.ok(!body.includes("เปิดรอบแล้ว ส่งข้อมูลเข้าระบบได้ที่ลิงก์นี้"), "ต้องไม่ชวนส่งในเมลที่ไม่มีอะไรค้าง");
+  assert.ok(!body.includes("ส่งข้อมูลได้ที่ลิงก์นี้"), "ต้องไม่ชวนส่งในเมลที่ไม่มีอะไรค้าง");
+  assert.ok(body.includes("ส่งเข้าระบบครบแล้ว"), body);
+  assert.ok(!body.includes("ส่งแล้วเกิดอะไรขึ้นต่อ"), "ไม่มีอะไรค้างก็ไม่ต้องอธิบายขั้นตอนการส่ง");
 });
 
 test("รายการนำหน้าด้วยรหัสในทะเบียน ไม่ใช่เลขลำดับ", () => {
@@ -123,7 +187,14 @@ test("ไม่มี emoji ในเนื้อเมลของทุกฝ�
 
 test("เนื้อย่อสำหรับ URL ที่ยาวเกิน ยังมีลิงก์และไม่มีรายการยาว", () => {
   const items = itemsByOwner("จัดส่ง ลาดกระบัง");
-  const short = shortBodyOf({ owner: "จัดส่ง ลาดกระบัง", period, link: "https://x/y" });
+  const short = shortBodyOf({
+    owner: "จัดส่ง ลาดกระบัง",
+    period,
+    items,
+    records: new Map(),
+    link: "https://x/y",
+    now,
+  });
   const full = bodyOf({
     owner: "จัดส่ง ลาดกระบัง",
     period,
@@ -134,6 +205,10 @@ test("เนื้อย่อสำหรับ URL ที่ยาวเกิ
   });
   assert.ok(short.includes("https://x/y"));
   assert.ok(short.length < full.length);
+  /* ย่อแล้วยังต้องตัดสินใจได้: ค้างกี่ชิ้น ชิ้นแรกครบกำหนดเมื่อไหร่ */
+  assert.ok(short.includes(`${items.length} รายการที่ต้องส่ง`), short);
+  assert.ok(short.includes(`วันที่ ${Math.min(...items.map((i) => i.dueDay))} ก.ย.`), short);
+  for (const item of items) assert.ok(!short.includes(item.title), "ฉบับย่อไม่ลงรายชิ้น");
 });
 
 /* ---- ผู้รับ: ส่งสมุดรายชื่อปลอมเข้าไปตรง ๆ ไม่แตะ NCAC ---- */

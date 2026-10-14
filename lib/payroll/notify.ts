@@ -38,8 +38,31 @@ export function intakeLink(origin: string, period: PeriodRef, owner: IntakeOwner
   );
 }
 
-export function subjectOf(owner: IntakeOwner, period: PeriodRef): string {
-  return `[HR Service] ทะเบียนรับข้อมูลเงินเดือน รอบ ${periodLabel(period)} — ${owner}`;
+/**
+ * `ฝ่ายจัดส่ง ลาดกระบัง` · `ฝ่าย HR C&B` — คำนำหน้าชื่อฝ่ายสำหรับเอาไปแทรกในประโยค
+ *
+ * ชื่อฝ่ายที่เป็นอักษรโรมันต้องมีเว้นวรรคคั่น (`ฝ่ายHR C&B` อ่านสะดุด) ส่วนชื่อไทย
+ * เขียนติดกันตามปกติของภาษา · ไม่เติม `ฝ่าย` ให้ชื่อที่ขึ้นต้นด้วยคำนั้นอยู่แล้ว
+ */
+export function ownerPhrase(owner: IntakeOwner): string {
+  if (owner.startsWith("ฝ่าย")) return owner;
+  return /^[\u0E00-\u0E7F]/.test(owner) ? `ฝ่าย${owner}` : `ฝ่าย ${owner}`;
+}
+
+/**
+ * หัวเรื่อง — **มีวันครบกำหนดอยู่ในหัวเรื่อง** เพราะคนส่วนใหญ่ตัดสินว่าจะเปิดเมลไหน
+ * ก่อนจากหัวเรื่องในรายการ ไม่ได้เปิดอ่านทุกฉบับ · รอบที่ส่งครบแล้วไม่มีกำหนดจะทวง
+ * จึงบอกไปตรง ๆ ว่าครบแล้ว ไม่ต้องให้คนเปิดเข้าไปดูเองว่ามีอะไรค้างหรือไม่
+ *
+ * ขึ้นต้นด้วย `[เงินเดือน <รอบ>]` ให้ค้นและตั้งตัวกรองใน Gmail ได้ด้วยรอบ
+ */
+export function subjectOf(owner: IntakeOwner, period: PeriodRef, due?: Deadline): string {
+  const head = `[เงินเดือน ${periodLabel(period)}] `;
+  if (!due || due.count === 0) return `${head}${ownerPhrase(owner)} ส่งข้อมูลครบแล้ว`;
+  if (due.overdue > 0) {
+    return `${head}ขอข้อมูลจาก${ownerPhrase(owner)} — เลยกำหนดแล้ว ${due.overdue} รายการ`;
+  }
+  return `${head}ขอข้อมูลจาก${ownerPhrase(owner)} — ภายใน ${due.firstDueText}`;
 }
 
 interface BodyArgs {
@@ -54,23 +77,90 @@ interface BodyArgs {
 const recordOf = (records: Map<string, IntakeRecord>, item: IntakeItem) =>
   records.get(item.id) ?? emptyRecord(item.id);
 
-/** ท่อนต้นเมล — ชื่อเรื่อง ลิงก์ และเรื่องการล็อกอิน (ชุดเดียวกันทั้งฉบับเต็มและฉบับย่อ) */
+/**
+ * สิ่งที่คนอ่านอยากรู้ก่อนอย่างอื่น: ค้างกี่รายการ ชิ้นแรกครบกำหนดเมื่อไหร่ เลยกำหนดไปแล้วกี่ชิ้น
+ * — ใช้ทั้งในหัวเรื่อง ย่อหน้าเปิด และฉบับย่อ จึงคิดที่เดียวแล้วส่งต่อ ไม่คิดซ้ำสามที่
+ */
+export interface Deadline {
+  count: number;
+  overdue: number;
+  /** `3 ก.ย.` — วันครบกำหนดของชิ้นที่ใกล้ที่สุด · ไม่มีของค้างจะเป็นค่าว่าง */
+  firstDueText: string;
+}
+
+function deadlineOf(args: Omit<BodyArgs, "link">): Deadline {
+  const { period, items, records, now } = args;
+  const month = TH_MONTHS[period.month];
+  const pending = items.filter((item) => {
+    const stage = recordOf(records, item).stage;
+    return stage !== "passed" && stage !== "submitted";
+  });
+
+  const overdue = pending.filter(
+    (item) => lateDays(item, period, recordOf(records, item), now) > 0,
+  ).length;
+  const firstDue = pending.reduce<number | null>(
+    (soonest, item) => (soonest === null || item.dueDay < soonest ? item.dueDay : soonest),
+    null,
+  );
+
+  return {
+    count: pending.length,
+    overdue,
+    firstDueText: firstDue === null ? "" : `${firstDue} ${month}`,
+  };
+}
+
+/**
+ * ย่อหน้าเปิด — **ใช้ชุดเดียวกันทั้งฉบับเต็มและฉบับย่อ** เพื่อให้คนที่ได้ฉบับย่อ
+ * (เพราะ URL ยาวเกิน) ยังได้ข้อมูลที่ตัดสินใจได้ครบ: ค้างกี่ชิ้น ครบกำหนดเมื่อไหร่ ลิงก์อยู่ไหน
+ *
+ * **ไม่ลงท้าย ครับ/ค่ะ** เพราะเมลออกจากบัญชีของคนส่งซึ่งเป็นใครก็ได้ ระบบไม่รู้ว่า
+ * จะต้องใช้คำลงท้ายไหน — เดาผิดอ่านแล้วสะดุดกว่าไม่มีเลย · คนส่งเติมเองได้ในหน้าเขียนเมล
+ */
 function openingOf(
   { owner, period, link }: Pick<BodyArgs, "owner" | "period" | "link">,
-  nothingToSend = false,
+  due: Deadline,
 ): string[] {
-  return [
-    `ทะเบียนรับข้อมูลเงินเดือน รอบ ${periodLabel(period)} — ${owner}`,
+  const lines = [`เรียน ผู้รับผิดชอบข้อมูลเงินเดือน — ${owner}`, ""];
+
+  if (due.count === 0) {
+    lines.push(
+      `รอบ ${periodLabel(period)} ของ${ownerPhrase(owner)} ส่งเข้าระบบครบแล้ว ไม่มีรายการค้าง ขอบคุณที่ส่งให้ทันรอบ`,
+      "",
+      "ดูสถานะของแต่ละรายการได้ที่ลิงก์นี้",
+      link,
+    );
+    return lines;
+  }
+
+  const overdueNote =
+    due.overdue > 0 ? ` และมี ${due.overdue} รายการที่เลยกำหนดมาแล้ว` : "";
+  lines.push(
+    `เปิดรอบเงินเดือน ${periodLabel(period)} แล้ว รอบนี้${ownerPhrase(owner)} มี ${due.count} รายการที่ต้องส่ง` +
+      ` ชิ้นที่ใกล้ที่สุดครบกำหนดวันที่ ${due.firstDueText}${overdueNote}`,
     "",
-    /* ไม่มีอะไรค้างแล้วจะชวน “ส่งข้อมูล” ต่อไม่ได้ — เมลกลายเป็นแจ้งสถานะแทน */
-    nothingToSend
-      ? "รอบนี้ไม่มีรายการค้างส่งแล้ว ดูสถานะของแต่ละรายการได้ที่ลิงก์นี้"
-      : "เปิดรอบแล้ว ส่งข้อมูลเข้าระบบได้ที่ลิงก์นี้",
+    "ส่งข้อมูลได้ที่ลิงก์นี้ — ต้องเข้าสู่ระบบด้วยอีเมลบริษัทก่อน เข้าไปแล้วจะเห็นเฉพาะรายการของฝ่ายตัวเอง",
     link,
-    "",
-    `ลิงก์นี้ต้องเข้าสู่ระบบด้วยบัญชีบริษัทก่อน แล้วจะเห็นเฉพาะรายการของ${owner}`,
-  ];
+  );
+  return lines;
 }
+
+/**
+ * ท่อน "ส่งแล้วเกิดอะไรขึ้นต่อ" — คำถามแรกที่ฝ่ายถามกลับมาเสมอคือส่งแล้วจบหรือยัง
+ * บอกไว้ในเมลตั้งแต่ต้นจะได้ไม่ต้องตอบรายคน · ฉบับย่อใช้บรรทัดเดียวจากชุดนี้
+ */
+const NEXT_STEPS = [
+  "ส่งแล้วเกิดอะไรขึ้นต่อ",
+  "ระบบตรวจชื่อคอลัมน์กับช่องเงินให้ทันทีที่อัปโหลด ไม่ตรงตรงไหนจะขึ้นให้เห็นบนหน้าจอเลย",
+  "แก้แล้วอัปโหลดใหม่ได้ ไม่ต้องแจ้งใคร เมื่อผ่านด่านนี้ HR จะตรวจอีกชั้นก่อนรับเข้ารอบ",
+  "ถ้ายังต้องแก้ จะตีกลับมาพร้อมเหตุผลให้เห็นในหน้าเดียวกัน",
+];
+
+const CLOSING = [
+  "แบบฟอร์มดาวน์โหลดได้จากหน้าเดียวกัน กรอกบนแบบฟอร์มของระบบจะผ่านการตรวจเร็วกว่า เพราะเป็นผังคอลัมน์ที่ระบบตรวจตรง ๆ",
+  "ถ้าช่องไหนไม่ชัดเจน หรือรอบนี้มีเคสพิเศษที่ฟอร์มไม่รองรับ ตอบเมลนี้มาได้เลย",
+];
 
 /**
  * เนื้อเมลข้อความล้วน — **ไม่มีลายเซ็นผู้ส่ง** เพราะเมลออกจากบัญชีของผู้ใช้เอง
@@ -96,7 +186,8 @@ export function bodyOf({ owner, period, items, records, link, now }: BodyArgs): 
     } else toSend.push(item);
   }
 
-  const lines = openingOf({ owner, period, link }, toSend.length === 0 && returned.length === 0);
+  const due = deadlineOf({ owner, period, items, records, now });
+  const lines = openingOf({ owner, period, link }, due);
 
   lines.push("", "ของที่ต้องส่งในรอบนี้");
   if (toSend.length === 0) {
@@ -126,11 +217,9 @@ export function bodyOf({ owner, period, items, records, link, now }: BodyArgs): 
     for (const item of passed) lines.push(`- #${item.id} ${item.title}`);
   }
 
-  lines.push(
-    "",
-    "ดาวน์โหลดแบบฟอร์มได้จากหน้าเดียวกัน กรอกบนแบบฟอร์มของระบบจะผ่านการตรวจเร็วกว่า",
-    "เพราะระบบตรวจชื่อคอลัมน์กับช่องเงินให้อัตโนมัติตอนอัปโหลด",
-  );
+  /* ส่งครบแล้วไม่ต้องอธิบายขั้นตอนการส่ง — ย่อหน้าเปิดบอกไปแล้วว่าไม่มีอะไรค้าง */
+  if (due.count > 0) lines.push("", ...NEXT_STEPS);
+  lines.push("", ...CLOSING);
 
   return lines.join("\n");
 }
@@ -138,14 +227,25 @@ export function bodyOf({ owner, period, items, records, link, now }: BodyArgs): 
 /**
  * ฉบับย่อ — ใช้เมื่อเนื้อเมลฉบับเต็มยาวจน URL หน้าเขียนเมลของ Gmail เกินเพดาน
  * (ภาษาไทยกิน 9 ตัวอักษรต่อ 1 ตัวเมื่อ encode · ดู `DETAIL_LIMIT` ใน `case-notify.ts`)
- * รายการทั้งหมดอยู่ในหน้าตามลิงก์อยู่แล้ว และปุ่ม “คัดลอกเนื้อหา” ให้ฉบับเต็มแบบไม่ผ่าน URL
+ *
+ * **ย่อแต่ยังตัดสินใจได้** — ค้างกี่ชิ้น ชิ้นแรกครบกำหนดเมื่อไหร่ เลยกำหนดกี่ชิ้น อยู่ในย่อหน้า
+ * เปิดเหมือนฉบับเต็ม ที่หายไปคือรายการรายชิ้นซึ่งอยู่ในหน้าตามลิงก์อยู่แล้ว · ปุ่ม
+ * "คัดลอกเนื้อหา" ให้ฉบับเต็มแบบไม่ผ่าน URL
  */
-export function shortBodyOf(args: Pick<BodyArgs, "owner" | "period" | "link">): string {
-  return [
-    ...openingOf(args),
-    "",
-    "รายการที่ต้องส่งพร้อมวันครบกำหนดอยู่ในหน้าตามลิงก์ ดาวน์โหลดแบบฟอร์มได้จากหน้าเดียวกัน",
-  ].join("\n");
+export function shortBodyOf(args: Omit<BodyArgs, "link"> & { link: string }): string {
+  const due = deadlineOf(args);
+  const lines = openingOf(args, due);
+
+  if (due.count > 0) {
+    lines.push(
+      "",
+      "รายการที่ต้องส่งพร้อมวันครบกำหนดของแต่ละชิ้น อยู่ในหน้าตามลิงก์ ดาวน์โหลดแบบฟอร์มได้จากหน้าเดียวกัน",
+      "",
+      "ระบบตรวจชื่อคอลัมน์กับช่องเงินให้ทันทีที่อัปโหลด แก้แล้วอัปโหลดใหม่ได้ ผ่านแล้ว HR จะตรวจอีกชั้นก่อนรับเข้ารอบ",
+    );
+  }
+  lines.push("", CLOSING[1]);
+  return lines.join("\n");
 }
 
 export interface NotifyDraft {
@@ -179,14 +279,15 @@ export async function notifyDraft(args: {
 
   const departmentId = departmentIdOf(owner);
   const plan = departmentId ? await resolveRecipients(departmentId, users) : null;
+  const items = itemsByOwner(owner);
 
   return {
     owner,
     to: plan?.to.map((r) => r.email) ?? [],
     cc: plan?.cc.map((r) => r.email) ?? [],
-    subject: subjectOf(owner, period),
-    body: bodyOf({ owner, period, items: itemsByOwner(owner), records, link, now }),
-    shortBody: shortBodyOf({ owner, period, link }),
+    subject: subjectOf(owner, period, deadlineOf({ owner, period, items, records, now })),
+    body: bodyOf({ owner, period, items, records, link, now }),
+    shortBody: shortBodyOf({ owner, period, items, records, link, now }),
     link,
     directoryMissing: departmentId === null,
     skipped: plan?.skipped ?? [],
