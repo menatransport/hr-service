@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { assertPassAllowed } from "@/lib/payroll/intake-gate";
+import { assertPassAllowed, overrideToStore } from "@/lib/payroll/intake-gate";
 import type { IntakeRecord } from "@/lib/payroll/intake-status";
 
 const record = (over: Partial<IntakeRecord> = {}): IntakeRecord => ({
@@ -38,4 +38,11 @@ test("ไฟล์ที่ยังไม่เคยผ่านด่าน 1
     () => assertPassAllowed(record({ errors: undefined, checkedAt: undefined })),
     /ยังไม่ได้ตรวจ/,
   );
+});
+
+test("เหตุผลข้ามด่านเก็บเฉพาะเมื่อไฟล์มีข้อผิดพลาดค้างจริง", () => {
+  assert.equal(overrideToStore(record({ errors: 0 }), "เหตุผล"), undefined);
+  assert.equal(overrideToStore(record({ errors: undefined }), "เหตุผล"), undefined);
+  assert.equal(overrideToStore(record({ errors: 2 }), "  ยอดถูกแล้ว "), "ยอดถูกแล้ว");
+  assert.equal(overrideToStore(record({ errors: 2 }), "   "), undefined);
 });

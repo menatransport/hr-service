@@ -190,8 +190,8 @@ export function IntakeView({
    * ของเดิมสถานะถูกเขียนตอนกดรับเข้ารอบเท่านั้น ซึ่งแปลว่าคนที่อัปโหลดเสร็จแล้ว
    * ปิดจอไป ทะเบียนยังขึ้น “รอส่ง” อยู่ดี แล้ว HR ก็โทรตามของที่มาถึงแล้ว
    *
-   * `rows`/`columns` ส่งเป็นอาร์กิวเมนต์ ไม่ได้อ่านจาก state เพราะ `setProfile`
-   * ยังไม่มีผลใน tick นี้ — อ่าน state ตรงนี้จะได้ค่าของไฟล์ก่อนหน้า
+   * การบันทึกทำที่เซิร์ฟเวอร์ในคำขอเดียวกับการอ่านไฟล์ (`/api/payroll/parse`) พร้อมผลตรวจ
+   * ด่าน 1 — หน้าจอไม่ส่งตัวเลขผลตรวจกลับไปเอง
    */
   async function read(next: File) {
     if (!active) return;
@@ -217,6 +217,7 @@ export function IntakeView({
           checks: CheckResult[];
           tally: CheckTally;
           file: { fileId: string };
+          record: IntakeRecord;
         }
       | { error: string; file?: { fileId: string } };
     let res: Response;
@@ -231,44 +232,36 @@ export function IntakeView({
 
     if (!res.ok || !("profile" in json)) {
       const error = "error" in json ? json.error : undefined;
-      /* 422 = ไฟล์ถูกเก็บไว้แล้วแต่อ่านไม่ออก — บอกผู้ใช้ตรง ๆ ว่าระบบได้ไฟล์ไปแล้ว
-         ไม่ทำเหมือนไม่มีอะไรเกิดขึ้น เพราะ HR ต้องไปเปิดไฟล์นั้นดูได้ */
-      if (res.status === 422 && "file" in json && json.file) {
+      /* มี `file` = ไฟล์ถูกเก็บไว้แล้ว (422 อ่านไม่ออก · 500 บันทึกสถานะไม่ได้) — บอกตรง ๆ
+         ว่าระบบได้ไฟล์ไปแล้ว ไม่ทำเหมือนไม่มีอะไรเกิดขึ้น เพราะ HR ต้องเปิดไฟล์นั้นดูได้
+         และไม่คงโปรไฟล์ไว้บนจอ เพราะแถวสถานะไม่ตรงกับมัน */
+      if ("file" in json && json.file) {
         void toastError(
-          "รับไฟล์ไว้แล้ว แต่อ่านเนื้อหาไม่สำเร็จ",
-          `${error ?? ""} · ไฟล์ถูกเก็บไว้ในระบบ (เลขไฟล์ ${json.file.fileId}) ให้ ${HR_DEPARTMENT_LABEL} เปิดดูได้`.trim(),
+          res.status === 422
+            ? "รับไฟล์ไว้แล้ว แต่อ่านเนื้อหาไม่สำเร็จ"
+            : "เก็บไฟล์ไว้แล้ว แต่ยังไม่ได้บันทึกสถานะ",
+          `${error ? `${error} · ` : ""}ไฟล์ถูกเก็บไว้ในระบบ (เลขไฟล์ ${json.file.fileId}) ให้ ${HR_DEPARTMENT_LABEL} เปิดดูได้`,
         );
       } else {
         void toastError("อ่านไฟล์ไม่สำเร็จ", error);
       }
+      /* 422 เซิร์ฟเวอร์เขียนแถว “อัปโหลดแล้ว” ให้แล้ว — โหลดทะเบียนใหม่ให้ตรง */
+      if (res.status === 422) setReloadAt(Date.now());
       clearFile();
       return;
     }
 
     setProfile(json.profile);
     setChecks(json.checks);
-    const picked = defaultSelection(json.profile);
-    setSelected(picked);
-
-    /* **ส่ง `blocking` ไม่ใช่ `errors`** — `errors` นับทุกข้อที่ severity เป็น error รวมของ
-       ที่ยัง `pending` ซึ่งไม่ใช่ความผิดของไฟล์และต้องไม่ขวางการผ่าน */
-    const saved = await save("submitted", {
-      fileName: next.name,
-      rows: json.profile.totalRows,
-      columns: picked.size,
-      fileId: json.file.fileId,
-      errors: json.tally.blocking,
-      warnings: json.tally.warnings,
-      pendingChecks: json.tally.pending,
-    });
-    if (saved) {
-      void toastSuccess(
-        "บันทึกว่าอัปโหลดแล้ว",
-        canPass
-          ? "ตรวจคอลัมน์ด้านล่าง แล้วกดรับเข้ารอบ"
-          : `รอ${HR_DEPARTMENT_LABEL}ตรวจแล้วกดรับเข้ารอบ`,
-      );
-    }
+    setSelected(defaultSelection(json.profile));
+    /* สถานะและผลตรวจถูกบันทึกฝั่งเซิร์ฟเวอร์ในคำขอเดียวกับการอ่านไฟล์ — หน้าจอแค่รับแถวที่ได้มา */
+    setRecords((was) => new Map(was).set(json.record.itemId, json.record));
+    void toastSuccess(
+      "บันทึกว่าอัปโหลดแล้ว",
+      canPass
+        ? "ตรวจผลด้านล่าง แล้วกดรับเข้ารอบ"
+        : `รอ${HR_DEPARTMENT_LABEL}ตรวจแล้วกดรับเข้ารอบ`,
+    );
   }
 
   function toggle(letter: string) {
@@ -295,10 +288,6 @@ export function IntakeView({
           returnedReason: extra.returnedReason,
           rows: extra.rows ?? profile?.totalRows,
           columns: extra.columns ?? (selected.size || undefined),
-          fileId: extra.fileId,
-          errors: extra.errors,
-          warnings: extra.warnings,
-          pendingChecks: extra.pendingChecks,
           overrideReason: extra.overrideReason,
         }),
       });
@@ -334,6 +323,7 @@ export function IntakeView({
     ? (records.get(active.id) ?? emptyRecord(active.id))
     : null;
   const openErrors = activeRecord?.errors ?? 0;
+  const openBlocking = checks.filter((c) => c.blocking).length;
 
   return (
     <div className="animate-rise flex flex-col gap-5">
@@ -690,14 +680,14 @@ export function IntakeView({
             <>
               <div
                 className={`flex flex-wrap items-center gap-x-5 gap-y-2 rounded-box border p-3.5 ${
-                  counts.error
+                  counts.error || openBlocking
                     ? "border-sla/30 bg-sla/6"
                     : counts.warn
                       ? "border-warning/35 bg-warning/8"
                       : "border-primary/30 bg-soft/60"
                 }`}
               >
-                {counts.error ? (
+                {counts.error || openBlocking ? (
                   <TriangleAlert size={19} strokeWidth={1.8} aria-hidden className="text-sla" />
                 ) : (
                   <CircleCheck size={19} strokeWidth={1.8} aria-hidden className="text-primary" />
@@ -714,7 +704,9 @@ export function IntakeView({
                   <span className="text-13 text-pretty">
                     {counts.error
                       ? "คอลัมน์ที่ต้องดูก่อน"
-                      : "ไม่มีคอลัมน์ที่ติดขัด รับเข้ารอบได้เลย"}
+                      : openBlocking
+                        ? `คอลัมน์ไม่ติดขัด แต่การตรวจด่านแรกยังพบข้อผิดพลาด ${openBlocking} ข้อ ดูด้านล่าง`
+                        : "ไม่มีคอลัมน์ที่ติดขัดและไม่พบข้อผิดพลาดจากการตรวจ รับเข้ารอบได้"}
                   </span>
                 </span>
 

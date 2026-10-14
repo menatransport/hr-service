@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { forbidden, ok, unauthorized } from "@/app/api/_lib/respond";
 import { getDeskIdentity, readSessionUser } from "@/lib/auth/session";
+import { saveIntake } from "@/lib/payroll/intake";
 import { saveIntakeFile } from "@/lib/payroll/intake-files";
 import { checkContentLength, parseFailureBody, validateIntakeUpload } from "@/lib/payroll/intake-upload";
 import { profileWorkbook } from "@/lib/payroll/parse";
@@ -54,13 +55,62 @@ export async function POST(request: NextRequest) {
     const stored = await saveIntakeFile(file, { period, itemId, uploadedBy: identity.name });
 
     /* เก็บแล้ว — จากนี้ไฟล์อ่านไม่ออกคือปัญหาของไฟล์ (422) และต้องบอก fileId กลับไปด้วย */
+    let parsed;
+    let checks;
     try {
-      const parsed = await profileWorkbook(await file.arrayBuffer(), file.name);
-      const checks = runChecks(itemId, parsed);
-      return ok({ profile: parsed.profile, checks, tally: summarize(checks), file: stored });
+      parsed = await profileWorkbook(await file.arrayBuffer(), file.name);
+      checks = runChecks(itemId, parsed);
     } catch (err) {
+      /* ฝ่ายส่งไฟล์มาแล้ว แต่อ่านไม่ออก — ทะเบียนต้องขึ้น “อัปโหลดแล้ว” พร้อมสิ่งที่ต้องแก้
+         (นับเป็นข้อผิดพลาด 1 ข้อ) ไม่ใช่ “รอส่ง” ที่ทำให้ HR โทรตามของที่มาถึงแล้ว */
+      try {
+        await saveIntake({
+          period,
+          itemId,
+          stage: "submitted",
+          fileName: file.name,
+          fileId: stored.fileId,
+          errors: 1,
+          warnings: 0,
+          pendingChecks: 0,
+          updatedBy: identity.name,
+        });
+      } catch (saveErr) {
+        console.error("[api] payroll parse 422 save", saveErr);
+      }
       return NextResponse.json(parseFailureBody(err, stored), { status: 422 });
     }
+
+    /* **เส้นนี้เป็นที่เดียวที่เขียนสถานะ `submitted`** — เพราะรู้ผลตรวจจริง ไม่ปล่อยให้
+       browser ส่งตัวเลขกลับมาเอง (ส่ง errors: 0 ปลอมแล้วด่าน 1 ก็เป็นหมัน)
+       `blocking` ไม่ใช่ `errors` เพราะ errors นับของที่ยัง pending ด้วย */
+    const tally = summarize(checks);
+    let record;
+    try {
+      record = await saveIntake({
+      period,
+      itemId,
+      stage: "submitted",
+      fileName: file.name,
+      rows: parsed.profile.totalRows,
+      columns: parsed.profile.columns.length,
+      fileId: stored.fileId,
+      errors: tally.blocking,
+      warnings: tally.warnings,
+      pendingChecks: tally.pending,
+      updatedBy: identity.name,
+      });
+    } catch (saveErr) {
+      console.error("[api] payroll parse save", saveErr);
+      return NextResponse.json(
+        {
+          error: "เก็บไฟล์ไว้แล้ว แต่บันทึกสถานะไม่สำเร็จ — ทะเบียนยังไม่ขึ้นว่าอัปโหลดแล้ว ลองอัปโหลดใหม่อีกครั้ง",
+          file: stored,
+        },
+        { status: 500 },
+      );
+    }
+    return ok({ profile: parsed.profile, checks, tally, file: stored, record });
   } catch (err) {
     /* ฐานข้อมูล/GridFS ล้ม — ไม่ส่ง err.message ของ driver ออกไปให้ผู้ใช้ */
     console.error("[api] payroll parse", err);

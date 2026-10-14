@@ -71,6 +71,12 @@ export async function PATCH(request: NextRequest) {
       return badRequest(`stage ต้องเป็นหนึ่งใน ${STAGES.join(" / ")}`);
     }
 
+    /* **`submitted` เขียนได้จาก `/api/payroll/parse` เท่านั้น** — เส้นนั้นเป็นที่เดียวที่
+       รู้ผลตรวจจริง ถ้าเปิดให้ PATCH เขียนสถานะนี้ ก็แปลว่าผลตรวจเป็นของที่ client เสนอเอง */
+    if (body.stage === "submitted") {
+      return badRequest("สถานะ “อัปโหลดแล้ว” บันทึกได้จากการอัปโหลดไฟล์เท่านั้น");
+    }
+
     const identity = await getDeskIdentity();
 
     /* **การรับเข้ารอบถูกกันที่เซิร์ฟเวอร์ ไม่ใช่แค่ปิดปุ่ม** — ปุ่มที่ปิดไว้บนหน้าจอ
@@ -101,11 +107,6 @@ export async function PATCH(request: NextRequest) {
           typeof body.returnedReason === "string" ? body.returnedReason : undefined,
         rows: typeof body.rows === "number" ? body.rows : undefined,
         columns: typeof body.columns === "number" ? body.columns : undefined,
-        fileId: typeof body.fileId === "string" ? body.fileId : undefined,
-        errors: typeof body.errors === "number" ? body.errors : undefined,
-        warnings: typeof body.warnings === "number" ? body.warnings : undefined,
-        pendingChecks:
-          typeof body.pendingChecks === "number" ? body.pendingChecks : undefined,
         overrideReason:
           typeof body.overrideReason === "string" ? body.overrideReason : undefined,
         updatedBy: identity.name,

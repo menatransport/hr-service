@@ -10,6 +10,16 @@ import type { IntakeRecord } from "./intake-status";
  * **ของที่ `status: "pending"` ไม่นับเป็นข้อผิดพลาด** — เป็นกติกาที่เรายังไม่รู้
  * ไม่ใช่ความผิดของไฟล์ ถ้าเอามาบล็อกก็เท่ากับหยุดเงินเดือนด้วยกฎที่เราแต่งเอง
  */
+/**
+ * เหตุผลที่จะเก็บลงแถว — **เก็บเฉพาะเมื่อไฟล์มีข้อผิดพลาดค้างจริง**
+ * `overrideReason` มีอยู่ = “ผ่านทั้งที่มีข้อผิดพลาดค้าง” ถ้าเก็บตอนไม่มีข้อผิดพลาดด้วย
+ * ความหมายนั้นจะเพี้ยน และคนอ่านประวัติจะเข้าใจผิดว่ามีการข้ามด่าน
+ */
+export function overrideToStore(record: IntakeRecord, overrideReason?: string): string | undefined {
+  if ((record.errors ?? 0) <= 0) return undefined;
+  return overrideReason?.trim() || undefined;
+}
+
 export function assertPassAllowed(record: IntakeRecord, overrideReason?: string): void {
   if (!record.checkedAt && record.errors === undefined) {
     throw new Error("รับเข้ารอบไม่ได้ — ไฟล์นี้ยังไม่ได้ตรวจด่านแรก ลองอัปโหลดใหม่อีกครั้ง");

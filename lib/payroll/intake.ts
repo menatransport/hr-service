@@ -2,7 +2,7 @@ import type { Collection } from "mongodb";
 
 import { getDb } from "../mongo";
 import type { IntakeRecord, IntakeStage } from "./intake-status";
-import { assertPassAllowed } from "./intake-gate";
+import { assertPassAllowed, overrideToStore } from "./intake-gate";
 import { findItem } from "./registry";
 
 /**
@@ -101,6 +101,9 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
 
   const collection = await intakes();
 
+  /* ใช้ตอนเขียน `passed` — รู้ว่าอ่านแถวไหนมาตัดสิน */
+  let judged: IntakeDoc | null = null;
+
   if (input.stage === "passed") {
     const current = await collection.findOne({
       _id: keyOf(input.period, input.itemId),
@@ -115,6 +118,7 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
     /* ด่านที่สอง — ตัดสินจากผลตรวจที่ **เก็บไว้กับแถว** ไม่ใช่จากตัวเลขที่ client ส่งมา
        ตอนกดผ่าน ไม่งั้นยิง API ตรงพร้อม errors: 0 ก็ผ่านได้ */
     assertPassAllowed(toRecord(current), input.overrideReason);
+    judged = current;
   }
 
   const now = new Date().toISOString();
@@ -149,8 +153,10 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
     }
     if (!input.fileId?.trim()) unset.fileId = "";
   }
-  if (input.stage === "passed" && input.overrideReason?.trim()) {
-    set.overrideReason = input.overrideReason.trim();
+  if (judged) {
+    const reason = overrideToStore(toRecord(judged), input.overrideReason);
+    if (reason) set.overrideReason = reason;
+    else unset.overrideReason = "";
   }
 
   /* ทุกสถานะที่ไม่ใช่ `passed` ต้องล้างลายเซ็นการผ่านทิ้ง — ของที่ผ่านแล้วถูกตีกลับ
@@ -189,12 +195,28 @@ export async function saveIntake(input: SaveIntakeInput): Promise<IntakeRecord> 
   /* เหตุผลข้ามด่านอยู่ได้เฉพาะแถวที่ผ่าน — ตีกลับแล้วส่งใหม่ต้องเริ่มด่านใหม่ */
   if (input.stage !== "passed") unset.overrideReason = "";
 
-  const doc = await collection.findOneAndUpdate(
-    { _id: keyOf(input.period, input.itemId) },
-    Object.keys(unset).length ? { $set: set, $unset: unset } : { $set: set },
-    { upsert: true, returnDocument: "after" },
-  );
+  const update = Object.keys(unset).length ? { $set: set, $unset: unset } : { $set: set };
+  const doc = judged
+    ? /* **เขียนผ่านแบบมีเงื่อนไข** — ต้องยังเป็นไฟล์ชุดเดิมที่เพิ่งถูกตรวจ (`submitted` และ
+         `receivedAt` เท่าเดิม) ถ้ามีการอัปโหลดใหม่แทรกระหว่างอ่านกับเขียน จะไม่มีแถวตรง
+         เงื่อนไข แล้วการผ่านล้ม แทนที่จะเอาไฟล์ใหม่ที่ยังไม่ถูกตรวจไปผ่าน */
+      await collection.findOneAndUpdate(
+        { _id: keyOf(input.period, input.itemId), stage: "submitted", receivedAt: judged.receivedAt },
+        update,
+        { returnDocument: "after" },
+      )
+    : await collection.findOneAndUpdate(
+        { _id: keyOf(input.period, input.itemId) },
+        update,
+        { upsert: true, returnDocument: "after" },
+      );
 
-  if (!doc) throw new Error("บันทึกสถานะไม่สำเร็จ");
+  if (!doc) {
+    throw new Error(
+      judged
+        ? "รับเข้ารอบไม่สำเร็จ — ระหว่างตรวจมีการอัปโหลดไฟล์ใหม่เข้ามา ให้เปิดตรวจไฟล์ล่าสุดอีกครั้ง"
+        : "บันทึกสถานะไม่สำเร็จ",
+    );
+  }
   return toRecord(doc);
 }
