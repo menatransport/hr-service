@@ -203,3 +203,48 @@ test("summarize นับแยก error / warn / pending / blocking", () => {
   ]);
   assert.deepEqual(tally, { errors: 2, warnings: 1, pending: 1, blocking: 1 });
 });
+
+test("รหัสวันที่ไม่อยู่ในชุด 24 ตัว = ข้อผิดพลาดที่บล็อก", () => {
+  const file = parsed("01", [{ [payeeCol("01")]: "1", "1": "ZZ" }]);
+  const found = runChecks("01", file).find((r) => r.id === "daycode.unknown");
+  assert.equal(found?.blocking, true);
+});
+
+test("รหัสวันที่อยู่ในชุดแต่ยังไม่รู้ความหมาย = รอยืนยัน ไม่บล็อก", () => {
+  const file = parsed("01", [{ [payeeCol("01")]: "1", "1": "Aส" }]);
+  const found = runChecks("01", file).find((r) => r.id === "daycode.meaning-pending");
+  assert.equal(found?.status, "pending");
+  assert.equal(found?.blocking, false);
+  assert.ok(found?.detail.includes("ฝ่ายจัดส่ง"));
+});
+
+test("รายการที่ยังไม่ยืนยันทิศทางเงิน ได้ผลตรวจรอยืนยัน และไม่มีกฎเครื่องหมายมาบล็อก", () => {
+  const file = parsed("17", [
+    { [payeeCol("17")]: "1", [moneyCol("17", "รอยืนยัน")]: "-100" },
+  ]);
+  const results = runChecks("17", file);
+  const pending = results.find((r) => r.id === "money.effect-pending");
+  assert.equal(pending?.status, "pending");
+  assert.equal(pending?.blocking, false);
+  assert.equal(results.some((r) => r.id === "money.negative"), false);
+  assert.ok(pending?.detail.includes("ยานยนต์"));
+});
+
+test("รายการที่รอ Tiger Soft เคาะช่องรวม/ช่องย่อย ได้ผลตรวจรอยืนยัน", () => {
+  const file = parsed("08", [{ [payeeCol("08")]: "1" }]);
+  const found = runChecks("08", file).find((r) => r.id === "tigersoft.shape-pending");
+  assert.equal(found?.status, "pending");
+  assert.ok(found?.detail.includes("HR"));
+});
+
+test("กฎรอยืนยันไม่เคยทำให้ blocking เพิ่มขึ้น ไม่ว่ารายการไหน", () => {
+  for (const id of ["14", "15", "17", "18", "08", "23"]) {
+    const spec = templateOf(id)!;
+    const row: Record<string, string> = {};
+    for (const c of spec.columns) row[c] = c.includes("รหัส") ? "1" : "";
+    const results = runChecks(id, parsed(id, [row]));
+    for (const r of results.filter((x) => x.status === "pending")) {
+      assert.equal(r.blocking, false, `${id}/${r.id} ต้องไม่บล็อก`);
+    }
+  }
+});

@@ -1,6 +1,6 @@
-import { classify, postedColumns } from "./classify";
+import { classify, MONEY_COLUMNS, postedColumns } from "./classify";
 import { headerLetter, normalizeHeader, type ParsedFile } from "./parse";
-import { templateOf } from "./template-spec";
+import { DAY_CODES, hasDayGrid, templateOf } from "./template-spec";
 
 /**
  * ด่าน 1 — ระบบตรวจไฟล์ให้ก่อนที่ HR จะมาตรวจ
@@ -257,6 +257,100 @@ export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
         );
       }
     }
+  }
+
+  /* ── ตารางสถานะรายวัน ────────────────────────────────────────────
+     รหัสที่ไม่อยู่ในชุด 24 ตัวเลย = ผิดแน่ บล็อกได้ · รหัสที่อยู่ในชุดแต่ `meaning`
+     ยังว่าง = **เรายังไม่รู้ว่าวันนั้นได้เงินหรือไม่** ห้ามบล็อกและห้ามปล่อยเงียบ
+     ต้องขึ้นบนจอว่ารออะไรจากใคร */
+  if (hasDayGrid(spec.columns)) {
+    const known = new Map(DAY_CODES.map((d) => [d.code.toUpperCase(), d.meaning]));
+    const dayLetters = spec.columns
+      .filter((c) => /^\d+$/.test(c))
+      .map((c) => headerLetter(profile, c))
+      .filter(Boolean) as string[];
+
+    const unknown = new Map<string, string[]>();
+    const pending = new Set<string>();
+
+    rows.forEach((row, i) => {
+      for (const letter of dayLetters) {
+        const code = row[letter]?.trim();
+        if (!code) continue;
+        const meaning = known.get(code.toUpperCase());
+        if (meaning === undefined) {
+          const at = unknown.get(code) ?? [];
+          if (at.length < 3) at.push(rowNo(i));
+          unknown.set(code, at);
+        } else if (!meaning) {
+          pending.add(code);
+        }
+      }
+    });
+
+    if (unknown.size) {
+      out.push(
+        make({
+          id: "daycode.unknown",
+          severity: "error",
+          status: "active",
+          title: `มีรหัสวันที่ไม่รู้จัก ${unknown.size} รหัส`,
+          detail: `${[...unknown.keys()].slice(0, 8).join(" · ")} — ไม่อยู่ในชุดรหัส 24 ตัวที่ระบบรู้จัก · ระวังอย่าใช้รหัสของเครื่องลงเวลา TA100 ปนมา เพราะ "A" ของสองชุดแปลไม่เหมือนกัน`,
+          rows: [...unknown.values()].flat().slice(0, ROW_LIMIT),
+        }),
+      );
+    }
+
+    if (pending.size) {
+      out.push(
+        make({
+          id: "daycode.meaning-pending",
+          severity: "warn",
+          status: "pending",
+          title: `มีรหัสวันที่ยังไม่ยืนยันความหมาย ${pending.size} รหัส`,
+          detail: `${[...pending].join(" · ")} — ยังรอฝ่ายจัดส่งยืนยันว่าวันนั้นนับเป็นวันทำงานหรือไม่ · ระบบจึงยังคิดวันทำงานจากไฟล์นี้ให้ไม่ได้ และไม่บล็อกการรับเข้ารอบ`,
+        }),
+      );
+    }
+  }
+
+  /* ── ทิศทางเงินที่ยังไม่ยืนยัน ──────────────────────────────────── */
+  const WAITING_OWNER: Record<string, string> = {
+    "14": "บัญชีกรุงเทพ",
+    "15": "บัญชีกรุงเทพ",
+    "17": "ยานยนต์",
+    "18": "ยานยนต์",
+  };
+  const unconfirmed = Object.entries(MONEY_COLUMNS[itemId] ?? {})
+    .filter(([, effect]) => effect === "รอยืนยัน")
+    .map(([column]) => column);
+  if (unconfirmed.length) {
+    out.push(
+      make({
+        id: "money.effect-pending",
+        severity: "warn",
+        status: "pending",
+        title: "ยังไม่ยืนยันว่าเงินก้อนนี้เพิ่มหรือหัก",
+        detail: `ช่อง ${unconfirmed.join(" · ")} ยังรอ${WAITING_OWNER[itemId] ?? "ฝ่ายเจ้าของข้อมูล"}ยืนยันว่าเป็นเงินเพิ่มหรือเงินหัก — ระบบจึงตรวจเครื่องหมายให้ไม่ได้ ต้องให้คนดูยอดเองก่อนรับเข้ารอบ`,
+      }),
+    );
+  }
+
+  /* ── รูปแบบที่ Tiger Soft รับ ────────────────────────────────────── */
+  const TIGERSOFT_PENDING: Record<string, string> = {
+    "08": "เงินรางวัลมี 4 ช่องย่อย",
+    "23": "ค่าน้ำกับค่าไฟแยกกันสองช่อง",
+  };
+  if (TIGERSOFT_PENDING[itemId]) {
+    out.push(
+      make({
+        id: "tigersoft.shape-pending",
+        severity: "info",
+        status: "pending",
+        title: "ยังไม่เคาะว่าจะส่งเข้า Tiger Soft เป็นช่องรวมหรือช่องย่อย",
+        detail: `${TIGERSOFT_PENDING[itemId]} — รอ HR ค่าจ้างและสวัสดิการเคาะว่า Tiger Soft รับยอดรวมหรือรับแยกช่อง · ไม่กระทบการรับเข้ารอบ แต่กระทบตอนทำไฟล์นำเข้า`,
+      }),
+    );
   }
 
   return out;
