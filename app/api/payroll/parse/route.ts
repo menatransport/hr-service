@@ -54,15 +54,13 @@ export async function POST(request: NextRequest) {
     const stored = await saveIntakeFile(file, { period, itemId, uploadedBy: identity.name });
 
     /* เก็บแล้ว — จากนี้ไฟล์อ่านไม่ออกคือปัญหาของไฟล์ (422) และต้องบอก fileId กลับไปด้วย */
-    let parsed;
     try {
-      parsed = await profileWorkbook(await file.arrayBuffer(), file.name);
+      const parsed = await profileWorkbook(await file.arrayBuffer(), file.name);
+      const checks = runChecks(itemId, parsed);
+      return ok({ profile: parsed.profile, checks, tally: summarize(checks), file: stored });
     } catch (err) {
       return NextResponse.json(parseFailureBody(err, stored), { status: 422 });
     }
-    const checks = runChecks(itemId, parsed);
-
-    return ok({ profile: parsed.profile, checks, tally: summarize(checks), file: stored });
   } catch (err) {
     /* ฐานข้อมูล/GridFS ล้ม — ไม่ส่ง err.message ของ driver ออกไปให้ผู้ใช้ */
     console.error("[api] payroll parse", err);
