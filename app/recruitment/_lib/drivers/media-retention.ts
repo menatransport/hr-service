@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/mongo";
+import { hrCol } from "@/lib/db";
 import { deleteMediaFolder, mediaKeys } from "@/lib/s3";
 import { todayInBangkok } from "./registry";
 import { resignedMediaPurgeDate } from "./types";
@@ -31,7 +31,7 @@ export async function purgeResignedDriverMedia(
   { dryRun = false }: { dryRun?: boolean } = {},
 ): Promise<MediaPurgeReport> {
   const today = todayInBangkok();
-  const collection = (await getDb()).collection("master_driver");
+  const collection = await hrCol("drivers");
 
   /* คัดกว้างด้วย Mongo แล้วตัดสินวันที่ด้วย `resignedMediaPurgeDate()` ตัวเดียวกับป้าย
      บนหน้าจอ — วันบนจอกับวันที่ลบจริงจะไม่มีวันคลาดกัน */

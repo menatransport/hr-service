@@ -54,7 +54,7 @@ export function FormImportButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-field border border-line bg-base-100 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
+        className="btn-sec flex items-center gap-1.5 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
       >
         <FileUp size={13} strokeWidth={2} aria-hidden className="flex-none" />
         นำเข้าจาก Google Form
@@ -184,7 +184,7 @@ function FormImportDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-field border border-line px-3.5 py-2 text-13 transition-colors hover:bg-base-200"
+            className="btn-sec px-3.5 py-2 text-13 transition-colors hover:bg-base-200"
           >
             ปิด
           </button>
@@ -193,7 +193,7 @@ function FormImportDialog({
               type="button"
               onClick={commit}
               disabled={!total}
-              className="rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-pri px-3.5 py-2 text-13 font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
               นำเข้า {total.toLocaleString("th-TH")} ใบ
             </button>
@@ -202,7 +202,7 @@ function FormImportDialog({
               type="button"
               onClick={check}
               disabled={!file || checking}
-              className="flex items-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-pri flex items-center gap-1.5 px-3.5 py-2 text-13 font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
               {checking ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null}
               {checking ? "กำลังตรวจไฟล์…" : "ตรวจไฟล์"}

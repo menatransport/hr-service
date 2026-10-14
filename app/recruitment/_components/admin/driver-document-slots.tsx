@@ -165,7 +165,7 @@ export function DriverDocumentSlots({
       เติมให้เต็มพอดีและเลื่อนเฉพาะรายการข้างใน · `lg:` เท่านั้น จอเล็กวางซ้อนกันปกติ
     */
     <div className="relative">
-      <section className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-5 lg:absolute lg:inset-0">
+      <section className="flex flex-col gap-3 border-t border-line pt-6 lg:absolute lg:inset-0 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
         <div className="flex flex-none flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-14 font-semibold">เอกสารแนบ</h2>

@@ -65,7 +65,7 @@ function saveConsent(granted: string[]): void {
  */
 export function ConsentDialog({
   label = "เริ่มกรอกใบสมัคร",
-  className = "w-full bg-primary py-4 text-primary-content hover:opacity-90",
+  className = "btn-pri w-full py-4",
 }: {
   label?: string;
   className?: string;
@@ -372,7 +372,7 @@ function Sheet({
               type="button"
               onClick={onAccept}
               disabled={!ready || going}
-              className="flex h-13 items-center justify-center gap-2 rounded-box bg-primary text-15 font-semibold text-primary-content transition-all hover:opacity-90 active:scale-[0.985] disabled:bg-base-300 disabled:text-mut"
+              className="btn-pri flex h-13 items-center justify-center gap-2 text-15 font-semibold transition-all active:scale-[0.985] disabled:bg-base-300 disabled:text-mut"
             >
               {going ? (
                 <Loader2

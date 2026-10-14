@@ -12,19 +12,12 @@ function isActive(pathname: string, href: string) {
 }
 
 const ROW =
-  "group flex w-full items-center gap-2.5 rounded-field px-2.5 py-2 text-left text-13-5 transition-colors";
+  "group flex min-h-10 w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-13-5 transition-colors";
 
-export function DeskSidebar() {
-  const pathname = usePathname();
-
-  return (
-    <aside className="hidden w-[248px] flex-none border-r border-line bg-base-100 lg:sticky lg:top-14 lg:block lg:h-[calc(100dvh-3.5rem)] lg:overflow-y-auto">
-      <NavList pathname={pathname} />
-    </aside>
-  );
-}
-
-/** Same list, rendered inside the top-bar dropdown below `lg`. */
+/**
+ * เมนูเดิมของ `/desk` (`deskNav`) — เหลือเป็นเมนูสำรองของ `AppShell` สำหรับหน้าที่ไม่อยู่ใน
+ * กลุ่มงานใดของ `lib/modules.ts` (ตอนนี้คือทะเบียน พจส. ที่ยังปิดอยู่)
+ */
 export function DeskNavList() {
   const pathname = usePathname();
   return <NavList pathname={pathname} />;
@@ -35,7 +28,7 @@ function NavList({ pathname }: { pathname: string }) {
     <nav aria-label="เมนู HR" className="flex flex-col gap-5 p-3">
       {deskNav.map((group) => (
         <div key={group.section} className="flex flex-col gap-1">
-          <p className="px-2.5 pb-1 text-11 tracking-[0.08em] text-mut">
+          <p className="px-3 pb-1 text-11 font-semibold tracking-[0.08em] text-mut">
             {group.section}
           </p>
           {group.items.map((item) =>
@@ -48,8 +41,8 @@ function NavList({ pathname }: { pathname: string }) {
                 aria-current={isActive(pathname, item.href) ? "page" : undefined}
                 className={`${ROW} ${
                   isActive(pathname, item.href)
-                    ? "bg-primary font-medium text-primary-content"
-                    : "text-ink hover:bg-base-200"
+                    ? "nav-on font-medium"
+                    : "text-ink hover:bg-soft hover:text-primary"
                 }`}
               >
                 <item.icon
@@ -89,7 +82,7 @@ function NavGroup({ item, pathname }: { item: DeskNavItem; pathname: string }) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((wasOpen) => !wasOpen)}
-        className={`${ROW} hover:bg-base-200 ${
+        className={`${ROW} hover:bg-soft ${
           inGroup ? "font-medium text-primary" : "text-ink"
         }`}
       >
@@ -125,8 +118,8 @@ function NavGroup({ item, pathname }: { item: DeskNavItem; pathname: string }) {
                   aria-current={active ? "page" : undefined}
                   className={`${ROW} ${
                     active
-                      ? "bg-primary font-medium text-primary-content"
-                      : "text-mut hover:bg-base-200 hover:text-ink"
+                      ? "nav-on font-medium"
+                      : "text-mut hover:bg-soft hover:text-primary"
                   }`}
                 >
                   <span className="flex-1 truncate">{child.label}</span>

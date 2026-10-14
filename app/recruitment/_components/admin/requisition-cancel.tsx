@@ -64,7 +64,7 @@ export function RequisitionCancelModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-field border border-line px-3.5 py-2.5 text-13 text-mut transition-colors hover:text-ink disabled:opacity-50"
+            className="btn-sec px-3.5 py-2.5 text-13 text-mut transition-colors hover:text-ink disabled:opacity-50"
           >
             ไม่ยกเลิก
           </button>
@@ -72,7 +72,7 @@ export function RequisitionCancelModal({
             type="button"
             onClick={submit}
             disabled={saving || !reason}
-            className="flex items-center gap-2 rounded-field bg-alert px-4 py-2.5 text-13 font-medium text-ink-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="btn-danger flex items-center gap-2 px-4 py-2.5 text-13 font-medium disabled:opacity-45"
           >
             {saving ? <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" /> : null}
             ยกเลิกคำขอ

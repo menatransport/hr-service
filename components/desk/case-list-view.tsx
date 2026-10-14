@@ -13,7 +13,12 @@ import { dataErrorMessage, getCases } from "@/lib/cases";
  * ดึงข้อมูลเองผ่าน `getCases()` ซึ่ง `cache()` ไว้ — เรียกซ้ำในหน้าเดียวกัน
  * (ตาราง + modal + กระดิ่งแจ้งเตือน) ยิง NCAC จริงแค่ครั้งเดียว
  */
-export async function CaseListView() {
+export async function CaseListView({
+  manage,
+}: {
+  /** เปิดกล่องจัดการ master ชนิดนี้ไว้ตั้งแต่แรก (มาจาก `?manage=` ของหน้าคิว) */
+  manage?: "type" | "cause";
+} = {}) {
   let cases;
   try {
     cases = await getCases();
@@ -25,8 +30,8 @@ export async function CaseListView() {
           subtitle="ทุกเรื่องร้องเรียนที่ พจส. แจ้งเข้ามา"
           actions={
             <>
-              <MasterButton kind="type" />
-              <MasterButton kind="cause" />
+              <MasterButton kind="type" autoOpen={manage === "type"} />
+              <MasterButton kind="cause" autoOpen={manage === "cause"} />
               <NewCaseButton />
             </>
           }
@@ -43,8 +48,8 @@ export async function CaseListView() {
         subtitle="คลิกที่แถวเพื่อเปิดรายละเอียดและดำเนินการ"
         actions={
           <>
-            <MasterButton kind="type" />
-            <MasterButton kind="cause" />
+            <MasterButton kind="type" autoOpen={manage === "type"} />
+            <MasterButton kind="cause" autoOpen={manage === "cause"} />
             <NewCaseButton />
           </>
         }

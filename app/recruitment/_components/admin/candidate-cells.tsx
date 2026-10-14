@@ -298,7 +298,7 @@ function CancelPrompt({
             type="button"
             onClick={() => onConfirm(reason, other ? note.trim() : "", blacklist)}
             disabled={!ready}
-            className="flex items-center gap-1.5 rounded-field bg-alert px-4 py-2 text-12-5 font-medium text-ink-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="btn-danger flex items-center gap-1.5 px-4 py-2 text-12-5 font-medium disabled:opacity-45"
           >
             <CircleSlash size={14} strokeWidth={2} aria-hidden />
             ยืนยันยกเลิก
@@ -476,7 +476,7 @@ function ReasonMenu({
           <button
             type="submit"
             disabled={!ready}
-            className="rounded-field bg-primary px-3 py-1 text-12 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="btn-pri px-3 py-1 text-12 font-medium disabled:opacity-45"
           >
             บันทึก
           </button>
@@ -800,7 +800,7 @@ function InterviewForm({
           type="button"
           disabled={!date}
           onClick={() => onSubmit({ date, time })}
-          className="flex-1 rounded-field bg-primary px-3 py-1.5 text-12-5 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+          className="btn-pri flex-1 px-3 py-1.5 text-12-5 font-medium disabled:opacity-45"
         >
           บันทึกนัด
         </button>
@@ -808,7 +808,7 @@ function InterviewForm({
           <button
             type="button"
             onClick={() => onSubmit({ date: "", time: "", plan: "" })}
-            className="rounded-field border border-line px-3 py-1.5 text-12-5 text-mut transition-colors hover:border-alert/50 hover:text-alert"
+            className="btn-sec px-3 py-1.5 text-12-5 text-mut transition-colors hover:border-alert/50 hover:text-alert"
           >
             ยกเลิกนัด
           </button>

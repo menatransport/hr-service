@@ -18,6 +18,8 @@ import { Pager } from "@/components/ui/pager";
 import { SearchField } from "@/components/ui/field";
 import {
   SegmentedControl,
+  SummaryBody,
+  SummaryFooter,
   SummaryPanel,
   SummaryStat,
   SummaryStats,
@@ -76,12 +78,23 @@ import {
  */
 
 type SiteFilter = DriverSiteKey | "all" | "other";
-type EmploymentTab = "current" | "resigned";
+/** `nowork` = ETL ว่ายังทำงานแต่ไม่มีข้อมูลการทำงานเลย (`DriverRecord.noWorkRecord`) */
+type EmploymentTab = "current" | "nowork" | "resigned";
 
 type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "license" | "status" | "fleet";
 type Filters = Record<FilterKey, string[]>;
 
-type SortKey = "name" | "vehicle" | "fleet" | "plant" | "owner" | "tenure" | "license" | "status";
+type SortKey =
+  | "name"
+  | "code"
+  | "phone"
+  | "vehicle"
+  | "fleet"
+  | "plant"
+  | "owner"
+  | "tenure"
+  | "license"
+  | "status";
 type SortDir = "asc" | "desc";
 
 /**
@@ -139,7 +152,9 @@ const COLUMNS: {
   desc: string;
   align?: "start" | "end";
 }[] = [
-  { sort: "name", label: "คนขับ", width: "w-[264px]", asc: "ชื่อ ก → ฮ", desc: "ชื่อ ฮ → ก" },
+  { sort: "name", label: "คนขับ", width: "w-[220px]", asc: "ชื่อ ก → ฮ", desc: "ชื่อ ฮ → ก" },
+  { sort: "code", label: "รหัสพนักงาน", width: "w-[112px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
+  { sort: "phone", label: "เบอร์โทร", width: "w-[124px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
   {
     sort: "vehicle",
     label: "รถที่ขับ",
@@ -210,6 +225,12 @@ const COLUMNS: {
  */
 const RESIGNED_HIDDEN = new Set<string>(["vehicle", "fleet", "plant"]);
 
+/** แท็บที่คนนี้อยู่ — ทุกคนอยู่แท็บเดียวเสมอ */
+function employmentOf(driver: DriverRecord): EmploymentTab {
+  if (driver.active) return "current";
+  return driver.noWorkRecord ? "nowork" : "resigned";
+}
+
 /** ข้อความในคอลัมน์รถ — ลาดกระบังนำด้วยเลขรถ สาขาอื่นนำด้วยทะเบียน */
 function vehicleLead(driver: DriverRecord): string {
   const code = driver.vehicle?.code || "";
@@ -255,9 +276,18 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
     () =>
       drivers.filter((d) => {
         if (site !== "all" && (d.siteKey ?? "other") !== site) return false;
-        return employment === "current" ? d.active : !d.active;
+        return employmentOf(d) === employment;
       }),
     [drivers, site, employment],
+  );
+
+  /** จำนวนคน “ไม่มีข้อมูลการทำงาน” ในสาขาที่เลือก — ขึ้นบนแท็บ ให้รู้ว่ามีงานรอยืนยันอยู่เท่าไร */
+  const noWorkCount = useMemo(
+    () =>
+      drivers.filter(
+        (d) => d.noWorkRecord && (site === "all" || (d.siteKey ?? "other") === site),
+      ).length,
+    [drivers, site],
   );
 
   const counts = useMemo(() => {
@@ -512,11 +542,17 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
         <SummaryStats>
           <SummaryStat
             lead
-            label={resignedTab ? "พ้นสภาพแล้ว" : "ปฏิบัติงานอยู่"}
+            label={
+              resignedTab
+                ? "พ้นสภาพแล้ว"
+                : employment === "nowork"
+                  ? "ไม่มีข้อมูลการทำงาน"
+                  : "ปฏิบัติงานอยู่"
+            }
             value={counts.total}
             unit="คน"
             sub={site === "all" ? "ทุกสาขา" : `สาขา${siteFilterLabel(site)}`}
-            tone={resignedTab ? "alert" : "ink"}
+            tone={resignedTab ? "alert" : employment === "nowork" ? "sla" : "ink"}
           />
           <SummaryStat
             label={`อายุงานน้อยกว่า ${PROBATION_MONTHS} เดือน`}
@@ -526,7 +562,6 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             title="กลุ่มที่ต้องตามดูใกล้ ๆ"
             dot="bg-primary"
             tone="primary"
-            filterHint
             active={filters.tenure.includes("under4")}
             onClick={() => toggleTile("tenure", "under4")}
           />
@@ -538,7 +573,6 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             title="ต้องระงับการจ่ายงาน"
             dot="bg-alert"
             tone="alert"
-            filterHint
             active={filters.license.includes("expired")}
             onClick={() => toggleTile("license", "expired")}
           />
@@ -550,7 +584,6 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             title="ยังไม่ได้ประจำคันไหน"
             dot="bg-sla"
             tone="sla"
-            filterHint
             active={filters.vehicle.includes("none")}
             onClick={() => toggleTile("vehicle", "none")}
           />
@@ -596,6 +629,18 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
               พนักงานปัจจุบัน
             </EmploymentTabButton>
             <EmploymentTabButton
+              active={employment === "nowork"}
+              tone="sla"
+              onClick={() => changeEmployment("nowork")}
+            >
+              ไม่มีข้อมูลการทำงาน
+              {noWorkCount ? (
+                <span className="ml-1.5 rounded-full bg-sla/12 px-1.5 py-px font-mono text-11 text-sla tabular-nums">
+                  {noWorkCount.toLocaleString("th-TH")}
+                </span>
+              ) : null}
+            </EmploymentTabButton>
+            <EmploymentTabButton
               active={resignedTab}
               tone="alert"
               onClick={() => changeEmployment("resigned")}
@@ -626,10 +671,11 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             </span>
           </p>
         </SummaryStrip>
-      </SummaryPanel>
 
       {results.length === 0 ? (
-        <EmptyResult query={query.trim()} onClear={clearFilters} />
+        <SummaryBody pad>
+          <EmptyResult query={query.trim()} onClear={clearFilters} />
+        </SummaryBody>
       ) : (
         <>
           {/*
@@ -648,12 +694,12 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
           */}
           <div
             ref={tableBox}
-            className="elev-card relative hidden max-h-[calc(100dvh-13rem)] overflow-auto rounded-box border border-line bg-base-100 lg:block"
+            className="relative hidden max-h-[calc(100dvh-10.5rem)] overflow-auto border-t border-line bg-base-100 lg:block"
           >
             <table
               /* แท็บพ้นสภาพเหลือ 5 คอลัมน์ ถ้าคงความกว้างขั้นต่ำเดิมไว้จะเหลือที่ว่างยาวท้ายตาราง */
-              className={`w-full border-collapse text-13 ${
-                resignedTab ? "min-w-[760px]" : "min-w-[1120px]"
+              className={`sheet-table w-full border-collapse text-13 ${
+                resignedTab ? "min-w-[990px]" : "min-w-[1350px]"
               }`}
             >
               <thead>
@@ -691,18 +737,18 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             </table>
           </div>
 
-          {/* ── จอ <lg: การ์ดแถวละคน ตารางแนวนอนใช้บนจอแคบไม่ได้ ── */}
-          <ul
-            key={`${current}-${results.length}`}
-            className="flex flex-col gap-2.5 lg:hidden"
-          >
+          {/* ── จอ <lg: แถวละคน (แถวแบนคั่นเส้น ไม่ใช่การ์ด) ตารางแนวนอนใช้บนจอแคบไม่ได้ ── */}
+          <SummaryBody className="lg:hidden">
+          <ul key={`${current}-${results.length}`} className="divide-y divide-line">
             {pageRows.map((d, i) => (
               <li key={d.drivercode}>
                 <DriverCard driver={d} index={i} hideVehicle={resignedTab} />
               </li>
             ))}
           </ul>
+          </SummaryBody>
 
+          <SummaryFooter>
           <PageBar
             from={sliceFrom + 1}
             to={sliceFrom + pageRows.length}
@@ -711,8 +757,10 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             count={pageCount}
             onGo={goToPage}
           />
+          </SummaryFooter>
         </>
       )}
+      </SummaryPanel>
     </div>
   );
 }
@@ -733,6 +781,10 @@ function compare(a: DriverRecord, b: DriverRecord, key: SortKey): number {
   switch (key) {
     case "name":
       return byText(a.name, b.name);
+    case "code":
+      return byText(a.drivercode, b.drivercode);
+    case "phone":
+      return byText(primaryPhone(a.phone), primaryPhone(b.phone));
     case "vehicle":
       return byText(vehicleLead(a), vehicleLead(b));
     case "fleet":
@@ -774,8 +826,9 @@ function Row({
    * ดูจาก `driver.active` ไม่ใช่จากแท็บที่เปิดอยู่ — สีจึงติดไปกับภาพที่แคปส่งต่อ
    * และกับกระดาษที่พิมพ์ออกมา ซึ่งไม่มีแท็บติดไปด้วย · ถ้าวันหนึ่งแท็บ “ปัจจุบัน”
    * มีคนที่เพิ่งกดพ้นสภาพปนอยู่ แถวนั้นก็แดงทันทีโดยไม่ต้องรอสลับแท็บ
+   * · “ไม่มีข้อมูลการทำงาน” ยังไม่ใช่การพ้นสภาพ จึงไม่แดง
    */
-  const resigned = !driver.active;
+  const resigned = !driver.active && !driver.noWorkRecord;
 
   return (
     /*
@@ -803,22 +856,24 @@ function Row({
           <span className="flex-none transition-transform duration-300 group-hover:scale-108">
             <DriverAvatar driver={driver} />
           </span>
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate font-medium text-ink">{driver.name || "—"}</span>
-            <span className="flex items-center gap-2 font-mono text-10-5 tracking-wider">
-              {/* ลิงก์จริงหนึ่งจุดต่อแถว — แถวที่คลิกได้ด้วย onClick อย่างเดียว
-                  แท็บไปไม่ถึงและโปรแกรมอ่านหน้าจอไม่เห็นว่ามีอะไรให้กด */}
-              <Link
-                href={href}
-                onClick={(e) => e.stopPropagation()}
-                className={`transition-colors hover:text-ink ${resigned ? "text-alert" : "text-primary"}`}
-              >
-                {driver.drivercode}
-              </Link>
-              {driver.phone ? <span className="text-mut">{primaryPhone(driver.phone)}</span> : null}
-            </span>
-          </span>
+          <span className="truncate font-medium text-ink">{driver.name || "—"}</span>
         </span>
+      </td>
+
+      <td className="px-3 py-2 font-mono text-12 tracking-wider whitespace-nowrap">
+        {/* ลิงก์จริงหนึ่งจุดต่อแถว — แถวที่คลิกได้ด้วย onClick อย่างเดียว
+            แท็บไปไม่ถึงและโปรแกรมอ่านหน้าจอไม่เห็นว่ามีอะไรให้กด */}
+        <Link
+          href={href}
+          onClick={(e) => e.stopPropagation()}
+          className={`transition-colors hover:text-ink ${resigned ? "text-alert" : "text-primary"}`}
+        >
+          {driver.drivercode}
+        </Link>
+      </td>
+
+      <td className="px-3 py-2 font-mono text-12 tabular-nums whitespace-nowrap text-ink">
+        {driver.phone ? primaryPhone(driver.phone) : <Dash />}
       </td>
 
       {hideVehicle ? null : (
@@ -886,16 +941,14 @@ function DriverCard({
   hideVehicle: boolean;
 }) {
   /* กติกาเดียวกับ `Row` — คนที่พ้นสภาพแล้วอ่านออกจากสีได้ก่อนอ่านตัวหนังสือ */
-  const resigned = !driver.active;
+  const resigned = !driver.active && !driver.noWorkRecord;
 
   return (
     <Link
       href={`/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
-      className={`group flex animate-lift-in flex-col gap-2.5 rounded-box border bg-base-100 p-3.5 transition-[transform,border-color,background-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-22px_var(--color-ink)] active:translate-y-0 ${
-        resigned
-          ? "border-alert/25 hover:border-alert/50 hover:bg-alert-soft"
-          : "border-line hover:border-primary/40 hover:bg-soft/35"
+      className={`group flex animate-fade-in flex-col gap-2.5 px-(--sheet-px) py-3.5 transition-colors ${
+        resigned ? "hover:bg-alert-soft" : "hover:bg-soft/35"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -910,7 +963,7 @@ function DriverCard({
         <StatusCell driver={driver} />
       </div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-line pt-2.5 text-12">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-12">
         {hideVehicle ? null : (
           <>
             <CardField label="รถที่ขับ">
@@ -1159,7 +1212,7 @@ function ActiveFilterBar({
   onClearAll: () => void;
 }) {
   return (
-    <div className="flex animate-fade-in flex-wrap items-center gap-2 border-t border-primary/20 bg-soft/45 px-4 py-2">
+    <div className="flex animate-fade-in flex-wrap items-center gap-2 border-t border-primary/20 bg-soft/45 px-(--sheet-px) py-2">
       <span className="flex items-center gap-1.5 text-11-5 font-medium text-primary">
         <ListFilter size={13} strokeWidth={1.9} aria-hidden />
         กรองอยู่
@@ -1246,12 +1299,12 @@ function EmploymentTabButton({
 }: {
   active: boolean;
   onClick: () => void;
-  /** แท็บ“พ้นสภาพแล้ว”เป็นแดง ตรงกับสีของแถวในตารางที่มันเปิด */
-  tone?: "primary" | "alert";
+  /** แท็บ“พ้นสภาพแล้ว”เป็นแดง ตรงกับสีของแถวในตารางที่มันเปิด · “ไม่มีข้อมูลการทำงาน” เป็นส้ม */
+  tone?: "primary" | "alert" | "sla";
   children: React.ReactNode;
 }) {
-  const on = tone === "alert" ? "text-alert" : "text-primary";
-  const bar = tone === "alert" ? "bg-alert" : "bg-primary";
+  const on = tone === "alert" ? "text-alert" : tone === "sla" ? "text-sla" : "text-primary";
+  const bar = tone === "alert" ? "bg-alert" : tone === "sla" ? "bg-sla" : "bg-primary";
 
   return (
     <button
@@ -1324,7 +1377,7 @@ function PageBar({
 
 function EmptyResult({ query, onClear }: { query: string; onClear: () => void }) {
   return (
-    <div className="flex animate-lift-in flex-col items-center gap-2.5 rounded-box border border-dashed border-line bg-base-100 px-5 py-12 text-center">
+    <div className="flex animate-fade-in flex-col items-center gap-2.5 px-5 py-12 text-center">
       <span className="grid size-12 animate-pop-in place-items-center rounded-full bg-base-200 text-mut [animation-delay:80ms]">
         <SearchX size={22} strokeWidth={1.6} aria-hidden />
       </span>

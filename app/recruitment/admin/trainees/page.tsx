@@ -86,8 +86,7 @@ function EmptyRegistry() {
         ยังไม่มีใครมีสถานะฝึกงาน (<code className="font-mono">ฝ</code>) ในเดือนนี้ ทั้งจาก ATMS
         และที่กรอกเอง · ถ้าคิดว่าน่าจะมี ให้ตรวจว่าสถานะการทำงาน (
         <code className="font-mono">employee_work_status</code>) กับทะเบียน{" "}
-        <code className="font-mono">master_driver</code> อัปเดตแล้วหรือยัง (
-        <code className="font-mono text-ink">node sync_master_driver.mjs</code>)
+        <code className="font-mono">main_driver</code> ใน Boom_ETL อัปเดตแล้วหรือยัง
       </p>
     </div>
   );

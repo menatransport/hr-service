@@ -93,7 +93,14 @@ function saveRead(next: ReadMap, live: DeskNotification[]) {
  * เรนเดอร์แรกตรงกับ HTML ฝั่งเซิร์ฟเวอร์ (ยังไม่อ่านทั้งหมด) แล้ว React ค่อยสลับ
  * เป็นค่าจริงตอน hydrate — จึงไม่ต้อง setState ใน effect และไม่เกิด hydration mismatch
  */
-export function NotificationBell({ items }: { items: DeskNotification[] }) {
+export function NotificationBell({
+  items,
+  variant = "default",
+}: {
+  items: DeskNotification[];
+  /** `shell` = ปุ่มกระจกบนพื้นไล่สีของเชลล์ (`components/shell/`) */
+  variant?: "default" | "shell";
+}) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -145,9 +152,13 @@ export function NotificationBell({ items }: { items: DeskNotification[] }) {
             ? `การแจ้งเตือน ${unread.length} รายการที่ยังไม่อ่าน`
             : "การแจ้งเตือน"
         }
-        className={`group relative flex size-9 items-center justify-center rounded-selector transition-colors ${
-          open ? "bg-base-200 text-ink" : "text-mut hover:bg-base-200 hover:text-ink"
-        }`}
+        className={
+          variant === "shell"
+            ? "glass-btn group relative flex size-10 items-center justify-center rounded-xl"
+            : `group relative flex size-9 items-center justify-center rounded-selector transition-colors ${
+                open ? "bg-base-200 text-ink" : "text-mut hover:bg-base-200 hover:text-ink"
+              }`
+        }
       >
         <Bell
           size={18}
@@ -167,7 +178,7 @@ export function NotificationBell({ items }: { items: DeskNotification[] }) {
         <div
           role="menu"
           aria-label="การแจ้งเตือน"
-          className="animate-rise absolute top-full right-0 z-50 mt-2 w-[min(92vw,360px)] overflow-hidden rounded-box border border-line bg-base-100/95 shadow-xl backdrop-blur-xl"
+          className="animate-rise absolute top-full right-0 z-50 mt-2 w-[min(92vw,360px)] overflow-hidden rounded-box border border-line bg-base-100/95 text-ink shadow-xl backdrop-blur-xl"
         >
           {/* เส้นไฮไลต์บางบนขอบ — ให้กล่องดูลอยจากพื้นหลัง */}
           <span

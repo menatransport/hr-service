@@ -247,7 +247,7 @@ export const deskNav: { section: string; items: DeskNavItem[] }[] = [
   {
     section: "งานของฉัน",
     items: [
-      { href: "/desk", label: "แจ้งข้อร้องเรียน", icon: ClipboardList },
+      { href: "/desk/cases", label: "แจ้งข้อร้องเรียน", icon: ClipboardList },
       { href: "/desk/record-cases", label: "บันทึกเคส", icon: Bookmark },
       { href: "/desk/employee", label: "ค้นหาข้อมูลพนักงาน", icon: Users },
       { href: "/desk/survey", label: "แบบสอบถาม", icon: ClipboardPenLine},

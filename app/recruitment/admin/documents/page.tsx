@@ -4,8 +4,7 @@ import { FolderOpen } from "lucide-react";
 import { PageHead } from "@/components/desk/page-head";
 import { DataError } from "@/components/ui/data-error";
 import { DocumentExpiryView } from "@/app/recruitment/_components/admin/document-expiry-view";
-import { getDriverRegistry, todayInBangkok } from "@/app/recruitment/_lib/drivers/registry";
-import { collectDocExpiries } from "@/app/recruitment/_lib/drivers/types";
+import { getDocExpiries, todayInBangkok } from "@/app/recruitment/_lib/drivers/registry";
 import type { DocExpiry } from "@/app/recruitment/_lib/drivers/types";
 
 /**
@@ -36,14 +35,13 @@ export default async function DriverDocumentsPage() {
   let error: string | null = null;
 
   try {
-    const registry = await getDriverRegistry();
-    rows = collectDocExpiries(registry.drivers);
+    rows = await getDocExpiries();
   } catch (err) {
     error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
   }
 
   return (
-    <div className="flex animate-rise flex-col gap-4">
+    <div className="flex animate-rise flex-col gap-4 pt-4 sm:pt-5">
 
       {rows ? (
         rows.length ? (
@@ -71,8 +69,8 @@ function EmptyRegistry() {
       <p className="text-sm font-semibold">ยังไม่มีเอกสารที่มีวันหมดอายุ</p>
       <p className="max-w-[54ch] text-12-5 leading-[1.7] text-mut text-pretty">
         ไม่มี พจส. ที่ยังปฏิบัติงานคนไหนมีวันหมดอายุใบขับขี่หรือบัตรประชาชนในทะเบียน —
-        ถ้าคอลเลกชัน <code className="font-mono">master_driver</code> ยังว่างอยู่ ให้สั่ง{" "}
-        <code className="font-mono text-ink">node sync_master_driver.mjs</code> หนึ่งครั้งก่อน
+        ถ้าคิดว่าน่าจะมี ให้ตรวจว่า <code className="font-mono">Boom_ETL.main_driver</code>{" "}
+        ของระบบต้นทางมีข้อมูลหรือไม่
       </p>
     </div>
   );

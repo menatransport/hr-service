@@ -65,7 +65,7 @@ export function Pager({
             aria-current={n === current ? "page" : undefined}
             className={`size-8 flex-none rounded-selector text-12-5 transition-colors ${
               n === current
-                ? "border border-ink bg-ink font-medium text-ink-content"
+                ? "border border-primary bg-primary font-semibold text-primary-content"
                 : "border border-line bg-base-100 text-mut hover:border-ink/30 hover:text-ink"
             }`}
           >

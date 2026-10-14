@@ -471,9 +471,8 @@ export interface DriverRecord {
   /**
    * รูปประจำตัวที่ฝ่ายบุคคลอัปเองผ่านหน้านี้ — ว่าง = ยังไม่มีรูป
    *
-   * **เป็นฟิลด์ของ hr-service ไม่ใช่ของ ETL** เก็บไว้ใน `master_driver` ซึ่ง
-   * `sync_master_driver.mjs` เขียนด้วย `$set` เฉพาะฟิลด์ที่มาจาก ETL รูปจึงไม่หาย
-   * เมื่อ sync รอบถัดไปวิ่ง (ดูคอมเมนต์หัวสคริปต์นั้น)
+   * **เป็นฟิลด์ของ hr-service ไม่ใช่ของ ETL** เก็บไว้ใน `master_driver` ซึ่ง ETL ไม่เคยเขียน
+   * (ดู `master.ts`)
    */
   photoUrl: string;
   /** ค่าดิบของ `owner_type` — เก็บไว้ให้ตามกลับไปที่ต้นทางได้เวลาแปลไม่ออก */
@@ -505,11 +504,18 @@ export interface DriverRecord {
   idCardDaysLeft: number | null;
   /**
    * สถานะที่ใช้จริงบนหน้าจอ — `statusOverride` ถ้ามี ไม่งั้นตกไปใช้ `etlActive`
+   * (ยกเว้น `noWorkRecord` ที่นับเป็นไม่ได้ปฏิบัติงาน)
    * **อ่านตัวนี้เสมอ** อย่าไปอ่าน `etlActive` ตรง ๆ นอกจากจะอยากรู้ว่า ETL ว่าอย่างไร
    */
   active: boolean;
   /** ค่าดิบจาก ETL ก่อนถูกทับ */
   etlActive: boolean;
+  /**
+   * ETL ว่ายังทำงาน แต่ **ไม่มีแถวใน `employee_work_status` เลย** (ไม่นับคนที่วันเริ่มงานคือวันนี้
+   * หรือยังมาไม่ถึง และคนที่ฝ่ายบุคคลกดสถานะไว้แล้ว) — น่าจะออกไปแล้วโดยไม่มีใครบันทึก · `active` เป็น `false`
+   * แต่ **ยังไม่ใช่การพ้นสภาพ** ไม่มีวันที่/เหตุผล ต้องให้ฝ่ายบุคคลยืนยันทางใดทางหนึ่ง
+   */
+  noWorkRecord: boolean;
   /** `null` = ไม่ได้ทับ ใช้ตาม ETL */
   statusOverride: DriverStatus | null;
   /** มีค่าเมื่อฝ่ายบุคคลบันทึกการพ้นสภาพไว้ — ไม่ผูกกับ `active` ของ ETL */
@@ -538,7 +544,7 @@ export interface DriverRecord {
 
 export interface DriverRegistry {
   drivers: DriverRecord[];
-  /** เวลาที่ `sync_master_driver.mjs` วิ่งล่าสุด — ISO หรือ null ถ้ายังไม่เคยวิ่ง */
+  /** เวลาที่ ETL mirror `Boom_ETL.main_driver` ล่าสุด — ISO หรือ null ถ้าไม่รู้ */
   syncedAt: string | null;
   /** ต่อ `Boom_ETL` เพื่อดึงรถ/สถานะงานไม่ติด — รายชื่อยังใช้ได้ แค่ข้อมูลเสริมหาย */
   enrichmentFailed: boolean;

@@ -399,20 +399,10 @@ export function RequisitionsView({
       {/* หัวเรื่องซ่อนไว้ให้โปรแกรมอ่านจอเท่านั้น — ถอดหัวที่มองเห็นออกตามคำขอ 23 ก.ย. 2026 */}
       <h1 className="sr-only">{title}</h1>
 
-      {options.failed.length ? (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-box border border-sla/30 bg-sla/10 px-3.5 py-2.5 text-12-5 text-sla"
-        >
-          <TriangleAlert size={15} strokeWidth={1.8} aria-hidden className="mt-0.5 flex-none" />
-          <p className="text-pretty">
-            อ่าน{options.failed.join(" และ ")}ไม่สำเร็จ — ตัวเลือกในฟอร์มจึงยังว่าง
-            คำขอที่บันทึกไว้แล้วยังใช้งานได้ตามปกติ
-          </p>
-        </div>
-      ) : null}
-
-      {/* ─────────────────── การ์ดสรุป + เครื่องมือ — ตัวเลขทุกช่องกดแล้วกรองตารางข้างล่าง */}
+      {/* ─────────────────── การ์ดสรุป + เครื่องมือ + ตาราง — รวมเป็น section เดียว
+          (13 ต.ค. 2026) แผ่นเนื้อหาด้านหลังโปร่งใสแล้ว ของที่แยกการ์ดกันอยู่เดิม
+          (แถบเตือนตัวเลือกอ่านไม่สำเร็จ + ตารางคำขอ) ย้ายเข้ามาเป็นส่วนในของการ์ดนี้
+          ตัวเลขทุกช่องกดแล้วกรองตารางข้างใน */}
       <SummaryPanel label="สรุปคำขอสรรหา">
         <SummaryStats className="grid-cols-2 md:grid-cols-5">
           <SummaryStat
@@ -503,7 +493,7 @@ export function RequisitionsView({
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-field bg-primary px-3.5 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 lg:ml-auto"
+            className="btn-pri flex cursor-pointer items-center justify-center gap-1.5 px-3.5 py-2 text-13 font-medium lg:ml-auto"
           >
             <Plus size={16} strokeWidth={2.2} aria-hidden />
             ขอสรรหา
@@ -529,7 +519,7 @@ export function RequisitionsView({
               <button
                 type="button"
                 onClick={clearAll}
-                className="flex cursor-pointer items-center gap-1 rounded-field border border-line bg-base-100 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
+                className="btn-sec flex cursor-pointer items-center gap-1 px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
               >
                 <RotateCcw size={12} strokeWidth={2} aria-hidden />
                 ล้างตัวกรองทั้งหมด
@@ -537,10 +527,22 @@ export function RequisitionsView({
             ) : null}
           </div>
         </SummaryStrip>
-      </SummaryPanel>
 
-      <div className="elev-card relative max-h-[calc(100dvh-20rem)] overflow-auto rounded-box border border-line bg-base-100">
-        <table className="w-full border-collapse text-13">
+        {options.failed.length ? (
+          <p
+            role="alert"
+            className="flex items-start gap-2 border-t border-line bg-sla/10 px-(--sheet-px) py-2 text-12-5 text-sla"
+          >
+            <TriangleAlert size={14} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none" />
+            <span className="text-pretty">
+              อ่าน{options.failed.join(" และ ")}ไม่สำเร็จ — ตัวเลือกในฟอร์มจึงยังว่าง
+              คำขอที่บันทึกไว้แล้วยังใช้งานได้ตามปกติ
+            </span>
+          </p>
+        ) : null}
+
+      <div className="relative max-h-[calc(100dvh-17.5rem)] overflow-auto border-y border-line">
+        <table className="sheet-table w-full border-collapse text-13">
           <thead>
             <tr>
               {COLUMNS.map((column, i) => (
@@ -751,7 +753,7 @@ export function RequisitionsView({
               <button
                 type="button"
                 onClick={clearAll}
-                className="mt-1 rounded-field border border-line px-3 py-1.5 text-12-5 transition-colors hover:border-primary/40 hover:text-primary"
+                className="btn-sec mt-1 px-3 py-1.5 text-12-5 transition-colors hover:border-primary/40 hover:text-primary"
               >
                 ล้างตัวกรองทั้งหมด
               </button>
@@ -759,6 +761,7 @@ export function RequisitionsView({
           </div>
         ) : null}
       </div>
+      </SummaryPanel>
 
       {creating ? (
         <RequisitionForm

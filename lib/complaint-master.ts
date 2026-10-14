@@ -2,7 +2,7 @@ import type { AnyBulkWriteOperation, Collection } from "mongodb";
 import { cache } from "react";
 
 import { reasonGroups } from "./data";
-import { getDb } from "./mongo";
+import { hrCol } from "./db";
 import { toMasterType } from "./ncac/adapt";
 import {
   createComplaintMaster,
@@ -36,8 +36,6 @@ import type { MasterItem, MasterKind } from "./types";
  * ไม่มี FK — แต่ด้วยเหตุผลเดียวกัน **การเปลี่ยนชื่อสาเหตุไม่ย้อนไปแก้คำร้องเก่า**
  * ที่บันทึกข้อความเดิมไว้แล้ว (หน้าจอเตือนผู้ใช้ตรงจุดที่กดแก้)
  */
-
-const COLLECTION = "master_complainte";
 
 interface MasterDoc {
   _id: string;
@@ -80,32 +78,21 @@ const sorter = (kind: MasterKind) => (a: MasterItem, b: MasterItem) =>
 /* ------------------------------------------------------- เตรียมคอลเลกชัน */
 
 async function collection(): Promise<Collection<MasterDoc>> {
-  const db = await getDb();
-  const col = db.collection<MasterDoc>(COLLECTION);
+  const col = await hrCol<MasterDoc>("complaintMaster");
   await prepare(col);
   return col;
 }
 
 /**
- * ดัชนี + ข้อมูลตั้งต้น — ทำครั้งเดียวต่อโปรเซส และ **ติดธงเฉพาะตอนสำเร็จ**
+ * ข้อมูลตั้งต้น — ทำครั้งเดียวต่อโปรเซส และ **ติดธงเฉพาะตอนสำเร็จ**
+ * (ดัชนี `{ kind, group, order }` ย้ายไปประกาศที่ `lib/db/registry.mjs` แล้ว)
  * ล้มแล้วรอบหน้าลองใหม่ (เช่น NCAC ล่มพอดีตอน migrate ประเภทเรื่องครั้งแรก)
  * ทุกขั้นกลืน error ไว้เอง เพราะเป็นงานเตรียมของ ไม่ใช่คำตอบที่ผู้ใช้ขอ
  */
-let indexed = false;
 let seededCauses = false;
 let migratedTypes = false;
 
 async function prepare(col: Collection<MasterDoc>) {
-  if (!indexed) {
-    try {
-      // ดัชนีตัวเดียวพอ — ทุก query ในไฟล์นี้เริ่มด้วย `kind` แล้วตามด้วยกลุ่ม/ลำดับ
-      await col.createIndex({ kind: 1, group: 1, order: 1 });
-      indexed = true;
-    } catch (err) {
-      console.warn("[master] สร้างดัชนีไม่สำเร็จ —", err);
-    }
-  }
-
   if (!seededCauses) {
     try {
       if ((await col.countDocuments({ kind: "cause" }, { limit: 1 })) === 0) {

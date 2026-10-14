@@ -183,7 +183,7 @@ export function CaseModal({
   /** กล่องส่งอีเมลแจ้งหน่วยงาน — ลอยทับโมดัลนี้อีกชั้น */
   const [notifyOpen, setNotifyOpen] = useState(false);
 
-  const close = useCallback(() => router.push("/desk"), [router]);
+  const close = useCallback(() => router.push("/desk/cases"), [router]);
 
   /**
    * กล่องส่งอีเมลลอยทับอยู่ไหม — ตัวฟัง Esc ข้างล่างต้องรู้ แต่ **ห้ามเป็น dependency
@@ -753,7 +753,7 @@ export function CaseModal({
                       ? "มอบหมายหน่วยงานผู้รับผิดชอบก่อน จึงจะรู้ว่าต้องส่งอีเมลถึงใคร"
                       : `แจ้ง ${departmentLabel(hrCase.departmentId)} ทางอีเมล`
                   }
-                  className="flex flex-none items-center gap-1.5 rounded-field border border-line px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none disabled:opacity-40"
+                  className="btn-sec flex flex-none items-center gap-1.5 px-3.5 py-2 text-13 text-mut transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none disabled:opacity-40"
                 >
                   <Mail size={15} strokeWidth={1.9} aria-hidden />
                   แจ้งทางอีเมล
@@ -790,7 +790,7 @@ export function CaseModal({
                       setPendingAction(null);
                       setRemark("");
                     }}
-                    className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
+                    className="btn-sec px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
                   >
                     ยกเลิก
                   </button>
@@ -814,7 +814,7 @@ export function CaseModal({
                       type="button"
                       disabled={busy}
                       onClick={() => setDraft(saved)}
-                      className="rounded-field border border-line px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
+                      className="btn-sec px-3.5 py-2 text-13 text-mut hover:text-ink disabled:opacity-40"
                     >
                       ล้างที่แก้
                     </button>

@@ -298,8 +298,9 @@ export function loginWithGoogle(idToken: string): Promise<GoogleLoginResponse> {
 
 /* ---------------------------------------------------------------- ผู้ใช้ */
 
+/** ต้องมี `/` ท้าย — ไม่งั้น FastAPI ตอบ 307 แล้วเสียรอบเดินทางเพิ่มอีกหนึ่งรอบทุกครั้ง (วัดได้ 45–130ms) */
 export function listUsers(): Promise<UserDto[]> {
-  return call<UserDto[]>("/users");
+  return call<UserDto[]>("/users/");
 }
 
 /** พนักงานคนเดียว — ต่างจาก `/users` ตรงที่ไม่ต้องดึงทั้งบริษัทมาค้นเอง */

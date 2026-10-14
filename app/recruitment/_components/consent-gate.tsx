@@ -132,7 +132,7 @@ export function ConsentGate({
         type="button"
         onClick={onAccept}
         disabled={!ready}
-        className="rounded-box bg-primary py-3.5 text-14 font-semibold text-primary-content transition-opacity hover:opacity-90 disabled:bg-base-300 disabled:text-mut"
+        className="btn-pri py-3.5 text-14 font-semibold disabled:bg-base-300 disabled:text-mut"
       >
         {ready ? "ยินยอมและเริ่มกรอกใบสมัคร" : "ติ๊กข้อที่จำเป็นให้ครบเพื่อไปต่อ"}
       </button>

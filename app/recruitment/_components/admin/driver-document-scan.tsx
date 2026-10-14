@@ -162,7 +162,7 @@ export function DriverDocumentScan({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="cursor-pointer rounded-field border border-line px-4 py-2 text-13 transition-colors hover:border-ink/30 disabled:opacity-50"
+              className="btn-sec cursor-pointer px-4 py-2 text-13 transition-colors hover:border-ink/30 disabled:opacity-50"
             >
               ยกเลิก
             </button>
@@ -170,7 +170,7 @@ export function DriverDocumentScan({
               type="button"
               onClick={save}
               disabled={busy || status === "reading"}
-              className="cursor-pointer rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="btn-pri cursor-pointer px-4 py-2 text-13 font-medium disabled:opacity-50"
             >
               {willUpdate ? "แนบ + อัปเดตวันหมดอายุ" : "แนบเอกสาร"}
             </button>

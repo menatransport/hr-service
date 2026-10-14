@@ -21,7 +21,7 @@ import type { AuthUserDto } from "@/lib/ncac/types";
  * (ดู `CALLBACK_PATH` ใน `lib/auth/google.ts` — ย้ายพาธเมื่อไหร่ล็อกอินพังทันที)
  *
  * ลำดับ: ตรวจ `state` → แลก `code` เป็น `id_token` → ส่งให้ NCAC ตรวจและออก
- * session → เก็บคุกกี้ → เข้า `/desk`
+ * session → เก็บคุกกี้ → เข้า `/home`
  *
  * **ทุกทางที่ล้มเหลวต้องจบที่หน้าล็อกอินพร้อมเหตุผลจริง** ไม่ใช่หน้า error ของ Next
  * เพราะผู้ใช้ต้องรู้ว่าควรทำอะไรต่อ (ใช้อีเมลบริษัท / ติดต่อ IT / ลองใหม่)
@@ -109,10 +109,10 @@ export async function GET(request: NextRequest) {
       exp: Date.now() + SESSION_MAX_AGE_SEC * 1000,
     });
 
-    // กลับไปหน้าที่ตั้งใจจะเปิดตั้งแต่แรก ถ้าไม่มีก็คิวงานหลัก · `welcome=1`
+    // กลับไปหน้าที่ตั้งใจจะเปิดตั้งแต่แรก ถ้าไม่มีก็หน้าหลัก · `welcome=1`
     // ทำให้ขนมปังปิ้ง “เข้าสู่ระบบสำเร็จ” เด้งครั้งเดียวตอนมาถึง
     const destination = new URL(
-      safeNextPath(request.cookies.get(NEXT_COOKIE)?.value) ?? "/desk",
+      safeNextPath(request.cookies.get(NEXT_COOKIE)?.value) ?? "/home",
       request.url,
     );
     destination.searchParams.set("welcome", "1");

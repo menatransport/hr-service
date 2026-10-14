@@ -18,18 +18,12 @@ import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { MongoClient } from "mongodb";
 
-const env = Object.fromEntries(
-  fs
-    .readFileSync(new URL(".env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("=") && !l.trim().startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    }),
-);
+import { hrDbName, loadEnv } from "./db_env.mjs";
+import { HR } from "./lib/db/registry.mjs";
 
-const QUESTIONS = "recruitment_regist_question";
+const env = loadEnv();
+
+const QUESTIONS = HR.questions.name;
 const BY = "ปรับตาม Google Form (HR0221-04)";
 const apply = process.argv.includes("--apply");
 
@@ -306,7 +300,7 @@ const show = (v) => (typeof v === "string" ? JSON.stringify(v) : JSON.stringify(
 
 const client = new MongoClient(env.MONGO_URI, { serverSelectionTimeoutMS: 15_000 });
 await client.connect();
-const col = client.db(env.MONGO_DB || "hr_service").collection(QUESTIONS);
+const col = client.db(hrDbName(env)).collection(QUESTIONS);
 const all = await col.find({}).toArray();
 const byKey = new Map(all.map((q) => [q.key, q]));
 

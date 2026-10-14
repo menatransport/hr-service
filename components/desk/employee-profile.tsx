@@ -19,8 +19,8 @@ import type { Employee } from "@/lib/types";
 /**
  * ข้อมูลพนักงานรายคน (`/desk/employee/[id]`)
  *
- * ซ้ายคือบัตรใบเดียวกับในหน้าค้นหา แต่ขยายเต็มใบและ **ห้อยกับสายคล้อง** เหมือน
- * บัตรบนหน้า login (คลาส `badge-hang` — หล่นลงมาแกว่งเข้าที่แล้วนิ่งสนิท)
+ * ซ้ายคือบัตรพนักงานเต็มใบ **ห้อยกับสายคล้อง** เหมือนบัตรบนหน้า login
+ * (คลาส `badge-hang` — หล่นลงมาแกว่งเข้าที่แล้วนิ่งสนิท) · ไม่มีเงา วางบนแผ่นเนื้อหาตรง ๆ
  * ขวาคือข้อมูลที่บัตรใส่ไม่หมด กับรายชื่อเพื่อนร่วมแผนก
  *
  * ทั้งหน้าเป็น server component — ไม่มีอะไรให้กดนอกจากลิงก์
@@ -33,7 +33,7 @@ export function EmployeeProfile({
   teammates: Employee[];
 }) {
   return (
-    <div className="flex flex-col gap-5 animate-rise">
+    <div className="flex flex-col gap-5 pt-4 animate-rise sm:pt-5">
       <Link
         href="/desk/employee"
         className="group flex w-fit items-center gap-1.5 text-13 text-mut transition-colors hover:text-primary"
@@ -50,8 +50,9 @@ export function EmployeeProfile({
       <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <IdBadge employee={employee} />
 
-        <div className="flex flex-col gap-5">
-          <section className="flex flex-col gap-4 rounded-box border border-line bg-base-100 p-5">
+        {/* ข้อมูลกับเพื่อนร่วมแผนกวางแบนบนแผ่นเนื้อหา คั่นกันด้วยเส้นบาง — ไม่มีการ์ดซ้อน (13 ต.ค. 2026) */}
+        <div className="flex flex-col gap-6 lg:pt-1">
+          <section className="flex flex-col gap-4">
             <h2 className="text-14 font-semibold">ข้อมูลพนักงาน</h2>
 
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -69,7 +70,7 @@ export function EmployeeProfile({
             </dl>
           </section>
 
-          <section className="flex flex-col gap-3.5 rounded-box border border-line bg-base-100 p-5">
+          <section className="flex flex-col gap-3.5 border-t border-line pt-6">
             <div className="flex items-baseline gap-2.5">
               <h2 className="text-14 font-semibold">เพื่อนร่วมแผนก</h2>
               <span className="text-12 text-mut">{employee.department}</span>
@@ -133,7 +134,7 @@ function IdBadge({ employee }: { employee: Employee }) {
       </div>
 
       {/* เงาบาง ๆ ชั้นเดียวพอให้บัตรอ่านว่า “ห้อยอยู่หน้าพื้น” — ไม่มีแสงกวาด/เงาฟุ้ง */}
-      <div className="overflow-hidden rounded-[14px] border border-line bg-base-100 text-ink shadow-[0_2px_10px_-6px_rgba(21,32,29,0.22)]">
+      <div className="overflow-hidden rounded-[14px] border border-line bg-base-100 text-ink">
         <BadgeHeader tall />
 
         <div className="flex flex-col items-center px-5.5 pt-5 pb-6 text-center">

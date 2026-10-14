@@ -1,7 +1,7 @@
-import { GridFSBucket, ObjectId } from "mongodb";
-import type { GridFSFile } from "mongodb";
+import { ObjectId } from "mongodb";
+import type { GridFSBucket, GridFSFile } from "mongodb";
 
-import { getDb } from "./mongo";
+import { hrBucket } from "./db";
 
 /**
  * ไฟล์แนบของบันทึกเคส — เก็บใน **MongoDB GridFS** ไม่ได้ขึ้น Spaces
@@ -25,8 +25,6 @@ import { getDb } from "./mongo";
  * (อัป) และ `/api/record-cases/files/{id}` (เปิด/ดาวน์โหลด)
  */
 
-const BUCKET = "record_attachments";
-
 /** 10 MB ต่อไฟล์ — ใหญ่พอสำหรับสแกนเอกสารหลายหน้า แต่ยังไม่ทำให้ฐานข้อมูลบวม */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -36,8 +34,8 @@ function contentTypeOf(meta: GridFSFile): string {
   return typeof fromMeta === "string" && fromMeta ? fromMeta : "application/octet-stream";
 }
 
-async function bucket(): Promise<GridFSBucket> {
-  return new GridFSBucket(await getDb(), { bucketName: BUCKET });
+function bucket(): Promise<GridFSBucket> {
+  return hrBucket("recordAttachments");
 }
 
 export interface StoredFile {

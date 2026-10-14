@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   UserMinus,
+  UserRoundSearch,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -99,16 +100,22 @@ export const adminNav: AdminNavGroup[] = [
   {
     section: "การสรรหา",
     items: [
-      /* คำขอกับผู้สมัครเป็น **เมนูเดียว สองแท็บ** (22 ก.ย. 2026) — เดิมแยกกัน
-         แล้วคนใช้ต้องเด้งไปมาทั้งวัน เพราะคำถามจริงของฝ่ายสรรหาคือ “อัตรานี้
-         ได้คนหรือยัง” ซึ่งอ่านจากตารางเดียวไม่จบ · แท็บอยู่ที่
-         `/requisitions?tab=` ดู `recruitment-tabs.tsx` */
+      /* คำขอกับผู้สมัครแยกเป็นสองหน้าอีกครั้ง (14 ต.ค. 2026) — เคยรวมเป็นสองแท็บ
+         ช่วง 22 ก.ย.–14 ต.ค. · ลิงก์เก่า `/requisitions?tab=candidates` ยังส่งต่อมาที่
+         หน้าผู้สมัครให้ ดู `recruitment-screens.tsx` */
       {
         href: `${ADMIN_ROOT}/requisitions`,
-        label: "ขอสรรหาและผู้สมัคร",
+        label: "ขออัตราสรรหาพนักงาน",
         icon: ClipboardList,
         ready: true,
-        blurb: "อัตราที่จัดส่งขอ และใบสมัครที่เข้ามารับอัตรานั้น — สองแท็บในหน้าเดียว",
+        blurb: "อัตราที่จัดส่งขอ และสถานะการหาคนของแต่ละอัตรา",
+      },
+      {
+        href: `${ADMIN_ROOT}/candidates`,
+        label: "ผู้สมัคร",
+        icon: UserRoundSearch,
+        ready: true,
+        blurb: "ใบสมัครที่เข้ามา ติดต่อ นัดสัมภาษณ์ และผูกกับอัตราที่ขอไว้",
       },
       {
         href: `${ADMIN_ROOT}/trainees`,

@@ -281,7 +281,7 @@ export function RatingEditor({
           type="button"
           onClick={onSave}
           disabled={!dirty || saving}
-          className="flex items-center justify-center gap-2 rounded-field bg-primary px-4 py-2.5 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="btn-pri flex items-center justify-center gap-2 px-4 py-2.5 text-13 font-medium disabled:opacity-40"
         >
           {saving ? (
             <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />

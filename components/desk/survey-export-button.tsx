@@ -67,7 +67,7 @@ export function SurveyExportButton({
           ? "ไม่มีคำตอบที่ตรงกับเงื่อนไขให้ส่งออก"
           : `ส่งออกผลแบบสอบถาม ${scope} ${count} คน เป็นไฟล์ Excel (ชีต Raw data + Pivot)`
       }
-      className="flex flex-none items-center gap-1.5 cursor-pointer rounded-md bg-lime-600 px-3.5 py-1.5 text-14 font-semibold text-primary-content shadow-sm transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+      className="btn-sec flex flex-none items-center gap-1.5 px-3.5 py-1.5 text-13 font-medium text-ink disabled:pointer-events-none disabled:opacity-40"
     >
       {busy ? (
         <Loader2 size={15} strokeWidth={1.9} className="animate-spin" aria-hidden />
@@ -88,6 +88,7 @@ function ExcelIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
+      className="flex-none text-excel"
       strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"

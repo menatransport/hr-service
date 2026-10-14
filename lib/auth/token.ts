@@ -20,15 +20,17 @@ export const NEXT_COOKIE = "hrs.oauth_next";
  * (`//evil.com` เป็น path ที่ถูกต้องตามไวยากรณ์แต่พาออกนอกเว็บ จึงต้องกันด้วย)
  *
  * รายการนี้ต้องเดินคู่กับ `matcher` ใน `proxy.ts` — พาธที่ถูกกั้นแต่ไม่อยู่ในนี้
- * จะทำให้คนที่เปิดลิงก์มาตรง ๆ ถูกเด้งไปล็อกอินแล้วโผล่ที่ `/desk` แทนที่จะได้
+ * จะทำให้คนที่เปิดลิงก์มาตรง ๆ ถูกเด้งไปล็อกอินแล้วโผล่ที่ `/home` แทนที่จะได้
  * ไปที่หน้าที่เขาตั้งใจจะเปิด (ลิงก์ในเมลแจ้งฝ่ายชี้มาที่ `/payroll/intake`)
  */
-const NEXT_PREFIXES = ["/desk", "/payroll"];
+const NEXT_PREFIXES = ["/home", "/desk", "/payroll"];
 
 export function safeNextPath(value: string | null | undefined): string | null {
   if (!value || value.startsWith("//")) return null;
   const ok = NEXT_PREFIXES.some(
-    (prefix) => value === prefix || value.startsWith(`${prefix}/`) || value.startsWith(`${prefix}?`),
+    (prefix) =>
+      value === prefix ||
+      (value.startsWith(prefix) && /^[/?#]/.test(value.slice(prefix.length))),
   );
   return ok ? value : null;
 }

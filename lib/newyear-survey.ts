@@ -1,4 +1,4 @@
-import { getDb } from "./mongo";
+import { hrCol } from "./db";
 import { DEFAULT_SURVEY_ID, type SurveyResponse } from "./survey-forms";
 
 /**
@@ -17,8 +17,6 @@ import { DEFAULT_SURVEY_ID, type SurveyResponse } from "./survey-forms";
  * (โครงเดิมพร้อม `id`) — **อ่านจาก `answers_detail` เท่านั้น** เพราะจับคู่ด้วย
  * `q1..q20` ที่คงที่ ไม่พังเวลา HR แก้ข้อความคำถาม
  */
-
-const COLLECTION = "newyear-survey";
 
 /** จำนวนที่ดึงมาแสดง — กรอง/เรียง/สรุปทำฝั่ง client บนชุดนี้ */
 const LIST_LIMIT = 2000;
@@ -121,10 +119,29 @@ function toResponse(doc: SurveyDoc): SurveyResponse {
 export async function listSurveyResponses(
   surveyId: string = DEFAULT_SURVEY_ID,
 ): Promise<SurveyResponse[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection<SurveyDoc>(COLLECTION)
+  const survey = await hrCol<SurveyDoc>("newyearSurvey");
+  const docs = await survey
     .find({ survey_id: surveyId })
+    // เอาเฉพาะฟิลด์ที่ `toResponse()` อ่าน — เอกสารเต็มเฉลี่ย ~13KB เพราะ `answers_detail`
+    // พกข้อความคำถามซ้ำทุกฉบับ (`question`) ซึ่งหน้านี้ไม่ใช้เลย
+    .project<SurveyDoc>({
+      _id: 0,
+      drivercode: 1,
+      driver_name: 1,
+      truckplate: 1,
+      plant: 1,
+      plant_name: 1,
+      customer: 1,
+      client_name: 1,
+      attending: 1,
+      submitted_at: 1,
+      duration_seconds: 1,
+      "answers_detail.id": 1,
+      "answers_detail.type": 1,
+      "answers_detail.value": 1,
+      "answers_detail.ranked": 1,
+      "answers_detail.other": 1,
+    })
     .sort({ submitted_at: -1 })
     .limit(LIST_LIMIT)
     .toArray();

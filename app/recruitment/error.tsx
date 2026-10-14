@@ -35,7 +35,7 @@ export default function RecruitmentError({
         <button
           type="button"
           onClick={reset}
-          className="flex items-center justify-center gap-2 rounded-box bg-primary py-3 text-14 font-semibold text-primary-content transition-opacity hover:opacity-90"
+          className="btn-pri flex items-center justify-center gap-2 py-3 text-14 font-semibold"
         >
           <RefreshCw size={15} strokeWidth={2} aria-hidden />
           ลองใหม่อีกครั้ง

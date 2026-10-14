@@ -74,3 +74,19 @@ export function LogoutRow() {
     </button>
   );
 }
+
+/** ปุ่มเต็ม (พื้นแดง) ในเมนูผู้ใช้ของเชลล์ — ท่าเดียวกับปุ่ม “ออกจากระบบ” ใน Navbar ของ menaIT */
+export function LogoutTile() {
+  const signOut = useSignOut();
+
+  return (
+    <button
+      type="button"
+      onClick={() => void signOut()}
+      className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-alert px-4 py-3 text-ink-content transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+    >
+      <LogOut size={16} strokeWidth={1.8} aria-hidden />
+      <span className="text-14 font-medium">ออกจากระบบ</span>
+    </button>
+  );
+}

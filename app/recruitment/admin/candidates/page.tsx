@@ -1,26 +1,76 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
-import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
+import { DataError } from "@/components/ui/data-error";
+import { CandidatesScreen } from "@/app/recruitment/_components/admin/recruitment-screens";
+import { listRequisitions } from "@/app/recruitment/_lib/requisitions/store";
+import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
+import {
+  listApplications,
+  listBlacklist,
+  listContactOwners,
+} from "@/app/recruitment/_lib/applications";
+import { listDocSlots } from "@/app/recruitment/_lib/doc-slots";
+import type { DocSlot } from "@/app/recruitment/_lib/form";
+import type { ApplicationSummary, BlacklistEntry } from "@/app/recruitment/_lib/types";
 
 /**
- * ผู้สมัครย้ายไปเป็น **แท็บหนึ่งของหน้าขอสรรหา** แล้ว (22 ก.ย. 2026) —
- * เส้นทางเดิมจึงเหลือหน้าที่เดียวคือส่งต่อ
+ * ผู้สมัคร — แยกออกจากหน้าขอสรรหามาเป็นหน้าของตัวเองอีกครั้ง (14 ต.ค. 2026)
  *
- * **อย่าลบทิ้ง** ลิงก์เก่าที่คนบุ๊กมาร์กไว้ ประวัติเบราว์เซอร์ และลิงก์ที่เคยส่ง
- * กันในแชท ยังชี้มาที่นี่อยู่ · `?ref=` ต้องส่งต่อไปด้วยเพราะมันคือสิ่งเดียวที่
- * ทำให้กดจากคิวงานแล้วไปถึงแถวที่ต้องการเลย
+ * `?ref=` คือเลขที่ใบสมัครที่คิวงานหรือตารางคำขอส่งมา เพื่อเปิดตรงแถวนั้นเลย ·
+ * คำขอสรรหายังต้องโหลดมาด้วย เพราะกล่องทำเอกสารผูก/ปลด RQ ได้จากหน้านี้
  */
+
+export const metadata: Metadata = {
+  title: "ผู้สมัคร",
+};
 
 export const dynamic = "force-dynamic";
 
-export default async function CandidatesRedirect({
+export default async function CandidatesPage({
   searchParams,
 }: PageProps<"/recruitment/admin/candidates">) {
   const params = await searchParams;
   const ref = typeof params.ref === "string" ? params.ref : "";
 
-  const query = new URLSearchParams({ tab: "candidates" });
-  if (ref) query.set("ref", ref);
+  let requisitions: Requisition[] | null = null;
+  let applications: ApplicationSummary[] | null = null;
+  let contactOptions: string[] = [];
+  let docSlots: DocSlot[] = [];
+  let blacklist: BlacklistEntry[] = [];
+  let error: string | null = null;
 
-  redirect(`${ADMIN_ROOT}/requisitions?${query}`);
+  try {
+    [requisitions, applications, contactOptions, docSlots, blacklist] = await Promise.all([
+      listRequisitions(),
+      listApplications(),
+      listContactOwners(),
+      listDocSlots(),
+      listBlacklist(),
+    ]);
+  } catch (err) {
+    error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
+  }
+
+  return (
+    <div className="animate-rise">
+      {requisitions && applications ? (
+        <CandidatesScreen
+          initialRequisitions={requisitions}
+          initialApplications={applications}
+          contactOptions={contactOptions}
+          docSlots={docSlots}
+          blacklist={blacklist}
+          initialRef={ref}
+        />
+      ) : (
+        <div className="mx-auto max-w-xl py-6">
+          <DataError
+            title="โหลดข้อมูลผู้สมัครไม่สำเร็จ"
+            envKey="MONGO_URI"
+            message={error ?? "เชื่อมต่อฐานข้อมูลไม่สำเร็จ"}
+          />
+        </div>
+      )}
+    </div>
+  );
 }

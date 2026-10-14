@@ -30,10 +30,10 @@ export async function EmployeeDirectoryView() {
   }
 
   return (
-    <div className="flex flex-col gap-6 animate-rise">
+    <div className="flex flex-col gap-5 animate-rise">
       <PageHead
         title="ค้นหาข้อมูลพนักงาน"
-        subtitle="พิมพ์ชื่อ รหัสพนักงาน หรือตำแหน่งเพื่อค้นหา แล้วคลิกที่บัตรเพื่อดูข้อมูลเต็ม"
+        subtitle="พิมพ์ชื่อ รหัสพนักงาน หรือตำแหน่งเพื่อค้นหา แล้วคลิกที่รายชื่อเพื่อดูข้อมูลเต็ม"
       />
       <EmployeeDirectory employees={employees} />
     </div>

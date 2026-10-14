@@ -4,7 +4,6 @@ import { Fragment, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  Bookmark,
   ChevronRight,
   ChevronsUpDown,
   Paperclip,
@@ -22,9 +21,12 @@ import {
   QuickStatusActions,
   useRecordStatusChange,
 } from "@/components/desk/record-status-actions";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FilterChip, type FilterChipTone } from "@/components/ui/filter-chip";
 import { SearchField, Select, type SelectOption } from "@/components/ui/field";
 import { Pager } from "@/components/ui/pager";
 import { RecordStatusBadge } from "@/components/ui/record-status-badge";
+import { SummaryBody, SummaryFooter, SummaryPanel } from "@/components/ui/summary-panel";
 import { departmentLabel } from "@/lib/case-flow";
 import { departmentIcon, departments } from "@/lib/data";
 import {
@@ -100,6 +102,13 @@ const deptOptions: SelectOption[] = [
   ...departments.map((d) => ({ value: d.id, label: d.label })),
 ];
 
+/** สีของชิปกรองแต่ละสถานะ = สีของป้ายสถานะนั้น (`recordStatusMeta[].chip`) */
+const STATUS_TONE: Record<RecordStatus, FilterChipTone> = {
+  pending: "wait",
+  completed: "done",
+  rejected: "alert",
+};
+
 const pageSizeOptions: SelectOption[] = PAGE_SIZES.map((n) => ({
   value: String(n),
   label: `${n} แถว`,
@@ -144,16 +153,19 @@ function sortValue(r: RecordCase, key: SortKey, categories: RecordCategory[]): s
 export function RecordCaseView({
   records,
   categories,
+  manageCategories = false,
 }: {
   records: RecordCase[];
   categories: RecordCategory[];
+  /** เปิดกล่องจัดการประเภทค้างไว้ตั้งแต่แรก — ทางเข้าจากเมนู HR MASTER บนหน้า Home */
+  manageCategories?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [department, setDepartment] = useState("all");
   const [category, setCategory] = useState("all");
   const [creating, setCreating] = useState(false);
-  const [managingCategories, setManagingCategories] = useState(false);
+  const [managingCategories, setManagingCategories] = useState(manageCategories);
   /** เคสที่กำลังแก้ไข — เก็บเป็น id แล้วหาใหม่จาก props เหมือนแผงที่กางอยู่ */
   const [editingId, setEditingId] = useState<string | null>(null);
   /** เคสที่กางรายละเอียดอยู่ — ทีละใบเดียว หน้าจอจะได้ไม่ยาวจนหาคิวไม่เจอ */
@@ -258,7 +270,7 @@ export function RecordCaseView({
               <button
                 type="button"
                 onClick={() => setManagingCategories(true)}
-                className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3.5 py-2 text-13 text-mut transition-colors hover:border-ink/30 hover:text-ink"
+                className="btn-sec flex items-center gap-2 px-3.5 py-2 text-13 text-mut transition-colors hover:border-ink/30 hover:text-ink"
               >
                 <Settings2 size={15} strokeWidth={1.8} aria-hidden />
                 จัดการประเภทเคส
@@ -266,7 +278,7 @@ export function RecordCaseView({
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-13 font-medium text-primary-content transition-opacity hover:opacity-90"
+                className="btn-pri flex items-center gap-2 px-4 py-2 text-13 font-medium"
               >
                 <Plus size={16} strokeWidth={2} aria-hidden />
                 บันทึกเคสใหม่
@@ -275,21 +287,25 @@ export function RecordCaseView({
           }
         />
 
+        {/* เครื่องมือ + ตาราง + แถบเลขหน้า = section เดียว แบนบนแผ่นเนื้อหา คั่นด้วยเส้นบาง
+            ไม่มีการ์ดแยกชิ้น (13 ต.ค. 2026) */}
+        <SummaryPanel label="บันทึกเคส">
         {/* แถบเครื่องมือ */}
-        <div className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-3.5">
+        <div className="flex flex-col gap-3 px-(--sheet-px) pb-3.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Chip
-              active={status === "all"}
-              onClick={() => setStatus("all")}
+            <FilterChip
               label="ทั้งหมด"
+              on={status === "all"}
+              onClick={() => setStatus("all")}
               count={counts.all}
             />
             {RECORD_STATUSES.map((s) => (
-              <Chip
+              <FilterChip
                 key={s}
-                active={status === s}
-                onClick={() => setStatus(s)}
                 label={recordStatusMeta[s].label}
+                tone={STATUS_TONE[s]}
+                on={status === s}
+                onClick={() => setStatus(s)}
                 count={counts[s]}
               />
             ))}
@@ -340,8 +356,8 @@ export function RecordCaseView({
         </div>
 
         {/* ── จอ ≥md: ตารางแบบสเปรดชีต หัวตารางตรึง เส้นตารางครบทุกช่อง ── */}
-        <div className="hidden md:block">
-          <div className="elev-card max-h-[78dvh] overflow-auto rounded-box border border-line bg-base-100">
+        <SummaryBody className="hidden md:block">
+          <div className="max-h-[78dvh] overflow-auto">
             <table className="w-full min-w-[1120px] border-collapse text-left text-12-5">
               <thead>
                 <tr className="bg-head [&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-line-strong [&>th]:bg-head">
@@ -430,7 +446,7 @@ export function RecordCaseView({
                   const Dept = departmentIcon(r.departmentId);
                   const Cat = RECORD_CATEGORY_ICON;
                   const expanded = openId === r.id;
-                  /* แถวสุดท้ายไม่ต้องมีเส้นล่าง — กรอบของกล่องทำหน้าที่นั้นอยู่แล้ว
+                  /* แถวสุดท้ายไม่ต้องมีเส้นล่าง — เส้นบนของแถบเลขหน้าทำหน้าที่นั้นอยู่แล้ว
                      (ใช้ `last:` ไม่ได้ เพราะตัวสุดท้ายอาจเป็นแถวรายละเอียดที่แทรกเข้ามา) */
                   const lastRow = i === pageRows.length - 1;
 
@@ -599,25 +615,20 @@ export function RecordCaseView({
               />
             )}
           </div>
-        </div>
+        </SummaryBody>
 
-        {/* ── จอ <md: การ์ดแนวตั้ง ไม่ต้องเลื่อนแนวนอน ── */}
-        <div className="flex flex-col gap-2.5 md:hidden">
+        {/* ── จอ <md: รายการแนวตั้ง (แถวแบนคั่นเส้น ไม่ใช่การ์ด) ไม่ต้องเลื่อนแนวนอน ── */}
+        <SummaryBody className="divide-y divide-line md:hidden">
           {pageRows.map((r) => {
             const Dept = departmentIcon(r.departmentId);
             const Cat = RECORD_CATEGORY_ICON;
             const expanded = openId === r.id;
 
             return (
-              <div
-                key={r.id}
-                className={`flex flex-col overflow-hidden rounded-box border bg-base-100 transition-colors ${
-                  expanded ? "border-ink/25" : "border-line"
-                }`}
-              >
+              <div key={r.id} className="flex flex-col">
                 <div
                   onClick={() => toggle(r.id)}
-                  className={`flex cursor-pointer flex-col gap-2.5 p-4 transition-colors ${
+                  className={`flex cursor-pointer flex-col gap-2.5 px-(--sheet-px) py-3.5 transition-colors ${
                     expanded ? "bg-base-200/60" : ""
                   }`}
                 >
@@ -705,16 +716,14 @@ export function RecordCaseView({
           })}
 
           {shown.length ? null : (
-            <div className="rounded-box border border-dashed border-line bg-base-100">
-              <Empty
-                total={records.length}
-                onClear={filtered ? clearFilters : undefined}
-              />
-            </div>
+            <Empty
+              total={records.length}
+              onClear={filtered ? clearFilters : undefined}
+            />
           )}
-        </div>
+        </SummaryBody>
 
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+        <SummaryFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
           <p className="text-12 text-mut">
             {shown.length ? (
               <>
@@ -744,7 +753,8 @@ export function RecordCaseView({
 
             <Pager current={current} count={pageCount} onGo={setPage} />
           </div>
-        </div>
+        </SummaryFooter>
+        </SummaryPanel>
       </div>
 
       {/*
@@ -828,53 +838,15 @@ function Th({
 
 function Empty({ total, onClear }: { total: number; onClear?: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 px-5 py-14 text-center">
-      <Bookmark size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
-      <p className="text-sm font-semibold">
-        {total ? "ไม่มีเคสที่ตรงกับเงื่อนไข" : "ยังไม่มีบันทึกเคส"}
-      </p>
-      <p className="max-w-[46ch] text-12-5 leading-[1.7] text-mut text-pretty">
-        {total
+    <EmptyState
+      title={total ? "ไม่มีเคสที่ตรงกับเงื่อนไข" : "ยังไม่มีบันทึกเคส"}
+      bubble={total ? undefined : "เริ่มบันทึกเรื่องแรกกันเลย!"}
+      hint={
+        total
           ? "ลองล้างตัวกรองหรือเปลี่ยนคำค้นหา"
-          : "กด “บันทึกเคสใหม่” เพื่อบันทึกเรื่องแรกเข้าระบบ"}
-      </p>
-      {onClear ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="rounded-full border border-line px-3.5 py-1.5 text-12-5 transition-colors hover:border-ink/30 hover:text-ink"
-        >
-          ล้างตัวกรอง
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function Chip({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  count: number;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-12-5 transition-colors ${
-        active
-          ? "border-ink bg-ink font-medium text-ink-content"
-          : "border-line bg-base-100 text-mut hover:border-primary/40 hover:text-ink"
-      }`}
-    >
-      {label}
-      <span className={active ? "opacity-70" : "text-mut"}>{count}</span>
-    </button>
+          : "กด “บันทึกเคสใหม่” เพื่อบันทึกเรื่องแรกเข้าระบบ"
+      }
+      onClear={onClear}
+    />
   );
 }

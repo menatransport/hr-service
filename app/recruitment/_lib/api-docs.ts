@@ -172,13 +172,13 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/auth/callback/google",
         summary: "รับผลล็อกอินจาก Google",
         description:
-          "ตรวจ `state` → แลก `code` เป็น `id_token` → ส่งให้ NCAC ตรวจ → ออกคุกกี้ session → เข้า `/desk` · ล้มเหลวทุกกรณีจะกลับหน้าล็อกอินพร้อมเหตุผล · **ห้ามย้ายพาธนี้** เพราะผูกกับ redirect URI ที่ลงทะเบียนไว้",
+          "ตรวจ `state` → แลก `code` เป็น `id_token` → ส่งให้ NCAC ตรวจ → ออกคุกกี้ session → เข้า `/home` · ล้มเหลวทุกกรณีจะกลับหน้าล็อกอินพร้อมเหตุผล · **ห้ามย้ายพาธนี้** เพราะผูกกับ redirect URI ที่ลงทะเบียนไว้",
         access: "public",
         params: [
           { name: "code", in: "query", type: "string", required: true, desc: "รหัสจาก Google" },
           { name: "state", in: "query", type: "string", required: true, desc: "ต้องตรงกับคุกกี้ที่ออกไว้" },
         ],
-        response: "302 → /desk?welcome=1",
+        response: "302 → /home?welcome=1",
       },
       {
         method: "POST",

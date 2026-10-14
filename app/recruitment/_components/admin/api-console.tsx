@@ -267,7 +267,7 @@ export function ApiConsole({ e }: { e: ApiEndpoint }) {
               type="button"
               onClick={send}
               disabled={busy}
-              className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-field bg-primary px-3.5 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="btn-pri flex min-h-9 cursor-pointer items-center gap-1.5 px-3.5 text-13 font-medium disabled:opacity-50"
             >
               {busy ? (
                 <Loader2 size={14} strokeWidth={2} className="animate-spin" aria-hidden />

@@ -101,8 +101,8 @@ export function ApiDocsView() {
   return (
     <div className="flex flex-col gap-5">
       {/* ------------------------------------------------------------ ภาพรวม */}
-      <section className="overflow-hidden rounded-box border border-line bg-base-100 elev-card">
-        <h2 className="border-b border-line-strong bg-head px-5 py-3 text-14 font-semibold">ภาพรวม</h2>
+      <section className="sheet-bleed border-y border-line">
+        <h2 className="border-b border-line-strong bg-head px-(--sheet-px) py-3 text-14 font-semibold">ภาพรวม</h2>
         <dl className="grid gap-px bg-line sm:grid-cols-2 xl:grid-cols-4">
           <Fact term="Base URL">
             <code className="font-mono text-13">/api</code> บนโดเมนเดียวกับระบบ
@@ -119,7 +119,7 @@ export function ApiDocsView() {
           </Fact>
         </dl>
 
-        <div className="grid gap-5 border-t border-line p-5 lg:grid-cols-2">
+        <div className="grid gap-5 border-t border-line px-(--sheet-px) py-5 lg:grid-cols-2">
           <div className="flex flex-col gap-2">
             <h3 className="text-13 font-semibold">รหัสสถานะ HTTP</h3>
             <table className="w-full text-12-5">
@@ -153,7 +153,7 @@ export function ApiDocsView() {
       </section>
 
       {/* ------------------------------------------------------- ค้นหา + ดัชนี */}
-      <section className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-4 elev-card">
+      <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-2.5 md:flex-row md:items-center">
           <SearchField
             value={q}
@@ -199,13 +199,13 @@ export function ApiDocsView() {
       {/* ---------------------------------------------------------- endpoints */}
       {groups.map((g) => (
         <section key={g.id} id={g.id} className="flex scroll-mt-20 flex-col gap-2.5">
-          <div className="flex flex-col gap-0.5 px-1">
+          <div className="flex flex-col gap-0.5">
             <h2 className="text-16 font-semibold">{g.title}</h2>
             <p className="max-w-[80ch] text-12-5 text-mut text-pretty">
               <Rich text={g.description} />
             </p>
           </div>
-          <div className="overflow-hidden rounded-box border border-line bg-base-100 elev-card">
+          <div className="sheet-bleed border-y border-line">
             {g.rows.map((e) => (
               <Endpoint key={anchorOf(e)} e={e} defaultOpen={filtering && g.rows.length <= 3} />
             ))}
@@ -214,17 +214,17 @@ export function ApiDocsView() {
       ))}
 
       {!groups.length ? (
-        <p className="rounded-box border border-dashed border-line bg-base-100 px-4 py-10 text-center text-13 text-mut">
+        <p className="px-4 py-10 text-center text-13 text-mut">
           ไม่พบ endpoint ที่ตรงกับเงื่อนไข
         </p>
       ) : null}
 
       {/* --------------------------------------------------------- changelog */}
       <section id="changelog" className="flex scroll-mt-20 flex-col gap-2.5">
-        <h2 className="px-1 text-16 font-semibold">ประวัติการเปลี่ยนแปลง</h2>
-        <ol className="flex flex-col rounded-box border border-line bg-base-100 elev-card">
+        <h2 className="text-16 font-semibold">ประวัติการเปลี่ยนแปลง</h2>
+        <ol className="sheet-bleed flex flex-col border-y border-line">
           {API_CHANGELOG.map((c) => (
-            <li key={c.version} className="grid gap-2 border-b border-line px-5 py-4 last:border-b-0 sm:grid-cols-[10rem_minmax(0,1fr)]">
+            <li key={c.version} className="grid gap-2 border-b border-line px-(--sheet-px) py-4 last:border-b-0 sm:grid-cols-[10rem_minmax(0,1fr)]">
               <div className="flex flex-col">
                 <span className="font-mono text-13 font-semibold">v{c.version}</span>
                 <span className="text-11-5 text-mut">{formatThaiDate(c.date, "full")}</span>
@@ -248,7 +248,7 @@ export function ApiDocsView() {
 
 function Fact({ term, children }: { term: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 bg-base-100 px-5 py-3.5">
+    <div className="flex flex-col gap-1 bg-base-100 px-(--sheet-px) py-3.5">
       <dt className="text-11-5 tracking-[0.04em] text-mut">{term}</dt>
       <dd className="text-12-5 text-pretty">{children}</dd>
     </div>
@@ -280,7 +280,7 @@ function Endpoint({ e, defaultOpen }: { e: ApiEndpoint; defaultOpen: boolean }) 
       open={defaultOpen || undefined}
       className="group/ep scroll-mt-20 border-b border-line last:border-b-0"
     >
-      <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 transition-colors hover:bg-base-200/50 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-(--sheet-px) py-2.5 transition-colors hover:bg-base-200/50 [&::-webkit-details-marker]:hidden">
         <MethodBadge method={e.method} />
         <code className="min-w-0 font-mono text-12-5 font-medium break-all text-ink">{e.path}</code>
         <span className="min-w-0 flex-1 truncate text-12-5 text-mut max-sm:basis-full max-sm:pl-19">
@@ -295,7 +295,7 @@ function Endpoint({ e, defaultOpen }: { e: ApiEndpoint; defaultOpen: boolean }) 
         />
       </summary>
 
-      <div className="flex flex-col gap-4 border-t border-line bg-base-200/30 px-4 py-4">
+      <div className="flex flex-col gap-4 border-t border-line bg-base-200/30 px-(--sheet-px) py-4">
         <div className="flex flex-col gap-1">
           <p className="text-13 font-medium">{e.summary}</p>
           {e.description ? (

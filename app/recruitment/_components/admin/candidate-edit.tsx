@@ -134,7 +134,7 @@ export function CandidateEditModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-field border border-line px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40 disabled:opacity-50"
+            className="btn-sec px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40 disabled:opacity-50"
           >
             ยกเลิก
           </button>
@@ -142,7 +142,7 @@ export function CandidateEditModal({
             type="button"
             onClick={save}
             disabled={saving || !dirty}
-            className="flex items-center gap-2 rounded-field bg-primary px-4 py-2.5 text-13 font-medium text-primary-content transition-opacity hover:opacity-90 disabled:opacity-45"
+            className="btn-pri flex items-center gap-2 px-4 py-2.5 text-13 font-medium disabled:opacity-45"
           >
             {saving ? (
               <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
