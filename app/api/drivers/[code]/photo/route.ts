@@ -18,9 +18,8 @@ import { mediaKeys, putMedia, StorageError } from "@/lib/s3";
  * 3. `$set` ลิงก์ `/api/media/{key}` ลง `hr_service.master_driver` แล้ว **อ่านกลับมาตรวจ**
  *    (รูปเก่าบน S3 ถูกลบตามใน `setDriverPhoto()`)
  *
- * **เขียนลง `master_driver` เท่านั้น ไม่แตะ `Boom_ETL`** — และเพราะ
- * `sync_master_driver.mjs` เขียนด้วย `$set` เฉพาะฟิลด์ของ ETL รูปที่บันทึกไว้
- * จึงอยู่รอดข้ามรอบ sync (ดูคอมเมนต์หัวสคริปต์นั้นกับ `lib/drivers/registry.ts`)
+ * **เขียนลง `master_driver` เท่านั้น ไม่แตะ `Boom_ETL`** — ETL ไม่เคยเขียนที่นี่
+ * รูปที่บันทึกไว้จึงไม่มีทางถูกทับ (ดู `app/recruitment/_lib/drivers/master.ts`)
  *
  * ผู้บันทึกมาจาก session ฝั่งเซิร์ฟเวอร์เสมอ **ไม่รับจาก client** — ไม่งั้นใครยิง
  * API ตรงก็อ้างเป็นคนอื่นได้

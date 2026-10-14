@@ -127,11 +127,12 @@
    * ต้อง **ทึบสนิท** เสมอ (ห้ามเป็นค่าโปร่งแสง) — หัวตารางทุกตัวในระบบเป็น
    * `sticky top-0` ถ้าพื้นโปร่ง ตัวหนังสือของแถวที่เลื่อนผ่านข้างใต้จะทะลุขึ้นมา
    *
-   * เป็น **เขียวเข้มโทนเดียวกับ `primary` แต่ลึกกว่าหนึ่งขั้น** — คุมโทนกับปุ่มหลัก
-   * แต่ยังแยกออกจากปุ่ม `bg-primary` ที่วางอยู่บนหน้าเดียวกันได้ · ตัวหนังสือ/เส้น
-   * บนพื้นนี้พลิกเป็นสีอ่อนเองผ่านบล็อก `.bg-head` ท้ายส่วนธีมมืด ไม่ต้องแก้ทีละจอ
+   * เป็น **teal เข้มโทนเดียวกับพื้นหลังระบบ** (13 ต.ค. 2026 · Bew “ให้สีเข้มกว่านี้”) — สว่างกว่า
+   * `#115e59` เดิมหนึ่งขั้นให้ดูสดขึ้น · หัวตารางยาวชนขอบแผ่นเนื้อหา จึงต้องมี **ขอบสว่างรอบแผ่น**
+   * (`.app-shell-sheet` box-shadow 1px) คั่นจากกรอบ teal ไม่งั้นแถบเข้มกลืนเป็นเนื้อเดียวกับกรอบ
+   * · ขาวบนพื้นนี้ 6.8:1 · `mut` ข้างใน 4.65:1 — ตัวหนังสือ/เส้นพลิกเป็นโทนอ่อนผ่านบล็อก `.bg-head`
    */
-  --color-head: #115e59;
+  --color-head: #0f6660;
   /* วันอาทิตย์ในตารางติดตามฝึกงาน — ตัวหนังสืออย่างเดียว ไม่ใช่พื้น */
   --color-rose: #e11d48;
   --color-canvas: #e9eeeb;
@@ -172,6 +173,9 @@
    * ถ้าวางบนพื้นมืด (ห้ามใช้ `ink-content` แทน เพราะตัวนั้นพลิกเป็นสีเข้มในธีมมืด)
    */
   --color-g-chip: #ffffff;
+
+  /* ไอคอนปุ่มส่งออก Excel — เขียวแบบสเปรดชีต อยู่บนปุ่มรองพื้นขาว (5.0:1) ไม่ใช่พื้นปุ่มทั้งก้อน */
+  --color-excel: #15803d;
 
   /* case-volume chart — validated 2-slot categorical pair, see the component */
   --color-series-a: #a35a08;
@@ -386,6 +390,8 @@
   /* คงขาวโดยตั้งใจ — เหตุผลอยู่ที่ประกาศใน `@theme` ด้านบน */
   --color-g-chip: #ffffff;
 
+  --color-excel: #4ade80;
+
   /* กระดาษเอกสาร HR คงค่าเดิมโดยตั้งใจ — เหตุผลอยู่ที่ประกาศใน `@theme` ด้านบน */
   --color-paper: #ffffff;
   --color-paper-ink: #111111;
@@ -414,7 +420,7 @@
  * ไม่ต้องรู้ว่าตัวเองอยู่บนหัวตาราง (Radix portal หลุดออกจากกล่องนี้ จึงไม่โดน)
  *
  * `primary` ข้างในกลายเป็นขาว/ตัวหนังสือเขียว — ป้ายนับตัวกรอง ป้าย “วันนี้” จึงเป็น
- * เม็ดขาวบนพื้นเขียว แทนที่จะเป็นเขียวบนเขียวจนมองไม่เห็น
+ * เม็ดขาวบนพื้นเขียว แทนที่จะเป็นเขียวบนเขียวจนมองไม่เห็น · วันอาทิตย์เป็นชมพูอ่อน (4.9:1)
  */
 .bg-head {
   --color-ink: #ffffff;
@@ -427,7 +433,7 @@
   --color-base-200: color-mix(in oklab, #ffffff 10%, var(--color-head));
   --color-base-300: color-mix(in oklab, #ffffff 18%, var(--color-head));
   --color-alert: #ffb4ab;
-  --color-rose: #fda4af;
+  --color-rose: #fecdd3;
 }
 
 /* --------------------------------------------------------------------------
@@ -1394,6 +1400,21 @@
 }
 
 /**
+ * ตารางที่ชนขอบแผ่นเนื้อหาทั้งสองข้าง (`SummaryBody` / `sheet-bleed`) — ช่องแรกกับช่องท้ายของทุกแถว
+ * เว้นขอบเท่าแผ่น (`--sheet-px`) ตัวหนังสือคอลัมน์แรกจึงตรงแนวกับหัวเรื่องของหน้า
+ * · อยู่ชั้น utilities แต่เจาะจงกว่า `px-3` ของช่อง จึงชนะเสมอ · **อย่าใส่กับตารางที่ช่องแรกเป็น `p-0`**
+ *   (ปุ่มเต็มช่อง เช่นตารางติดตามฝึกงาน) — ปุ่มจะเยื้องตาม
+ */
+@utility sheet-table {
+  & :is(th, td):first-child {
+    padding-left: var(--sheet-px);
+  }
+  & :is(th, td):last-child {
+    padding-right: var(--sheet-px);
+  }
+}
+
+/**
  * การ์ดที่กดได้ — ยกขึ้นเล็กน้อยตอนเอาเมาส์วาง แล้วกดลงจนสุดตอนคลิก
  *
  * `translateY` แค่ 2px โดยตั้งใจ · การ์ดในระบบนี้เรียงกันเป็นตารางหลายใบ
@@ -1496,6 +1517,20 @@
   --chip-bg: var(--color-primary);
   --chip-ink: var(--color-primary-content);
   --chip-line: var(--color-primary);
+}
+
+/* ตัวกรอง “ทั้งหมด” ที่เลือกอยู่ (`FilterChip`) — พื้นหมึกทึบ ไม่ใช่สีของสถานะใด */
+@utility chip-ink {
+  --chip-bg: var(--color-ink);
+  --chip-ink: var(--color-ink-content);
+  --chip-line: var(--color-ink);
+}
+
+/* เกิน SLA — ส้มแดงของ `sla` ชุดเดียวกับตัวหนังสือ “เกิน SLA” ในแถว */
+@utility chip-sla {
+  --chip-bg: color-mix(in oklab, var(--color-sla) 14%, var(--color-base-100));
+  --chip-ink: var(--color-sla);
+  --chip-line: color-mix(in oklab, var(--color-sla) 40%, var(--color-base-100));
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1917,23 +1952,68 @@
   background-image: var(--shell-bg);
   background-attachment: fixed;
 }
-/* แผ่นเนื้อหาโค้งมนที่วางบนพื้นไล่สี — พื้นแบบ `page-canvas` ของหน้าเดิม เนื้อในจึงไม่ต้องแก้ */
+/* แผ่นเนื้อหา “แผ่นเดียว” (13 ต.ค. 2026 · Bew) — พื้นทึบสีเดียวกับการ์ด ไม่มีเงา ทั้งหน้าคือ
+ * component เดียว: **ข้างในห้ามมีการ์ด/เงายกข้อมูลขึ้นอีกชั้น** แยกส่วนด้วยเส้นบาง (`border-line`)
+ * กับระยะห่างแทน · `--elev-card`/`--elev-raise` เป็น none ทั้งแผ่น ของเก่าที่ยังใส่ `elev-card`
+ * จึงแบนเอง (กล่องลอยจริงใช้ `elev-pop` ไม่โดน) · `--sheet-px` = ระยะขอบซ้ายขวาของแผ่น
+ * ส่วนที่ต้องกินเต็มความกว้างแผ่น (แถบสรุป ตาราง เส้นคั่น) ใช้ `sheet-bleed` */
 .app-shell-sheet {
+  --sheet-px: 1rem;
+  --elev-card: none;
+  --elev-raise: none;
   color: var(--color-ink);
-  background-color: var(--color-canvas);
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    color-mix(in oklab, var(--color-ink) 4%, transparent) 1px,
-    transparent 0
-  );
-  background-size: 26px 26px;
-  box-shadow: 0 30px 60px -30px rgba(4, 30, 27, 0.65);
+  background-color: var(--color-base-100);
+  background-image: var(--sheet-glow);
+  background-repeat: no-repeat;
+  /* ขอบสว่าง 1px รอบแผ่น (ไม่ใช่เงา) — หัวตาราง/ช่องยอดรวมสีเข้มที่ชนขอบแผ่นจึงไม่กลืนกับกรอบ teal */
+  box-shadow: 0 0 0 1px var(--sheet-rim);
 }
-/* แถบข้าง — พื้นทึบเรียบ ๆ สีเดียวกับการ์ด ให้สีของกลุ่ม (`--tone`) เป็นสีเดียวที่เด่นในแถบ */
+/* แสงที่หัวแผ่น — มิ้นต์จาง ๆ **เต็มความกว้าง** แล้วจางหายในราว 9rem แรก (13 ต.ค. 2026 · Bew “ลดสีพื้นหลัง”)
+ * เดิมเป็นดวงไฟทองมุมขวา + มิ้นต์มุมซ้ายแบบพื้นหลังระบบ ซึ่งทำให้ขอบบนของแผ่นมีสีแค่สองปลาย
+ * ตรงกลางขาว ดูเหมือนขอบไม่เต็ม · ตาราง/รายการข้างล่างจึงยังอยู่บนพื้นขาวล้วน
+ * · ไม่ `fixed` (เลื่อนไปกับแผ่น) · แถบที่ติดหัวจอวางบนแสงนี้ให้ใช้พื้นขาวโปร่ง 90% + เบลอ
+ *   (ดูแถบเครื่องมือหน้าพนักงาน) ไม่งั้นขอบบนของแถบจะตัดแสงเป็นรอยต่อ */
+:root {
+  --sheet-rim: rgba(255, 255, 255, 0.28);
+  --sheet-glow: linear-gradient(180deg, color-mix(in oklab, #14b8a6 6%, transparent) 0, transparent 9rem);
+}
+[data-theme="hrs-dark"] {
+  --sheet-rim: rgba(255, 255, 255, 0.09);
+  --sheet-glow: linear-gradient(180deg, color-mix(in oklab, #14b8a6 5%, transparent) 0, transparent 9rem);
+}
+/* ช่องยอดรวมของแถบสรุป (`SummaryStat lead`) — พื้นหลังระบบย่อส่วน: teal ไล่จากเข้มทางซ้ายไปสด
+ * ทางขวา + ประกายทองมุมขวาบน · ตัวหนังสืออยู่ฝั่งซ้ายที่เข้มเสมอ (ขาว 9.4 · ป้าย 6.5 :1) */
+.stat-lead {
+  --color-ink: #ffffff;
+  --color-mut: color-mix(in oklab, #ffffff 80%, #0b4f4a);
+  background-color: #0f6660;
+  background-image:
+    radial-gradient(110% 130% at 100% 0%, rgba(248, 181, 69, 0.4), transparent 62%),
+    linear-gradient(120deg, #0b4f4a 0%, #0f6b64 50%, #129a85 100%);
+}
+/* ไทล์ไอคอนหน้าข้างชื่อหน้า (`PageHead`) — พื้นหลังระบบย่อส่วน: teal ไล่เข้ม + ประกายทองมุมขวาบน */
+.brand-tile {
+  color: #ffffff;
+  background-color: #0f5f58;
+  background-image:
+    radial-gradient(90% 90% at 100% 0%, rgba(248, 181, 69, 0.55), transparent 65%),
+    linear-gradient(150deg, #0b3a36 0%, #0f766e 58%, #129a85 100%);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+}
+@media (width >= 40rem) {
+  .app-shell-sheet {
+    --sheet-px: 1.25rem;
+  }
+}
+/* ดึงส่วนนั้นออกไปชนขอบแผ่นทั้งสองข้าง — นอกแผ่น (ไม่มี `--sheet-px`) ไม่มีผลอะไร */
+.sheet-bleed {
+  margin-inline: calc(var(--sheet-px, 0px) * -1);
+}
+/* แถบข้าง — พื้นทึบเรียบ ๆ สีเดียวกับแผ่นเนื้อหา ไม่มีเงา ให้สีของกลุ่ม (`--tone`) เป็นสีเดียวที่เด่นในแถบ */
 .app-shell-side {
   color: var(--color-ink);
   background: var(--color-base-100);
-  box-shadow: 0 18px 40px -26px rgba(4, 30, 27, 0.55);
+  box-shadow: 0 0 0 1px var(--sheet-rim);
 }
 /* ปุ่มกระจกบนพื้นไล่สี (ย้อนกลับ · กระดิ่ง · เมนูผู้ใช้) — แบบ `bg-white/10` ของ NavbarHeader menaIT */
 .glass-btn {

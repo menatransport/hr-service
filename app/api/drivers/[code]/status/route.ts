@@ -16,7 +16,7 @@ import { DriverRegistryError, setDriverStatus } from "@/app/recruitment/_lib/dri
  *
  * เขียนลง `hr_service.master_driver` เท่านั้น — **ไม่แตะ `Boom_ETL` และไม่แตะ
  * ฟิลด์ `active` ที่ ETL เป็นเจ้าของ** ค่าที่กดไปอยู่ที่ `statusOverride`
- * แล้วทับตอนอ่าน (ดู `lib/drivers/registry.ts`) รอบ sync ถัดไปจึงไม่ลบทิ้ง
+ * แล้วทับตอนอ่าน (ดู `lib/drivers/registry.ts`)
  *
  * ผู้บันทึกมาจาก session ฝั่งเซิร์ฟเวอร์เสมอ **ไม่รับจาก client** — ไม่งั้นใครยิง
  * API ตรงก็อ้างเป็นคนอื่นได้
@@ -39,6 +39,7 @@ export async function PUT(
       reasonCode?: unknown;
       exitType?: unknown;
       note?: unknown;
+      confirm?: unknown;
     } | null;
 
     if (!body) return badRequest("อ่านข้อมูลที่ส่งมาไม่ได้");
@@ -59,6 +60,7 @@ export async function PUT(
         reasonCode: typeof body.reasonCode === "string" ? body.reasonCode : undefined,
         exitType: typeof body.exitType === "string" ? body.exitType : undefined,
         note,
+        confirmWorking: body.confirm === true,
       },
       await getActorEmployeeId(),
     );

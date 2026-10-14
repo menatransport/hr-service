@@ -1,21 +1,15 @@
-import Link from "next/link";
-
-import { Avatar } from "@/components/ui/avatar";
-import type { Employee } from "@/lib/types";
-
 /**
- * บัตรพนักงาน — ยกรูปทรงมาจากบัตรบนหน้า login (`components/login/sign-in-card.tsx`)
- * แล้วเติมข้อมูลจริงลงในช่องที่บัตรใบนั้นเว้นว่างไว้
+ * ชิ้นส่วนของบัตรพนักงาน — ยกรูปทรงมาจากบัตรบนหน้า login (`components/login/sign-in-card.tsx`)
+ * ใช้วาดบัตรใบใหญ่ที่ห้อยสายคล้องในหน้ารายคน (`EmployeeProfile`)
  *
- * ชิ้นส่วนที่ยกมาตรง ๆ: แถบหัวสี primary + ป้าย `HR SERVICE` ตัว mono ·
- * ช่องร้อยสาย · แถวป้ายอังกฤษบนเส้นประ · ท้ายบัตรเส้นประกับแถบบาร์โค้ด
+ * ชิ้นส่วนที่ยกมาตรง ๆ: แถบหัวสี primary + ป้าย mono · ช่องร้อยสาย ·
+ * แถวป้ายอังกฤษบนเส้นประ · ท้ายบัตรเส้นประกับแถบบาร์โค้ด
  *
  * **รูปไม่คร่อมแถบหัวบัตรแบบต้นแบบ** — เจ้าของงานสั่งเมื่อ 7 ส.ค. 2026 ว่าอย่าให้
- * ทับซ้อนกัน รูปจึงลงมาอยู่ในเนื้อบัตรเต็มใบ เรียงแถวเดียวกับชื่อ (อย่าย้ายกลับ
- * ไปใช้ `-mt-*` ให้คร่อมอีก) · บัตรใบใหญ่ในหน้ารายคนก็วางตามกติกาเดียวกัน
+ * ทับซ้อนกัน รูปจึงลงมาอยู่ในเนื้อบัตรเต็มใบ (อย่าย้ายกลับไปใช้ `-mt-*` ให้คร่อมอีก)
  *
- * ทั้งใบเป็นลิงก์ไป `/desk/employee/{รหัสพนักงาน}` จึงมี hover ยกขึ้นและแสงกวาด
- * ผ่านแถบหัว บอกว่ากดได้โดยไม่ต้องมีปุ่มเพิ่ม
+ * หน้าค้นหาพนักงานเลิกใช้บัตรใบเล็กแล้ว (13 ต.ค. 2026) — เป็นแถวรายชื่อแบนใน
+ * `employee-directory.tsx` ตามกติกาแผ่นเนื้อหาแผ่นเดียว ไม่มีการ์ดซ้อน
  */
 
 /** แถบบาร์โค้ดท้ายบัตร — ความกว้างสุ่มไว้ตายตัวเพื่อไม่ให้ SSR/CSR ต่างกัน */
@@ -100,53 +94,5 @@ export function BadgeRow({
         {value}
       </dd>
     </div>
-  );
-}
-
-export function EmployeeCard({
-  employee,
-  /** ลำดับในตาราง — ใช้ไล่จังหวะ entrance ให้การ์ดทยอยขึ้น ไม่ใช่โผล่พร้อมกันหมด */
-  index = 0,
-}: {
-  employee: Employee;
-  index?: number;
-}) {
-  return (
-    <Link
-      href={`/desk/employee/${encodeURIComponent(employee.employeeId)}`}
-      /* หน่วงตันที่ใบที่ 12 — รายชื่อยาวเป็นร้อยคน ถ้าคูณไปเรื่อย ๆ ใบท้ายจะรอหลายวินาที */
-      style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}
-      /* hover บอกว่ากดได้ด้วย “ขอบเข้ม + ยกขึ้นเล็กน้อย” เท่านั้น — ไม่มีเงาฟุ้ง */
-      className="stagger-in group flex animate-lift-in flex-col overflow-hidden rounded-box border border-line bg-base-100 text-ink transition-[transform,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/40 active:translate-y-0 active:duration-90"
-    >
-      <BadgeHeader />
-
-      <div className="flex flex-1 flex-col px-4 pt-4 pb-4">
-        <div className="flex items-center gap-3">
-          <Avatar
-            name={employee.name}
-            src={employee.imageUrl}
-            size="lg"
-            className="ring-line/70"
-          />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <p className="truncate text-14-5 font-semibold transition-colors group-hover:text-primary">
-              {employee.name}
-            </p>
-            <p className="truncate text-12 text-mut">{employee.position}</p>
-          </div>
-        </div>
-
-        <dl className="mt-4 flex flex-col gap-2">
-          <BadgeRow label="EMPLOYEE ID" value={employee.employeeId} mono />
-          <BadgeRow label="ACCESS" value={employee.levelLabel} />
-        </dl>
-      </div>
-
-      <div className="flex items-center justify-between gap-3 border-t border-dashed border-line bg-base-200 px-4 py-2.5">
-        <span className="min-w-0 truncate text-11 text-mut">{employee.site}</span>
-        <Barcode className="h-3.5 flex-none opacity-70" />
-      </div>
-    </Link>
   );
 }

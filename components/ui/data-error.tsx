@@ -19,7 +19,7 @@ export function DataError({
   return (
     <div
       role="alert"
-      className="flex flex-col items-center gap-2.5 rounded-box border border-sla/30 bg-sla/6 px-5 py-10 text-center"
+      className="flex flex-col items-center gap-2.5 rounded-box border border-sla/30 bg-[color-mix(in_oklab,var(--color-sla)_6%,var(--color-base-100))] px-5 py-10 text-center"
     >
       <Mascot size={76} mood="oops" motion="none" className="mb-1" />
       <p className="text-15 font-semibold text-sla">{title}</p>

@@ -1,6 +1,7 @@
 import type { WithId } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
+import { readDrivers } from "./master";
 import {
   DriverRegistryError,
   loadManualDays,
@@ -97,7 +98,7 @@ interface WorkMonth {
   latestISO: string;
 }
 
-/** เอกสาร `master_driver` เท่าที่หน้านี้ขอมา — ไม่ใช่ทั้งใบ */
+/** เอกสาร พจส. (`readDrivers()`) เท่าที่หน้านี้ขอมา — ไม่ใช่ทั้งใบ */
 interface DriverLite {
   drivercode?: unknown;
   driverName?: unknown;
@@ -218,23 +219,10 @@ export async function getTraineeBoard(requestedMonth: string): Promise<TraineeBo
   let docs: DriverLite[] = [];
   try {
     if (codes.length) {
-      const drivers = await hrCol<DriverLite>("drivers");
-      docs = await drivers
-        .find(
-          { drivercode: { $in: codes } },
-          {
-            projection: {
-              drivercode: 1,
-              driverName: 1,
-              photoUrl: 1,
-              branch: 1,
-              vehicleCode: 1,
-              startDate: 1,
-              resignation: 1,
-            },
-          },
-        )
-        .toArray();
+      docs = await readDrivers<DriverLite>(
+        ["drivercode", "driverName", "photoUrl", "branch", "vehicleCode", "startDate", "resignation"],
+        { codes },
+      );
     }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);

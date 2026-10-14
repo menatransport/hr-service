@@ -11,8 +11,8 @@ import type { DriverRegistry } from "@/app/recruitment/_lib/drivers/types";
 /**
  * ทะเบียนประวัติ พจส. — รายชื่อพนักงานขับรถทั้งหมด
  *
- * อ่านจาก `hr_service.master_driver` ซึ่ง `sync_master_driver.mjs` เป็นคนเติม
- * จาก `Boom_ETL.main_driver` · ถ้าคอลเลกชันยังว่าง หน้านี้จะบอกให้ไปรัน sync
+ * อ่านสดจาก `Boom_ETL.main_driver` + ฟิลด์ของฝ่ายบุคคลใน `hr_service.master_driver`
+ * (`_lib/drivers/master.ts`) · ถ้าต้นทางว่าง หน้านี้จะบอกตรง ๆ
  * **ไม่ใช่ขึ้นตารางเปล่า** ซึ่งอ่านเป็น “บริษัทไม่มีคนขับสักคน”
  *
  * อ่านผ่าน `getDriverList()` — ไม่มีปฏิทินรายวัน/ของที่กรอกเอง/แฟ้มเอกสาร ตั้งแต่ใน query
@@ -69,13 +69,16 @@ export default async function DriversRegistryPage() {
  * ไม่ใช่รู้ตอนไล่หาปุ่มแก้ไขจนทั่วหน้าแล้วไม่เจอ
  */
 function ReadOnlyNotice({ enrichmentFailed }: { enrichmentFailed: boolean }) {
+  /* ไม่มีอะไรจะเตือน = ไม่วาดกล่องเปล่า — กล่องเปล่ายังกิน `gap-4` ของหน้า แถบสรุปเลยไม่ติดขอบบนของแผ่น */
+  if (!enrichmentFailed) return null;
+
   return (
     <div className="flex flex-col gap-2">
 
       {enrichmentFailed ? (
         <p
           role="status"
-          className="flex items-start gap-2.5 rounded-box border border-sla/30 bg-sla/6 px-4 py-3 text-12-5 text-sla text-pretty"
+          className="flex items-start gap-2.5 rounded-box border border-sla/30 bg-[color-mix(in_oklab,var(--color-sla)_6%,var(--color-base-100))] px-4 py-3 text-12-5 text-sla text-pretty"
         >
           <Info size={15} strokeWidth={1.8} aria-hidden className="mt-0.5 flex-none" />
           อ่านข้อมูลรถและสถานะการทำงานจาก ไม่สำเร็จ — รายชื่อในทะเบียนยังครบ
@@ -92,9 +95,8 @@ function EmptyRegistry() {
       <BookUser size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
       <p className="text-sm font-semibold">ยังไม่มีข้อมูลในทะเบียน</p>
       <p className="max-w-[54ch] text-12-5 leading-[1.7] text-mut text-pretty">
-        คอลเลกชัน <code className="font-mono">master_driver</code> ยังว่างอยู่ — สั่ง{" "}
-        <code className="font-mono text-ink">node sync_master_driver.mjs</code>{" "}
-        หนึ่งครั้งเพื่อดึงทะเบียนจากระบบต้นทางเข้ามา แล้วโหลดหน้านี้ใหม่
+        อ่าน <code className="font-mono">Boom_ETL.main_driver</code> ของระบบต้นทางแล้วไม่พบใครเลย —
+        ตรวจว่า ETL ยังส่งข้อมูลอยู่ แล้วโหลดหน้านี้ใหม่
       </p>
     </div>
   );

@@ -561,6 +561,27 @@ const triggerVariant: Record<SelectVariant, string> = {
 const SEARCH_THRESHOLD = 10;
 
 /**
+ * วาดตัวเลือกสูงสุดเท่านี้ต่อครั้ง — ที่เหลือหาด้วยการพิมพ์ค้น
+ *
+ * Radix วาด `Item` ทุกตัวที่ส่งเข้าไป · ช่อง พจส. (2,377 คน) กับรถ (1,409 คัน) ในฟอร์ม
+ * ขอสรรหาจึงค้างทุกครั้งที่กด (วัด 14 ต.ค. 2026) · ไม่มีใครเลื่อนหาคนที่ 1,800 ด้วยตาอยู่แล้ว
+ * — กรองยังทำกับรายการเต็ม แค่ตัดตอนวาด และค่าที่เลือกไว้ขึ้นเสมอแม้อยู่นอกช่วง
+ */
+const RENDER_LIMIT = 50;
+
+function capOptions(
+  matched: SelectOption[] | undefined,
+  value: string,
+): SelectOption[] | undefined {
+  if (!matched || matched.length <= RENDER_LIMIT) return matched;
+  const head = matched.slice(0, RENDER_LIMIT);
+  /* ค่าที่เลือกไว้อยู่นอกช่วง → ยกขึ้นบนสุด ให้เห็นเครื่องหมายถูกและ Radix เลื่อนไปหาได้ */
+  if (!value || head.some((o) => o.value === value)) return head;
+  const picked = matched.find((o) => o.value === value);
+  return picked ? [picked, ...head.slice(0, -1)] : head;
+}
+
+/**
  * มี dropdown กางอยู่ไหม — ให้ modal ถามก่อนจะปิดตัวเองด้วย Esc
  * (Esc ครั้งเดียวควรปิดแค่ dropdown)
  *
@@ -764,7 +785,9 @@ export function Select({
    * (ดูข้างล่าง) และ `Select` ตัวนี้ไม่ได้ส่ง `name` ให้ native `<select>` ของ Radix
    * จึงไม่มีฟอร์มไหนอ่านค่าจากตัวเลือกที่ถูกซ่อน
    */
-  const shownOptions = !open ? undefined : q ? options?.filter(hit) : options;
+  const matched = !open ? undefined : q ? options?.filter(hit) : options;
+  const shownOptions = capOptions(matched, value);
+  const hiddenCount = (matched?.length ?? 0) - (shownOptions?.length ?? 0);
   const shownGroups = !open
     ? undefined
     : q
@@ -904,6 +927,16 @@ export function Select({
                 ))}
               </RSelect.Group>
             ))}
+
+            {hiddenCount > 0 ? (
+              <p
+                role="status"
+                className="px-2.5 pt-2 pb-1.5 text-center text-12 text-mut max-sm:text-13"
+              >
+                แสดง {shownOptions?.length} จาก {matched?.length.toLocaleString("th-TH")} รายการ
+                {withSearch ? " — พิมพ์เพื่อค้นหาเพิ่ม" : ""}
+              </p>
+            ) : null}
 
             {q && !firstHit ? (
               <p

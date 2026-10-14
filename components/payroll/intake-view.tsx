@@ -43,6 +43,10 @@ import { toastError, toastInfo } from "@/lib/swal";
  * ลำดับบนหน้าคือลำดับการตัดสินใจจริง และ **ปุ่มไปต่ออยู่ล่างสุดเสมอ** — คนที่ยังไม่
  * เลื่อนดูผลวิเคราะห์ไม่ควรกดผ่านไปได้โดยบังเอิญ
  */
+
+/** หนึ่งขั้น — แบนบนแผ่นเนื้อหา เส้นคั่นบนยาวชนขอบแผ่นทั้งสองข้าง (ไม่ใช่การ์ด) */
+const STEP = "sheet-bleed flex flex-col gap-3 border-t border-line px-(--sheet-px) pt-5";
+
 export function IntakeView() {
   const [period, setPeriod] = useState<PeriodRef>(CURRENT_PERIOD);
   const [file, setFile] = useState<File | null>(null);
@@ -108,8 +112,9 @@ export function IntakeView() {
         subtitle="เลือกรอบ อัปโหลดไฟล์ Excel แล้วตรวจทีละคอลัมน์ว่าข้อมูลสะอาดพอจะนำเข้าหรือยัง"
       />
 
-      {/* ─────────────────────────────────────────── 1. เลือกรอบ */}
-      <section className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-4">
+      {/* ─────────────────────────────────────────── 1. เลือกรอบ
+          สามขั้นแบนอยู่บนแผ่นเนื้อหา คั่นกันด้วยเส้นเต็มแผ่น ไม่มีการ์ดแยกชิ้น (13 ต.ค. 2569) */}
+      <section className={STEP}>
         <StepHead
           no={1}
           done
@@ -126,7 +131,7 @@ export function IntakeView() {
       </section>
 
       {/* ────────────────────────────────────────── 2. อัปโหลด */}
-      <section className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-4">
+      <section className={STEP}>
         <StepHead
           no={2}
           done={Boolean(profile)}
@@ -216,7 +221,7 @@ export function IntakeView() {
 
       {/* ──────────────────────────────────── 3. ตรวจคอลัมน์ */}
       {profile && counts ? (
-        <section className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-4">
+        <section className={STEP}>
           <StepHead
             no={3}
             done

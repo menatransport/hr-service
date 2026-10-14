@@ -52,7 +52,9 @@ export function ShellSidebar({
   return (
     <aside
       data-rail={rail || undefined}
-      className={`app-shell-side sticky top-(--shell-header-h) hidden max-h-[calc(100dvh-var(--shell-header-h)-0.75rem)] flex-none overflow-x-hidden overflow-y-auto overscroll-contain rounded-[16px] transition-[width] duration-300 ease-out lg:block ${
+      /* สูงเต็มจอใต้แถบบนเสมอ (14 ต.ค. 2026 · Bew) — เท่ากับ min-h ของแผ่นเนื้อหาใน `AppShell`
+         ขอบล่างของสองแผ่นจึงตรงกัน · เมนูยาวเกินจอเมื่อไหร่ เลื่อนในแถบเอง */
+      className={`app-shell-side sticky top-[calc(var(--shell-header-h)+2px)] hidden h-[calc(100dvh-var(--shell-header-h)-0.875rem)] flex-none flex-col overflow-x-hidden overflow-y-auto overscroll-contain rounded-[16px] transition-[width] duration-300 ease-out lg:flex ${
         rail ? "w-14" : "w-[200px]"
       }`}
     >

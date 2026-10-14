@@ -1,4 +1,5 @@
-import { etlCol, hrCol } from "@/lib/db";
+import { etlCol } from "@/lib/db";
+import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { siteLabel } from "@/app/recruitment/_lib/drivers/types";
 import { normalizeStatus, type AnswerMap } from "@/app/recruitment/_lib/types";
 import {
@@ -27,10 +28,28 @@ export interface PickOption {
   label: string;
 }
 
+/** พจส. + รถประจำตัว — เลือกคนที่จะแทนแล้วฟอร์มเติมรถให้เอง (ท่าเดียวกับฟอร์มเดิมใน mena-next-lb) */
+export interface DriverOption extends PickOption {
+  /** ค่าที่ใช้เลือกในช่องรถ (`code` หรือทะเบียน) · ว่าง = ไม่มีรถประจำ */
+  vehicle?: string;
+}
+
+/**
+ * รถ + ค่าที่อ่านออกจาก `fleet` ของ ETL (`Cpac ML` → ลูกค้า Cpac ตำแหน่ง ML)
+ * — ฟอร์มใช้เติมลูกค้า/ตำแหน่ง/แพล้นท์ให้ คนกรอกจะได้ไม่ต้องพิมพ์ซ้ำ
+ */
+export interface VehicleOption extends PickOption {
+  plate?: string;
+  brand?: string;
+  plant?: string;
+  customer?: string;
+  position?: string;
+}
+
 export interface RequisitionOptions {
   /** พจส. ที่ยังทำงานอยู่ — ใช้ทั้งช่องครูฝึกและช่อง พจส. ที่จะแทน */
-  drivers: PickOption[];
-  vehicles: PickOption[];
+  drivers: DriverOption[];
+  vehicles: VehicleOption[];
   plants: PickOption[];
   /** ใบสมัครที่ผูกกับอัตราได้ — ทุกสถานะยกเว้นยกเลิก (ดู `LINKABLE_STATUSES`) */
   candidates: PickOption[];
@@ -58,31 +77,72 @@ const EMPTY: RequisitionOptions = {
 const THAI_ORDER = new Intl.Collator("th", { numeric: true });
 const thai = (a: PickOption, b: PickOption) => THAI_ORDER.compare(a.label, b.label);
 
-async function loadDrivers(): Promise<PickOption[]> {
-  const drivers = await hrCol<{ drivercode?: string; driverName?: string; branch?: string }>("drivers");
-  const docs = await drivers
-    .find({ active: true }, { projection: { drivercode: 1, driverName: 1, branch: 1 } })
-    .toArray();
+async function loadDrivers(): Promise<DriverOption[]> {
+  const docs = await readDrivers<{
+    drivercode?: string;
+    driverName?: string;
+    branch?: string;
+    vehicleCode?: string;
+    active?: boolean;
+  }>(["drivercode", "driverName", "branch", "vehicleCode", "active"]);
 
   return docs
-    .filter((d) => (d.drivercode ?? "").trim())
+    .filter((d) => d.active === true && (d.drivercode ?? "").trim())
     .map((d) => {
       const code = (d.drivercode ?? "").trim();
       const name = (d.driverName ?? "").trim() || code;
       const site = siteLabel((d.branch ?? "").trim());
       /* ป้ายมีทั้งชื่อ รหัส และสาขา เพราะช่องค้นหาของ `Select` ค้นจากป้าย —
          พิมพ์รหัสหรือชื่อสาขาก็เจอ ไม่ต้องจำว่าต้องพิมพ์อะไร */
-      return { value: code, label: site ? `${name} — ${code} · ${site}` : `${name} — ${code}` };
+      const vehicle = String(d.vehicleCode ?? "").trim();
+      return {
+        value: code,
+        label: site ? `${name} — ${code} · ${site}` : `${name} — ${code}`,
+        ...(vehicle ? { vehicle } : {}),
+      };
     })
     .sort(thai);
 }
 
-async function loadVehicles(): Promise<{ vehicles: PickOption[]; plants: PickOption[] }> {
-  const vehicleCol = await etlCol<{ code?: string; plate_no?: string; brand?: string; plant?: string }>(
-    "vehicles",
-  );
+/**
+ * `fleet` ของ ETL → ลูกค้าในรายการ `CUSTOMERS` + ตำแหน่ง ML/MS (ถ้ามีท้ายชื่อ)
+ * ชื่อ fleet ที่ไม่อยู่ในตารางนี้ (รถขาย · รถว่าง …) ไม่เติมอะไร ปล่อยให้คนเลือกเอง
+ */
+const FLEET_CUSTOMER: Record<string, string> = {
+  acon: "Acon",
+  asia: "Asia",
+  cpac: "Cpac",
+  fast: "Fast",
+  kpac: "Kpac",
+  orc: "ORC",
+  scco: "SCCO",
+  umo: "UMO",
+  rp: "RP Concreate",
+  "ที.เอ็น.ซีเมนต์บล็อค": "TN",
+  จิรโชติ: "หจก.จิรโชติ",
+};
+
+function fromFleet(fleet: string): { customer?: string; position?: string } {
+  const m = fleet.trim().match(/^(.*?)\s+(ML|MS)$/i);
+  const base = (m ? m[1] : fleet).trim().toLowerCase();
+  const customer = FLEET_CUSTOMER[base];
+  const position = m ? m[2].toUpperCase() : undefined;
+  return { ...(customer ? { customer } : {}), ...(position ? { position } : {}) };
+}
+
+async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plants: PickOption[] }> {
+  const vehicleCol = await etlCol<{
+    code?: string;
+    plate_no?: string;
+    brand?: string;
+    plant?: string;
+    fleet?: string;
+  }>("vehicles");
   const docs = await vehicleCol
-    .find({ active: true }, { projection: { code: 1, plate_no: 1, brand: 1, plant: 1 } })
+    .find(
+      { active: true },
+      { projection: { code: 1, plate_no: 1, brand: 1, plant: 1, fleet: 1 } },
+    )
     .toArray();
 
   const vehicles = docs
@@ -95,7 +155,15 @@ async function loadVehicles(): Promise<{ vehicles: PickOption[]; plants: PickOpt
         .join(" · ");
       /* เลือกด้วย `code` เมื่อมี ไม่งั้นใช้ทะเบียน — `vehicle()` ใน `store.ts`
          ค้นด้วยทั้งสองฟิลด์อยู่แล้ว เพราะบางสาขาเรียกรถด้วยทะเบียนล้วน */
-      return { value: code || plate, label: code ? `${code} — ${rest}` : rest };
+      const plant = (v.plant ?? "").trim();
+      return {
+        value: code || plate,
+        label: code ? `${code} — ${rest}` : rest,
+        plate,
+        brand: (v.brand ?? "").trim(),
+        ...(plant && plant !== "Unknown" ? { plant } : {}),
+        ...fromFleet(v.fleet ?? ""),
+      };
     })
     .sort(thai);
 

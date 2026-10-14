@@ -163,7 +163,7 @@ export function DriverWorkYear({
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-box border border-line bg-base-100 p-5">
+    <section className="flex flex-col gap-4 border-t border-line pt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <CalendarDays size={16} strokeWidth={1.8} aria-hidden className="text-primary" />

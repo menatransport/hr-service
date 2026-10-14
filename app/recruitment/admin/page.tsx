@@ -28,9 +28,7 @@ function HubView() {
         subtitle="โมดูลทั้งหมดของศูนย์กลางการสรรหา — ที่เปิดใช้งานแล้วและที่กำลังจะมี"
         actions={
           <Link
-            /* ผู้สมัครเป็นแท็บของหน้าขอสรรหาแล้ว — ชี้ตรงไปที่แท็บนั้น ไม่ผ่าน
-               เส้นทางเก่าที่เหลือไว้แค่ redirect (ดู `admin/candidates/page.tsx`) */
-            href={`${ADMIN_ROOT}/requisitions?tab=candidates`}
+            href={`${ADMIN_ROOT}/candidates`}
             className="btn-pri px-3.5 py-2 text-13 font-medium"
           >
             ไปที่ผู้สมัคร
@@ -38,7 +36,8 @@ function HubView() {
         }
       />
 
-      <section className="flex flex-col gap-2.5">
+      {/* แบนบนแผ่นเนื้อหา คั่นจากหัวด้วยเส้นเต็มแผ่น (13 ต.ค. 2569) */}
+      <section className="sheet-bleed border-t border-line px-(--sheet-px) pt-5">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-14 font-semibold">โมดูลของระบบ</h2>
           <span className="text-12 text-mut">
@@ -47,7 +46,7 @@ function HubView() {
           </span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {adminModules.map((module) => {
             const Icon = module.icon;
 
@@ -97,7 +96,7 @@ function HubView() {
             ) : (
               <div
                 key={module.href}
-                className={`${shell} border-dashed bg-base-100/60`}
+                className={`${shell} border-dashed bg-base-100`}
                 aria-disabled
               >
                 {body}

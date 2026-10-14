@@ -34,7 +34,6 @@ import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rat
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
 import { requestJson } from "@/lib/http";
-import { FormImportButton } from "@/app/recruitment/_components/admin/form-import-dialog";
 import { alertError } from "@/lib/swal";
 import {
   displayAnswer,
@@ -59,11 +58,9 @@ import {
 import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
 
 /**
- * แท็บ “ผู้สมัคร” — ตารางแบบสเปรดชีตที่ฝ่ายบุคคลทำงานได้จบในตารางเดียว
+ * หน้า “ผู้สมัคร” — ตารางแบบสเปรดชีตที่ฝ่ายบุคคลทำงานได้จบในตารางเดียว
  *
- * อยู่ใต้หัวเดียวกับตารางคำขอสรรหาแล้ว (ดู `recruitment-tabs.tsx`) — หัวเรื่องกับ
- * แถบแท็บอยู่บนสุดของไฟล์นี้ ส่วน `rows` ถือโดยตัวแท็บ เพราะตัวเลขงานค้างบน
- * หัวแท็บต้องขยับตามทันทีที่เลื่อนสถานะใบสมัครในตาราง
+ * `rows` ถือโดย `recruitment-screens.tsx` ที่ห่อหน้านี้อยู่
  *
  * ยึดท่าของ Excel / Google Sheets ทั้งหมดโดยตั้งใจ เพราะฝ่ายบุคคลอยู่กับสองตัวนั้น
  * ทุกวัน และไม่มีอะไรที่ระบบนี้จะสอนเขาได้ดีกว่าเครื่องมือที่เขาใช้คล่องอยู่แล้ว:
@@ -273,7 +270,6 @@ type Filters = Partial<Record<ColumnId, string[]>>;
 
 export function CandidatesView({
   title,
-  tabs,
   rows,
   setRows,
   initialTerm = "",
@@ -283,10 +279,7 @@ export function CandidatesView({
   blacklist = [],
   setRequisitions,
 }: {
-  /** หัวเรื่องของทั้งหน้า — ตัวเดียวกับที่แท็บคำขอสรรหาใช้ ไม่ใช่ชื่อแท็บ */
   title: string;
-  /** แถบแท็บของทั้งหน้า วาดโดย `recruitment-tabs.tsx` แล้วส่งมาวางใต้หัวเรื่อง */
-  tabs: React.ReactNode;
   rows: ApplicationSummary[];
   setRows: Dispatch<SetStateAction<ApplicationSummary[]>>;
   /**
@@ -525,46 +518,27 @@ export function CandidatesView({
   const filtering = isFiltering(filters as InsightFilters);
 
   return (
-    <div className="flex flex-col gap-3 lg:h-[calc(100dvh-6.5rem)]">
+    <div className="flex flex-col lg:h-[calc(100dvh-4rem)]">
       {/* หัวเรื่องซ่อนไว้ให้โปรแกรมอ่านจอเท่านั้น — ถอดหัวที่มองเห็นออกตามคำขอ 23 ก.ย. 2026
           (`sr-only` เป็น absolute จึงไม่กิน `gap` ของกล่องนอก) */}
       <h1 className="sr-only">{title}</h1>
 
       {/* ─────────────────────── แถบสรุป — ทุกชิ้นกดแล้วกรองตารางข้างล่าง */}
       <CandidateInsights
-        tabs={tabs}
         rows={rows}
-        visibleCount={visible.length}
         filters={filters as InsightFilters}
         onFilter={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
-        onSort={setSort}
-        /* ล้างทุกคอลัมน์ ไม่ใช่เฉพาะที่แถบสรุปเป็นเจ้าของ — ท่าเดียวกับปุ่ม
-           “ล้างตัวกรอง” ในตารางและในหน้าจอตอนไม่พบผลลัพธ์ */
+        /* ล้างทุกคอลัมน์ ไม่ใช่เฉพาะที่แถบสรุปเป็นเจ้าของ — ปุ่มอยู่บนการ์ด “ทั้งหมด”
+           ไม่ได้เพิ่มแถวใหม่เหนือตาราง (14 ต.ค. 2026 · Bew) */
         onClearAll={() => setFilters(DEFAULT_FILTERS)}
-        actions={<FormImportButton onImported={setRows} />}
       />
-
-      {/* ทางออกทางเดียวที่ล้างตัวกรองทุกคอลัมน์ได้รวดเดียว — เดิมต้องไล่เปิดเมนู
-          หัวคอลัมน์ล้างทีละอัน ซึ่งคนที่กรองซ้อนสามชั้นแล้วมักเลือกกดรีเฟรชหน้าทิ้งแทน
-          · ยอดที่เหลือหลังกรองอยู่บนแถบสรุปข้างบน (`CandidateInsights`) ที่เดียว */}
-      {filtering ? (
-        <div className="flex items-center justify-end text-12 text-mut">
-          <button
-            type="button"
-            onClick={() => setFilters(DEFAULT_FILTERS)}
-            className="btn-sec px-2 py-0.5 transition-colors hover:border-primary/40 hover:text-ink"
-          >
-            ล้างตัวกรองทั้งหมด
-          </button>
-        </div>
-      ) : null}
 
       {/* `relative` ทำให้กล่องนี้เป็น containing block ของลูกที่ `position: absolute`
           (เช่น `.sr-only` ในปุ่มแต่ละแถว) — ไม่งั้นสแปนที่มองไม่เห็นพวกนั้นจะไปอิง
           ตำแหน่งกับเอกสารทั้งหน้าแทนกล่องนี้ ดันความสูงจริงของหน้าให้ยาวเกินของจริง
           (เห็นผลเป็นแถบข้างที่ดูเหมือนเลื่อนตามเพราะ container คำนวณความสูงผิด) */}
-      <div className="elev-card relative max-h-[calc(100dvh-13rem)] overflow-auto rounded-box border border-line bg-base-100 lg:max-h-none lg:min-h-0 lg:flex-1">
-        <table className="w-full border-collapse text-13">
+      <div className="sheet-bleed relative max-h-[calc(100dvh-10.5rem)] overflow-auto border-y border-line lg:max-h-none lg:min-h-0 lg:flex-1">
+        <table className="sheet-table w-full border-collapse text-13">
           <thead>
             <tr>
               {columns.map((column, i) => (

@@ -93,7 +93,7 @@ export async function hrCol<T extends Document = Document>(key: HrKey): Promise<
 
 /**
  * คอลเลกชันใน `Boom_ETL` — **อ่านอย่างเดียว** ETL sync ทับเองเป็นรอบ ของที่เขียนเพิ่มจะหาย
- * ฟิลด์ที่ hr-service เป็นเจ้าของต้องอยู่ใน `hr_service` เท่านั้น (ดู `sync_master_driver.mjs`)
+ * ฟิลด์ที่ hr-service เป็นเจ้าของต้องอยู่ใน `hr_service` เท่านั้น (ดู `drivers/master.ts`)
  * อยู่คลัสเตอร์เดียวกัน จึงใช้ client ตัวเดิม สลับแค่ `.db()`
  */
 export async function etlCol<T extends Document = Document>(

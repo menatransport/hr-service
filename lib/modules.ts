@@ -11,6 +11,8 @@ import {
   Route,
   ShieldCheck,
   Truck,
+  UserPlus,
+  UserRoundSearch,
   Users,
   Wallet,
 } from "lucide-react";
@@ -42,8 +44,7 @@ export interface ModuleItem {
   /** ยังไม่มีหน้าจริง — แสดงเป็น “เร็ว ๆ นี้” และกดไม่ได้ */
   soon?: boolean;
   /**
-   * path ที่นับว่าเป็นเมนูนี้ เมื่อไม่ใช่ path ของ `href` เอง — เช่นทะเบียน พจส. ลิงก์ไปสาขา
-   * ลาดกระบังแต่ต้องนับ `/desk/registry/saraburi` เป็นเมนูเดียวกันด้วย
+   * path ที่นับว่าเป็นเมนูนี้ เมื่อไม่ใช่ path ของ `href` เอง
    */
   match?: string;
   /**
@@ -87,25 +88,40 @@ export const MODULES: ModuleGroup[] = [
         icon: ClipboardList,
       },
       {
-        id: "requisitions",
-        label: "ขออัตราสรรหาพนักงาน",
-        desc: "ใบขออัตรากำลังจากหน่วยงาน · ติดตามการสรรหา",
+        id: "new-hire",
+        label: "พนักงานใหม่",
+        desc: "ขออัตราสรรหา · ผู้สมัคร · ติดตามฝึกงาน",
         href: "/recruitment/admin/requisitions",
-        icon: BriefcaseBusiness,
-      },
-      {
-        id: "trainees",
-        label: "ติดตามฝึกงาน",
-        desc: "ตารางฝึก · รถฝึก · ผลการฝึกรายวัน",
-        href: "/recruitment/admin/trainees",
-        icon: Route,
+        icon: UserPlus,
+        children: [
+          {
+            id: "requisitions",
+            label: "ขออัตราสรรหาพนักงาน",
+            desc: "ใบขออัตรากำลังจากหน่วยงาน · ติดตามการสรรหา",
+            href: "/recruitment/admin/requisitions",
+            icon: BriefcaseBusiness,
+          },
+          {
+            id: "candidates",
+            label: "ผู้สมัคร",
+            desc: "ใบสมัคร · ติดต่อ · นัดสัมภาษณ์",
+            href: "/recruitment/admin/candidates",
+            icon: UserRoundSearch,
+          },
+          {
+            id: "trainees",
+            label: "ติดตามฝึกงาน",
+            desc: "ตารางฝึก · รถฝึก · ผลการฝึกรายวัน",
+            href: "/recruitment/admin/trainees",
+            icon: Route,
+          },
+        ],
       },
       {
         id: "registry",
         label: "ทะเบียนประวัติ พจส.",
-        desc: "ลาดกระบัง · สระบุรี",
-        href: "/desk/registry/ladkrabang",
-        match: "/desk/registry",
+        desc: "ประวัติพนักงานขับรถทุกคน",
+        href: "/recruitment/admin/drivers",
         icon: BookUser,
       },
     ],
@@ -135,7 +151,7 @@ export const MODULES: ModuleGroup[] = [
     items: [
       {
         id: "payroll",
-        label: "Pay Roll",
+        label: "ค่าจ้างและสวัสดิการ",
         desc: "รอบเงินเดือน · นำเข้าข้อมูลค่าจ้าง",
         href: "/payroll",
         icon: Wallet,

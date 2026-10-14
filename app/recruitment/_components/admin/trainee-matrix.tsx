@@ -16,9 +16,11 @@ import { TraineeCell } from "@/app/recruitment/_components/admin/trainee-cell";
 import { TraineeVehicleModal } from "@/app/recruitment/_components/admin/trainee-vehicle-modal";
 import { Avatar } from "@/components/ui/avatar";
 import { Pager } from "@/components/ui/pager";
-import { ColumnMenu } from "@/components/ui/column-menu";
 import { SearchField, type SelectOption } from "@/components/ui/field";
 import {
+  SegmentedControl,
+  SummaryBody,
+  SummaryFooter,
   SummaryPanel,
   SummaryStat,
   SummaryStats,
@@ -31,6 +33,7 @@ import {
   THAI_WEEKDAYS_SHORT,
   formatTenure,
   formatThaiDate,
+  type DriverSiteKey,
   type TraineeDailyEntry,
 } from "@/app/recruitment/_lib/drivers/types";
 import type { TraineeBoard, TraineeBoardDriver } from "@/app/recruitment/_lib/drivers/trainee-board";
@@ -85,7 +88,7 @@ export function TraineeMatrix({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [site, setSite] = useState<string[]>([]);
+  const [site, setSite] = useState<SiteFilter>("all");
   const [query, setQuery] = useState("");
   const deferred = useDeferredValue(query);
 
@@ -109,7 +112,10 @@ export function TraineeMatrix({
     });
   }, [year, monthNo]);
 
-  const filter = useMemo(() => ({ sites: site, query: deferred }), [site, deferred]);
+  const filter = useMemo(
+    () => ({ sites: site === "all" ? [] : [site], query: deferred }),
+    [site, deferred],
+  );
 
   const drivers = useMemo(() => {
     if (!vehicleEdits.size) return board.drivers;
@@ -158,27 +164,12 @@ export function TraineeMatrix({
 
   function clearFilters() {
     setQuery("");
-    setSite([]);
+    setSite("all");
     setPage(1);
   }
 
-  const siteOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const d of board.drivers) {
-      const key = d.siteKey ?? "other";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return [
-      ...DRIVER_SITES.filter((s) => counts.has(s.key)).map((s) => ({
-        value: s.key,
-        label: s.label,
-        count: counts.get(s.key),
-      })),
-      ...(counts.has("other")
-        ? [{ value: "other", label: "สาขาอื่น ๆ", count: counts.get("other") }]
-        : []),
-    ];
-  }, [board.drivers]);
+  /** มีคนที่ไม่อยู่สาขาหลักไหม — แท็บ “อื่น ๆ” ขึ้นเฉพาะตอนนั้น (ท่าเดียวกับทะเบียนประวัติ) */
+  const hasOtherSite = useMemo(() => board.drivers.some((d) => !d.siteKey), [board.drivers]);
 
   /**
    * เก็บผลที่เซิร์ฟเวอร์ตอบกลับ — `null` = ลบบันทึกของวันนั้นไปแล้ว
@@ -204,7 +195,7 @@ export function TraineeMatrix({
   }
 
   const index = board.months.indexOf(board.month);
-  const filtering = Boolean(deferred.trim()) || site.length > 0;
+  const filtering = Boolean(deferred.trim()) || site !== "all";
 
   return (
     <div className="flex flex-col gap-4">
@@ -277,17 +268,19 @@ export function TraineeMatrix({
             className="w-full lg:max-w-80 lg:flex-1"
           />
 
-          <ColumnMenu
-            label="สาขา"
-            variant="chip"
-            filter={{
-              options: siteOptions,
-              selected: site,
-              onChange: (next) => {
-                setSite(next);
-                setPage(1);
-              },
+          <SegmentedControl
+            label="เลือกสาขา"
+            value={site}
+            onChange={(next) => {
+              setSite(next);
+              setPage(1);
             }}
+            options={[
+              "all" as const,
+              ...DRIVER_SITES.map((s) => s.key),
+              ...(hasOtherSite ? (["other"] as const) : []),
+            ].map((value) => ({ value, label: siteFilterLabel(value) }))}
+            className="w-full sm:w-auto sm:self-start lg:self-auto"
           />
         </SummaryToolbar>
 
@@ -316,10 +309,9 @@ export function TraineeMatrix({
             </button>
           ) : null}
         </SummaryStrip>
-      </SummaryPanel>
 
       {board.manualFailed || board.enrichmentFailed ? (
-        <p className="flex items-start gap-2 rounded-box bg-sla/10 px-3 py-2 text-12-5 text-sla">
+        <p className="flex items-start gap-2 border-t border-line bg-sla/10 px-(--sheet-px) py-2 text-12-5 text-sla">
           <AlertTriangle size={14} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none" />
           {board.manualFailed
             ? "อ่านบันทึกที่เคยกรอกไว้ไม่สำเร็จ — ปิดการกรอกไว้ก่อนเพื่อไม่ให้เขียนทับของเดิม ลองโหลดหน้าใหม่อีกครั้ง"
@@ -328,7 +320,9 @@ export function TraineeMatrix({
       ) : null}
 
       {rows.length === 0 ? (
-        <Empty query={query.trim()} />
+        <SummaryBody pad>
+          <Empty query={query.trim()} />
+        </SummaryBody>
       ) : (
         <>
           {/*
@@ -336,7 +330,7 @@ export function TraineeMatrix({
             เหมือนตารางทะเบียนประวัติ · เลื่อนไปวันที่ 28 แล้วยังต้องรู้ว่ากำลังดูของใคร
           */}
           <div
-            className={`elev-card relative max-h-[calc(100dvh-20rem)] overflow-auto rounded-box border border-line bg-base-100 transition-opacity ${
+            className={`relative max-h-[calc(100dvh-17.5rem)] overflow-auto border-t border-line bg-base-100 transition-opacity ${
               pending ? "opacity-50" : ""
             }`}
           >
@@ -450,6 +444,7 @@ export function TraineeMatrix({
             </table>
           </div>
 
+          <SummaryFooter className="flex flex-col gap-3">
           <PageBar
             from={activeRows.length ? sliceFrom + 1 : 0}
             to={sliceFrom + pageRows.length}
@@ -465,8 +460,10 @@ export function TraineeMatrix({
           />
 
           <Legend />
+          </SummaryFooter>
         </>
       )}
+      </SummaryPanel>
 
       {editingVehicle ? (
         <TraineeVehicleModal
@@ -817,7 +814,7 @@ function Step({
 
 function Empty({ query }: { query: string }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 rounded-box border border-dashed border-line bg-base-100 px-5 py-12 text-center">
+    <div className="flex flex-col items-center gap-2.5 px-5 py-12 text-center">
       <SearchX size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
       <p className="text-sm font-semibold">ไม่มีคนที่ต้องติดตามในเดือนนี้</p>
       <p className="max-w-[48ch] text-12-5 leading-[1.7] text-mut text-pretty">
@@ -827,4 +824,12 @@ function Empty({ query }: { query: string }) {
       </p>
     </div>
   );
+}
+
+type SiteFilter = DriverSiteKey | "all" | "other";
+
+function siteFilterLabel(site: SiteFilter): string {
+  if (site === "all") return "ทุกสาขา";
+  if (site === "other") return "อื่น ๆ";
+  return DRIVER_SITES.find((s) => s.key === site)?.label ?? site;
 }

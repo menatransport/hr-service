@@ -1,7 +1,8 @@
-import type { Collection, Document, Filter } from "mongodb";
+import type { Collection } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
 import { deleteDriverDocumentFile } from "./documents";
+import { driverExists, readDriver, readDrivers, type DriverField } from "./master";
 import { mediaKeyOf } from "@/lib/media";
 import { deleteMedia } from "@/lib/s3";
 import { pickResignReason } from "@/app/recruitment/_lib/resign-reasons/store";
@@ -30,21 +31,16 @@ import {
 /**
  * ทะเบียนประวัติ พจส. — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
  *
- * รายชื่อหลักอ่านจาก `hr_service.master_driver` ซึ่งเป็นสำเนาที่
- * `sync_master_driver.mjs` ดึงมาจาก `Boom_ETL.main_driver` ไว้ — **ไม่อ่าน
- * `main_driver` ตรง ๆ** เพราะ db นั้นเป็นกระจกเงาที่ ETL ทับทั้งก้อนเป็นรอบ
- * ฟิลด์ที่ hr-service จะเขียนเพิ่มเองทีหลัง (ลาออก/รูปถ่าย) ต้องมีที่อยู่ที่ไม่โดนทับ
- * และที่นั้นคือเอกสารใน `master_driver` ใบเดียวกันนี้
+ * รายชื่อหลักอ่านสดจาก `Boom_ETL.main_driver` แล้วทับด้วยฟิลด์ที่ hr-service เป็นเจ้าของ
+ * (ลาออก/รูปถ่าย/เอกสาร) จาก `hr_service.master_driver` — ประกอบที่ `./master.ts` ที่เดียว
+ * · **เขียนได้แค่ `master_driver`** เพราะ `Boom_ETL` เป็นกระจกเงาที่ ETL ทับทั้งก้อนเป็นรอบ
  *
  * ส่วนรถกับสถานะการทำงานเป็นข้อมูล **ยืมมาอ่านเฉย ๆ** ไม่มีฟิลด์ของ hr-service
  * ปนอยู่ จึงอ่านสดจาก `Boom_ETL` ได้เลย ไม่ต้อง sync ซ้ำอีกชุด · ถ้าอ่านไม่ได้
  * ก็แค่ไม่มีข้อมูลเสริม รายชื่อยังขึ้นครบ (`enrichmentFailed`)
  */
 
-/** ทะเบียนมีราว 2,600 แถว · ดึงครบทีเดียวแล้วกรองฝั่ง client เหมือนสมุดรายชื่อพนักงาน */
-const LIST_LIMIT = 5_000;
-
-/** เอกสารดิบใน `master_driver` ตามที่ `sync_master_driver.mjs` เขียนไว้ */
+/** เอกสาร พจส. ที่ `readDrivers()` ประกอบให้ (ฟิลด์ ETL + ฟิลด์ของ hr-service) */
 interface MasterDriverDoc {
   drivercode?: unknown;
   driverName?: unknown;
@@ -324,7 +320,7 @@ function toWorkStatus(doc: Record<string, unknown>): DriverWorkStatus {
  * `"full"` = ปฏิทินรายวันครบ (หน้ารายคน) · `"none"` = ไม่อ่านเลย (ศูนย์เอกสาร) ·
  * ตารางรายชื่อที่ต้องการแค่สถานะล่าสุดใช้ `loadLatestEnrichmentAll()`
  */
-type WorkDetail = "full" | "none";
+type WorkDetail = "full" | "latest" | "none";
 
 /** ฟิลด์ของ `vehicles` ที่ `toVehicle()` อ่านจริง — เลขตัวถัง ไฟแนนซ์ ฯลฯ ไม่ต้องข้ามเน็ตมา */
 const VEHICLE_FIELDS = {
@@ -360,7 +356,7 @@ async function loadEnrichment(
       ? workCol
           .find(
             { employee_code: { $in: driverCodes } },
-            { projection: { ...WORK_LATEST_FIELDS, months: 1 } },
+            { projection: work === "full" ? { ...WORK_LATEST_FIELDS, months: 1 } : WORK_LATEST_FIELDS },
           )
           .toArray()
       : Promise.resolve([]),
@@ -571,12 +567,20 @@ function toStatusOverride(raw: unknown): DriverStatus | null {
 
 /* ------------------------------------------------------------- ประกอบร่าง */
 
+/**
+ * “ไม่มีข้อมูลการทำงาน” = ETL ว่ายังทำงาน แต่ไม่มีแถวใน `employee_work_status` เลย
+ * (13 ต.ค. 2569 · ETL active 2,374 คน ไม่มีสถานะเลย 1,360 คน) · **ยกเว้นคนที่วันเริ่มงาน
+ * คือวันนี้หรือยังมาไม่ถึง** — ยังไม่มีวันให้บันทึก (ตามคำสั่ง Bew 13 ต.ค. 2569)
+ */
+
 function toRecord(
   doc: MasterDriverDoc,
   today: string,
   vehicles: Map<string, DriverVehicle>,
   work: Map<string, DriverWorkStatus>,
   manual: Map<string, Record<string, TraineeDailyEntry>>,
+  /** `false` = อ่านสถานะการทำงานไม่ได้ (หรือไม่ได้อ่าน) — ห้ามสรุปว่า “ไม่มีข้อมูลการทำงาน” */
+  workLoaded: boolean,
 ): DriverRecord {
   const drivercode = str(doc.drivercode);
   const vehicleRef = str(doc.vehicleCode);
@@ -587,6 +591,12 @@ function toRecord(
   const branch = str(doc.branch);
   const etlActive = Boolean(doc.active);
   const statusOverride = toStatusOverride(doc.statusOverride);
+  const noWorkRecord =
+    workLoaded &&
+    !statusOverride &&
+    etlActive &&
+    !work.has(drivercode) &&
+    !(startDateISO && startDateISO >= today);
 
   return {
     drivercode,
@@ -609,8 +619,9 @@ function toRecord(
     idCardExpiryISO,
     idCardDaysLeft: idCardExpiryISO ? daysBetween(today, idCardExpiryISO) : null,
     /* ค่าที่ฝ่ายบุคคลกดเอง ชนะค่าจาก ETL เสมอ — ETL ไม่รู้เรื่องการพ้นสภาพที่บันทึกที่นี่ */
-    active: statusOverride ? statusOverride === "active" : etlActive,
+    active: statusOverride ? statusOverride === "active" : etlActive && !noWorkRecord,
     etlActive,
+    noWorkRecord,
     statusOverride,
     resignation: toResignation(doc.resignation),
     mediaPurgedAt:
@@ -621,7 +632,7 @@ function toRecord(
   };
 }
 
-/** เวลาที่ sync ล่าสุด = ค่ามากที่สุดในทะเบียน (ทุกแถวได้เวลาเดียวกันต่อหนึ่งรอบ) */
+/** เวลาที่ ETL mirror `main_driver` ล่าสุด = ค่ามากที่สุดในทะเบียน */
 function latestSyncedAt(docs: MasterDriverDoc[]): string | null {
   let latest = 0;
 
@@ -642,7 +653,7 @@ function latestSyncedAt(docs: MasterDriverDoc[]): string | null {
  * `getTraineeBoard()` · **หน้าใหม่ให้ทำตัวอ่านที่ขอเฉพาะของที่วาด อย่ากลับมาใช้ตัวนี้**
  */
 export async function getDriverRegistry(): Promise<DriverRegistry> {
-  const docs = await readMasterDrivers({}, {});
+  const docs = await readMasterDrivers("all");
 
   const today = todayInBangkok();
   const vehicleRefs = uniq(docs.map((d) => str(d.vehicleCode)));
@@ -671,24 +682,19 @@ export async function getDriverRegistry(): Promise<DriverRegistry> {
   return {
     drivers: docs
       .filter((doc) => str(doc.drivercode))
-      .map((doc) => toRecord(doc, today, vehicles, work, manual)),
+      .map((doc) => toRecord(doc, today, vehicles, work, manual, !enrichmentFailed)),
     syncedAt: latestSyncedAt(docs),
     enrichmentFailed,
     manualFailed,
   };
 }
 
-/** อ่าน `master_driver` ตามเงื่อนไข — ห่อ error เป็นข้อความเดียวกับ `getDriverRegistry()` */
+/** อ่านทะเบียน (`./master.ts`) — ห่อ error เป็นข้อความเดียวกับ `getDriverRegistry()` */
 async function readMasterDrivers(
-  filter: Filter<MasterDriverDoc>,
-  projection: Document,
+  fields: readonly DriverField[] | "all",
 ): Promise<MasterDriverDoc[]> {
   try {
-    return await (await hrCol<MasterDriverDoc>("drivers"))
-      .find(filter, { projection })
-      .sort({ drivercode: 1 })
-      .limit(LIST_LIMIT)
-      .toArray();
+    return await readDrivers<MasterDriverDoc>(fields);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new DriverRegistryError(`อ่านทะเบียนประวัติจากฐานข้อมูลไม่สำเร็จ — ${reason}`);
@@ -698,28 +704,26 @@ async function readMasterDrivers(
 const uniq = (values: string[]) => [...new Set(values.filter(Boolean))];
 
 /**
- * ฟิลด์ของ `master_driver` ที่ `toRecord()` / `latestSyncedAt()` อ่าน **ยกเว้น `documents`**
- * — `_id` `etlSource` `etlSyncedAt` ของ sync ไม่มีใครอ่าน (ราว 18% ของคอลเลกชัน)
+ * ฟิลด์ที่ `toRecord()` / `latestSyncedAt()` อ่าน **ยกเว้น `documents`**
  * **เพิ่มฟิลด์ที่ `toRecord()` อ่านเมื่อไหร่ ต้องเพิ่มที่นี่ด้วย** ไม่งั้นตารางจะได้ค่าว่างเงียบ ๆ
  */
-const LIST_FIELDS = {
-  _id: 0,
-  drivercode: 1,
-  driverName: 1,
-  photoUrl: 1,
-  statusOverride: 1,
-  idCardExpiryDate: 1,
-  resignation: 1,
-  mediaPurgedAt: 1,
-  ownerType: 1,
-  branch: 1,
-  vehicleCode: 1,
-  startDate: 1,
-  licenseExpiryDate: 1,
-  phone: 1,
-  active: 1,
-  syncedAt: 1,
-} as const;
+const LIST_FIELDS: DriverField[] = [
+  "drivercode",
+  "driverName",
+  "photoUrl",
+  "statusOverride",
+  "idCardExpiryDate",
+  "resignation",
+  "mediaPurgedAt",
+  "ownerType",
+  "branch",
+  "vehicleCode",
+  "startDate",
+  "licenseExpiryDate",
+  "phone",
+  "active",
+  "syncedAt",
+];
 
 /**
  * ทะเบียนสำหรับ **ตารางรายชื่อ** `/recruitment/admin/drivers` — ทุกคน แต่ไม่มีปฏิทิน
@@ -738,7 +742,7 @@ export async function getDriverList(): Promise<DriverRegistry> {
   /* เริ่มอ่าน ETL ก่อนแล้วค่อยรอ — `.catch` ติดไว้ตั้งแต่ตอนสร้าง ถ้ารายชื่อหลักพังแล้วโยนออกไป
      promise นี้จะไม่กลายเป็น unhandled rejection · ข้อมูลเสริมพังไม่ล้มทั้งทะเบียน */
   const enrichment = loadLatestEnrichmentAll().catch(() => null);
-  const docs = await readMasterDrivers({}, LIST_FIELDS);
+  const docs = await readMasterDrivers(LIST_FIELDS);
   const enriched = await enrichment;
 
   const today = todayInBangkok();
@@ -749,33 +753,32 @@ export async function getDriverList(): Promise<DriverRegistry> {
   return {
     drivers: docs
       .filter((doc) => str(doc.drivercode))
-      .map((doc) => toRecord(doc, today, vehicles, work, new Map())),
+      .map((doc) => toRecord(doc, today, vehicles, work, new Map(), !enrichmentFailed)),
     syncedAt: latestSyncedAt(docs),
     enrichmentFailed,
     manualFailed: false,
   };
 }
 
-/** ฟิลด์ของ `master_driver` ที่ `collectDocExpiries()` ใช้ (ผ่าน `toRecord()`) */
-const EXPIRY_FIELDS = {
-  _id: 0,
-  drivercode: 1,
-  driverName: 1,
-  phone: 1,
-  branch: 1,
-  vehicleCode: 1,
-  licenseExpiryDate: 1,
-  idCardExpiryDate: 1,
-  active: 1,
-  statusOverride: 1,
-} as const;
+/** ฟิลด์ที่ `collectDocExpiries()` ใช้ (ผ่าน `toRecord()`) */
+const EXPIRY_FIELDS: DriverField[] = [
+  "drivercode",
+  "driverName",
+  "phone",
+  "branch",
+  "vehicleCode",
+  "licenseExpiryDate",
+  "idCardExpiryDate",
+  "active",
+  "statusOverride",
+];
 
 /**
  * วันหมดอายุเอกสารของ พจส. ที่ยังปฏิบัติงาน — ข้อมูลของศูนย์เอกสาร `/recruitment/admin/documents`
  *
  * หน้านั้นต้องการแค่ชื่อ เบอร์ สาขา ทะเบียนรถ กับสองวันที่ · เดิมอ่านทะเบียนทั้งก้อน
  * (`getDriverRegistry()` 8 MB รวมปฏิทินทุกคน) แล้วทิ้งเกือบหมด · ตัวนี้:
- * - คัดเฉพาะคนที่ **อาจ** ยังทำงานตั้งแต่ใน query (`active: true` หรือมี `statusOverride`)
+ * - คัดเฉพาะคนที่ **อาจ** ยังทำงาน (`active: true` หรือมี `statusOverride`) ก่อนอ่านรถ
  *   — เป็นชุดที่กว้างกว่าจริงโดยตั้งใจ ตัวตัดสินจริงยังเป็น `driver.active` ใน
  *   `collectDocExpiries()` (ค่าที่ `statusOverride` ทับแล้ว) **ห้ามเปลี่ยนไปเชื่อ `active` ของ ETL**
  * - ไม่อ่านสถานะงาน/ของที่กรอกเองเลย · รถอ่านเฉพาะของคนที่เหลือ
@@ -784,21 +787,25 @@ const EXPIRY_FIELDS = {
  * (รูป วันเริ่มงาน ฯลฯ) ถ้าหลุดออกไปจะอ่านเหมือน “ไม่มีข้อมูล” ทั้งที่แค่ไม่ได้ขอมา
  */
 export async function getDocExpiries(): Promise<DocExpiry[]> {
-  const docs = await readMasterDrivers(
-    { $or: [{ active: true }, { statusOverride: { $exists: true } }] },
-    EXPIRY_FIELDS,
+  const docs = (await readMasterDrivers(EXPIRY_FIELDS)).filter(
+    (doc) => doc.active === true || doc.statusOverride !== undefined,
   );
   const today = todayInBangkok();
 
-  /* รถพังแค่คอลัมน์ทะเบียนว่าง — ปฏิทินวันหมดอายุยังใช้ได้ครบ */
-  const vehicles = await loadEnrichment(uniq(docs.map((d) => str(d.vehicleCode))), [], "none")
-    .then((e) => e.vehicles)
-    .catch(() => new Map<string, DriverVehicle>());
+  /* พังแค่คอลัมน์ทะเบียนว่าง และไม่ตัดคน “ไม่มีข้อมูลการทำงาน” ออก — ปฏิทินวันหมดอายุยังใช้ได้ครบ
+     สถานะงานอ่านแค่ล่าสุด เพื่อรู้ว่าใครไม่มีบันทึกการทำงานเลย (ไม่นับเป็นคนที่ยังปฏิบัติงาน) */
+  const enriched = await loadEnrichment(
+    uniq(docs.map((d) => str(d.vehicleCode))),
+    uniq(docs.map((d) => str(d.drivercode))),
+    "latest",
+  ).catch(() => null);
+  const vehicles = enriched?.vehicles ?? new Map<string, DriverVehicle>();
+  const work = enriched?.work ?? new Map<string, DriverWorkStatus>();
 
   return collectDocExpiries(
     docs
       .filter((doc) => str(doc.drivercode))
-      .map((doc) => toRecord(doc, today, vehicles, new Map(), new Map())),
+      .map((doc) => toRecord(doc, today, vehicles, work, new Map(), Boolean(enriched))),
   );
 }
 
@@ -810,7 +817,7 @@ export async function getDriver(code: string): Promise<DriverRecord | null> {
   let doc: MasterDriverDoc | null;
 
   try {
-    doc = await (await hrCol<MasterDriverDoc>("drivers")).findOne({ drivercode });
+    doc = await readDriver<MasterDriverDoc>(drivercode);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new DriverRegistryError(`อ่านประวัติคนขับจากฐานข้อมูลไม่สำเร็จ — ${reason}`);
@@ -822,9 +829,11 @@ export async function getDriver(code: string): Promise<DriverRecord | null> {
   let vehicles = new Map<string, DriverVehicle>();
   let work = new Map<string, DriverWorkStatus>();
   let manual = new Map<string, Record<string, TraineeDailyEntry>>();
+  let workLoaded = false;
 
   try {
     ({ vehicles, work } = await loadEnrichment(vehicleRef ? [vehicleRef] : [], [drivercode]));
+    workLoaded = true;
   } catch {
     /* หน้ารายคนยังอ่านได้โดยไม่มีข้อมูลรถ — กล่องรถจะบอกเองว่าไม่มีข้อมูล */
   }
@@ -835,7 +844,7 @@ export async function getDriver(code: string): Promise<DriverRecord | null> {
     /* เหมือนกัน — ไม่มีของที่กรอกเองก็ยังอ่านประวัติได้ */
   }
 
-  return toRecord(doc, todayInBangkok(), vehicles, work, manual);
+  return toRecord(doc, todayInBangkok(), vehicles, work, manual, workLoaded);
 }
 
 /** ประวัติรายคนที่พร้อมส่งออกไปนอกเซิร์ฟเวอร์ — ดู `getDriverProfile()` */
@@ -857,7 +866,8 @@ export type DriverProfileRecord = DriverRecord & {
 export async function getDriverProfile(code: string): Promise<DriverProfileRecord | null> {
   const driver = await getDriver(code);
   if (!driver) return null;
-  if (driver.active) return { ...driver, personalHidden: false };
+  /* “ไม่มีข้อมูลการทำงาน” ยังไม่ใช่การพ้นสภาพ — ฝ่ายบุคคลต้องเห็นเบอร์ไว้โทรตามยืนยัน */
+  if (driver.active || driver.noWorkRecord) return { ...driver, personalHidden: false };
   return {
     ...driver,
     phone: "",
@@ -877,13 +887,17 @@ export interface DriverStatusInput {
   /** Vol / Inv / Disap — ไม่ส่งมา = ใช้ค่าตั้งต้นของรหัสที่เลือก */
   exitType?: string;
   note?: string;
+  /**
+   * `status: "active"` + `true` = ฝ่ายบุคคล **ยืนยันว่ายังปฏิบัติงาน** (คนที่ไม่มีข้อมูลการทำงาน)
+   * → เก็บ `statusOverride: "active"` ไว้ · ไม่ส่ง = ยกเลิกการพ้นสภาพที่กดผิด กลับไปเดินตาม ETL
+   */
+  confirmWorking?: boolean;
 }
 
 /**
  * บันทึกสถานะการจ้างที่ฝ่ายบุคคลกดเอง — คืนเรกคอร์ดที่ **อ่านกลับมาจากฐานข้อมูลจริง**
  *
- * เขียนลง `hr_service.master_driver` เท่านั้น และ **ไม่แตะฟิลด์ `active` ของ ETL**
- * เลยแม้แต่น้อย — ถ้าเขียนทับตรงนั้น รอบ sync ถัดไปจะดันกลับเงียบ ๆ
+ * เขียนลง `hr_service.master_driver` เท่านั้น — `active` เป็นของ ETL (`Boom_ETL` เขียนไม่ได้)
  * ค่าที่กดจึงไปอยู่ที่ `statusOverride` แล้วทับตอนอ่านใน `toRecord()` แทน
  *
  * กลับเป็น “ปฏิบัติงาน” = ล้างทั้ง `statusOverride` และ `resignation` ทิ้ง
@@ -903,7 +917,12 @@ export async function setDriverStatus(
 
   if (input.status === "active") {
     /* `mediaPurgedAt` ล้างด้วย — กลับมาทำงานแล้วพ้นสภาพอีกรอบ ต้องนับ 1 เดือนใหม่และลบได้อีก */
-    update = { $unset: { statusOverride: "", resignation: "", mediaPurgedAt: "" } };
+    update = input.confirmWorking
+      ? {
+          $set: { statusOverride: "active" },
+          $unset: { resignation: "", mediaPurgedAt: "" },
+        }
+      : { $unset: { statusOverride: "", resignation: "", mediaPurgedAt: "" } };
   } else {
     const dateISO = toIsoDate(input.resignDate);
     if (!dateISO) throw new DriverRegistryError("ต้องระบุวันที่พ้นสภาพ");
@@ -938,9 +957,10 @@ export async function setDriverStatus(
   }
 
   try {
+    if (!(await driverExists(drivercode))) return null;
+    /* upsert — คนที่เพิ่งมาจาก ETL ยังไม่มีแถวใน `master_driver` จนกว่าฝ่ายบุคคลจะบันทึกอะไรครั้งแรก */
     const drivers = await hrCol<MasterDriverDoc>("drivers");
-    const result = await drivers.updateOne({ drivercode }, update);
-    if (!result.matchedCount) return null;
+    await drivers.updateOne({ drivercode }, update, { upsert: true });
   } catch (err) {
     if (err instanceof DriverRegistryError) throw err;
     const reason = err instanceof Error ? err.message : String(err);
@@ -992,11 +1012,8 @@ export async function setTraineeDaily(
   const note = (input.note ?? "").trim();
 
   try {
-    const drivers = await hrCol<MasterDriverDoc>("drivers");
-
     // ต้องมีรหัสนี้ในทะเบียนจริง — ไม่งั้นพิมพ์รหัสอะไรมาก็สร้างแถวผีได้
-    const exists = await drivers.countDocuments({ drivercode }, { limit: 1 });
-    if (!exists) return null;
+    if (!(await driverExists(drivercode))) return null;
 
     const collection = await traineeDaily();
     const _id = dailyId(drivercode, dateISO);
@@ -1035,12 +1052,9 @@ export async function setTraineeDaily(
  * บันทึก URL รูปประจำตัวของคนขับ — คืนค่าที่ **อ่านกลับมาจากฐานข้อมูลจริง**
  *
  * เขียนลง `hr_service.master_driver` เท่านั้น **ไม่แตะ `Boom_ETL` เด็ดขาด** ·
- * ใช้ `$set` เฉพาะสามฟิลด์นี้ ไม่ใช่ `replaceOne` — ฟิลด์ที่ ETL เป็นเจ้าของ
- * ในเอกสารเดียวกันต้องไม่โดนแตะ และรอบ sync ถัดไปก็จะไม่ทับรูปคืน เพราะ
- * `sync_master_driver.mjs` ก็ `$set` เฉพาะฟิลด์ของ ETL เหมือนกัน
+ * ใช้ `$set` เฉพาะสามฟิลด์นี้ ไม่ใช่ `replaceOne` — ฟิลด์อื่นของ hr-service ในแถวเดียวกันต้องอยู่ครบ
  *
- * อ่านกลับมาแทนที่จะคืนค่าที่เพิ่งส่งไป — ถ้า `matchedCount` เป็น 0 (รหัสไม่มีจริง)
- * การคืนค่าที่ส่งไปจะทำให้หน้าจอขึ้นว่าบันทึกแล้วทั้งที่ไม่มีอะไรถูกบันทึก
+ * อ่านกลับมาแทนที่จะคืนค่าที่เพิ่งส่งไป — หน้าจอต้องแสดงของที่บันทึกจริง
  */
 export async function setDriverPhoto(
   code: string,
@@ -1051,19 +1065,20 @@ export async function setDriverPhoto(
   if (!drivercode) return null;
 
   try {
+    if (!(await driverExists(drivercode))) return null;
     const collection = await hrCol<MasterDriverDoc>("drivers");
 
+    /* upsert — คนที่เพิ่งมาจาก ETL ยังไม่มีแถว · `before` เป็น `null` ได้ (ยังไม่เคยมีรูป) */
     const before = await collection.findOneAndUpdate(
       { drivercode },
       { $set: { photoUrl, photoUpdatedAt: new Date(), photoUpdatedBy: actor } },
-      { returnDocument: "before" },
+      { returnDocument: "before", upsert: true },
     );
-    if (!before) return null;
 
     /* รูปเก่าบน S3 ไม่มีใครอ้างถึงแล้ว — ลบทิ้ง (โฟลเดอร์ avatar เหลือรูปเดียวเสมอ)
        ลบไม่ติดไม่ใช่เหตุให้บอกว่าเปลี่ยนรูปไม่สำเร็จ ไฟล์ private ที่ค้างเปิดไม่ได้อยู่แล้ว */
-    const oldKey = mediaKeyOf(str(before.photoUrl));
-    if (oldKey && str(before.photoUrl) !== photoUrl) {
+    const oldKey = mediaKeyOf(str(before?.photoUrl));
+    if (oldKey && str(before?.photoUrl) !== photoUrl) {
       await deleteMedia(oldKey).catch((err: unknown) => {
         console.warn("[registry] ลบรูปประจำตัวเดิมบน S3 ไม่สำเร็จ —", oldKey, err);
       });
@@ -1082,10 +1097,10 @@ export async function setDriverPhoto(
 /**
  * บันทึกวันหมดอายุบัตรประชาชน — ค่าว่าง = ลบวันที่ที่กรอกไว้ทิ้ง (กรอกผิดคน/ผิดใบ)
  *
- * **มีแค่บัตรประชาชน ไม่มีใบขับขี่** โดยตั้งใจ — `licenseExpiryDate` เป็นของ ETL
- * ซึ่ง `sync_master_driver.mjs` `$set` ทับทุกรอบ เขียนกลับไปที่นั่นเท่ากับเขียนทิ้ง
+ * **มีแค่บัตรประชาชน ไม่มีใบขับขี่** โดยตั้งใจ — `licenseExpiryDate` อ่านสดจาก ETL
+ * (`./master.ts` ทับค่าที่นี่ทุกครั้ง) เขียนไว้ก็ไม่มีใครเห็น
  * ส่วนบัตรประชาชนไม่มีใน `Boom_ETL.main_driver` เลย จึงเป็นฟิลด์ของ hr-service
- * เต็มตัวเหมือน `photoUrl` / `statusOverride` และรอบ sync ไม่แตะ
+ * เต็มตัวเหมือน `photoUrl` / `statusOverride`
  *
  * ไม่ห้ามวันในอดีต — บัตรที่หมดอายุไปแล้วคือสิ่งที่ศูนย์เอกสารต้องเห็นเป็นอันดับแรก
  * ถ้าปฏิเสธไว้ จะกรอกของจริงที่ค้างอยู่ไม่ได้เลย (ต่างจากวันพ้นสภาพที่ห้ามอนาคต)
@@ -1123,9 +1138,9 @@ export async function setDriverIdCardExpiry(
       };
 
   try {
+    if (!(await driverExists(drivercode))) return null;
     const drivers = await hrCol<MasterDriverDoc>("drivers");
-    const result = await drivers.updateOne({ drivercode }, update);
-    if (!result.matchedCount) return null;
+    await drivers.updateOne({ drivercode }, update, { upsert: true });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new DriverRegistryError(`บันทึกวันหมดอายุบัตรประชาชนไม่สำเร็จ — ${reason}`);
@@ -1152,8 +1167,6 @@ export interface DriverDocumentInput {
  * · `null` = ไม่มีรหัสนี้ในทะเบียน (คนเรียกต้องไปลบไฟล์ที่เพิ่งอัปทิ้งเอง)
  *
  * `$push` ลง `hr_service.master_driver.documents` เท่านั้น **ไม่แตะ `Boom_ETL`**
- * และเพราะ `sync_master_driver.mjs` เขียนด้วย `$set` เฉพาะฟิลด์ของ ETL แฟ้ม
- * เอกสารจึงอยู่รอดข้ามรอบ sync เหมือน `photoUrl` (ดูคอมเมนต์หัวสคริปต์นั้น)
  *
  * **ไม่ทับของเดิมแม้เป็นประเภทเดียวกัน** — สำเนาบัตรประชาชนใบใหม่ไม่ได้แปลว่า
  * ใบเก่าผิด สัญญาจ้างมีได้หลายฉบับตามอายุสัญญา และใบรับรองแพทย์ก็ตรวจซ้ำได้เรื่อย ๆ
@@ -1184,10 +1197,10 @@ export async function attachDriverDocument(
   };
 
   try {
+    if (!(await driverExists(drivercode))) return null;
     const collection = await hrCol<MasterDriverDoc>("drivers");
 
-    const result = await collection.updateOne({ drivercode }, { $push: { documents: entry } });
-    if (!result.matchedCount) return null;
+    await collection.updateOne({ drivercode }, { $push: { documents: entry } }, { upsert: true });
 
     // อ่านกลับมาทั้งแฟ้ม — หน้าจอจะได้แสดงของที่บันทึกจริง ไม่ใช่ของที่ส่งไป
     const after = await collection.findOne({ drivercode });

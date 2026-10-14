@@ -66,24 +66,32 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
    *
    * ถ้าจะเพิ่มฟิลด์ที่เป็นข้อมูลส่วนบุคคลในอนาคต **ต้องมาเพิ่มเงื่อนไขตรงนี้ด้วย**
    */
-  const hidePersonal = !driver.active;
+  const hidePersonal = !driver.active && !driver.noWorkRecord;
+  const statusText = driver.active
+    ? "ปฏิบัติงานอยู่"
+    : driver.noWorkRecord
+      ? "ไม่มีข้อมูลการทำงาน"
+      : "พ้นสภาพแล้ว";
 
   return (
     <div className="flex flex-col gap-5 animate-rise">
-      <Link
-        href="/recruitment/admin/drivers"
-        className="group flex w-fit items-center gap-1.5 text-13 text-mut transition-colors hover:text-primary"
-      >
-        <ArrowLeft
-          size={15}
-          strokeWidth={1.8}
-          aria-hidden
-          className="transition-transform duration-200 group-hover:-translate-x-0.5"
-        />
-        กลับไปทะเบียนประวัติ
-      </Link>
+      {/* ทั้งหน้าแบนอยู่บนแผ่นเนื้อหาแผ่นเดียว (13 ต.ค. 2569) — หัวคั่นจากเนื้อหาด้วยเส้นเต็มแผ่น
+          แต่ละส่วนข้างล่างคั่นด้วยเส้นบาง ไม่มีการ์ดซ้อน */}
+      <header className="sheet-bleed flex flex-col gap-4 border-b border-line px-(--sheet-px) pt-4 pb-5 sm:pt-5">
+        <Link
+          href="/recruitment/admin/drivers"
+          className="group flex w-fit items-center gap-1.5 text-13 text-mut transition-colors hover:text-primary"
+        >
+          <ArrowLeft
+            size={15}
+            strokeWidth={1.8}
+            aria-hidden
+            className="transition-transform duration-200 group-hover:-translate-x-0.5"
+          />
+          กลับไปทะเบียนประวัติ
+        </Link>
 
-      <header className="flex flex-wrap items-center gap-4 rounded-box border border-line bg-base-100 p-5">
+        <div className="flex flex-wrap items-center gap-4">
         {/* กดที่วงรูปเพื่อเพิ่ม/เปลี่ยนรูป — บันทึกลง `master_driver` ของเราเอง
             ไม่ใช่ `Boom_ETL` จึงไม่หายเมื่อ ETL sync รอบถัดไป */}
         <DriverAvatar driver={driver} size="xl" />
@@ -95,7 +103,7 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-12-5 text-mut">{driver.drivercode}</span>
             <Chip tone={driver.active ? "live" : "done"}>
-              {driver.active ? "ปฏิบัติงานอยู่" : "พ้นสภาพแล้ว"}
+              {statusText}
             </Chip>
             {driver.ownerTypeLabel ? <Chip tone="done">{driver.ownerTypeLabel}</Chip> : null}
             {driver.siteLabel ? <Chip tone="done">{driver.siteLabel}</Chip> : null}
@@ -106,13 +114,14 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
           <span className="text-11-5 text-mut">สถานะการจ้าง</span>
           <DriverStatusControl driver={driver} variant="panel" />
         </div>
+        </div>
       </header>
 
       {/* ใบขับขี่หมดอายุไม่ใช่เรื่องต้องเตือนสำหรับคนที่ไม่ได้ทำงานแล้ว */}
       {expiry === "expired" && !hidePersonal ? (
         <p
           role="alert"
-          className="flex items-center gap-2.5 rounded-box border border-alert/30 bg-alert/6 px-4 py-3 text-12-5 text-alert text-pretty"
+          className="flex items-center gap-2.5 rounded-box border border-alert/30 bg-[color-mix(in_oklab,var(--color-alert)_6%,var(--color-base-100))] px-4 py-3 text-12-5 text-alert text-pretty"
         >
           <IdCard size={16} strokeWidth={1.8} aria-hidden className="flex-none" />
           ใบขับขี่{formatLicenseGap(driver.licenseDaysLeft)} — ต้องระงับการจ่ายงานจนกว่าจะต่ออายุ
@@ -124,8 +133,8 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
       {/* ไม่มี `items-start` โดยตั้งใจ — คอลัมน์ขวา (ช่องแนบเอกสาร) ต้องยืดเท่าแถว
           แล้วเลื่อนข้างในเอง ไม่งั้นกล่องที่ยาวกว่าจะดันแถวจนฝั่งซ้ายเหลือช่องว่างห้อยท้าย
           (ดูคอมเมนต์ใน `driver-document-slots.tsx`) */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div className="flex flex-col gap-5">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-0">
+        <div className="flex flex-col gap-6 lg:pr-6">
           <Section title="ข้อมูลทะเบียน" source="main_driver">
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Field icon={Hash} label="รหัสพนักงานขับรถ" value={driver.drivercode} mono />
@@ -193,7 +202,7 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
               <Field
                 icon={BadgeCheck}
                 label="สถานะในทะเบียน"
-                value={driver.active ? "ปฏิบัติงานอยู่" : "พ้นสภาพแล้ว"}
+                value={statusText}
                 note={
                   driver.resignation
                     ? `พ้นสภาพ ${formatThaiDate(driver.resignation.dateISO)}`
@@ -242,7 +251,7 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
       {driver.work ? (
         <DriverWorkYear driver={driver} work={driver.work} />
       ) : (
-        <section className="flex flex-col gap-2 rounded-box border border-line bg-base-100 p-5">
+        <section className="flex flex-col gap-2 border-t border-line pt-6">
           <div className="flex items-center gap-2.5">
             <CalendarDays size={16} strokeWidth={1.8} aria-hidden className="text-mut" />
             <h2 className="text-14 font-semibold">ปฏิทินการทำงาน</h2>
@@ -276,7 +285,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 rounded-box border border-line bg-base-100 p-5">
+    <section className="flex flex-col gap-4 border-t border-line pt-6 first:border-t-0 first:pt-0">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-14 font-semibold">{title}</h2>
         <span

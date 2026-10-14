@@ -1,6 +1,7 @@
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
+import { readDriver } from "@/app/recruitment/_lib/drivers/master";
 import { nextSeq } from "@/lib/db/counters";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import {
@@ -204,9 +205,10 @@ function customer(value: unknown, other: unknown): { customer: string; customerO
 /** ชื่อ พจส. จากรหัส — **ต้องมีอยู่จริงในทะเบียน** ไม่งั้นคำขอจะอ้างถึงคนที่ไม่มีตัวตน */
 async function person(drivercode: unknown, field: string): Promise<PersonDoc> {
   const code = text(drivercode, field);
-  const drivers = await hrCol<{ drivercode?: string; driverName?: string }>("drivers");
-  const doc = await drivers
-    .findOne({ drivercode: code }, { projection: { drivercode: 1, driverName: 1 } });
+  const doc = await readDriver<{ drivercode?: string; driverName?: string }>(code, [
+    "drivercode",
+    "driverName",
+  ]);
 
   if (!doc) throw new RequisitionError(`ไม่พบ พจส. รหัส ${code} ในทะเบียนประวัติ`);
   return { drivercode: code, name: (doc.driverName ?? "").trim() || code };

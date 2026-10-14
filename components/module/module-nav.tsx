@@ -68,7 +68,7 @@ function Resolved({
   return (
     <nav
       aria-label={`เมนู${group.label}`}
-      className={`tone-${group.id} flex flex-col gap-0.5 ${rail ? "items-center px-2 py-2.5" : "px-2.5 pt-3.5 pb-2.5"}`}
+      className={`tone-${group.id} flex shrink-0 grow flex-col gap-0.5 ${rail ? "items-center px-2 py-2.5" : "px-2.5 pt-3.5 pb-2.5"}`}
     >
       <Morph on={morph} name={`module-${group.id}`}>
         <div className={`flex items-center gap-2 ${rail ? "justify-center pb-1.5" : "pb-2.5 pl-2"}`}>
@@ -261,13 +261,21 @@ function SubGroup({
   );
 }
 
-/** สลับไปกลุ่มอื่นได้จากแถบข้างเลย — พากลับ Home โดยเปิดแผงของกลุ่มนั้นไว้ให้ */
+/**
+ * สลับไปกลุ่มอื่นได้จากแถบข้างเลย — พากลับ Home โดยเปิดแผงของกลุ่มนั้นไว้ให้
+ *
+ * `mt-auto` = ชิดท้ายแถบข้างที่สูงเต็มจอ (14 ต.ค. 2026) เมนูของกลุ่มอยู่บน ทางออกไปกลุ่มอื่นอยู่ล่าง
+ * แยกกันชัด · ในลิ้นชักมือถือที่สูงตามเนื้อหา `mt-auto` ไม่มีผลอะไร
+ */
 function OtherGroups({ current, rail }: { current: ModuleGroup; rail: boolean }) {
   const others = MODULES.filter((m) => m.id !== current.id);
 
   return (
-    <>
-      <div aria-hidden className={`my-2.5 h-px bg-line ${rail ? "w-7" : "mx-2"}`} />
+    <div className={`mt-auto flex flex-col gap-0.5 pt-4 ${rail ? "w-full items-center" : ""}`}>
+      <div aria-hidden className={`mb-2 h-px bg-line ${rail ? "w-7" : "mx-2"}`} />
+      {rail ? null : (
+        <p className="px-2.5 pb-1 text-10-5 font-semibold tracking-[0.06em] text-mut/80">กลุ่มงานอื่น</p>
+      )}
       {others.map((m) => (
         <Link
           key={m.id}
@@ -283,6 +291,6 @@ function OtherGroups({ current, rail }: { current: ModuleGroup; rail: boolean })
           {rail ? null : <span className="min-w-0 flex-1 truncate">{m.label}</span>}
         </Link>
       ))}
-    </>
+    </div>
   );
 }

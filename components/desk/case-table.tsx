@@ -9,9 +9,11 @@ import { ExportExcelButton } from "@/components/desk/export-button";
 import { NotifyModal } from "@/components/desk/notify-modal";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterChip, type FilterChipTone } from "@/components/ui/filter-chip";
 import { SearchField, Select, type SelectOption } from "@/components/ui/field";
 import { Pager } from "@/components/ui/pager";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SummaryBody, SummaryFooter, SummaryPanel } from "@/components/ui/summary-panel";
 import {
   UNASSIGNED,
   hasFilters,
@@ -51,6 +53,15 @@ const departmentFilterOptions: SelectOption[] = [
   { value: UNASSIGNED, label: "ยังไม่มอบหมาย" },
   ...deptOptions,
 ];
+
+/** สีของชิปกรองแต่ละสถานะ = สีของป้ายสถานะนั้นในตาราง (`statusMeta[].chip`) */
+const STATUS_TONE: Record<CaseStatus, FilterChipTone> = {
+  open: "new",
+  assigned: "live",
+  pending_review: "wait",
+  ready_to_close: "on",
+  closed: "done",
+};
 
 const pageSizeOptions: SelectOption[] = PAGE_SIZES.map((n) => ({
   value: String(n),
@@ -258,9 +269,16 @@ export function CaseTable({
 
   return (
     <div className="flex flex-col gap-3">
+      {/*
+        ตัวกรอง/ตาราง/แถบเลขหน้า = section เดียวใน `SummaryPanel` (13 ต.ค. 2569) — แบนอยู่บน
+        แผ่นเนื้อหา คั่นกันด้วยเส้นบาง ไม่มีการ์ดแยกชิ้น
+      */}
+      <SummaryPanel label="คิวคำร้อง">
       {showFilters ? (
-        <div className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2.5 px-(--sheet-px) pb-3.5">
+          {/* แถวบน = ช่องกรอก (ค้นหา · ผู้รับผิดชอบ) สูงเท่ากันด้วย `items-stretch` + การกระทำชิดขวา
+              · แถวล่าง = ชิปเปิด/ปิดทั้งหมด (สถานะ · เกิน SLA) — ของชนิดเดียวกันอยู่แถวเดียวกัน */}
+          <div className="flex flex-wrap items-stretch gap-2">
             <SearchField
               value={query}
               onChange={setQuery}
@@ -269,7 +287,7 @@ export function CaseTable({
               className="min-w-[220px] flex-1 sm:max-w-[320px]"
             />
 
-            <div className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3 py-1.5">
+            <div className="flex items-center gap-2 rounded-field border border-line bg-base-100 px-3.5 transition-colors hover:border-line-strong">
               <span className="flex-none text-12 text-mut">ผู้รับผิดชอบ</span>
               <Select
                 value={department}
@@ -279,15 +297,6 @@ export function CaseTable({
                 options={departmentFilterOptions}
               />
             </div>
-
-            <Chip
-              on={slaOnly}
-              onClick={() => setSlaOnly((v) => !v)}
-              tone="sla"
-              count={counts.sla}
-            >
-              เกิน SLA
-            </Chip>
 
             {/*
              * ส่งออก + ล้างตัวกรองอยู่ปลายแถวเดียวกัน — ทั้งคู่ทำกับ “ชุดที่กรองไว้
@@ -309,33 +318,42 @@ export function CaseTable({
 
           <div
             role="group"
-            aria-label="กรองตามสถานะ"
+            aria-label="กรองตามสถานะและ SLA"
             className="flex flex-wrap gap-1.5"
           >
-            <Chip
+            <FilterChip
+              label="ทั้งหมด"
               on={status === "all"}
               onClick={() => setStatus("all")}
               count={cases.length}
-            >
-              ทั้งหมด
-            </Chip>
+            />
             {STATUS_FLOW.map((s) => (
-              <Chip
+              <FilterChip
                 key={s}
+                label={statusMeta[s].short}
+                tone={STATUS_TONE[s]}
                 on={status === s}
                 onClick={() => setStatus(s)}
                 count={counts.by[s] ?? 0}
-              >
-                {statusMeta[s].short}
-              </Chip>
+              />
             ))}
+
+            {/* เกิน SLA กรองซ้อนกับสถานะได้ (ไม่ใช่ตัวเลือกเดียวกัน) — คั่นด้วยเส้นตั้งให้เห็นว่าเป็นอีกชุด */}
+            <span aria-hidden className="mx-1 w-px self-stretch bg-line max-sm:hidden" />
+            <FilterChip
+              label="เกิน SLA"
+              tone="sla"
+              on={slaOnly}
+              onClick={() => setSlaOnly((v) => !v)}
+              count={counts.sla}
+            />
           </div>
         </div>
       ) : null}
 
       {/* ── จอ ≥md: ตาราง 4 คอลัมน์ (ผู้แจ้งอยู่ในคอลัมน์ “เรื่อง”) ── */}
-      <div className="elev-card hidden overflow-x-auto rounded-box border border-line bg-base-100 md:block">
-        <table className="w-full min-w-[820px] border-collapse text-left">
+      <SummaryBody className="hidden overflow-x-auto md:block">
+        <table className="sheet-table w-full min-w-[820px] border-collapse text-left">
           <thead>
             <tr className="border-b border-line-strong bg-head text-11-5 tracking-[0.04em] text-mut">
               <Th className="w-[110px]">อายุคำร้อง</Th>
@@ -452,17 +470,17 @@ export function CaseTable({
             onClear={filtered ? clearFilters : undefined}
           />
         ) : null}
-      </div>
+      </SummaryBody>
 
-      {/* ── จอ <md: การ์ดแนวตั้ง ไม่ต้องเลื่อนแนวนอน ── */}
-      <div className="flex flex-col gap-2.5 md:hidden">
+      {/* ── จอ <md: รายการแนวตั้ง (แถวแบนคั่นเส้น ไม่ใช่การ์ด) ไม่ต้องเลื่อนแนวนอน ── */}
+      <SummaryBody className="divide-y divide-line md:hidden">
         {pageRows.map((c) => {
           const breached = isSlaBreached(c);
           return (
             <div
               key={c.trackingNo}
               onClick={() => open(c)}
-              className="card-lift group cursor-pointer rounded-box border border-line bg-base-100 p-3.5"
+              className="group cursor-pointer px-(--sheet-px) py-3.5 transition-colors hover:bg-base-200/60"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -511,7 +529,7 @@ export function CaseTable({
               </div>
 
               <div
-                className="mt-2.5 flex items-center border-t border-line pt-2.5"
+                className="mt-2 flex items-center"
                 onClick={(e) => e.stopPropagation()}
               >
                 <DeptCell
@@ -533,16 +551,14 @@ export function CaseTable({
         })}
 
         {!rows.length ? (
-          <div className="rounded-box border border-line bg-base-100">
-            <Empty
-              hint={filtered ? "ลองปรับคำค้นหรือล้างตัวกรอง" : emptyHint}
-              onClear={filtered ? clearFilters : undefined}
-            />
-          </div>
+          <Empty
+            hint={filtered ? "ลองปรับคำค้นหรือล้างตัวกรอง" : emptyHint}
+            onClear={filtered ? clearFilters : undefined}
+          />
         ) : null}
-      </div>
+      </SummaryBody>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+      <SummaryFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
         <p className="text-12 text-mut">
           {rows.length ? (
             <>
@@ -572,7 +588,8 @@ export function CaseTable({
 
           <Pager current={current} count={pageCount} onGo={setPage} />
         </div>
-      </div>
+      </SummaryFooter>
+      </SummaryPanel>
 
       {notifying ? (
         <NotifyModal
@@ -736,45 +753,5 @@ function Th({
     <th scope="col" className={`px-3.5 py-2.5 font-medium ${className}`}>
       {children}
     </th>
-  );
-}
-
-function Chip({
-  children,
-  on,
-  onClick,
-  tone = "ink",
-  count,
-}: {
-  children: React.ReactNode;
-  on: boolean;
-  onClick: () => void;
-  tone?: "ink" | "sla";
-  /** ตัวเลขบนชิป — แทนการ์ดสรุปที่เคยแสดงเลขชุดเดียวกันซ้ำอีกที่ */
-  count?: number;
-}) {
-  const onCls =
-    tone === "sla"
-      ? "border-sla bg-sla text-ink-content"
-      : "border-ink bg-ink text-ink-content";
-
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={`flex-none rounded-full border px-3 py-1.5 text-12-5 transition-colors ${
-        on
-          ? onCls
-          : "border-line bg-base-100 text-mut hover:border-ink/30 hover:text-ink"
-      }`}
-    >
-      {children}
-      {count !== undefined ? (
-        <span className={`ml-1.5 font-medium ${on ? "opacity-80" : "text-ink"}`}>
-          {count}
-        </span>
-      ) : null}
-    </button>
   );
 }

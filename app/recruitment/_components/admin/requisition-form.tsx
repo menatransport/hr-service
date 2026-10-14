@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, Sparkles } from "lucide-react";
 
 import { useDeskIdentity } from "@/components/auth/identity-provider";
 import {
@@ -16,7 +16,10 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction } from "@/lib/swal";
 import { todayInBangkok } from "@/lib/record-case-flow";
-import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
+import type {
+  RequisitionOptions,
+  VehicleOption,
+} from "@/app/recruitment/_lib/requisitions/options";
 import {
   CUSTOMERS,
   HIRE_TYPES,
@@ -42,6 +45,12 @@ import {
  * ความกว้าง + `tone="form"`) เพื่อให้ฟอร์มสองใบของระบบอ่านเป็นชุดเดียวกัน
  *
  * **ผู้แจ้งไม่ต้องกรอก** — มาจาก session และขึ้นบนหัวกล่องว่าจะแจ้งในนามใคร
+ *
+ * **ลำดับช่องตาม “แบบฟอร์มขอสรรหาพจส.ทดแทน” ของ mena-next-lb (ปรับ 14 ต.ค. 2026)**
+ * — เริ่มที่ “แทนใคร” แล้วฟอร์มเติมรถประจำของคนนั้น + ลูกค้า/ตำแหน่ง/แพล้นท์ที่อ่าน
+ * จาก `fleet` ของรถให้เอง (เติมเฉพาะช่องที่ว่างหรือที่ระบบเติมไว้รอบก่อน — ค่าที่คน
+ * เลือกเองไม่ถูกทับ) · ช่องเหตุผลที่ทดแทนของฟอร์มเดิม**ไม่เอากลับมา** (ถอดตามคำสั่ง
+ * 29 ก.ย. 2026) · ช่องรายละเอียดกับหมายเหตุรวมเหลือช่องเดียว
  */
 export function RequisitionForm({
   options,
@@ -66,7 +75,6 @@ export function RequisitionForm({
 
   const [hireType, setHireType] = useState<HireType>("replace");
   const [replaceDrivercode, setReplaceDrivercode] = useState("");
-  const [replaceReasonNote, setReplaceReasonNote] = useState("");
 
   const [vehicleCode, setVehicleCode] = useState("");
   const [trainerDrivercode, setTrainerDrivercode] = useState("");
@@ -82,9 +90,51 @@ export function RequisitionForm({
    */
   function switchHireType(next: HireType) {
     setHireType(next);
-    if (next === "new_rate") {
-      setReplaceDrivercode("");
-      setReplaceReasonNote("");
+    if (next === "new_rate") setReplaceDrivercode("");
+    else setHeadcount(1);
+  }
+
+  /**
+   * ค่าที่ระบบเติมรอบล่าสุด — เปลี่ยนคนหรือรถแล้วเติมใหม่ได้เฉพาะช่องที่ยังว่าง
+   * หรือยังถือค่าที่ระบบเติมไว้ ช่องที่คนเลือกเองไม่ถูกทับ
+   */
+  const auto = useRef({ customer: "", position: "", plant: "" });
+  const autoVehicle = useRef("");
+  const [autoFrom, setAutoFrom] = useState("");
+
+  function fillFromVehicle(v: VehicleOption | undefined) {
+    const next = {
+      customer: v?.customer ?? "",
+      position: v?.position ?? "",
+      plant: v?.plant ?? "",
+    };
+    const take = (cur: string, prev: string, val: string, set: (x: string) => void) => {
+      if (val && (!cur || cur === prev)) set(val);
+    };
+    take(customer, auto.current.customer, next.customer, setCustomer);
+    take(position, auto.current.position, next.position, setPosition);
+    take(plant, auto.current.plant, next.plant, setPlant);
+    auto.current = next;
+    setAutoFrom(v && (next.customer || next.position || next.plant) ? v.value : "");
+  }
+
+  function pickVehicle(value: string) {
+    setVehicleCode(value);
+    const v = options.vehicles.find((x) => x.value === value);
+    fillFromVehicle(v);
+  }
+
+
+  /** เลือกคนที่จะแทน → รถประจำของคนนั้นมาเอง (ถ้าช่องรถยังว่างหรือเป็นรถของคนก่อน) */
+  function pickReplace(code: string) {
+    setReplaceDrivercode(code);
+    const bound = options.drivers.find((d) => d.value === code)?.vehicle ?? "";
+    const v = bound
+      ? options.vehicles.find((x) => x.value === bound || x.plate === bound)
+      : undefined;
+    if (v && (!vehicleCode || vehicleCode === autoVehicle.current)) {
+      autoVehicle.current = v.value;
+      pickVehicle(v.value);
     }
   }
 
@@ -145,7 +195,7 @@ export function RequisitionForm({
                 headcount: count,
                 hireType,
                 replaceDrivercode,
-                replaceReasonNote: replaceReasonNote.trim(),
+                replaceReasonNote: "",
                 vehicleCode,
                 trainerDrivercode,
                 note: note.trim(),
@@ -175,10 +225,10 @@ export function RequisitionForm({
 
   return (
     <ModalShell
-      title="ขอสรรหาอัตราใหม่"
+      title="ขอสรรหา พจส."
       subtitle={`แจ้งในนาม ${me.name}${me.department ? ` · ${me.department}` : ""}`}
       onClose={onClose}
-      width="680px"
+      width="640px"
       tone="form"
       footer={
         <>
@@ -201,21 +251,89 @@ export function RequisitionForm({
         </>
       }
     >
-      <Section title="รายละเอียดอัตรา">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <DateField
-            id="rq-date"
-            label="วันที่แจ้งสรรหา"
-            value={requestedOn}
-            onChange={setRequestedOn}
+      <Section title="แทนใคร">
+        {/* สองตัวเลือกไม่ควรเป็นดรอปดาวน์ — มันซ่อนตัวเลือกที่เหลือทั้งที่มีแค่ตัวเดียว
+            และตัวนี้เป็นสวิตช์ที่คุมว่าอีกช่องจะโผล่ไหม ต้องเห็นสถานะตลอดเวลา */}
+        <div
+          role="group"
+          aria-label="ประเภทการรับ"
+          className="flex w-fit gap-1 rounded-full border border-line bg-base-100 p-1"
+        >
+          {HIRE_TYPES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => switchHireType(option.value)}
+              aria-pressed={hireType === option.value}
+              className={`cursor-pointer rounded-full px-3.5 py-1.5 text-12-5 transition-colors ${
+                hireType === option.value
+                  ? "bg-ink font-medium text-ink-content"
+                  : "text-mut hover:text-ink"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {hireType === "replace" ? (
+          <SelectField
+            id="rq-replace-who"
+            label="พจส. ที่จะแทน"
+            hint="เลือกแล้วระบบเติมรถ ลูกค้า ตำแหน่ง และแพล้นท์ให้"
+            placeholder="ค้นชื่อหรือรหัส พจส…"
+            value={replaceDrivercode}
+            onChange={pickReplace}
+            options={options.drivers}
+            searchable
+            searchPlaceholder="ค้นชื่อ รหัส หรือสาขา…"
           />
+        ) : (
+          <NumberField
+            id="rq-headcount"
+            label="จำนวนอัตรา"
+            hint="มากกว่า 1 จะสร้างคำขอแยกใบให้อัตโนมัติ ใบละหนึ่งอัตรา"
+            value={headcount}
+            onChange={setHeadcount}
+          />
+        )}
+      </Section>
+
+      <Section title="อัตรา">
+        {autoFrom ? (
+          <p className="-mb-1 flex items-center gap-1.5 text-12 text-primary">
+            <Sparkles size={14} aria-hidden />
+            เติมจากรถ {autoFrom} ให้แล้ว — แก้ได้
+          </p>
+        ) : null}
+        <div className="grid gap-4 sm:grid-cols-3">
           <SelectField
             id="rq-position"
             label="ตำแหน่ง"
-            placeholder="เลือกตำแหน่ง…"
+            placeholder="เลือก…"
             value={position}
             onChange={setPosition}
             options={POSITIONS.map((p) => ({ value: p.value, label: p.label }))}
+          />
+          <SelectField
+            id="rq-customer"
+            label="ลูกค้า"
+            placeholder="เลือก…"
+            value={customer}
+            onChange={setCustomer}
+            options={customerOptions}
+          />
+          {/* แพล้นท์มาจากที่ที่มีจริงในทะเบียนรถ แต่**พิมพ์เองได้** เพราะแพล้นท์
+              เปิดใหม่จะยังไม่มีรถประจำจนกว่า ETL จะ sync */}
+          <SelectField
+            id="rq-plant"
+            label="แพล้นท์"
+            placeholder="เลือก…"
+            value={plant}
+            onChange={setPlant}
+            options={plantOptions(options)}
+            searchable
+            searchPlaceholder="ค้นชื่อแพล้นท์…"
           />
           {position === OTHER ? (
             <TextField
@@ -223,37 +341,16 @@ export function RequisitionForm({
               label="ระบุตำแหน่ง"
               value={positionOther}
               onChange={setPositionOther}
-              className="sm:col-span-2"
+              className="sm:col-start-1"
             />
           ) : null}
-
-          <SelectField
-            id="rq-customer"
-            label="ลูกค้า"
-            placeholder="เลือกลูกค้า…"
-            value={customer}
-            onChange={setCustomer}
-            options={customerOptions}
-          />
-          {/* แพล้นท์มาจากที่ที่มีจริงในทะเบียนรถ แต่**พิมพ์เองได้** เพราะแพล้นท์
-              เปิดใหม่จะยังไม่มีรถประจำจนกว่า ETL จะ sync — ถ้าบังคับให้เลือก
-              จากรายการ คำขอของแพล้นท์ใหม่จะแจ้งไม่ได้เลย */}
-          <SelectField
-            id="rq-plant"
-            label="แพล้นท์"
-            placeholder="เลือกแพล้นท์…"
-            value={plant}
-            onChange={setPlant}
-            options={plantOptions(options)}
-            searchable
-            searchPlaceholder="ค้นชื่อแพล้นท์…"
-          />
           {customer === OTHER ? (
             <TextField
               id="rq-customer-other"
               label="ระบุชื่อลูกค้า"
               value={customerOther}
               onChange={setCustomerOther}
+              className="sm:col-start-2"
             />
           ) : null}
           {plant === OTHER ? (
@@ -262,96 +359,39 @@ export function RequisitionForm({
               label="ระบุชื่อแพล้นท์"
               value={plantOther}
               onChange={setPlantOther}
+              className="sm:col-start-3"
             />
           ) : null}
-
-          <NumberField
-            id="rq-headcount"
-            label="จำนวนอัตรา"
-            hint="มากกว่า 1 จะสร้างคำขอแยกใบให้อัตโนมัติ ใบละหนึ่งอัตรา"
-            value={headcount}
-            onChange={setHeadcount}
-            className="sm:col-span-2"
+          <DateField
+            id="rq-date"
+            label="วันที่แจ้งสรรหา"
+            value={requestedOn}
+            onChange={setRequestedOn}
+            className="sm:col-start-1"
           />
         </div>
       </Section>
 
-      <Section title="เหตุผลของอัตรานี้">
-        {/* สองตัวเลือกไม่ควรเป็นดรอปดาวน์ — มันซ่อนตัวเลือกที่เหลือทั้งที่มีแค่ตัวเดียว
-            และตัวนี้เป็นสวิตช์ที่คุมว่าอีกสองช่องจะโผล่ไหม ต้องเห็นสถานะตลอดเวลา */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-12-5 font-medium text-mut">
-            ประเภทการรับ
-            <span aria-hidden className="font-normal text-alert"> *</span>
-          </span>
-          <div
-            role="group"
-            aria-label="ประเภทการรับ"
-            className="flex w-fit gap-1 rounded-full border border-line bg-base-100 p-1"
-          >
-            {HIRE_TYPES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => switchHireType(option.value)}
-                aria-pressed={hireType === option.value}
-                className={`cursor-pointer rounded-full px-3.5 py-1.5 text-12-5 transition-colors ${
-                  hireType === option.value
-                    ? "bg-ink font-medium text-ink-content"
-                    : "text-mut hover:text-ink"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {hireType === "replace" ? (
-          <>
-            <SelectField
-              id="rq-replace-who"
-              label="พจส. ที่จะแทน"
-              placeholder="ค้นชื่อหรือรหัส พจส…"
-              value={replaceDrivercode}
-              onChange={setReplaceDrivercode}
-              options={options.drivers}
-              searchable
-              searchPlaceholder="ค้นชื่อ รหัส หรือสาขา…"
-            />
-            <TextareaField
-              id="rq-replace-note"
-              label="รายละเอียดเพิ่มเติม"
-              optional
-              rows={2}
-              value={replaceReasonNote}
-              onChange={setReplaceReasonNote}
-              placeholder="บริบทที่คนรับเรื่องต่อควรรู้ (ถ้ามี)"
-            />
-          </>
-        ) : null}
-      </Section>
-
       <Section title="รถและครูฝึก">
-        {/* เลือกรถทีเดียวได้ครบทั้งเลขรถ ทะเบียน และยี่ห้อ — ฟอร์มเดิมของระบบเก่า
-            ให้กรอกสามช่องแยกกัน ซึ่งพิมพ์ผิดแล้วไม่มีอะไรจับได้ */}
-        <SelectField
-          id="rq-vehicle"
-          label="รถที่จะให้ขับ"
-          optional
-          placeholder="ค้นเลขรถหรือทะเบียน…"
-          value={vehicleCode}
-          onChange={setVehicleCode}
-          options={options.vehicles}
-          searchable
-          clearable
-          searchPlaceholder="ค้นเลขรถ ทะเบียน หรือแพล้นท์…"
-        />
+        <div className="flex flex-col gap-1.5">
+          <SelectField
+            id="rq-vehicle"
+            label="เบอร์รถ"
+            optional
+            placeholder="ค้นเลขรถหรือทะเบียน…"
+            value={vehicleCode}
+            onChange={pickVehicle}
+            options={options.vehicles}
+            searchable
+            clearable
+            searchPlaceholder="ค้นเลขรถ ทะเบียน หรือแพล้นท์…"
+          />
+        </div>
         <SelectField
           id="rq-trainer"
           label="ครูฝึก"
           optional
-          hint="ระบุไว้ตั้งแต่ตอนแจ้ง แล้วจะไปขึ้นบนหน้าติดตามฝึกงานให้เองเมื่อผู้สมัครเริ่มฝึก — แก้ทีหลังได้ทั้งสองหน้า"
+          hint="จะไปขึ้นบนหน้าติดตามฝึกงานให้เองเมื่อผู้สมัครเริ่มฝึก"
           placeholder="ค้นชื่อหรือรหัส พจส…"
           value={trainerDrivercode}
           onChange={setTrainerDrivercode}
@@ -368,7 +408,7 @@ export function RequisitionForm({
           label="หมายเหตุ"
           srLabel
           optional
-          placeholder="ข้อมูลประกอบเพิ่มเติมของคำขอนี้"
+          placeholder="บริบทที่คนรับเรื่องต่อควรรู้ (ถ้ามี)"
           rows={2}
           value={note}
           onChange={setNote}

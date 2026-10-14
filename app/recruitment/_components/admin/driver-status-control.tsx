@@ -49,7 +49,32 @@ export function DriverStatusControl({
 
   useOverlayCount(menuOpen);
 
-  const resigned = !driver.active;
+  /** ไม่มีข้อมูลการทำงาน — ไม่ใช่ทั้งปฏิบัติงานและพ้นสภาพ จนกว่าฝ่ายบุคคลจะยืนยัน */
+  const noWork = driver.noWorkRecord;
+  const resigned = !driver.active && !noWork;
+  const label = noWork ? "ไม่มีข้อมูลงาน" : resigned ? "พ้นสภาพ" : "ปฏิบัติงาน";
+
+  /** ยืนยันว่ายังทำงานอยู่ — เก็บ `statusOverride: "active"` ไว้ ไม่งั้นจะกลับมาอยู่แท็บนี้อีก */
+  async function confirmWorking() {
+    const out = await runAction({
+      confirm: {
+        title: `ยืนยันว่า ${driver.name || driver.drivercode} ยังปฏิบัติงานอยู่?`,
+        text: "ระบบไม่พบข้อมูลการทำงานของคนนี้เลย ยืนยันแล้วจะย้ายกลับไปแท็บพนักงานปัจจุบัน",
+        confirmText: "ยืนยันว่ายังทำงาน",
+      },
+      pending: "กำลังบันทึก…",
+      success: "ยืนยันว่ายังปฏิบัติงานแล้ว",
+      failureTitle: "เปลี่ยนสถานะไม่สำเร็จ",
+      run: () =>
+        requestJson(
+          `/api/drivers/${encodeURIComponent(driver.drivercode)}/status`,
+          { method: "PUT", body: { status: "active", confirm: true } },
+          "เปลี่ยนสถานะไม่สำเร็จ",
+        ),
+    });
+
+    if (out.status === "done") router.refresh();
+  }
 
   /** กดกลับเป็นปฏิบัติงาน = ยกเลิกการบันทึกที่ผิด จึงถามให้ชัดว่าข้อมูลจะหาย */
   async function revertToActive() {
@@ -84,10 +109,12 @@ export function DriverStatusControl({
         className={`flex cursor-pointer items-center gap-0.5 rounded-selector px-1 py-0.5 text-11-5 transition-colors ${
           resigned
             ? "font-medium text-alert hover:bg-alert/10"
-            : "text-mut hover:bg-base-300/60 hover:text-ink"
+            : noWork
+              ? "font-medium text-sla hover:bg-sla/10"
+              : "text-mut hover:bg-base-300/60 hover:text-ink"
         }`}
       >
-        <span className="truncate">{resigned ? "พ้นสภาพ" : "ปฏิบัติงาน"}</span>
+        <span className="truncate">{label}</span>
         <ChevronDown size={11} strokeWidth={2.2} aria-hidden className="flex-none opacity-60" />
       </button>
     ) : (
@@ -100,7 +127,7 @@ export function DriverStatusControl({
         ) : (
           <UserRound size={15} strokeWidth={1.8} aria-hidden />
         )}
-        {resigned ? "พ้นสภาพ" : "ปฏิบัติงาน"}
+        {label}
         <ChevronDown size={14} strokeWidth={2} aria-hidden className="text-mut" />
       </button>
     );
@@ -121,14 +148,14 @@ export function DriverStatusControl({
             >
               <MenuItem
                 icon={UserRound}
-                active={!resigned}
+                active={!resigned && !noWork}
                 onClick={() => {
                   setMenuOpen(false);
-                  if (!resigned) return;
-                  void revertToActive();
+                  if (noWork) void confirmWorking();
+                  else if (resigned) void revertToActive();
                 }}
               >
-                ปฏิบัติงาน
+                {noWork ? "ยืนยันว่ายังปฏิบัติงาน" : "ปฏิบัติงาน"}
               </MenuItem>
 
               <MenuItem

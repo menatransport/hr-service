@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import ExcelJS from "exceljs";
 import { etlCol, hrCol } from "@/lib/db";
+import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { nextSeq } from "@/lib/db/counters";
 import { snapshotOf } from "./applications";
 import { EXIT_STATUS_CODES, workStatusFullLabel } from "./drivers/types";
@@ -620,13 +621,13 @@ function toIsoDateLoose(raw: unknown): string {
 }
 
 async function loadDriverLites(): Promise<DriverLite[]> {
-  const drivers = await hrCol("drivers");
-  const driverDocs = await drivers
-    .find(
-      {},
-      { projection: { drivercode: 1, driverName: 1, phone: 1, active: 1, statusOverride: 1 } },
-    )
-    .toArray();
+  const driverDocs = await readDrivers<{
+    drivercode?: unknown;
+    driverName?: unknown;
+    phone?: unknown;
+    active?: unknown;
+    statusOverride?: unknown;
+  }>(["drivercode", "driverName", "phone", "active", "statusOverride"]);
 
   const codes = [...new Set(driverDocs.map((d) => String(d.drivercode ?? "").trim()).filter(Boolean))];
 

@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
-import { Building2, MapPin, Users, X } from "lucide-react";
+import { Building2, ChevronRight, MapPin, Users, X } from "lucide-react";
 
-import { EmployeeCard } from "@/components/desk/employee-card";
+import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchField, Select } from "@/components/ui/field";
 import type { Employee } from "@/lib/types";
@@ -12,10 +13,13 @@ import type { Employee } from "@/lib/types";
  * สมุดรายชื่อพนักงาน — แถบเครื่องมือแถวเดียวชิดซ้าย ติดขอบบนตอนเลื่อน
  * แล้วรายชื่อจัดกลุ่มตามแผนกอยู่ใต้ลงมา
  *
+ * **รายชื่อเป็นแถวแบนคั่นเส้น ไม่ใช่บัตร** (13 ต.ค. 2026 · Bew) — ทั้งหน้าอยู่บนแผ่นเนื้อหา
+ * แผ่นเดียว ไม่มีการ์ด/เงายกข้อมูลขึ้น · บัตรพนักงานเหลือใบเดียวในหน้ารายคน (`EmployeeProfile`)
+ *
  * กรองทั้งหมดในเครื่อง ไม่ยิง API ซ้ำ — `/users` ส่งมาทั้งบริษัทในครั้งเดียวอยู่แล้ว
  * (ราว 140 คนหลังตัดคนที่พ้นสภาพออก) การกรองฝั่งเซิร์ฟเวอร์จะช้ากว่าและทำให้
  * พิมพ์แล้วผลกระตุก · `useDeferredValue` กันเฟรมตกตอนพิมพ์เร็ว ๆ — ช่องกรอก
- * อัปเดตทันที ส่วนตารางการ์ดตามมาทีหลังได้ ไม่มีใครสังเกต
+ * อัปเดตทันที ส่วนรายชื่อตามมาทีหลังได้ ไม่มีใครสังเกต
  *
  * กติกาที่ตกลงกันไว้แล้ว **อย่าเปลี่ยนโดยไม่ถาม**:
  * - ตัวกรองเป็น **dropdown ไม่ใช่ชิป** — 18 แผนกเรียงเป็นชิปกินพื้นที่เกือบครึ่งจอ
@@ -123,17 +127,18 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       {/**
        * แผงควบคุม — ติดใต้ topbar ตอนเลื่อน (เฉพาะ ≥lg)
        *
        * รายชื่อยาว 18 กลุ่ม เลื่อนลงไปแล้วอยากเปลี่ยนแผนกต้องไม่ต้องถีบกลับขึ้นบน
        * จอเล็กไม่ติด เพราะแถบพับเป็น 3 บรรทัด + topbar แล้วกินจอเกินครึ่ง
        *
-       * `-mx-8 px-8` ดันพื้น `bg-canvas` ให้กินเต็มรางซ้าย-ขวาของ `<main>`
-       * ไม่งั้นการ์ดจะโผล่ลอดข้างแถบตอนเลื่อน · `z-20` ต่ำกว่า topbar (`z-30`)
+       * `sheet-bleed` ให้แถบกินเต็มความกว้างแผ่น — ไม่งั้นแถวรายชื่อจะโผล่ลอดข้างแถบตอนเลื่อน
+       * · พื้นขาวโปร่ง 90% + เบลอ (เฉพาะตอนติดหัวจอ ≥lg) ไม่ใช่ขาวทึบ — แถบวางทับแสงที่หัวแผ่น
+       *   (`--sheet-glow`) ขาวทึบจะตัดแสงเป็นรอยต่อ · `z-20` ต่ำกว่า topbar (`z-30`)
        */}
-      <div className="flex flex-col gap-3 lg:sticky lg:top-(--shell-header-h) lg:z-20 lg:-mx-8 lg:bg-canvas lg:px-8 lg:pt-1 lg:pb-3">
+      <div className="sheet-bleed flex flex-col gap-3 border-b border-line px-(--sheet-px) pb-3 lg:sticky lg:top-(--shell-header-h) lg:z-20 lg:bg-base-100/90 lg:pt-1 lg:backdrop-blur-md">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
           <SearchField
             value={query}
@@ -166,7 +171,7 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line pb-3">
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           {/* live region ต้องไม่ถูก remount — `key` จึงอยู่ที่ span ชั้นใน
               ไม่ใช่ที่ <p> ไม่งั้น screen reader บางตัวจะไม่ประกาศผลลัพธ์ */}
           <p role="status" aria-live="polite" className="text-12-5 text-mut">
@@ -197,37 +202,67 @@ export function EmployeeDirectory({ employees }: { employees: Employee[] }) {
           onClear={clearFilters}
         />
       ) : (
-        <div className="flex flex-col gap-7">
+        <div className="sheet-bleed animate-fade-in">
           {groups.map((group) => (
-            <section key={group.department} className="flex flex-col gap-3.5">
-              <div className="flex items-center gap-2.5">
-                <Users
-                  size={16}
-                  strokeWidth={1.7}
-                  className="flex-none text-primary"
-                  aria-hidden
-                />
-                <h2 className="text-14 font-semibold">{group.department}</h2>
-                <span className="rounded-full bg-soft px-2 py-0.5 text-11-5 font-medium text-primary">
+            <section key={group.department} aria-label={group.department}>
+              {/* หัวกลุ่มเป็นแถบ teal อ่อน (`bg-soft`) — แยกแผนกด้วยพื้น ไม่ใช่การ์ด · ไม่ใช้ `bg-head`
+                  เข้มแบบหัวตาราง เพราะ 18 แผนกเป็นแถบเข้ม 18 เส้นจะหนักเกินไปสำหรับรายชื่อ */}
+              <div className="flex items-center gap-2.5 border-b border-primary/15 bg-soft px-(--sheet-px) py-2">
+                <Users size={15} strokeWidth={1.8} className="flex-none text-primary" aria-hidden />
+                <h2 className="text-13 font-semibold text-ink">{group.department}</h2>
+                <span className="rounded-full bg-primary px-2 py-px font-mono text-11 font-medium text-primary-content tabular-nums">
                   {group.employees.length}
                 </span>
-                <span aria-hidden className="h-px flex-1 bg-line" />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {group.employees.map((employee, index) => (
-                  <EmployeeCard
-                    key={employee.employeeId}
-                    employee={employee}
-                    index={index}
-                  />
+              <ul className="divide-y divide-line border-b border-line">
+                {group.employees.map((employee) => (
+                  <li key={employee.employeeId}>
+                    <EmployeeRow employee={employee} />
+                  </li>
                 ))}
-              </div>
+              </ul>
             </section>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * หนึ่งแถวในสมุดรายชื่อ — ทั้งแถวเป็นลิงก์ไป `/desk/employee/{รหัสพนักงาน}`
+ *
+ * จอกว้าง: ชื่อ+ตำแหน่ง · รหัส · ระดับ · สาขา · ลูกศร เรียงเป็นคอลัมน์ตรงกันทุกแผนก
+ * (grid คอลัมน์คงที่ ไม่ใช่ flex — แถวต่างแผนกจึงตรงแนวกันทั้งหน้า) · จอแคบเหลือชื่อกับรหัส
+ */
+function EmployeeRow({ employee }: { employee: Employee }) {
+  return (
+    <Link
+      href={`/desk/employee/${encodeURIComponent(employee.employeeId)}`}
+      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-(--sheet-px) py-2.5 transition-colors hover:bg-base-200/60 sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_1rem]"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <Avatar name={employee.name} src={employee.imageUrl} size="md" />
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-13-5 font-medium transition-colors group-hover:text-primary">
+            {employee.name}
+          </span>
+          <span className="truncate text-12 text-mut">{employee.position}</span>
+        </span>
+      </span>
+      <span className="font-mono text-12 tracking-[0.02em] text-mut tabular-nums">
+        {employee.employeeId}
+      </span>
+      <span className="truncate text-12 text-mut max-sm:hidden">{employee.levelLabel}</span>
+      <span className="truncate text-12 text-mut max-sm:hidden">{employee.site}</span>
+      <ChevronRight
+        size={15}
+        strokeWidth={1.8}
+        aria-hidden
+        className="text-mut transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary max-sm:hidden"
+      />
+    </Link>
   );
 }
 
@@ -303,7 +338,6 @@ function EmptyResult({
       bubble="หาไม่เจอเลย…"
       onClear={onClear}
       clearLabel="ล้างตัวกรองทั้งหมด"
-      className="rounded-box border border-dashed border-line bg-base-100"
     />
   );
 }

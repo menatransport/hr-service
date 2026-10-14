@@ -40,7 +40,7 @@ export function DriverAvatar({
    * คนที่พ้นสภาพได้วงรูปโทนแดง — อ่านออกได้จากตัวข้อมูลเอง ไม่ต้องให้หน้าที่เรียกส่งธงมา
    * · ทำให้แคปหน้าจอส่งต่อก็ยังอ่านออกว่าคนนี้ไม่ได้อยู่แล้ว โดยไม่ต้องมีแท็บติดไปด้วย
    */
-  const tone = driver.active ? "default" : "alert";
+  const tone = driver.active || driver.noWorkRecord ? "default" : "alert";
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [picked, setPicked] = useState<File | null>(null);

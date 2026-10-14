@@ -242,14 +242,14 @@ export function ResignReasonsView({ initial }: { initial: ResignMaster }) {
           <section
             key={c.id}
             id={`cat-${c.prefix}`}
-            className="scroll-mt-20 overflow-hidden rounded-box border border-line bg-base-100 elev-card"
+            className="sheet-bleed scroll-mt-20 border-y border-line"
           >
-            <header className="flex flex-wrap items-center gap-3 border-b border-line-strong bg-head px-4 py-3">
+            <header className="flex flex-wrap items-center gap-3 border-b border-line-strong bg-head px-(--sheet-px) py-3">
               <span className="flex size-9 flex-none items-center justify-center rounded-field bg-base-100 font-mono text-15 font-semibold text-primary">
                 {c.prefix}
               </span>
               <div className="flex min-w-0 flex-1 flex-col">
-                <h3 className="text-14 font-semibold text-white">{c.label}</h3>
+                <h3 className="text-14 font-semibold text-ink">{c.label}</h3>
                 <p className="text-11-5 text-mut">
                   {all.length} รหัส · ค่าตั้งต้น{" "}
                   {EXIT_TYPES.find((t) => t.value === c.exitType)?.label}
@@ -283,7 +283,7 @@ export function ResignReasonsView({ initial }: { initial: ResignMaster }) {
                 {rows.map((r) => (
                   <li
                     key={r.id}
-                    className={`group grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2.5 transition-colors hover:bg-base-200/50 sm:grid-cols-[3.25rem_minmax(0,1fr)_7.5rem_auto] ${
+                    className={`group grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-(--sheet-px) py-2.5 transition-colors hover:bg-base-200/50 sm:grid-cols-[3.25rem_minmax(0,1fr)_7.5rem_auto] ${
                       r.active ? "" : "opacity-55"
                     }`}
                   >
@@ -345,13 +345,13 @@ export function ResignReasonsView({ initial }: { initial: ResignMaster }) {
       })}
 
       {filtering && !reasons.some(visible) ? (
-        <p className="rounded-box border border-dashed border-line bg-base-100 px-4 py-10 text-center text-13 text-mut">
+        <p className="px-4 py-10 text-center text-13 text-mut">
           ไม่พบรหัสที่ตรงกับ “{q || "ตัวกรอง"}”
         </p>
       ) : null}
 
       {!categories.length ? (
-        <p className="rounded-box border border-dashed border-line bg-base-100 px-4 py-10 text-center text-13 text-mut text-pretty">
+        <p className="px-4 py-10 text-center text-13 text-mut text-pretty">
           ยังไม่มีหมวดเลย — กด “เพิ่มหมวด” หรือรัน <code className="font-mono">node seed_resign_reasons.mjs</code>{" "}
           เพื่อใส่ชุดตั้งต้นจากไฟล์ Reason Code Master ของทีม OPS
         </p>

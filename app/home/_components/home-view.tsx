@@ -52,7 +52,7 @@ function badgeCount(badge: HomeBadge): string {
 }
 
 /** ทางลัดใต้ช่องค้นหา (ชิปกระจก) — เมนูที่ใช้บ่อยที่สุด อ้างด้วย id ใน `lib/modules.ts` */
-const QUICK_IDS = ["cases", "record-cases", "requisitions", "trainees", "employee"];
+const QUICK_IDS = ["cases", "requisitions", "trainees", "registry", "employee"];
 
 /** ทุกเมนูที่เปิดได้จริง — เมนูที่มี subgroup แตกเป็นลูกแต่ละตัว (`parent` = หัวข้อ) */
 type Entry = { group: ModuleGroup; item: ModuleItem; parent?: ModuleItem };
@@ -284,7 +284,7 @@ function MenuTile({ item }: { item: ModuleItem }) {
 }
 
 /**
- * เมนูที่มี subgroup (เช่น Pay Roll) — หัวข้อเป็นปุ่มพับ/กาง ลูกเรียงใต้เส้นประสีกลุ่มที่ลากลง
+ * เมนูที่มี subgroup (เช่น ค่าจ้างและสวัสดิการ) — หัวข้อเป็นปุ่มพับ/กาง ลูกเรียงใต้เส้นประสีกลุ่มที่ลากลง
  * จากกึ่งกลางไอคอนหัวข้อ · กางไว้ตั้งแต่แรก (การ์ดยังมีที่พอ) · ลูกแต่ละตัวห่อ
  * `<ViewTransition name="menu-<child.id>">` ให้บินไปเป็นแถวลูกในแถบข้างได้เหมือนเมนูปกติ
  *
