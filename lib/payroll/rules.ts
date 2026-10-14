@@ -1,0 +1,230 @@
+import { classify, postedColumns } from "./classify";
+import { headerLetter, normalizeHeader, type ParsedFile } from "./parse";
+import { templateOf } from "./template-spec";
+
+/**
+ * ด่าน 1 — ระบบตรวจไฟล์ให้ก่อนที่ HR จะมาตรวจ
+ *
+ * **`status` สำคัญเท่า `severity`** — `"pending"` คือกฎที่เรารู้ว่าต้องตรวจ แต่ยังไม่มี
+ * คำตอบจากฝ่ายที่เป็นเจ้าของกติกา (ความหมายรหัสวัน 14 ตัว · ทิศทางเงิน 4 รายการ ·
+ * Tiger Soft รับช่องรวมหรือช่องย่อย) กฎพวกนี้ **ขึ้นบนจอได้แต่บล็อกใครไม่ได้**
+ * เพราะเดาแล้วบล็อกคือหยุดเงินเดือนด้วยกติกาที่เราแต่งขึ้นเอง และเดาแล้วปล่อยคือ
+ * จ่ายผิดโดยไม่มีใครรู้ · `blocking` จึงเป็น `severity === "error" && status === "active"`
+ * เท่านั้น และคำนวณที่นี่ที่เดียว อย่าคำนวณซ้ำในคอมโพเนนต์
+ */
+export type CheckSeverity = "error" | "warn" | "info";
+export type CheckStatus = "active" | "pending";
+
+export interface CheckResult {
+  /** คีย์คงที่สำหรับอ้างอิงในเทสต์และในบันทึก — ไม่ใช่ข้อความบนจอ */
+  id: string;
+  severity: CheckSeverity;
+  status: CheckStatus;
+  title: string;
+  detail: string;
+  /** เลขแถวในไฟล์ที่เป็นต้นเหตุ — ว่างคือเป็นเรื่องของทั้งไฟล์ */
+  rows?: string[];
+  blocking: boolean;
+}
+
+export interface CheckTally {
+  errors: number;
+  warnings: number;
+  pending: number;
+  blocking: number;
+}
+
+const ROW_LIMIT = 20;
+
+const make = (
+  r: Omit<CheckResult, "blocking">,
+): CheckResult => ({ ...r, blocking: r.severity === "error" && r.status === "active" });
+
+export function summarize(results: CheckResult[]): CheckTally {
+  return {
+    errors: results.filter((r) => r.severity === "error").length,
+    warnings: results.filter((r) => r.severity === "warn").length,
+    pending: results.filter((r) => r.status === "pending").length,
+    blocking: results.filter((r) => r.blocking).length,
+  };
+}
+
+const numberOf = (value: string): number | null => {
+  const cleaned = value.replace(/,/g, "").replace(/\s/g, "").replace(/฿/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+};
+
+export function runChecks(itemId: string, parsed: ParsedFile): CheckResult[] {
+  const spec = templateOf(itemId);
+  const cls = classify(itemId);
+  if (!spec || !cls) {
+    return [
+      make({
+        id: "item.unknown",
+        severity: "error",
+        status: "active",
+        title: "ไม่รู้จักรายการนี้",
+        detail: `รายการ #${itemId} ไม่มีในทะเบียนรับข้อมูล — ตรวจว่าเลือกรายการถูกช่องหรือไม่`,
+      }),
+    ];
+  }
+
+  const out: CheckResult[] = [];
+  const { profile, rows } = parsed;
+  const rowNo = (i: number) => String(profile.headerRow + 1 + i);
+
+  /* ── ไฟล์เปล่า ───────────────────────────────────────────────── */
+  if (rows.length === 0) {
+    out.push(
+      make({
+        id: "file.empty",
+        severity: "error",
+        status: "active",
+        title: "ไฟล์ไม่มีแถวข้อมูล",
+        detail: `อ่านชีต "${profile.sheetName}" แล้วไม่พบแถวใต้หัวตารางเลย — ส่งไฟล์ที่กรอกข้อมูลแล้ว`,
+      }),
+    );
+    return out;
+  }
+
+  /* ── หัวคอลัมน์ตรงสเปกไหม ─────────────────────────────────────── */
+  const have = new Set(profile.columns.map((c) => normalizeHeader(c.header)));
+  const missing = spec.columns.filter((c) => !have.has(normalizeHeader(c)));
+  if (missing.length) {
+    out.push(
+      make({
+        id: "columns.missing",
+        severity: "error",
+        status: spec.confirmed ? "active" : "pending",
+        title: `ขาดคอลัมน์ ${missing.length} ช่อง`,
+        detail: spec.confirmed
+          ? `ไฟล์นี้ต้องมีช่อง ${missing.join(" · ")} — ดาวน์โหลดแบบฟอร์มจากระบบแล้วกรอกบนฟอร์มนั้น`
+          : `แบบฟอร์มของรายการนี้ยังเป็นร่าง (${spec.source}) จึงยังเทียบคอลัมน์แบบบังคับไม่ได้ — ช่องที่ยังไม่พบคือ ${missing.join(" · ")}`,
+      }),
+    );
+  }
+
+  const extra = profile.columns
+    .filter((c) => c.header.trim() && !spec.columns.some((s) => normalizeHeader(s) === normalizeHeader(c.header)))
+    .map((c) => c.header.trim());
+  if (extra.length) {
+    out.push(
+      make({
+        id: "columns.extra",
+        severity: "warn",
+        status: "active",
+        title: `มีคอลัมน์เกินจากแบบฟอร์ม ${extra.length} ช่อง`,
+        detail: `ช่องที่ไม่อยู่ในแบบฟอร์ม: ${extra.slice(0, 8).join(" · ")}${extra.length > 8 ? " …" : ""} — ระบบไม่อ่านช่องพวกนี้ ถ้าเป็นข้อมูลที่ต้องใช้ต้องแจ้งก่อน`,
+      }),
+    );
+  }
+
+  /* ── เงินเข้าใคร ──────────────────────────────────────────────── */
+  const payeeLetter = headerLetter(profile, cls.payeeColumn);
+  if (!payeeLetter) {
+    out.push(
+      make({
+        id: "payee.column-missing",
+        severity: "error",
+        status: "active",
+        title: `ไม่พบช่อง ${cls.payeeColumn}`,
+        detail: `รายการนี้จับคู่คนที่ได้เงินด้วยช่อง "${cls.payeeColumn}" — ไม่มีช่องนี้ก็ไม่รู้ว่าเงินเข้าใคร`,
+      }),
+    );
+  } else {
+    const blank = rows.map((r, i) => (r[payeeLetter]?.trim() ? null : rowNo(i))).filter(Boolean) as string[];
+    if (blank.length) {
+      out.push(
+        make({
+          id: "payee.blank",
+          severity: "error",
+          status: "active",
+          title: `ช่อง ${cls.payeeColumn} ว่าง ${blank.length} แถว`,
+          detail: `ช่องอื่นว่างได้ (แปลว่าคนนั้นไม่มีรายการนั้น) แต่ "${cls.payeeColumn}" ว่างแปลว่าเงินก้อนนั้นไม่รู้จะเข้าใคร`,
+          rows: blank.slice(0, ROW_LIMIT),
+        }),
+      );
+    }
+
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const key = row[payeeLetter]?.trim();
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const dup = [...counts.entries()].filter(([, n]) => n > 1);
+    if (dup.length) {
+      out.push(
+        make({
+          id: "payee.duplicate",
+          severity: "warn",
+          status: "active",
+          title: `มีรหัสซ้ำ ${dup.length} รหัส`,
+          detail: `${dup.slice(0, 5).map(([k, n]) => `${k} (${n} แถว)`).join(" · ")}${dup.length > 5 ? " …" : ""} — ซ้ำได้ถ้าคนเดียวมีหลายรายการจริง แต่ถ้าเป็นการกรอกซ้ำ เงินจะเข้าสองครั้ง`,
+        }),
+      );
+    }
+  }
+
+  /* ── ช่องเงิน ─────────────────────────────────────────────────── */
+  for (const { column, effect } of postedColumns(itemId)) {
+    const letter = headerLetter(profile, column);
+    if (!letter) continue;
+
+    const values = rows.map((r, i) => ({ raw: r[letter]?.trim() ?? "", at: rowNo(i) }));
+    const filled = values.filter((v) => v.raw);
+
+    if (filled.length === 0) {
+      out.push(
+        make({
+          id: "money.all-blank",
+          severity: "warn",
+          status: "active",
+          title: `ช่อง ${column} ว่างทั้งคอลัมน์`,
+          detail: "ถ้าเดือนนี้ไม่มีรายการจริงก็ถูกแล้ว — ยืนยันกับผู้ส่งสักครั้งก่อนรับเข้ารอบ",
+        }),
+      );
+      continue;
+    }
+
+    const notNumber = filled.filter((v) => numberOf(v.raw) === null);
+    if (notNumber.length) {
+      out.push(
+        make({
+          id: "money.not-number",
+          severity: "error",
+          status: "active",
+          title: `ช่อง ${column} มีค่าที่ไม่ใช่ตัวเลข ${notNumber.length} แถว`,
+          detail: `ค่าตัวอย่าง: ${notNumber.slice(0, 3).map((v) => `"${v.raw}"`).join(" · ")} — ช่องเงินต้องเป็นตัวเลขล้วน ไม่ใส่หน่วยหรือหมายเหตุ`,
+          rows: notNumber.slice(0, ROW_LIMIT).map((v) => v.at),
+        }),
+      );
+    }
+
+    /* **เครื่องหมายตรวจได้เฉพาะช่องที่ยืนยันทิศทางเงินแล้ว** — ช่องที่ยัง "รอยืนยัน"
+       ไปโผล่ในกฎ pending ของงานที่ 5 ไม่ใช่ที่นี่ */
+    if (effect === "เพิ่ม" || effect === "หัก") {
+      const wrongSign = filled
+        .map((v) => ({ ...v, n: numberOf(v.raw) }))
+        .filter((v) => v.n !== null && v.n < 0);
+      if (wrongSign.length) {
+        out.push(
+          make({
+            id: "money.negative",
+            severity: "error",
+            status: "active",
+            title: `ช่อง ${column} มีค่าติดลบ ${wrongSign.length} แถว`,
+            detail:
+              effect === "เพิ่ม"
+                ? `"${column}" เป็นเงินเพิ่ม ค่าติดลบแปลว่ากรอกผิดช่อง — ถ้าต้องการหักเงินให้ใช้ช่องหักของรายการนั้น`
+                : `"${column}" เป็นเงินหักอยู่แล้ว กรอกเป็นจำนวนบวก ไม่ต้องใส่เครื่องหมายลบ ไม่งั้นจะกลายเป็นจ่ายเพิ่ม`,
+            rows: wrongSign.slice(0, ROW_LIMIT).map((v) => v.at),
+          }),
+        );
+      }
+    }
+  }
+
+  return out;
+}
