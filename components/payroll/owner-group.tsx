@@ -13,7 +13,7 @@ import {
   type IntakeRecord,
 } from "@/lib/payroll/intake-status";
 import { kindOf, type ItemKind } from "@/lib/payroll/classify";
-import type { IntakeItem, IntakeOwner } from "@/lib/payroll/registry";
+import type { IntakeCategory, IntakeItem, IntakeOwner } from "@/lib/payroll/registry";
 import { dueDaysOf } from "@/lib/payroll/registry";
 import type { PeriodRef } from "@/lib/payroll/period";
 
@@ -26,6 +26,10 @@ import type { PeriodRef } from "@/lib/payroll/period";
  *
  * **หัวกล่องบอกจำนวนที่ต้องตามก่อนบอกความคืบหน้า** — คนเปิดหน้านี้มาหาว่า
  * “เหลือตามใครบ้าง” ไม่ได้มาหาว่า “ทำไปกี่เปอร์เซ็นต์แล้ว”
+ *
+ * **ข้างในแบ่งเป็นหมวดอีกชั้น** — ฝ่ายจัดส่งมี 12 รายการซึ่งเกินกว่าที่คนจะกวาดตา
+ * เป็นรายชิ้นได้ และของจริงที่คนคุยกันคือก้อน ("ค่าล่วงเวลาสี่ลูกค้ายังไม่มาเลย")
+ * ไม่ใช่รายชิ้น · ฝ่ายที่มีหมวดเดียวจะไม่มีหัวหมวดมาคั่นให้รำคาญ (ผู้ใช้สั่ง 14 ต.ค. 2569)
  */
 export function OwnerGroup({
   owner,
@@ -69,6 +73,16 @@ export function OwnerGroup({
     if (la !== lb) return lb - la;
     return a.id.localeCompare(b.id);
   });
+
+  /* หมวดเรียงตามชิ้นที่ด่วนที่สุดในหมวดนั้น ไม่ใช่ตามลำดับหมวดในทะเบียน — หมวดที่มีของ
+     ค้างนานสุดจึงอยู่บนสุดเหมือนกับที่รายชิ้นเรียงอยู่ และของในหมวดคงลำดับความด่วนเดิม */
+  const byCategory = new Map<IntakeCategory, IntakeItem[]>();
+  for (const item of sorted) {
+    const bucket = byCategory.get(item.category);
+    if (bucket) bucket.push(item);
+    else byCategory.set(item.category, [item]);
+  }
+  const groups = [...byCategory].map(([category, items]) => ({ category, items }));
 
   return (
     <section
@@ -122,7 +136,20 @@ export function OwnerGroup({
 
       {open ? (
         <ul className="border-t border-line">
-          {sorted.map((item) => {
+          {groups.map((group) => (
+            <li key={group.category}>
+              {/* ฝ่ายที่มีหมวดเดียว ไม่ต้องมีหัวหมวดมาคั่น — มันไม่ได้แยกอะไรออกจากอะไร */}
+              {groups.length > 1 ? (
+                <GroupHead
+                  category={group.category}
+                  items={group.items}
+                  period={period}
+                  records={records}
+                  now={now}
+                />
+              ) : null}
+              <ul>
+          {group.items.map((item) => {
             const record = records.get(item.id) ?? emptyRecord(item.id);
             const late = lateDays(item, period, record, now);
             const chase = needsChasing(item, period, record, now);
@@ -210,9 +237,53 @@ export function OwnerGroup({
               </li>
             );
           })}
+              </ul>
+            </li>
+          ))}
         </ul>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * หัวหมวดในกล่องฝ่าย — **นับของที่ต้องตามในหมวดนั้นด้วย** ไม่ใช่บอกแค่ชื่อหมวด
+ * เพราะเหตุผลเดียวที่หัวหมวดมีค่าคือทำให้ตอบได้ทันทีว่า "ค่าล่วงเวลายังค้างทั้งก้อน"
+ * หรือ "ค้างชิ้นเดียว" โดยไม่ต้องไล่นับแถวเอง
+ */
+function GroupHead({
+  category,
+  items,
+  period,
+  records,
+  now,
+}: {
+  category: IntakeCategory;
+  items: IntakeItem[];
+  period: PeriodRef;
+  records: Map<string, IntakeRecord>;
+  now: Date;
+}) {
+  const sum = tallyOwner(items, period, records, now);
+
+  return (
+    <div className="flex items-center gap-x-2.5 gap-y-1 border-b border-line/60 bg-base-200/35 px-4 py-1.5">
+      <h3 className="text-12 font-semibold text-mut">{category}</h3>
+      <span className="font-mono text-11-5 text-mut tabular-nums">{items.length} รายการ</span>
+      {sum.chasing > 0 ? (
+        <span className="font-mono text-11-5 font-medium text-sla tabular-nums">
+          ต้องตาม {sum.chasing}
+        </span>
+      ) : null}
+      {sum.awaitingReview > 0 ? (
+        <span className="font-mono text-11-5 font-medium text-warning tabular-nums">
+          รอตรวจ {sum.awaitingReview}
+        </span>
+      ) : null}
+      {sum.passed === sum.total ? (
+        <span className="font-mono text-11-5 text-primary tabular-nums">ผ่านครบ</span>
+      ) : null}
+    </div>
   );
 }
 
