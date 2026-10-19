@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const, react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 "use client"
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"

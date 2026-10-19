@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect, react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 "use client"
 
 import React, { useEffect, useState, useCallback } from "react"

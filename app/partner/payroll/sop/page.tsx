@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 "use client"
 
 import Link from "next/link"

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 /**
  * เฟส 1 payroll: สรุปค่าเที่ยว + กระทบยอดเชื้อเพลิง ต่อ พขร. ต่อเดือน
  * แหล่งข้อมูล: mena-bi.driverCost (ระดับใบ LDT, sync จาก ATMS) — cluster เดียวกับแอป

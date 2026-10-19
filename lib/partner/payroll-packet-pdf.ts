@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 import "server-only"
 import type { Db } from "mongodb"
 import { prevMonth } from "@/lib/partner/utils"

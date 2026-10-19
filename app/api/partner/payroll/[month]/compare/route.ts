@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 import { NextRequest, NextResponse } from "next/server"
 import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 
