@@ -1,4 +1,4 @@
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 import { PARTNER } from "@/lib/db/registry.mjs"
 
 /**

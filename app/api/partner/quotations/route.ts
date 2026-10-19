@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { QUOTE_COLL, nextQuotationNo, type QuoteStatus } from "@/lib/partner/quotation"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)

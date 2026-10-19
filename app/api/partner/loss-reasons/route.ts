@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { LOSS_COLL, listLossReasons, seedLossReasons } from "@/lib/partner/loss-reason"
 import { ObjectId } from "mongodb"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** master เหตุผลที่ดีลหลุด — ทุกคนที่ล็อกอินอ่านได้ แก้ได้เฉพาะ admin */

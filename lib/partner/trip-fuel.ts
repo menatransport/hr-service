@@ -13,7 +13,8 @@
  */
 import "server-only"
 import { normPlate } from "@/lib/partner/promo-usage"
-import { partnerColOf, biCol, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
+import { biCol } from "@/lib/db/partner"
 import { PARTNER } from "@/lib/db/registry.mjs"
 
 export const TF_COLL = PARTNER.tripFuelMonthly

@@ -3,7 +3,8 @@ import { ObjectId } from "mongodb"
 import { renderPdfmake } from "@/lib/partner/pdfmake-printer"
 import { quotationDocDef } from "@/lib/partner/quotation-pdf"
 import { QUOTE_COLL, type Quotation } from "@/lib/partner/quotation"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 30

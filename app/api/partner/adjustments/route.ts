@@ -3,7 +3,8 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { calculatePayrollEntry } from "@/lib/partner/payroll-engine"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** GET /api/adjustments?month=YYYY-MM — list all adjustments for a month */

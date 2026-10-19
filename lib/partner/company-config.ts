@@ -1,4 +1,4 @@
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * ข้อมูลบริษัท + ผู้ลงนาม ที่ใช้พิมพ์บนสัญญาทุกชนิด — แก้ผ่านหน้า master (/admin/company)

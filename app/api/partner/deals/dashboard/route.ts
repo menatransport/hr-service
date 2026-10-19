@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { buildDashboard, type MetricDeal, type HistoryRow } from "@/lib/partner/deal-metrics"
 import { DEAL_COLL, HISTORY_COLL } from "@/lib/partner/deal-actions"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /** ตัวเลขแดชบอร์ดไปป์ไลน์ — กรองด้วย ?from=&to=&sales=&source= */
 export async function GET(req: NextRequest) {

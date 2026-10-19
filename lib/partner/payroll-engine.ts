@@ -1,7 +1,7 @@
 import { nextMonth, prevMonth } from "@/lib/partner/utils"
 import { getInsuranceDeductionForPlate } from "@/lib/partner/insurance-tax"
 import { getLedgerDeductions } from "@/lib/partner/driver-ledger"
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 export interface PayrollResult {
   contractCode: string

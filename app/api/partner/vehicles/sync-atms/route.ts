@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { partnerDb, partnerColOf, atmsCol } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb, atmsCol } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 /** ค่าจาก ATMS ที่ถือว่า "ว่าง" — pandas export ทิ้ง "nan"/"-" ไว้ */
 function clean(v: unknown): string {

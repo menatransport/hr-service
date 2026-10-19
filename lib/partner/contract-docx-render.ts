@@ -13,7 +13,8 @@ import { getCompanyVersion } from "@/lib/partner/company-config"
 import type { Contract } from "@/lib/partner/types"
 import { DOCX_TEMPLATES, normPlate, type DocxType, type PromoMasterData } from "@/lib/partner/contract-docx"
 import { appendDocxAttachments } from "@/lib/partner/docx-attachments"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export async function renderContractDocx(
   id: string,

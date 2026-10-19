@@ -4,7 +4,8 @@ import { QUOTE_COLL } from "@/lib/partner/quotation"
 import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm } from "@/lib/partner/rbac"
 import { buildSalesCommission, type CommissionQuote } from "@/lib/partner/commission"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * GET /api/quotations/commission — สรุปยอดขาย + ค่าคอมรายคน

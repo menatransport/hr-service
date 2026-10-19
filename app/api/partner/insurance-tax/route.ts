@@ -8,7 +8,8 @@ import {
   type ItemType,
   type InsuranceItem,
 } from "@/lib/partner/insurance-tax"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type ItemStatus = "active" | "expiring" | "expired" | "none"
 const WORST_RANK: Record<ItemStatus, number> = { none: 0, active: 1, expiring: 2, expired: 3 }

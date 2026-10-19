@@ -3,7 +3,8 @@ import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { normPlateIT } from "@/lib/partner/insurance-tax"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 

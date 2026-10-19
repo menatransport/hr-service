@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 const HEADERS: { key: string; label: string }[] = [
   { key: "staffCode",    label: "รหัสพนักงาน" },
   { key: "firstName",   label: "ชื่อ" },

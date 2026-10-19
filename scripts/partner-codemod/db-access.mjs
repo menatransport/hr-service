@@ -56,7 +56,9 @@ export function rewriteDbAccess(file, src, exported) {
   src = src.replace(/\bclient\.db\(ATMS_DB\)\.collection\(ATMS_COLL\)/g, 'await atmsCol("vehicleMaster")')
 
   // client → PartnerDb
-  src = src.replace(/^\s*const \{ default: clientPromise \} = await import\("@\/lib\/partner\/mongo"\)\n/gm, "")
+  // import แบบ lazy ของเดิม (โมดูลที่ฝั่ง client ใช้ด้วย) — คง lazy ไว้ ไม่ดึง driver เข้าบันเดิล browser
+  const lazy = /await import\("@\/lib\/partner\/mongo"\)/.test(src)
+  src = src.replace(/^(\s*)const \{ default: clientPromise \} = await import\("@\/lib\/partner\/mongo"\)\n/gm, '$1const { partnerDb } = await import("@/lib/db/partner")\n')
   src = src.replace(/^import\s+clientPromise(?:\s*,\s*\{\s*PARTNER_DB\s*\})?\s+from\s+"@\/lib\/partner\/mongo"\n/m, "")
   src = src.replace(/^import\s+\{\s*PARTNER_DB\s*\}\s+from\s+"@\/lib\/partner\/mongo"\n/m, "")
   src = src.replace(/^const DB\s*=\s*PARTNER_DB\s*\n/m, "")
@@ -111,9 +113,13 @@ export function rewriteDbAccess(file, src, exported) {
   const names = ["partnerDb", "partnerCol", "partnerColOf", "biCol", "atmsCol"].filter((n) => new RegExp(String.raw`\b${n}\(`).test(src) || new RegExp(String.raw`\b${n}[<(]`).test(src))
   if (/\bPartnerDb\b/.test(src)) names.push("type PartnerDb")
   if (/\bAnyDoc\b/.test(src)) names.push("type AnyDoc")
-  src = src.replace(/^import \{[^}]*\} from "@\/lib\/db\/partner"\n/gm, "") // รันซ้ำได้ — สร้างบรรทัด import ใหม่ทุกครั้ง
+  src = src.replace(/^import \{[^}]*\} from "@\/lib\/db\/partner(?:-col)?"\n/gm, "") // รันซ้ำได้ — สร้างบรรทัด import ใหม่ทุกครั้ง
   const lines = []
-  if (names.length) lines.push(`import { ${names.join(", ")} } from "@/lib/db/partner"`)
+  // ส่วน pure (partnerColOf + ชนิด) มาจาก partner-col — ไม่ดึง driver ของ Mongo เข้าบันเดิลฝั่ง client
+  const pure = names.filter((n) => /^(partnerColOf|type PartnerDb|type AnyDoc)$/.test(n))
+  const io = names.filter((n) => !pure.includes(n) && !(lazy && n === "partnerDb"))
+  if (pure.length) lines.push(`import { ${pure.join(", ")} } from "@/lib/db/partner-col"`)
+  if (io.length) lines.push(`import { ${io.join(", ")} } from "@/lib/db/partner"`)
   if (needPartnerReg && !/import \{[^}]*\bPARTNER\b[^}]*\} from "@\/lib\/db\/registry\.mjs"/.test(src)) lines.push('import { PARTNER } from "@/lib/db/registry.mjs"')
   for (const l of lines) src = addImport(src, l)
   return src

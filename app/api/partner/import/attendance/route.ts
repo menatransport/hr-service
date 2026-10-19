@@ -3,7 +3,8 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { parseAttendanceSheet, ATT_COLL } from "@/lib/partner/attendance"
 import { plateContractMap } from "@/lib/partner/trip-fuel"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const MONTH_RE = /^\d{4}-\d{2}$/

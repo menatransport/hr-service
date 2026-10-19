@@ -1,4 +1,4 @@
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * เติมข้อมูลรถที่ "ว่างในสัญญา" จาก vehicle_master ตอนอ่านออกมาใช้ (ไม่แก้ข้อมูลที่บันทึกไว้)

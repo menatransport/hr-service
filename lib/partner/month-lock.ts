@@ -1,4 +1,4 @@
-import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner-col"
 
 /**
  * ล็อคงวดเงินเดือน — งวดที่ approved/locked แล้ว ห้ามแก้ข้อมูลต้นทางทุกชนิด

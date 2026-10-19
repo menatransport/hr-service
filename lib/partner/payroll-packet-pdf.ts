@@ -2,7 +2,7 @@
 import "server-only"
 import { prevMonth } from "@/lib/partner/utils"
 import { seg } from "@/lib/partner/pdfmake-printer"
-import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner-col"
 
 /**
  * ชุดอนุมัติเงินเดือนรถร่วม (Approval Packet) — pdfmake docDefinition

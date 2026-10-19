@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getPromoUsage, normPlate } from "@/lib/partner/promo-usage"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * Promotion summary per contract.

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { TF_COLL, TF_CONFIG, DEFAULT_CONFIG, aggregateFromBI, computeRow, plateContractMap, type TripFuelConfig } from "@/lib/partner/trip-fuel"
-import { partnerDb, partnerColOf, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const MONTH_RE = /^\d{4}-\d{2}$/

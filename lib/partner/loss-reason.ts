@@ -1,5 +1,5 @@
 import type { Stage } from "@/lib/partner/deal-stage"
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 import { PARTNER } from "@/lib/db/registry.mjs"
 
 /**

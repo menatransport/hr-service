@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 const norm = (s: string) => (s ?? "").replace(/\s+/g, "").replace(/^สบ\.?/, "").trim()
 

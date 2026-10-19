@@ -1,4 +1,4 @@
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 /**
  * สถานะการผ่อนของคนขับ (derived — ไม่เก็บใน DB)
  *   paying  = Active ผ่อนชำระอยู่

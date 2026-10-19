@@ -4,7 +4,8 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { logActivity } from "@/lib/partner/activity-log"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }

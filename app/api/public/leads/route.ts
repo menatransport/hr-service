@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { parseLead, allowRequest } from "@/lib/partner/public-lead"
 import { loadPublicTruckBySlug } from "@/lib/partner/public-trucks"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /** ฟอร์มจากหน้าเว็บสาธารณะ → quotations status "lead" (โผล่ใน Kanban /quotations) */
 export async function POST(req: NextRequest) {

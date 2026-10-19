@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { computePayroll } from "@/lib/partner/utils"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ month: string; contractCode: string }> }
 

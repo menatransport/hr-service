@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { promoCopy, type PromoCopy } from "@/lib/partner/promo-copy"
 import { displaySalePrice } from "@/lib/partner/sale-display"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
 
 /** ทะเบียนไม่เอา prefix "สบ." — สูตรเดียวกับ lib/catalog-pdf (ไม่ import เพราะไฟล์นั้น server-only เทสต์โหลดไม่ได้) */
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
@@ -135,6 +135,7 @@ const VEHICLE_PROJECTION = {
 
 async function loadAll() {
   // import แบบ lazy — lib/mongo throw ตอน import ถ้าไม่มี MONGO_URI ทำให้เทสต์ pure function รันไม่ได้
+  const { partnerDb } = await import("@/lib/db/partner")
   const db = (await partnerDb())
   const [vehicles, prices, promos, contracts] = await Promise.all([
     partnerColOf(db, "vehicleMaster").find({}, { projection: VEHICLE_PROJECTION }).toArray(),

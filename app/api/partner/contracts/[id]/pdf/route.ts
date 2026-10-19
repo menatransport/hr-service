@@ -8,7 +8,8 @@ import { appendContractAttachments } from "@/lib/partner/pdf-attachments"
 import { withVehicleDetails } from "@/lib/partner/contract-vehicle"
 import { getCompanyVersion } from "@/lib/partner/company-config"
 import { applyCompany } from "@/lib/partner/contract-pdfmake-helpers"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 30

@@ -2,7 +2,7 @@ import "server-only"
 import { AUTO_CLOSE_DAYS, DAYS_TO_COMPLETE, isStage, STAGE_LABEL, type Stage } from "@/lib/partner/deal-stage"
 import { LOSS_COLL, seedLossReasons } from "@/lib/partner/loss-reason"
 import { DEAL_COLL, closeLost, moveStage } from "@/lib/partner/deal-actions"
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * งานรายวันของไปป์ไลน์ (เรียกจาก /api/cron/deals)

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { nextMonth } from "@/lib/partner/utils"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 type Alert = {
   type: "negative_pay" | "insurance_expired" | "insurance_expiring" | "repair_budget_critical" | "trip_fee_mismatch" | "overdue_installment"

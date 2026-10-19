@@ -2,7 +2,7 @@ import "server-only"
 import { ObjectId, type Db } from "mongodb"
 import { checkTransition, isOpen, isStage, stageIndex, STAGE_LABEL, type DealFields, type Stage } from "@/lib/partner/deal-stage"
 import { listLossReasons, reasonsForStage } from "@/lib/partner/loss-reason"
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 import { PARTNER } from "@/lib/db/registry.mjs"
 
 /**

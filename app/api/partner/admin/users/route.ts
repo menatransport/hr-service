@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { invalidateRoleCache } from "@/lib/partner/roles"
 import { ROLES } from "@/lib/partner/rbac"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 async function requireSuperadmin() {
   const session = await getPartnerSession()

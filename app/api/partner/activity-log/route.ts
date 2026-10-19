@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /** GET /api/activity-log?entity=<e>&entityId=<id> — ประวัติการแก้ไข (audit) ของ record นั้น */
 export async function GET(req: NextRequest) {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPromoUsage } from "@/lib/partner/promo-usage"
 import { normPlateIT } from "@/lib/partner/insurance-tax"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 const num = (v: unknown) => (typeof v === "number" ? v : 0)

@@ -12,7 +12,8 @@ import {
   type LedgerKind,
   type SourceType,
 } from "@/lib/partner/driver-ledger"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { PARTNER } from "@/lib/db/registry.mjs"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const MONTH_RE = /^\d{4}-\d{2}$/

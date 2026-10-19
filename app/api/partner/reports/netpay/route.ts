@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { nextMonth } from "@/lib/partner/utils"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl

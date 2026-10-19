@@ -1,5 +1,5 @@
 import "server-only"
-import { partnerColOf, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
 
 /** "สบ.71-1515" → "71-1515" (เหมือน normPlate ใน lib/contract-docx.ts) */
 export function normPlateIT(p?: string | null): string {

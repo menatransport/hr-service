@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { ensureFirstVersion } from "@/lib/partner/company-config"
 import type { Contract, Driver } from "@/lib/partner/types"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl

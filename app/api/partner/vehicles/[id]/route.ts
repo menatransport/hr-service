@@ -3,7 +3,8 @@ import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
 

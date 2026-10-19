@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { QUOTE_COLL } from "@/lib/partner/quotation"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
 const OPEN = (s: string) => s !== "won" && s !== "lost"

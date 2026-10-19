@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { partnerDb, partnerColOf, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
 

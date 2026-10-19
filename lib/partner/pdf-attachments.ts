@@ -2,7 +2,7 @@ import "server-only"
 import { ObjectId } from "mongodb"
 import type { Contract } from "@/lib/partner/types"
 import { pageFooter } from "@/lib/partner/contract-pdfmake-helpers"
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

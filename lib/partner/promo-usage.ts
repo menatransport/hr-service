@@ -1,4 +1,4 @@
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * Single source of truth for promotion budget usage (ค่าซ่อม / PM) per vehicle.

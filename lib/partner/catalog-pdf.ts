@@ -6,7 +6,7 @@ import { COMPANY } from "@/lib/partner/contract-pdfmake-helpers"
 import { seg } from "@/lib/partner/pdfmake-printer"
 import type { CatalogConfig } from "@/lib/partner/catalog-config"
 import { promoCopy, type PromoSeg } from "@/lib/partner/promo-copy"
-import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * Catalog รายคัน — 1 หน้า A4/คัน (pdfmake, Sarabun, โทนทองเดียวกับใบเสนอราคา)

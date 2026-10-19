@@ -2,7 +2,7 @@ import "server-only"
 import PizZip from "pizzip"
 import type { Contract } from "@/lib/partner/types"
 import { resolveContractAttachments } from "@/lib/partner/pdf-attachments"
-import { type PartnerDb } from "@/lib/db/partner"
+import { type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * ต่อเอกสารแนบ (รูปบัตร ปชช./ใบขับขี่/ทะเบียนบ้าน ฯลฯ) ท้ายไฟล์ .docx

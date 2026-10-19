@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { isAdminRole } from "@/lib/partner/rbac"
 import { nextMonth } from "@/lib/partner/utils"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * GET /api/admin/month-summary?month=YYYY-MM

@@ -1,7 +1,8 @@
-import type { Collection, Db, Document } from "mongodb";
+import type { Collection, Document } from "mongodb";
 
 import { client } from "@/lib/mongo";
 import type { ReadOnlyCollection } from "./index";
+import { type PartnerDb, type PartnerKey } from "./partner-col";
 import { ATMS, BI, DB, PARTNER, PARTNER_EXT_DB } from "./registry.mjs";
 
 /**
@@ -18,16 +19,12 @@ import { ATMS, BI, DB, PARTNER, PARTNER_EXT_DB } from "./registry.mjs";
  * ไม่สร้าง/ไม่แตะดัชนีของ `mena_partner` (ระบบรถร่วมเป็นเจ้าของ — ดูคอมเมนต์ `PARTNER` ใน registry)
  */
 
-export type PartnerKey = keyof typeof PARTNER;
+export { partnerColOf, type AnyDoc, type PartnerDb, type PartnerKey } from "./partner-col";
 export type BiKey = keyof typeof BI;
 export type AtmsKey = keyof typeof ATMS;
 
 /** ชื่อ db ของรถร่วม — `PARTNER_MONGO_DB` ทับได้ (เช่น db ทดสอบ) */
 export const PARTNER_DB: string = process.env.PARTNER_MONGO_DB?.trim() || DB.partner;
-
-declare const partnerBrand: unique symbol;
-/** `Db` ที่มาจาก `partnerDb()` เท่านั้น — กันส่ง db ของ hr เข้า `partnerColOf` โดยไม่ตั้งใจ */
-export type PartnerDb = Db & { readonly [partnerBrand]: true };
 
 export async function partnerDb(): Promise<PartnerDb> {
   return (await client()).db(PARTNER_DB) as PartnerDb;
@@ -35,11 +32,6 @@ export async function partnerDb(): Promise<PartnerDb> {
 
 export async function partnerCol<T extends Document = Document>(key: PartnerKey): Promise<Collection<T>> {
   return (await partnerDb()).collection<T>(PARTNER[key]);
-}
-
-/** แบบ sync สำหรับโค้ดที่ถือ `PartnerDb` อยู่แล้ว */
-export function partnerColOf<T extends Document = Document>(db: PartnerDb, key: PartnerKey): Collection<T> {
-  return db.collection<T>(PARTNER[key]);
 }
 
 /** `mena-bi` — อ่านอย่างเดียว */
@@ -51,13 +43,6 @@ export async function biCol<T extends Document = Document>(key: BiKey): Promise<
 export async function atmsCol<T extends Document = Document>(key: AtmsKey): Promise<ReadOnlyCollection<T>> {
   return (await client()).db(PARTNER_EXT_DB.atms).collection<T>(ATMS[key]);
 }
-
-/**
- * ชนิดเอกสารแบบหลวมของโค้ดเดิมที่ถือ db เป็น `any` (`.collection()` เดิมคืน `any`) — codemod ใส่ให้เพื่อไม่เปลี่ยนชนิดข้อมูลเดิม
- * โค้ดใหม่ให้ระบุชนิดจริงแทน
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyDoc = any;
 
 /** ชื่อจริงของคอลเลกชันรถร่วม (ค่าใน `PARTNER`) */
 export type PartnerName = (typeof PARTNER)[PartnerKey];

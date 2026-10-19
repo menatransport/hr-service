@@ -4,7 +4,7 @@ import { getCatalogConfig, type CatalogConfig } from "@/lib/partner/catalog-conf
 import type { TruckCatalog } from "@/components/partner/catalog/truck-catalog-poster"
 import { promoCopy, type PromoSeg } from "@/lib/partner/promo-copy"
 import { displaySalePrice } from "@/lib/partner/sale-display"
-import { type PartnerDb } from "@/lib/db/partner"
+import { type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * แปลงข้อมูลรถ (ชุดเดียวกับ Catalog PDF) → props ของ TruckCatalogPoster

@@ -5,7 +5,8 @@ import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm, isAdminRole } from "@/lib/partner/rbac"
 import { SALES_PEOPLE } from "@/lib/partner/quotation-people"
 import { QUOTE_COLL } from "@/lib/partner/quotation"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 /** รวมชื่อตั้งต้นในโค้ด + ชื่อที่ทีมเพิ่มเองผ่านหน้าจอ (ไม่ซ้ำ) */
 async function listNames(): Promise<string[]> {

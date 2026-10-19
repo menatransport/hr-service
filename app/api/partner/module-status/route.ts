@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 // สถานะ ready/testing/dev ยังอยู่ในโค้ด (lib/module-status.ts); ตรงนี้เป็น overlay ที่แก้ได้ในหน้าแรก
 

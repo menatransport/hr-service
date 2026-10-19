@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 /**
  * รหัสสัญญาถัดไป = เลขสูงสุดในระบบ + 1 (ใช้ prefix ของตัวเลขสูงสุด เช่น MTM192 → MTM193)
  * รองรับรูปแบบ <ตัวอักษร><ตัวเลข> เช่น MTM192 / MTL067

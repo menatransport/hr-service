@@ -1,6 +1,6 @@
 import "server-only"
 import { ObjectId } from "mongodb"
-import { partnerColOf, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
 
 /**
  * Unified driver debt/deposit ledger (สมุดหนี้/เงินสะสม พขร.)

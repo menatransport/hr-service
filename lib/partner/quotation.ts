@@ -1,5 +1,5 @@
 import "server-only"
-import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner"
+import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner-col"
 import { PARTNER } from "@/lib/db/registry.mjs"
 
 /** ระบบขาย — ใบเสนอราคา + CRM (เฟส 1) */

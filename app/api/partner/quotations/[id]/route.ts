@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { QUOTE_COLL, QUOTE_STATUSES, QUOTE_STATUS_LABEL, type QuoteStatus } from "@/lib/partner/quotation"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }

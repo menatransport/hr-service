@@ -4,7 +4,8 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { EXTRA_TYPE_MAP } from "@/lib/partner/payroll-extras"
 import { normPlate } from "@/lib/partner/promo-usage"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const MONTH_RE = /^\d{4}-\d{2}$/
 

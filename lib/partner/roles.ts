@@ -1,5 +1,6 @@
 import { ROLES, type Role } from "@/lib/partner/rbac"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 const ALLOWED_DOMAIN = "menatransport.co.th"
 

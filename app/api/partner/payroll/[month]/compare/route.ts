@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 import { NextRequest, NextResponse } from "next/server"
-import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const r2 = (n: number) => Math.round(n * 100) / 100
