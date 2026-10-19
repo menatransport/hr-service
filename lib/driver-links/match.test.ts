@@ -12,7 +12,7 @@ import {
 
 const partner = (over: Partial<PartnerCandidate> = {}): PartnerCandidate => ({
   contractCode: "C001",
-  partnerDriverId: "d1",
+  personKey: "d1",
   name: "นายสมชาย ใจดี",
   nationalId: null,
   licensePlate: "70-1234",
@@ -48,7 +48,7 @@ test("เลขบัตร: ต้อง 13 หลักพอดี ไม่�
 
 test("ทะเบียน: ตัดขีด ช่องว่าง และชื่อจังหวัดท้าย", () => {
   assert.equal(normalizePlate("70-1234 กรุงเทพมหานคร"), "701234");
-  assert.equal(normalizePlate("สบ 70-1234"), "สบ701234");
+  assert.equal(normalizePlate("สบ 70-1234"), "701234");
   assert.equal(normalizePlate(""), null);
 });
 
@@ -122,4 +122,61 @@ test("staffCode (MTM###) ไม่ใช่สัญญาณจับคู่ 
 test("คำนำหน้าอังกฤษต้องจบคำ — ไม่กินต้นชื่อ", () => {
   assert.equal(normalizeName("Mrinal Sen"), "mrinal sen");
   assert.equal(normalizeName("Mr Mrinal Sen"), "mrinal sen");
+});
+
+test("ทะเบียนต่างฟอร์แมต 71-1515 / 711515 / สบ.71-1515 / 71-1515 สระบุรี = ทะเบียนเดียวกัน", () => {
+  for (const raw of ["71-1515", "711515", "สบ.71-1515", "สบ 71-1515", "71-1515 สระบุรี", " 71 - 1515 "]) {
+    assert.equal(normalizePlate(raw), "711515", raw);
+  }
+  // ทะเบียนรถเก๋งแบบมีหมวดอักษร ไม่ถูกตัดหมวดทิ้ง
+  assert.equal(normalizePlate("1กข-1234 กรุงเทพมหานคร"), "1กข1234");
+
+  const [p] = proposeMatches([partner({ licensePlate: "สบ.71-1515" })], [etl({ plateNo: "711515" })]);
+  assert.equal(p.candidates[0].matchedBy, "name+plate");
+  assert.equal(p.candidates[0].confidence, "medium");
+});
+
+test("ชื่อ: คำนำหน้าต่างกัน (นาย / ไม่มี / น.ส. / นางสาว) ยังตรงกัน", () => {
+  const [a] = proposeMatches([partner({ name: "นาย สมชาย ใจดี" })], [etl({ name: "สมชาย  ใจดี" })]);
+  assert.equal(a.candidates.length, 1);
+  const [b] = proposeMatches(
+    [partner({ name: "น.ส.สมหญิง ใจงาม" })],
+    [etl({ name: "นางสาวสมหญิง ใจงาม" })],
+  );
+  assert.equal(b.candidates.length, 1);
+});
+
+test("ชื่อ: สระซ้ำ/นิคหิต+สระอา/อักขระล่องหน ไม่ทำให้หลุด", () => {
+  assert.equal(normalizeName("นายสมชาย\u200B ใจดี"), "สมชาย ใจดี");
+  assert.equal(normalizeName("ก\u0E4D\u0E32ไร"), "กำไร");
+  assert.equal(normalizeName("สมชาย ใจดี\u0E35\u0E35"), "สมชาย ใจดี");
+  assert.equal(normalizeName("\u0E48สมชาย ใจดี"), "สมชาย ใจดี");
+});
+
+test("ไม่มีฟิลด์เลขบัตรใน ETL (ค่าตั้ง null) — ยังจับด้วยชื่อ+ทะเบียนได้", () => {
+  const [p] = proposeMatches(
+    [partner({ nationalId: "1234567890123", licensePlate: "71-1515" })],
+    [etl({ nationalId: null, plateNo: "71-1515" })],
+  );
+  assert.equal(p.candidates[0].matchedBy, "name+plate");
+});
+
+test("ข้อเสนอเรียง high → medium → low → ไม่มีผู้สมัคร", () => {
+  const out = proposeMatches(
+    [
+      partner({ contractCode: "C-none", name: "ไม่มี ใคร" }),
+      partner({ contractCode: "C-low", name: "ต่ำ ต่ำ" }),
+      partner({ contractCode: "C-high", name: "สูง สูง", nationalId: "1111111111111" }),
+      partner({ contractCode: "C-mid", name: "กลาง กลาง", licensePlate: "70-1111" }),
+    ],
+    [
+      etl({ drivercode: "L", name: "ต่ำ ต่ำ" }),
+      etl({ drivercode: "H", name: "อื่น", nationalId: "1111111111111" }),
+      etl({ drivercode: "M", name: "กลาง กลาง", plateNo: "701111" }),
+    ],
+  );
+  assert.deepEqual(
+    out.map((p) => p.contractCode),
+    ["C-high", "C-mid", "C-low", "C-none"],
+  );
 });

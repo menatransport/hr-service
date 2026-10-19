@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircleCheck, Download, Info, RotateCcw, TriangleAlert } from "lucide-react";
 
+import { PartnerPanel } from "@/app/payroll/summary/partner-panel";
 import { PageHead } from "@/components/desk/page-head";
 import { NotifyButton } from "@/components/payroll/notify-panel";
 import { PeriodPicker } from "@/components/payroll/period-picker";
@@ -10,6 +11,7 @@ import type { DeskIdentity } from "@/lib/auth/identity";
 import { HR_DEPARTMENT_LABEL } from "@/lib/payroll/approver";
 import type { IntakeRecord } from "@/lib/payroll/intake-status";
 import { isLocked, periodCode, periodLabel, type PeriodRef } from "@/lib/payroll/period";
+import { ownerScope } from "@/lib/payroll/scope";
 import { visibleItems } from "@/lib/payroll/scope-filter";
 import { NO_REASON_TEXT, readinessLine, SCOPED_NOTE, statusText, summarizePeriod } from "@/lib/payroll/summary";
 
@@ -285,6 +287,9 @@ export function SummaryView({
 
         </>
       )}
+
+      {/* รายการจากระบบ (รถร่วม) — จุดเสียบเดียวของเลน 3 · เฉพาะคนที่เห็นทุกฝ่าย */}
+      {ownerScope(identity).all ? <PartnerPanel periodCode={code} /> : null}
 
       {/* ขั้นถัดไปที่ยังไม่มี — บอกตรง ๆ ว่าทำไม */}
       <div className="flex items-start gap-2.5 rounded-box border border-line bg-base-200/50 p-3.5 text-12-5 text-mut">

@@ -1,6 +1,6 @@
 import { effectOf, DEFAULT_PAYEE_COLUMN, PAYEE_COLUMN, type MoneyEffect } from "./classify";
 import { headerLetter, type ParsedFile } from "./parse";
-import { findItem, INTAKE_ITEMS, type IntakeOwner } from "./registry";
+import { findItem, INTAKE_ITEMS, type IntakeOwner, type SystemOwner } from "./registry";
 import { templateOf } from "./template-spec";
 
 /**
@@ -263,7 +263,8 @@ export function validateNormalization(): string[] {
 interface FactBase {
   period: string;
   itemId: string;
-  owner: IntakeOwner;
+  /** ฝ่ายที่ส่งไฟล์ · หรือระบบที่ส่งยอดเอง (`SYSTEM_ITEMS`) — เพิ่มชนิดเท่านั้น ตรรกะเดิมไม่เปลี่ยน */
+  owner: IntakeOwner | SystemOwner;
   /** เลขแถวจริงในชีต — ไว้ชี้กลับไปที่ไฟล์ต้นทางเวลาใครถามว่าเลขนี้มาจากไหน */
   sourceRow: number;
   /** คนที่แถวนี้พูดถึง */
