@@ -1,3 +1,7 @@
 {
-  "crons": [{ "path": "/api/cron/media-retention", "schedule": "0 19 * * *" }]
+  "regions": ["sin1"],
+  "crons": [
+    { "path": "/api/cron/media-retention", "schedule": "0 19 * * *" },
+    { "path": "/api/partner/cron/deals", "schedule": "0 1 * * *" }
+  ]
 }
