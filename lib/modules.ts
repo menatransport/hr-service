@@ -292,7 +292,15 @@ export const MODULES: ModuleGroup[] = [
           { id: "pt-payroll-extras", label: "รับ-หักอื่นๆ", desc: "รายการรับ/หักนอกสูตร", href: "/partner/payroll-extras", icon: SlidersHorizontal },
           { id: "pt-payroll", label: "เงินเดือน", desc: "คำนวณและปิดงวด", href: "/partner/payroll", icon: Banknote },
           { id: "pt-driver-ledger", label: "หนี้สิน & เงินสะสม", desc: "ยอดยกมา ผ่อนหนี้ เงินสำรอง", href: "/partner/driver-ledger", icon: HandCoins },
-          { id: "pt-adjustments", label: "รายการปรับปรุง", desc: "ปรับยอดรายเดือน", href: "/partner/adjustments", icon: SlidersHorizontal },
+          {
+            id: "pt-adjustments",
+            label: "รายการปรับปรุง",
+            desc: "ปรับยอดรายเดือน — เลือกเดือนจากหน้าจัดการรอบเดือน",
+            /* หน้าจริงเป็น `/partner/adjustments/[month]` ไม่มีหน้ารวม — เข้าผ่านลิงก์รายเดือนในหน้ารอบเดือน */
+            href: "/partner/admin/month",
+            match: "/partner/adjustments",
+            icon: SlidersHorizontal,
+          },
           { id: "pt-reports", label: "รายงาน", desc: "รายงานรถร่วม", href: "/partner/reports", icon: ChartColumn },
         ],
       },
@@ -300,7 +308,8 @@ export const MODULES: ModuleGroup[] = [
         id: "pt-admin",
         label: "ผู้ดูแลรถร่วม",
         desc: "นำเข้า Excel · ข้อมูลบริษัท · รอบเดือน · ผู้ใช้ & สิทธิ์",
-        href: "/partner/admin",
+        /* ไม่มีหน้า `/partner/admin` เอง — หัวข้อชี้ไปหน้าลูกตัวแรกที่มีจริง */
+        href: "/partner/import",
         icon: Settings,
         children: [
           { id: "pt-import", label: "นำเข้า Excel", desc: "นำเข้าข้อมูลจากไฟล์", href: "/partner/import", icon: Upload },

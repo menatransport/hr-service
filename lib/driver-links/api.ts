@@ -25,8 +25,11 @@ export interface ApiDeps {
     "loadSources" | "listLinks" | "contractExists" | "driverExists" | "findLink" | "insertLink" | "deleteLink"
   >;
   now?: () => Date;
-  /** บันทึกการปลดคู่ — ยังไม่มีคอลเลกชัน log ของตัวเอง (ขอ registry ไว้แล้ว) จึงลง log ของเซิร์ฟเวอร์ */
-  audit?: (event: Record<string, unknown>) => void;
+  /**
+   * จดประวัติยืนยัน/ปลดคู่ — ของจริงลง `partner_driver_link_events` (`audit.ts`)
+   * ล้มได้โดยไม่กระทบผลของคำสั่ง (ข้อมูลหลักบันทึกไปแล้ว)
+   */
+  audit?: (event: Record<string, unknown>) => void | Promise<void>;
 }
 
 const MATCHED_BY: readonly MatchedBy[] = ["nationalId", "name+plate", "name", "manual"];
@@ -38,6 +41,15 @@ const err = (status: number, error: string): ApiResult<never> => ({ status, body
 const NEED_LOGIN = err(401, "กรุณาเข้าสู่ระบบก่อน");
 
 const defaultAudit = (event: Record<string, unknown>) => console.info("[driver-links]", JSON.stringify(event));
+
+/** จดประวัติแบบไม่ทำให้คำสั่งล้ม — audit โยน error ก็แค่เตือน */
+async function record(deps: ApiDeps, event: Record<string, unknown>): Promise<void> {
+  try {
+    await (deps.audit ?? defaultAudit)(event);
+  } catch (e) {
+    console.warn("[driver-links] audit ล้ม —", e);
+  }
+}
 
 /** `GET /api/driver-links` — ข้อเสนอ · คู่ที่ยืนยันแล้ว · ตัวเลขคนขับ · ขัดแย้ง */
 export async function getOverview(deps: ApiDeps): Promise<ApiResult<DriverLinksOverview>> {
@@ -100,6 +112,16 @@ export async function confirmLink(deps: ApiDeps, raw: unknown): Promise<ApiResul
     }
     throw e;
   }
+  await record(deps, {
+    action: "confirm",
+    contractCode: link.contractCode,
+    drivercode: link.drivercode,
+    matchedBy: link.matchedBy,
+    confidence: link.confidence,
+    by: user.employeeId,
+    byName: user.name,
+    at: link.confirmedAt.toISOString(),
+  });
   return { status: 201, body: { link } };
 }
 
@@ -113,7 +135,7 @@ export async function unlink(deps: ApiDeps, contractCode: string): Promise<ApiRe
   const removed = await deps.repo.deleteLink(code);
   if (!removed) return err(404, `สัญญา ${code} ไม่มีคู่อยู่แล้ว`);
 
-  (deps.audit ?? defaultAudit)({
+  await record(deps, {
     action: "unlink",
     contractCode: code,
     drivercode: removed.drivercode,

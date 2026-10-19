@@ -10,7 +10,11 @@ const PUBLIC_EXACT = new Set(["/trucks", "/sitemap.xml", "/robots.txt"])
  * เพราะด่านกลางเคยกิน `Authorization: Bearer <CRON_SECRET>` จนตก 401 ก่อนถึง route (cron ไม่วิ่ง ต.ค. 2569)
  * `/api/cron/*` ของ hr ไม่อยู่ในรายการนี้ — ใช้กฎของ hr ตามเดิม (GET ผ่าน)
  */
-const PUBLIC_PREFIXES = ["/trucks/", "/api/public/", "/og/", "/api/partner/cron/"]
+/*
+ * `/partner/brand/` = รูปแบรนด์ใน `public/partner/brand` ที่หน้า /trucks ใช้ (โลโก้ ภาพปก) — อยู่ใต้ matcher
+ * `/partner/:path*` ของ proxy คนนอกจึงโหลดไม่ได้ถ้าไม่เปิดตรงนี้ · เปิดเฉพาะโฟลเดอร์ brand ไม่ใช่ทั้ง /partner
+ */
+const PUBLIC_PREFIXES = ["/trucks/", "/api/public/", "/og/", "/api/partner/cron/", "/partner/brand/"]
 
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true

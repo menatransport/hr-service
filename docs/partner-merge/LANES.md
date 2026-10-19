@@ -32,3 +32,9 @@
 - เทสต์ห้ามต่อ Mongo จริง (pure function / mock) · งานที่ต้องใช้ข้อมูลจริง = เขียนสคริปต์อ่านอย่างเดียวมี limit แล้วรายงานให้เจ้าของรัน
 - ไฟล์จาก repo partner คัดลอกเฉพาะที่อยู่ใน `git ls-files` (มีไฟล์ข้อมูลจริง untracked อยู่ — ห้ามติดมา)
 - commit ทีละ task ลงท้าย `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+
+## ปรับหลังรวม (L1, 19 ต.ค. 2569)
+- หน้า driver-links ของ L2 อยู่ที่ `app/desk/(module)/driver-links/` (ไม่ใช่ `app/desk/driver-links/`) — เมนู `/desk/driver-links`
+- ไฟล์นอกเลนที่รับรองแล้ว: `app/api/auth/callback/google/route.ts` (L4) · `app/api/payroll/summary/partner/route.ts`, `app/payroll/summary/partner-panel.tsx` และบรรทัดเสียบใน `components/payroll/summary-view.tsx` (L3)
+- รอยต่อที่ L1 แก้: `lib/partner/public-routes.ts` (+`/partner/brand/`) · `lib/driver-links/audit.ts` + จุดเรียกใน `api.ts`/`_deps.ts` (ประวัติลง `partner_driver_link_events`)
+- `check_db_names.mjs`, `lib/partner/mongo.ts`, `lib/db/partner.ts` เป็นของ L5 รอบสอง (แปลงโค้ดรถร่วมให้ผ่านกฎ ไม่ยกเว้น — เจ้าของงานสั่ง)

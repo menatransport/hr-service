@@ -1,4 +1,16 @@
 @import "tailwindcss";
+/* โค้ดรถร่วม (ย้ายมาจาก mena-partner) มีสไตล์ของตัวเองใน `styles/partner-theme.css`
+   — ไม่ให้ Tailwind ของ hr สแกนคลาสจากโฟลเดอร์เหล่านี้ CSS ของหน้า hr จึงเท่าก่อนรวมทุกไบต์ */
+@source not "../app/partner";
+@source not "../app/(partner-public)";
+@source not "../app/og";
+@source not "../app/api/partner";
+@source not "../app/api/public";
+@source not "../components/partner";
+@source not "../lib/partner";
+@source not "../partner-assets";
+@source not "../scripts/partner-codemod";
+@source not "../styles/partner-theme.css";
 /**
  * SweetAlert2 — โครงและแอนิเมชันของกล่องแจ้งเตือน ส่วน **สีและตัวอักษรถูกเขียนทับ
  * ทั้งหมด** ในบล็อก `.swal2-*` ท้ายไฟล์นี้ (นำเข้าไว้บนสุดเพื่อให้ทับได้ด้วยลำดับ)

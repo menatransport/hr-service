@@ -15,7 +15,9 @@ function deps(over: Partial<ApiDeps["repo"]> = {}, user: SessionUser | null = US
   const d: ApiDeps = {
     readUser: async () => user,
     now: () => new Date("2026-10-19T10:00:00Z"),
-    audit: (e) => audits.push(e),
+    audit: (e) => {
+      audits.push(e);
+    },
     repo: {
       loadSources: async () => ({ partnerDrivers: [], contracts: [], etlDrivers: [], vehicles: [] }),
       listLinks: async () => store,
@@ -85,9 +87,41 @@ test("ปลดคู่: ลบแถว + จด log ว่าใครปล�
   const res = await unlink(d, "MTM001");
   assert.equal(res.status, 200);
   assert.equal(store.length, 0);
-  assert.equal(audits[0].by, "E42");
-  assert.equal(audits[0].drivercode, "D1");
+  const un = audits.find((a) => a.action === "unlink")!;
+  assert.equal(un.by, "E42");
+  assert.equal(un.drivercode, "D1");
   assert.equal((await unlink(d, "MTM001")).status, 404);
+});
+
+test("ยืนยันคู่จดประวัติ action=confirm พร้อมผู้ยืนยันจาก session", async () => {
+  const { d, audits } = deps();
+  assert.equal((await confirmLink(d, body)).status, 201);
+  assert.deepEqual(
+    audits.map((a) => [a.action, a.contractCode, a.by]),
+    [["confirm", "MTM001", "E42"]],
+  );
+});
+
+test("จดประวัติล้ม ไม่ทำให้ยืนยัน/ปลดคู่ล้ม", async () => {
+  const { d } = deps();
+  d.audit = async () => {
+    throw new Error("ฐานล่ม");
+  };
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.equal((await confirmLink(d, body)).status, 201);
+    assert.equal((await unlink(d, "MTM001")).status, 200);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test("ยืนยันซ้ำที่ชน 409 ไม่จดประวัติ confirm", async () => {
+  const { d, audits } = deps();
+  await confirmLink(d, body);
+  assert.equal((await confirmLink(d, body)).status, 409);
+  assert.equal(audits.filter((a) => a.action === "confirm").length, 1);
 });
 
 test("GET ภาพรวมคืนข้อเสนอ/ตัวเลข/ขัดแย้ง", async () => {
