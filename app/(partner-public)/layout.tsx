@@ -2,12 +2,12 @@ import Image from "next/image"
 import Link from "next/link"
 import { Prompt } from "next/font/google"
 import "@/styles/partner-theme.css"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { PartnerThemeRoot } from "@/components/partner/theme-root"
 import { getCatalogConfig } from "@/lib/partner/catalog-config"
 import { ContactBar } from "@/components/partner/public/contact-bar"
 import { ThaiText, telHref } from "@/components/partner/public/thai-text"
 import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * หน้าเว็บสาธารณะ (ขายรถ /trucks) — ไม่มี sidebar, ไม่ต้อง login, light mode คงที่
@@ -46,7 +46,7 @@ const SOCIALS = [
 
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
   await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
-  const cfg = await getCatalogConfig((await clientPromise).db(PARTNER_DB))
+  const cfg = await getCatalogConfig((await partnerDb()))
 
   return (
     <div

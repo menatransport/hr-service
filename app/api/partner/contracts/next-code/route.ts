@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "contracts"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 /**
  * รหัสสัญญาถัดไป = เลขสูงสุดในระบบ + 1 (ใช้ prefix ของตัวเลขสูงสุด เช่น MTM192 → MTM193)
  * รองรับรูปแบบ <ตัวอักษร><ตัวเลข> เช่น MTM192 / MTL067
  */
 export async function GET() {
-  const client = await clientPromise
-  const codes  = await client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const codes  = await partnerColOf(pdb, "contracts")
     .find({}, { projection: { contractCode: 1 } })
     .toArray()
 

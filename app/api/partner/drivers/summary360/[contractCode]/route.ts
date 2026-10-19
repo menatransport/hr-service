@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getPromoUsage } from "@/lib/partner/promo-usage"
 import { normPlateIT } from "@/lib/partner/insurance-tax"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const r2 = (n: number) => Math.round(n * 100) / 100
 const num = (v: unknown) => (typeof v === "number" ? v : 0)
 
@@ -16,19 +15,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ con
   const { contractCode } = await params
   if (!contractCode) return NextResponse.json({ error: "contractCode required" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   const [driver, contract, entries, ledger, tf, att, debts] = await Promise.all([
-    db.collection("drivers").findOne({ contractCode }),
-    db.collection("contracts").findOne({ contractCode }),
-    db.collection("payroll_entries").find({ contractCode }).sort({ month: -1 }).limit(12).toArray(),
-    db.collection("driver_ledger").find({ contractCode, status: { $in: ["active", "cancelled", "closed"] } }).toArray(),
-    db.collection("trip_fuel_monthly").find({ contractCode }).sort({ month: -1 }).limit(12)
+    partnerColOf(db, "drivers").findOne({ contractCode }),
+    partnerColOf(db, "contracts").findOne({ contractCode }),
+    partnerColOf(db, "payrollEntries").find({ contractCode }).sort({ month: -1 }).limit(12).toArray(),
+    partnerColOf(db, "driverLedger").find({ contractCode, status: { $in: ["active", "cancelled", "closed"] } }).toArray(),
+    partnerColOf(db, "tripFuelMonthly").find({ contractCode }).sort({ month: -1 }).limit(12)
       .project({ month: 1, fuelDeduct: 1, overMoney: 1, underMoney: 1, tripFee: 1, tripCount: 1 }).toArray(),
-    db.collection("attendance_monthly").find({ contractCode }).sort({ month: -1 }).limit(12)
+    partnerColOf(db, "attendanceMonthly").find({ contractCode }).sort({ month: -1 }).limit(12)
       .project({ month: 1, workDays: 1, days: 1 }).toArray(),
-    db.collection("debt_acceptances").find({ contractCode })
+    partnerColOf(db, "debtAcceptances").find({ contractCode })
       .project({ debtAcceptanceNo: 1, issueDate: 1, liabilityAmount: 1, outstandingBalance: 1, ledgerDebtCode: 1, repairType: 1 }).toArray(),
   ])
   if (!driver && !contract) return NextResponse.json({ error: "ไม่พบสัญญานี้" }, { status: 404 })
@@ -38,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ con
 
   const [insurance, promoUsage] = await Promise.all([
     platePlain
-      ? db.collection("vehicle_insurance_tax").find({ platePlain, itemType: { $exists: true } })
+      ? partnerColOf(db, "vehicleInsuranceTax").find({ platePlain, itemType: { $exists: true } })
           .project({ itemType: 1, endDate: 1, expiryDate: 1, collectStart: 1, collectEnd: 1, monthlyInstallment: 1, status: 1 }).toArray()
       : Promise.resolve([]),
     getPromoUsage(db).catch(() => new Map()),

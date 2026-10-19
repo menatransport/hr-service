@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -12,8 +10,8 @@ export async function POST(req: Request) {
   if (type !== "PM1" && type !== "PM2") {
     return NextResponse.json({ error: "type must be PM1 or PM2" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const doc = {
     contractCode: String(contractCode),
     year: Number(year),
@@ -25,6 +23,6 @@ export async function POST(req: Request) {
     confirmed: true,
     createdAt: new Date(),
   }
-  const result = await db.collection("pm_records").insertOne(doc)
+  const result = await partnerColOf(db, "pmRecords").insertOne(doc)
   return NextResponse.json({ _id: result.insertedId.toString(), ...doc }, { status: 201 })
 }

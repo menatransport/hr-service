@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /**
  * รหัสพนักงานถัดไป
@@ -10,12 +8,12 @@ const DB = PARTNER_DB
  *   → MTM145-01 (คนถัดไปของสัญญาเดียวกัน = -02, -03, ...)
  */
 export async function GET(req: NextRequest) {
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   const contractCode = req.nextUrl.searchParams.get("contractCode")?.trim()
   if (contractCode) {
-    const drivers = await db.collection("drivers")
+    const drivers = await partnerColOf(db, "drivers")
       .find({ staffCode: { $regex: `^${contractCode}-\\d+$` } }, { projection: { staffCode: 1 } })
       .toArray()
     let maxN = 0
@@ -28,8 +26,8 @@ export async function GET(req: NextRequest) {
   }
 
   const [drivers, contracts] = await Promise.all([
-    db.collection("drivers").find({}, { projection: { staffCode: 1 } }).toArray(),
-    db.collection("contracts").find({}, { projection: { contractCode: 1 } }).toArray(),
+    partnerColOf(db, "drivers").find({}, { projection: { staffCode: 1 } }).toArray(),
+    partnerColOf(db, "contracts").find({}, { projection: { contractCode: 1 } }).toArray(),
   ])
 
   let max = 0

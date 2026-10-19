@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const year = searchParams.get("year")?.trim() ?? String(new Date().getFullYear())
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   // All payroll entries for the year
-  const entries = await db.collection("payroll_entries").aggregate([
+  const entries = await partnerColOf(db, "payrollEntries").aggregate([
     { $match: { month: { $regex: `^${year}-` } } },
     {
       $group: {
@@ -27,14 +25,14 @@ export async function GET(req: NextRequest) {
   ]).toArray()
 
   // All trips for the year
-  const tripAgg = await db.collection("trips").aggregate([
+  const tripAgg = await partnerColOf(db, "trips").aggregate([
     { $match: { date: { $gte: `${year}-01-01`, $lt: `${Number(year) + 1}-01-01` } } },
     { $group: { _id: "$contractCode", tripFeeTotal: { $sum: "$tripFee" }, tripCount: { $sum: 1 } } },
   ]).toArray()
   const tripMap = Object.fromEntries(tripAgg.map((t) => [t._id as string, t]))
 
   // Active drivers for metadata
-  const drivers = await db.collection("drivers").find({ status: "active" }, {
+  const drivers = await partnerColOf(db, "drivers").find({ status: "active" }, {
     projection: { contractCode: 1, driverName: 1, plant: 1, truckNumber: 1 }
   }).sort({ contractCode: 1 }).toArray()
   const entryMap = Object.fromEntries(entries.map((e) => [e._id as string, e]))
@@ -63,7 +61,7 @@ export async function GET(req: NextRequest) {
     .filter((r) => r.hasEntry)
 
   // Month list for this year from DB
-  const monthList = await db.collection("payroll_entries")
+  const monthList = await partnerColOf(db, "payrollEntries")
     .distinct("month", { month: { $regex: `^${year}-` } }) as string[]
   monthList.sort()
 
@@ -78,7 +76,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Per-month totals for the trend table
-  const monthTotals = await db.collection("payroll_entries").aggregate([
+  const monthTotals = await partnerColOf(db, "payrollEntries").aggregate([
     { $match: { month: { $regex: `^${year}-` } } },
     {
       $group: {

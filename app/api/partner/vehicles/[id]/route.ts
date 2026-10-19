@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-
-const DB   = PARTNER_DB
-const COLL = "vehicle_master"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
 
 const AUDIT_FIELDS = ["truckType", "status", "licensePlate", "brand", "model", "dataComplete", "dataExpectedDate"]
@@ -16,8 +12,8 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const client  = await clientPromise
-  const doc     = await client.db(DB).collection(COLL).findOne({ _id: new ObjectId(id) })
+  const pdb  = await partnerDb()
+  const doc     = await partnerColOf(pdb, "vehicleMaster").findOne({ _id: new ObjectId(id) })
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json(doc)
 }
@@ -70,8 +66,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   if (body.dataComplete         !== undefined) $set.dataComplete         = body.dataComplete === true
   if (body.dataExpectedDate     !== undefined) $set.dataExpectedDate     = str(body.dataExpectedDate)
 
-  const client = await clientPromise
-  const col = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "vehicleMaster")
 
   // กันทะเบียนซ้ำกับคันอื่น (เทียบแบบ normalize)
   if (body.licensePlate !== undefined && normPlate(body.licensePlate)) {
@@ -108,8 +104,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const client  = await clientPromise
-  const result  = await client.db(DB).collection(COLL).deleteOne({ _id: new ObjectId(id) })
+  const pdb  = await partnerDb()
+  const result  = await partnerColOf(pdb, "vehicleMaster").deleteOne({ _id: new ObjectId(id) })
   if (result.deletedCount === 0)
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   revalidatePublicTrucks()   // ลบรถออกจากทะเบียนกลาง

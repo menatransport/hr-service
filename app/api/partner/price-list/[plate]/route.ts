@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 const NUM_FIELDS = [
   "totalSalePrice", "downPayment", "cashDown", "remainingInstallment",
@@ -27,8 +25,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const plate = decodeURIComponent(raw).trim()
   const body = await req.json() as Record<string, unknown>
 
-  const client = await clientPromise
-  const col = client.db(DB).collection("master_price_list")
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "masterPriceList")
 
   const before = await col.findOne({ licensePlate: plate })
   if (!before) return NextResponse.json({ error: "ไม่พบทะเบียนนี้ใน price list" }, { status: 404 })

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { settleLedgerMonth } from "@/lib/partner/driver-ledger"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /**
  * สถานะรอบเดือนเงินเดือน — 5 ขั้น (ตาม SOP ปิดงวด):
@@ -33,15 +31,15 @@ interface HistoryItem { phase: MonthPhase; by: string; at: string; note?: string
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const month = searchParams.get("month")?.trim() ?? ""
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   if (!month) {
-    const docs = await db.collection("month_status").find({}).sort({ month: -1 }).toArray()
+    const docs = await partnerColOf(db, "monthStatus").find({}).sort({ month: -1 }).toArray()
     return NextResponse.json(docs.map((d) => ({ ...d, phase: normalizePhase(d.phase as string) })))
   }
 
-  const doc = await db.collection("month_status").findOne({ month })
+  const doc = await partnerColOf(db, "monthStatus").findOne({ month })
   if (!doc) return NextResponse.json({ month, phase: "draft" as MonthPhase, history: [] })
   return NextResponse.json({ ...doc, phase: normalizePhase(doc.phase as string) })
 }
@@ -65,10 +63,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "month required (YYYY-MM)" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
   const now    = new Date().toISOString()
-  const cur    = await db.collection("month_status").findOne({ month })
+  const cur    = await partnerColOf(db, "monthStatus").findOne({ month })
   const curPhase: MonthPhase = cur ? normalizePhase(cur.phase as string) : "draft"
   const note = (body.note ?? body.notes ?? "").trim()
   const action = body.action ?? "set"
@@ -87,7 +85,7 @@ export async function POST(req: NextRequest) {
   } else if (action === "reject") {
     if (!REJECT_ROLES.includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     // ห้ามตีกลับข้ามโซ่: มีงวดถัดไปที่อนุมัติ/ปิดแล้ว → ต้องปลดล็อคงวดล่าสุดก่อน (ไล่จากปลายโซ่)
-    const later = await db.collection("month_status").findOne(
+    const later = await partnerColOf(db, "monthStatus").findOne(
       { month: { $gt: month }, phase: { $in: ["approved", "locked"] } }, { projection: { month: 1 } })
     if (later) {
       return NextResponse.json({ error: `ตีกลับไม่ได้ — งวด ${later.month} อนุมัติ/ปิดแล้ว ต้องปลดล็อคงวดล่าสุดก่อนไล่ย้อนลงมา` }, { status: 409 })
@@ -109,7 +107,7 @@ export async function POST(req: NextRequest) {
   }
 
   const hist: HistoryItem = { phase, by: email, at: now, action: action as HistoryItem["action"], ...(note ? { note } : {}) }
-  await db.collection("month_status").updateOne(
+  await partnerColOf(db, "monthStatus").updateOne(
     { month },
     {
       $set: { month, phase, notes: note, updatedAt: now, updatedBy: email },
@@ -122,7 +120,7 @@ export async function POST(req: NextRequest) {
   // idempotent: settleLedgerMonth ข้าม (entryId, month) ที่ตัดไปแล้ว จึงยิงซ้ำได้
   let ledgerSettlement: { contracts: number; settled: number; total: number } | undefined
   if (phase === "approved" || phase === "locked") {
-    const codes: string[] = await db.collection("driver_ledger")
+    const codes: string[] = await partnerColOf(db, "driverLedger")
       .distinct("contractCode", { status: "active", startMonth: { $lte: month } })
     let settled = 0
     let total   = 0

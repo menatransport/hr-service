@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { QUOTE_COLL } from "@/lib/partner/quotation"
 import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm } from "@/lib/partner/rbac"
 import { buildSalesCommission, type CommissionQuote } from "@/lib/partner/commission"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /**
  * GET /api/quotations/commission — สรุปยอดขาย + ค่าคอมรายคน
@@ -22,8 +20,8 @@ export async function GET() {
   }
   const onlyMine = role === "salesperson"
 
-  const client = await clientPromise
-  const rows = await client.db(DB).collection(QUOTE_COLL)
+  const pdb = await partnerDb()
+  const rows = await partnerColOf(pdb, "quotations")
     .find({ status: "won" }, {
       projection: {
         quotationNo: 1, status: 1, salesEmail: 1, salesName: 1, customerName: 1,

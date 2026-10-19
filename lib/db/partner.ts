@@ -1,0 +1,60 @@
+import type { Collection, Db, Document } from "mongodb";
+
+import { client } from "@/lib/mongo";
+import type { ReadOnlyCollection } from "./index";
+import { ATMS, BI, DB, PARTNER, PARTNER_EXT_DB } from "./registry.mjs";
+
+/**
+ * ทางเข้า MongoDB ของโค้ดรถร่วม (ย้ายมาจาก mena-partner-driver) — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
+ *
+ * | ใช้ | เมื่อ |
+ * |---|---|
+ * | `partnerCol<T>("contracts")` | คอลเลกชันใน `mena_partner` (คีย์จาก `PARTNER` ใน `registry.mjs` — ไม่รับสตริงอิสระ) |
+ * | `partnerDb()` + `partnerColOf(db, "contracts")` | โค้ดเดิมที่ถือ db ไว้ตัวเดียวแล้วเรียกหลายคอลเลกชัน (ฟังก์ชันที่รับ `db` เป็นพารามิเตอร์) |
+ * | `biCol("driverCost")` / `atmsCol("vehicleMaster")` | db ของระบบอื่น — **อ่านอย่างเดียว** (ชนิดไม่มีเมธอดเขียน) |
+ *
+ * ใช้ MongoClient ตัวเดียวกับทั้งแอป (`lib/mongo.ts`) — คลัสเตอร์เดียวกัน ต่างแค่ db · ต่อฐานตอนเรียกครั้งแรก ไม่ใช่ตอน import
+ * ⚠️ ห้ามใช้ `process.env.MONGO_DB` กับโค้ดรถร่วม — ในแอปนี้คือ `hr_service`
+ * ไม่สร้าง/ไม่แตะดัชนีของ `mena_partner` (ระบบรถร่วมเป็นเจ้าของ — ดูคอมเมนต์ `PARTNER` ใน registry)
+ */
+
+export type PartnerKey = keyof typeof PARTNER;
+export type BiKey = keyof typeof BI;
+export type AtmsKey = keyof typeof ATMS;
+
+/** ชื่อ db ของรถร่วม — `PARTNER_MONGO_DB` ทับได้ (เช่น db ทดสอบ) */
+export const PARTNER_DB: string = process.env.PARTNER_MONGO_DB?.trim() || DB.partner;
+
+declare const partnerBrand: unique symbol;
+/** `Db` ที่มาจาก `partnerDb()` เท่านั้น — กันส่ง db ของ hr เข้า `partnerColOf` โดยไม่ตั้งใจ */
+export type PartnerDb = Db & { readonly [partnerBrand]: true };
+
+export async function partnerDb(): Promise<PartnerDb> {
+  return (await client()).db(PARTNER_DB) as PartnerDb;
+}
+
+export async function partnerCol<T extends Document = Document>(key: PartnerKey): Promise<Collection<T>> {
+  return (await partnerDb()).collection<T>(PARTNER[key]);
+}
+
+/** แบบ sync สำหรับโค้ดที่ถือ `PartnerDb` อยู่แล้ว */
+export function partnerColOf<T extends Document = Document>(db: PartnerDb, key: PartnerKey): Collection<T> {
+  return db.collection<T>(PARTNER[key]);
+}
+
+/** `mena-bi` — อ่านอย่างเดียว */
+export async function biCol<T extends Document = Document>(key: BiKey): Promise<ReadOnlyCollection<T>> {
+  return (await client()).db(PARTNER_EXT_DB.bi).collection<T>(BI[key]);
+}
+
+/** `atms` — อ่านอย่างเดียว */
+export async function atmsCol<T extends Document = Document>(key: AtmsKey): Promise<ReadOnlyCollection<T>> {
+  return (await client()).db(PARTNER_EXT_DB.atms).collection<T>(ATMS[key]);
+}
+
+/**
+ * ชนิดเอกสารแบบหลวมของโค้ดเดิมที่ถือ db เป็น `any` (`.collection()` เดิมคืน `any`) — codemod ใส่ให้เพื่อไม่เปลี่ยนชนิดข้อมูลเดิม
+ * โค้ดใหม่ให้ระบุชนิดจริงแทน
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyDoc = any;

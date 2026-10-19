@@ -1,7 +1,4 @@
-import { PARTNER_DB } from "@/lib/partner/mongo"
-const DB   = PARTNER_DB
-const COLL = "activity_log"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 export type FieldChange = { from: unknown; to: unknown }
 export type Changes = Record<string, FieldChange>
 
@@ -44,9 +41,8 @@ export function diffFields(
 export async function logActivity(entry: Omit<ActivityEntry, "editedAt">): Promise<boolean> {
   try {
     // lazy import: กัน lib/mongo (ที่ throw ถ้าไม่มี MONGO_URI) ไม่ให้ถูกโหลดตอน import ฟังก์ชัน pure
-    const { default: clientPromise } = await import("@/lib/partner/mongo")
-    const client = await clientPromise
-    await client.db(DB).collection(COLL).insertOne({
+    const pdb = await partnerDb()
+    await partnerColOf(pdb, "activityLog").insertOne({
       ...entry,
       editedAt: new Date().toISOString(),
     })

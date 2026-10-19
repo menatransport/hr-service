@@ -1,4 +1,5 @@
-import type { Db } from "mongodb"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
 /**
  * Template ข้อความของ Catalog รายคัน — เก็บ doc เดียวใน `catalog_config` (_id "default")
@@ -15,8 +16,7 @@ export interface CatalogConfig {
   updatedBy?:    string
 }
 
-export const CATALOG_COLL = "catalog_config"
-
+export const CATALOG_COLL = PARTNER.catalogConfig
 export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
   tagline: "รถโม่ปูนพร้อมสัญญางานวิ่ง — ผ่อนสบาย มีงานรองรับตั้งแต่วันแรก",
   sellingPoints: [
@@ -50,8 +50,8 @@ export function sanitizeCatalogConfig(body: Partial<CatalogConfig>): Omit<Catalo
   }
 }
 
-export async function getCatalogConfig(db: Db): Promise<CatalogConfig> {
-  const doc = await db.collection(CATALOG_COLL).findOne({ _id: "default" as unknown as never })
+export async function getCatalogConfig(db: PartnerDb): Promise<CatalogConfig> {
+  const doc = await partnerColOf(db, "catalogConfig").findOne({ _id: "default" as unknown as never })
   if (!doc) return DEFAULT_CATALOG_CONFIG
   const { _id: _omit, ...rest } = doc as unknown as CatalogConfig & { _id: unknown }
   void _omit

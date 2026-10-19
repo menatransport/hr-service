@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { QUOTE_COLL } from "@/lib/partner/quotation"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
 const OPEN = (s: string) => s !== "won" && s !== "lost"
 
 /** GET /api/quotations/dashboard — สรุปเชิงวิเคราะห์ของงานขาย (funnel/leaderboard/แนวโน้ม/ดีลค้าง) */
 export async function GET() {
-  const client = await clientPromise
-  const db = client.db(DB)
-  const rows = await db.collection(QUOTE_COLL)
+  const pdb = await partnerDb()
+  const db = pdb
+  const rows = await partnerColOf(db, "quotations")
     .find({}, { projection: { status: 1, totalSalePrice: 1, salesName: 1, salesEmail: 1, createdAt: 1, updatedAt: 1, customerName: 1, quotationNo: 1, licensePlate: 1 } })
     .limit(5000).toArray()
 

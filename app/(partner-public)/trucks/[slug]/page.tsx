@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getCatalogConfig } from "@/lib/partner/catalog-config"
 import { loadPublicTruckBySlug, loadPublicTrucks } from "@/lib/partner/public-trucks"
 import { siteUrl, truckTitle, truckDescription, truckJsonLd, fmtBaht } from "@/lib/partner/public-seo"
@@ -11,6 +10,7 @@ import { TruckCard } from "@/components/partner/public/truck-card"
 import { LeadForm } from "@/components/partner/public/lead-form"
 import { telHref } from "@/components/partner/public/thai-text"
 import { PrepStars, ReadyStars } from "@/components/partner/public/ready-stars"
+import { partnerDb } from "@/lib/db/partner"
 
 // ตัวกันพลาด — ปกติ lib/revalidate-public.ts สั่งล้างแคชทันทีที่ชุดรถว่างเปลี่ยน
 export const revalidate = 60
@@ -41,7 +41,7 @@ export default async function TruckDetailPage({ params }: Params) {
   const truck = await loadPublicTruckBySlug(slug)
   if (!truck) notFound()
 
-  const db = (await clientPromise).db(PARTNER_DB)
+  const db = (await partnerDb())
   const [cfg, all] = await Promise.all([getCatalogConfig(db), loadPublicTrucks()])
   const related = all.filter((t) => t.slug !== truck.slug).slice(0, 3)
   const title = [truck.brand, truck.model].filter(Boolean).join(" ") || "รถผสมปูนมือสอง"

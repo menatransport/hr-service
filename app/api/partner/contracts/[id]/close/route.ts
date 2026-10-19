@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -26,8 +24,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!hasPerm(role, "contracts")) return NextResponse.json({ error: "ไม่มีสิทธิ์ปิดงวดสัญญา" }, { status: 403 })
 
   const { reopen } = (await req.json().catch(() => ({}))) as { reopen?: boolean }
-  const client = await clientPromise
-  const col = client.db(DB).collection("contracts")
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "contracts")
   const doc = await col.findOne({ _id: new ObjectId(id) })
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 })
 

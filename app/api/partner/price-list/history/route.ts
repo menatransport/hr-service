@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /**
  * GET /api/price-list/history?plate=<licensePlate>
@@ -12,8 +10,8 @@ export async function GET(req: NextRequest) {
   const plate = req.nextUrl.searchParams.get("plate")?.trim()
   if (!plate) return NextResponse.json({ error: "plate required" }, { status: 400 })
 
-  const client  = await clientPromise
-  const entries = await client.db(DB).collection("activity_log")
+  const pdb  = await partnerDb()
+  const entries = await partnerColOf(pdb, "activityLog")
     .find({ entity: "price_list", entityId: plate })
     .sort({ editedAt: -1 })
     .limit(100)

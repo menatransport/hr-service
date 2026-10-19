@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB  = PARTNER_DB
-const COL = "promotion_entries"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -40,8 +36,8 @@ export async function PATCH(
   if (body.label !== undefined)   $set.label   = body.label
   if (body.details !== undefined) $set.details = body.details
 
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COL).updateOne(
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "promotionEntries").updateOne(
     { _id: oid },
     { $set }
   )
@@ -65,8 +61,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COL).deleteOne({ _id: oid })
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "promotionEntries").deleteOne({ _id: oid })
 
   if (result.deletedCount === 0) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })

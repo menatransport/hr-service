@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { EXTRA_TYPE_MAP } from "@/lib/partner/payroll-extras"
 import { normPlate } from "@/lib/partner/promo-usage"
-
-const DB = PARTNER_DB
-const COLL = "payroll_extras"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -15,8 +12,8 @@ const MONTH_RE = /^\d{4}-\d{2}$/
 export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get("month") ?? ""
   if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month=YYYY-MM required" }, { status: 400 })
-  const client = await clientPromise
-  const rows = await client.db(DB).collection(COLL).find({ month }).sort({ kind: 1, type: 1, driverName: 1 }).toArray()
+  const pdb = await partnerDb()
+  const rows = await partnerColOf(pdb, "payrollExtras").find({ month }).sort({ kind: 1, type: 1, driverName: 1 }).toArray()
   return NextResponse.json(rows.map((r: any) => ({ ...r, _id: r._id.toString() })))
 }
 
@@ -27,8 +24,8 @@ export async function POST(req: NextRequest) {
   const month = String(body.month ?? "")
   if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month ไม่ถูกต้อง" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
   const session = await getPartnerSession()
   const now = new Date().toISOString()
@@ -40,13 +37,13 @@ export async function POST(req: NextRequest) {
     const from = String(body.from ?? "")
     if (!MONTH_RE.test(from)) return NextResponse.json({ error: "from (YYYY-MM) required" }, { status: 400 })
     const labels: string[] = Array.isArray(body.labels) ? body.labels.filter((l: unknown) => typeof l === "string" && l) : []
-    const src = await db.collection(COLL).find({ month: from, ...(labels.length ? { label: { $in: labels } } : {}) }).toArray()
-    const existing = await db.collection(COLL).find({ month }).project({ contractCode: 1, label: 1, kind: 1 }).toArray()
+    const src = await partnerColOf(db, "payrollExtras").find({ month: from, ...(labels.length ? { label: { $in: labels } } : {}) }).toArray()
+    const existing = await partnerColOf(db, "payrollExtras").find({ month }).project({ contractCode: 1, label: 1, kind: 1 }).toArray()
     const seen = new Set(existing.map((e) => `${e.contractCode}|${e.label}|${e.kind}`))
     const docs = src.filter((sd) => !seen.has(`${sd.contractCode}|${sd.label}|${sd.kind}`))
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       .map(({ _id, ...sd }) => ({ ...sd, month, importBatch: `copy-${from}`, createdAt: now, createdBy: by }))
-    if (docs.length) await db.collection(COLL).insertMany(docs as never[])
+    if (docs.length) await partnerColOf(db, "payrollExtras").insertMany(docs as never[])
     return NextResponse.json({ ok: true, copied: docs.length, skipped: src.length - docs.length, from, to: month })
   }
 
@@ -55,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === "import") {
     // จับคู่ ref → สัญญา: รหัสสัญญา > ทะเบียน (normalize) > ชื่อคนขับ
-    const contracts = await db.collection("contracts").find({})
+    const contracts = await partnerColOf(db, "contracts").find({})
       .project({ contractCode: 1, licensePlate: 1, driverName: 1, buyerName: 1, status: 1 }).toArray()
     const byCC = new Map(contracts.map((c: any) => [String(c.contractCode).toUpperCase(), c]))
     const byPlate = new Map<string, any>()
@@ -88,7 +85,7 @@ export async function POST(req: NextRequest) {
       })
     }
     if (body.preview === true) return NextResponse.json({ matched: docs.length, unmatched, sample: docs.slice(0, 5) })
-    if (docs.length > 0) await db.collection(COLL).insertMany(docs)
+    if (docs.length > 0) await partnerColOf(db, "payrollExtras").insertMany(docs)
     return NextResponse.json({ ok: true, inserted: docs.length, unmatched })
   }
 
@@ -96,7 +93,7 @@ export async function POST(req: NextRequest) {
   const amount = Number(body.amount) || 0
   const contractCode = String(body.contractCode ?? "").trim()
   if (!contractCode || amount === 0) return NextResponse.json({ error: "contractCode + amount required" }, { status: 400 })
-  await db.collection(COLL).insertOne({
+  await partnerColOf(db, "payrollExtras").insertOne({
     month, kind: t.kind, type: t.key, label: t.label,
     contractCode, driverName: String(body.driverName ?? "").trim() || null,
     licensePlate: String(body.licensePlate ?? "").trim() || null,
@@ -116,27 +113,27 @@ export async function PATCH(req: NextRequest) {
   if (body.amount !== undefined) $set.amount = Math.round((Number(body.amount) || 0) * 100) / 100
   if (body.wht !== undefined) $set.wht = !!body.wht
   if (body.note !== undefined) $set.note = String(body.note).trim() || null
-  const client = await clientPromise
-  const _doc = await client.db(DB).collection(COLL).findOne({ _id: new ObjectId(body.id) }, { projection: { month: 1 } })
-  if (_doc && await monthClosed(client.db(DB), _doc.month as string)) return NextResponse.json(closedError(_doc.month as string), { status: 423 })
-  await client.db(DB).collection(COLL).updateOne({ _id: new ObjectId(body.id) }, { $set })
+  const pdb = await partnerDb()
+  const _doc = await partnerColOf(pdb, "payrollExtras").findOne({ _id: new ObjectId(body.id) }, { projection: { month: 1 } })
+  if (_doc && await monthClosed(pdb, _doc.month as string)) return NextResponse.json(closedError(_doc.month as string), { status: 423 })
+  await partnerColOf(pdb, "payrollExtras").updateOne({ _id: new ObjectId(body.id) }, { $set })
   return NextResponse.json({ ok: true })
 }
 
 // DELETE { id } | { importBatch } — middleware บังคับ admin+
 export async function DELETE(req: NextRequest) {
   const body = await req.json() as any
-  const client = await clientPromise
-  const col = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "payrollExtras")
   if (body.importBatch) {
     const _b = await col.findOne({ importBatch: String(body.importBatch) }, { projection: { month: 1 } })
-    if (_b && await monthClosed(client.db(DB), _b.month as string)) return NextResponse.json(closedError(_b.month as string), { status: 423 })
+    if (_b && await monthClosed(pdb, _b.month as string)) return NextResponse.json(closedError(_b.month as string), { status: 423 })
     const r = await col.deleteMany({ importBatch: String(body.importBatch) })
     return NextResponse.json({ ok: true, deleted: r.deletedCount })
   }
   if (!body.id || !ObjectId.isValid(body.id)) return NextResponse.json({ error: "id required" }, { status: 400 })
   const _d = await col.findOne({ _id: new ObjectId(body.id) }, { projection: { month: 1 } })
-  if (_d && await monthClosed(client.db(DB), _d.month as string)) return NextResponse.json(closedError(_d.month as string), { status: 423 })
+  if (_d && await monthClosed(pdb, _d.month as string)) return NextResponse.json(closedError(_d.month as string), { status: 423 })
   await col.deleteOne({ _id: new ObjectId(body.id) })
   return NextResponse.json({ ok: true })
 }

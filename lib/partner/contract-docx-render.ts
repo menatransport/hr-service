@@ -8,14 +8,12 @@ import { readFile } from "fs/promises"
 import path from "path"
 import PizZip from "pizzip"
 import Docxtemplater from "docxtemplater"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { withVehicleDetails } from "@/lib/partner/contract-vehicle"
 import { getCompanyVersion } from "@/lib/partner/company-config"
 import type { Contract } from "@/lib/partner/types"
 import { DOCX_TEMPLATES, normPlate, type DocxType, type PromoMasterData } from "@/lib/partner/contract-docx"
 import { appendDocxAttachments } from "@/lib/partner/docx-attachments"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export async function renderContractDocx(
   id: string,
@@ -24,15 +22,15 @@ export async function renderContractDocx(
   const tpl = DOCX_TEMPLATES[type]
   if (!tpl) return null
 
-  const client = await clientPromise
-  const db = client.db(DB)
-  const found = (await db.collection("contracts").findOne({ _id: new ObjectId(id) })) as Contract | null
+  const pdb = await partnerDb()
+  const db = pdb
+  const found = (await partnerColOf(db, "contracts").findOne({ _id: new ObjectId(id) })) as Contract | null
   if (!found) return null
   // ช่องข้อมูลรถที่ว่างในสัญญา → เติมจากทะเบียนรถ (ดู lib/contract-vehicle)
   const contract = await withVehicleDetails(db, found as unknown as Record<string, unknown>) as unknown as Contract
 
   const plate = normPlate(contract.licensePlate)
-  const promos = (await db.collection("promotion_master").find({}).toArray()) as unknown as PromoMasterData[]
+  const promos = (await partnerColOf(db, "promotionMaster").find({}).toArray()) as unknown as PromoMasterData[]
   const promo = promos.find((p) => normPlate(p.licensePlate) === plate) ?? null
 
   // ชื่อผู้ลงนาม/พยาน มาจาก master (/admin/company) — ไฟล์ต้นแบบใช้ {sellerSig1} {sellerSig2} {witness1} {witness2}

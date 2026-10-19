@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ contractCode: string }> }
 ) {
   const { contractCode } = await params
-  const client = await clientPromise
-  const db     = client.db(PARTNER_DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const doc = await db
-    .collection("repair_monthly")
+  const doc = await     partnerColOf(db, "repairMonthly")
     .findOne({ contractCode }, { sort: { month: -1 } })
 
   if (!doc) return NextResponse.json(null)

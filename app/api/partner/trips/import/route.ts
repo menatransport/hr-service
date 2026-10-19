@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "trips"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 interface TripRow {
   contractCode: string
   date: string
@@ -24,8 +20,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "rows array required" }, { status: 400 })
   }
 
-  const client  = await clientPromise
-  const col     = client.db(DB).collection(COLL)
+  const pdb  = await partnerDb()
+  const col     = partnerColOf(pdb, "trips")
   const now     = new Date().toISOString()
 
   // Collect ldtNumbers from incoming rows (only non-empty ones)

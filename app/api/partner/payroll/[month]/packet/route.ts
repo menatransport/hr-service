@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { renderPdfmake } from "@/lib/partner/pdfmake-printer"
 import { buildPayrollPacket } from "@/lib/partner/payroll-packet-pdf"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
-
-const DB = PARTNER_DB
 
 /** GET /api/payroll/[month]/packet — ชุดอนุมัติเงินเดือน PDF (ปะหน้า + NetPay รายคน + หน้าลงนาม) */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ month: string }> }) {
@@ -14,8 +12,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ mon
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json({ error: "month must be YYYY-MM" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   try {
     const docDef = await buildPayrollPacket(db, month)
     const pdf = await renderPdfmake(docDef)

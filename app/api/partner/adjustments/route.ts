@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { calculatePayrollEntry } from "@/lib/partner/payroll-engine"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /** GET /api/adjustments?month=YYYY-MM — list all adjustments for a month */
 export async function GET(req: NextRequest) {
@@ -13,9 +11,9 @@ export async function GET(req: NextRequest) {
   const month = searchParams.get("month")?.trim() ?? ""
   if (!month) return NextResponse.json({ error: "month required" }, { status: 400 })
 
-  const client = await clientPromise
-  const db     = client.db(DB)
-  const docs   = await db.collection("monthly_adjustments")
+  const pdb = await partnerDb()
+  const db     = pdb
+  const docs   = await partnerColOf(db, "monthlyAdjustments")
     .find({ month })
     .sort({ contractCode: 1 })
     .toArray()
@@ -45,15 +43,15 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "contractCode and month required" }, { status: 400 })
   }
   {
-    const client = await clientPromise
-    if (await monthClosed(client.db(DB), month)) return NextResponse.json(closedError(month), { status: 423 })
+    const pdb = await partnerDb()
+    if (await monthClosed(pdb, month)) return NextResponse.json(closedError(month), { status: 423 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
   const now    = new Date().toISOString()
 
-  await db.collection("monthly_adjustments").updateOne(
+  await partnerColOf(db, "monthlyAdjustments").updateOne(
     { contractCode, month },
     { $set: { contractCode, month, ...fields, updatedAt: now }, $setOnInsert: { createdAt: now } },
     { upsert: true }
@@ -62,7 +60,7 @@ export async function PUT(req: NextRequest) {
   // Recalculate payroll immediately after saving adjustment
   const result = await calculatePayrollEntry(db, contractCode, month)
   if (result) {
-    await db.collection("payroll_entries").updateOne(
+    await partnerColOf(db, "payrollEntries").updateOne(
       { contractCode, month },
       { $set: { ...result, updatedAt: now }, $setOnInsert: { createdAt: now } },
       { upsert: true }

@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB  = PARTNER_DB
-const COL = "promotion_entries"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 export async function GET() {
-  const client = await clientPromise
-  const docs = await client.db(DB).collection(COL)
+  const pdb = await partnerDb()
+  const docs = await partnerColOf(pdb, "promotionEntries")
     .find({})
     .sort({ licensePlate: 1, proType: 1 })
     .toArray()
@@ -47,8 +43,8 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date()
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COL).insertOne({
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "promotionEntries").insertOne({
     licensePlate:   body.licensePlate,
     proType:        body.proType,
     label:          body.label,

@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
-
-const DB   = PARTNER_DB
-const COLL = "drivers"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 type Ctx = { params: Promise<{ id: string }> }
 
 // field อ่อนไหว (โกงเงินเดือนได้) — log เฉพาะพวกนี้ ไม่ log ที่อยู่/เบอร์
@@ -14,8 +10,8 @@ const AUDIT_FIELDS = ["accountNumber", "bankName", "nationalId", "firstName", "l
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const client  = await clientPromise
-  const driver  = await client.db(DB).collection(COLL)
+  const pdb  = await partnerDb()
+  const driver  = await partnerColOf(pdb, "drivers")
     .findOne({ _id: new ObjectId(id) })
   if (!driver) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json(driver)
@@ -119,8 +115,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     $set.status = body.status
   }
 
-  const client = await clientPromise
-  const col = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "drivers")
   const before = await col.findOne({ _id: new ObjectId(id) })
   const result = await col.findOneAndUpdate(
     { _id: new ObjectId(id) },
@@ -147,8 +143,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const client  = await clientPromise
-  const result  = await client.db(DB).collection(COLL)
+  const pdb  = await partnerDb()
+  const result  = await partnerColOf(pdb, "drivers")
     .deleteOne({ _id: new ObjectId(id) })
   if (result.deletedCount === 0)
     return NextResponse.json({ error: "Not found" }, { status: 404 })

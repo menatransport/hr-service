@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "stock_movements"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 type Ctx = { params: Promise<{ id: string }> }
 
 // PATCH — set which promotion covers this movement item: "" | "repair" | "pm"
@@ -17,8 +13,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "invalid promoType" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COLL).updateOne(
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "stockMovements").updateOne(
     { _id: new ObjectId(id) },
     { $set: { promoType, updatedAt: new Date() } }
   )

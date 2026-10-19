@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { QUOTE_COLL, QUOTE_STATUSES, QUOTE_STATUS_LABEL, type QuoteStatus } from "@/lib/partner/quotation"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "bad id" }, { status: 400 })
-  const client = await clientPromise
-  const doc = await client.db(DB).collection(QUOTE_COLL).findOne({ _id: new ObjectId(id) })
+  const pdb = await partnerDb()
+  const doc = await partnerColOf(pdb, "quotations").findOne({ _id: new ObjectId(id) })
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json({ ...doc, _id: String(doc._id) })
 }
@@ -65,11 +64,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
   if (b.note && b.status === undefined && b.depositAmount === undefined) events.push({ at: now, by: email, action: "บันทึกกิจกรรม", note: b.note })
 
-  const client = await clientPromise
+  const pdb = await partnerDb()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update: any = { $set }
   if (events.length) update.$push = { timeline: { $each: events } }
-  await client.db(DB).collection(QUOTE_COLL).updateOne({ _id: new ObjectId(id) }, update)
-  const doc = await client.db(DB).collection(QUOTE_COLL).findOne({ _id: new ObjectId(id) })
+  await partnerColOf(pdb, "quotations").updateOne({ _id: new ObjectId(id) }, update)
+  const doc = await partnerColOf(pdb, "quotations").findOne({ _id: new ObjectId(id) })
   return NextResponse.json({ ...doc, _id: String(doc?._id) })
 }

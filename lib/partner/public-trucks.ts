@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { promoCopy, type PromoCopy } from "@/lib/partner/promo-copy"
 import { displaySalePrice } from "@/lib/partner/sale-display"
-import { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /** ทะเบียนไม่เอา prefix "สบ." — สูตรเดียวกับ lib/catalog-pdf (ไม่ import เพราะไฟล์นั้น server-only เทสต์โหลดไม่ได้) */
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
@@ -40,7 +40,6 @@ export interface PublicTruck {
   isReady: boolean
 }
 
-const DB = PARTNER_DB
 const s = (v: unknown) => String(v ?? "").trim()
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0) || 0)
 
@@ -136,13 +135,12 @@ const VEHICLE_PROJECTION = {
 
 async function loadAll() {
   // import แบบ lazy — lib/mongo throw ตอน import ถ้าไม่มี MONGO_URI ทำให้เทสต์ pure function รันไม่ได้
-  const { default: clientPromise } = await import("@/lib/partner/mongo")
-  const db = (await clientPromise).db(DB)
+  const db = (await partnerDb())
   const [vehicles, prices, promos, contracts] = await Promise.all([
-    db.collection("vehicle_master").find({}, { projection: VEHICLE_PROJECTION }).toArray(),
-    db.collection("master_price_list").find({}, { projection: { licensePlate: 1, saleStatus: 1, totalSalePrice: 1, downPayment: 1, cashDown: 1, monthlyPayment: 1, financeInstallments: 1 } }).toArray(),
-    db.collection("promotion_master").find({}, { projection: { licensePlate: 1, pro1Condition: 1, pro1FreeCount: 1, pro1TotalValue: 1, pro2RepairBudget: 1, pro3AnnualPm: 1 } }).toArray(),
-    db.collection("contracts").find({ status: "active" }, { projection: { licensePlate: 1 } }).toArray(),
+    partnerColOf(db, "vehicleMaster").find({}, { projection: VEHICLE_PROJECTION }).toArray(),
+    partnerColOf(db, "masterPriceList").find({}, { projection: { licensePlate: 1, saleStatus: 1, totalSalePrice: 1, downPayment: 1, cashDown: 1, monthlyPayment: 1, financeInstallments: 1 } }).toArray(),
+    partnerColOf(db, "promotionMaster").find({}, { projection: { licensePlate: 1, pro1Condition: 1, pro1FreeCount: 1, pro1TotalValue: 1, pro2RepairBudget: 1, pro3AnnualPm: 1 } }).toArray(),
+    partnerColOf(db, "contracts").find({ status: "active" }, { projection: { licensePlate: 1 } }).toArray(),
   ])
   return {
     vehicles,

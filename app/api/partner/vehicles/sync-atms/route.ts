@@ -1,11 +1,5 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB        = PARTNER_DB
-const COLL      = "vehicle_master"
-const ATMS_DB   = "atms"
-const ATMS_COLL = "vehiclemaster"
-
+import { partnerDb, partnerColOf, atmsCol } from "@/lib/db/partner"
 /** ค่าจาก ATMS ที่ถือว่า "ว่าง" — pandas export ทิ้ง "nan"/"-" ไว้ */
 function clean(v: unknown): string {
   const s = String(v ?? "").trim()
@@ -18,9 +12,9 @@ function clean(v: unknown): string {
  * (middleware บังคับ admin สำหรับ method ที่ไม่ใช่ GET อยู่แล้ว)
  */
 export async function POST() {
-  const client = await clientPromise
-  const app  = client.db(DB).collection(COLL)
-  const atms = client.db(ATMS_DB).collection(ATMS_COLL)
+  const pdb = await partnerDb()
+  const app  = partnerColOf(pdb, "vehicleMaster")
+  const atms = await atmsCol("vehicleMaster")
 
   // index ทะเบียน → เอกสาร ATMS (ถ้าทะเบียนซ้ำใน ATMS ใช้ตัวแรก)
   const atmsRows = await atms.find({}).toArray()

@@ -19,6 +19,7 @@ import { ActivityHistory } from "@/components/partner/activity-history"
 import { formatMoney, formatMonth } from "@/lib/partner/utils"
 import { exportToExcel, todayStamp } from "@/lib/partner/export-excel"
 import type { Contract } from "@/lib/partner/types"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
 /* ────────────────────────────── types ────────────────────────────── */
 
@@ -680,7 +681,7 @@ function ManageDrawer({ entry, onClose, onChanged }: {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <ActivityHistory
-              entity="driver_ledger"
+              entity={PARTNER.driverLedger}
               entityId={entry.debtCode}
               label="ประวัติ"
               fieldLabels={{ monthlyAmount: "หัก/เดือน", targetAmount: "เป้าสะสม", notes: "หมายเหตุ", status: "สถานะ" }}

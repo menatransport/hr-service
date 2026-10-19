@@ -1,7 +1,7 @@
-import type { Db } from "mongodb"
 import { nextMonth, prevMonth } from "@/lib/partner/utils"
 import { getInsuranceDeductionForPlate } from "@/lib/partner/insurance-tax"
 import { getLedgerDeductions } from "@/lib/partner/driver-ledger"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
 
 export interface PayrollResult {
   contractCode: string
@@ -49,7 +49,7 @@ export interface PayrollResult {
  * Returns null if the contract does not exist.
  */
 export async function calculatePayrollEntry(
-  db: Db,
+  db: PartnerDb,
   contractCode: string,
   month: string
 ): Promise<PayrollResult | null> {
@@ -57,11 +57,11 @@ export async function calculatePayrollEntry(
   const end   = `${nextMonth(month)}-01`
 
   const [contract, tripAgg, fuelRec, gpsRec, repairRec, installRec, adjRec] = await Promise.all([
-    db.collection("contracts").findOne(
+    partnerColOf(db, "contracts").findOne(
       { contractCode },
       { projection: { taxMonthlyInstallment: 1, repairMonthlyInstallment: 1, monthlyInstallment: 1, licensePlate: 1 } }
     ),
-    db.collection("trips").aggregate([
+    partnerColOf(db, "trips").aggregate([
       { $match: { contractCode, date: { $gte: start, $lt: end } } },
       {
         $group: {
@@ -72,11 +72,11 @@ export async function calculatePayrollEntry(
         },
       },
     ]).toArray(),
-    db.collection("fuel_records").findOne({ contractCode, month }),
-    db.collection("gps_config").findOne({ contractCode }),
-    db.collection("repair_monthly").findOne({ contractCode, month }),
-    db.collection("installment_schedule").findOne({ contractCode }),
-    db.collection("monthly_adjustments").findOne({ contractCode, month }),
+    partnerColOf(db, "fuelRecords").findOne({ contractCode, month }),
+    partnerColOf(db, "gpsConfig").findOne({ contractCode }),
+    partnerColOf(db, "repairMonthly").findOne({ contractCode, month }),
+    partnerColOf(db, "installmentSchedule").findOne({ contractCode }),
+    partnerColOf(db, "monthlyAdjustments").findOne({ contractCode, month }),
   ])
 
   if (!contract) return null
@@ -84,13 +84,13 @@ export async function calculatePayrollEntry(
   const trips       = tripAgg[0] ?? { total: 0, count: 0, uniqueDates: [] }
 
   // เฟส 1: สรุปเที่ยว+เชื้อเพลิงจาก BI (trip_fuel_monthly) — ถ้ามีของเดือนนี้ ใช้แทน trips/fuel_records เดิม
-  const tf = await db.collection("trip_fuel_monthly").findOne({ month, contractCode })
+  const tf = await partnerColOf(db, "tripFuelMonthly").findOne({ month, contractCode })
 
   const transportFee = tf ? ((tf.tripFee as number) ?? 0) : (trips.total as number)
   const tripCount    = tf ? ((tf.tripCount as number) ?? 0) : (trips.count as number)
 
   // เฟส 2: วันทำงานจากไฟล์ "สถานะวันทำงาน พจร." (attendance_monthly) — ถ้ามี ใช้แทนการนับวันจากเที่ยว
-  const att = await db.collection("attendance_monthly").findOne({ month, contractCode })
+  const att = await partnerColOf(db, "attendanceMonthly").findOne({ month, contractCode })
   const workingDays  = att ? ((att.workDays as number) ?? 0) : (trips.uniqueDates as string[]).length
 
   // เบี้ยวันทำงาน 5 ตัว (ค่าวินัย/โซนหนาแน่น/ค่าฝีมือ/เบี้ยขยัน/ค่าเช่าบ้าน) — จ่ายเมื่อคอลัมน์ "สูตร" = ได้
@@ -128,7 +128,7 @@ export async function calculatePayrollEntry(
   const ot               = (adjRec?.ot as number) ?? 0
 
   // เฟส 4: รายการรับ-หักมีชื่อ (payroll_extras) — บวกเข้า 4 ช่องเดิมตาม kind+wht
-  const extras = await db.collection("payroll_extras").find({ month, contractCode }).toArray()
+  const extras = await partnerColOf(db, "payrollExtras").find({ month, contractCode }).toArray()
   const exSum = (kind: string, wht: boolean) =>
     Math.round(extras.filter((e) => e.kind === kind && !!e.wht === wht)
       .reduce((s, e) => s + ((e.amount as number) ?? 0), 0) * 100) / 100
@@ -159,7 +159,7 @@ export async function calculatePayrollEntry(
     otherDeductWHT + otherDeductNoWHT + ledgerDeduction
 
   // หนี้ยกยอด: สุทธิเดือนก่อนติดลบ → ยกมาหักเดือนนี้ · เดือนนี้ยังติดลบ → ยกไปเดือนหน้า (ตรงคอลัมน์ NetPay ของ Excel)
-  const prev = await db.collection("payroll_entries").findOne(
+  const prev = await partnerColOf(db, "payrollEntries").findOne(
     { contractCode, month: prevMonth(month) }, { projection: { carryOut: 1 } })
   const carryIn = Math.round((((prev?.carryOut as number) ?? 0)) * 100) / 100
   const netPay = Math.round((totalIncome - totalDeductions) * 100) / 100

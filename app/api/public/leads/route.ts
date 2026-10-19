@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { parseLead, allowRequest } from "@/lib/partner/public-lead"
 import { loadPublicTruckBySlug } from "@/lib/partner/public-trucks"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /** ฟอร์มจากหน้าเว็บสาธารณะ → quotations status "lead" (โผล่ใน Kanban /quotations) */
 export async function POST(req: NextRequest) {
@@ -20,9 +18,9 @@ export async function POST(req: NextRequest) {
   // แนบข้อมูลรถจากฝั่ง server เท่านั้น (ห้ามเชื่อราคาที่ client ส่งมา)
   const truck = lead.slug ? await loadPublicTruckBySlug(lead.slug) : null
   const now = new Date().toISOString()
-  const db = (await clientPromise).db(DB)
+  const db = (await partnerDb())
 
-  await db.collection("quotations").insertOne({
+  await partnerColOf(db, "quotations").insertOne({
     quotationNo: "",                       // ยังไม่ออกเลขใบเสนอ — ออกตอนทีมขายแปลงเป็นใบจริง
     status: "lead",
     source: "public-listing",

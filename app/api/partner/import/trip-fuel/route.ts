@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { TF_COLL, parseTripSummarySheet } from "@/lib/partner/trip-fuel"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 /**
@@ -26,15 +25,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "อ่านไฟล์ไม่สำเร็จ" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   // จับคู่ชื่อ พจส. → รหัสสัญญา (drivers → contracts, ชื่อตัดช่องว่าง)
   const norm = (s: string) => (s ?? "").replace(/\s+/g, "").trim()
   const byName: Record<string, { code: string; plate: string }> = {}
-  const contracts = await db.collection("contracts").find({}, { projection: { contractCode: 1, driverName: 1, licensePlate: 1 } }).toArray()
+  const contracts = await partnerColOf(db, "contracts").find({}, { projection: { contractCode: 1, driverName: 1, licensePlate: 1 } }).toArray()
   for (const c of contracts) if (c.driverName) byName[norm(c.driverName as string)] ??= { code: c.contractCode as string, plate: (c.licensePlate as string) ?? "" }
-  const drivers = await db.collection("drivers").find({}, { projection: { contractCode: 1, driverName: 1, licensePlate: 1 } }).toArray()
+  const drivers = await partnerColOf(db, "drivers").find({}, { projection: { contractCode: 1, driverName: 1, licensePlate: 1 } }).toArray()
   for (const d of drivers) if (d.driverName) byName[norm(d.driverName as string)] = { code: d.contractCode as string, plate: (d.licensePlate as string) ?? "" }
 
   const r2 = (n: number) => Math.round(n * 100) / 100
@@ -60,8 +59,8 @@ export async function POST(req: NextRequest) {
   if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
   const session = await getPartnerSession()
   const now = new Date().toISOString()
-  await db.collection(TF_COLL).deleteMany({ month })
-  await db.collection(TF_COLL).insertMany(rows.map((r) => ({
+  await partnerColOf(db, "tripFuelMonthly").deleteMany({ month })
+  await partnerColOf(db, "tripFuelMonthly").insertMany(rows.map((r) => ({
     month, contractCode: r.contractCode, driverName: r.driverName, licensePlate: r.licensePlate,
     branch: r.branch, tripCount: r.tripCount, tripFee: r.tripFee,
     fuelDeduct: r.fuelDeduct, overMoney: r.overMoney, underMoney: r.underMoney,

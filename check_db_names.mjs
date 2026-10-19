@@ -4,7 +4,7 @@
  *   node check_db_names.mjs     → exit 0 = สะอาด · exit 1 = เจอชื่อพิมพ์เอง (พิมพ์ไฟล์:บรรทัดให้)
  *
  * นอก `lib/db/` ห้ามมี:
- * 1. สตริงที่ **ทั้งก้อน** ตรงกับชื่อในทะเบียน เช่น `"record_cases"` `"Boom_ETL"` (สคริปต์ที่รากต้อง import
+ * 1. สตริงที่ **ทั้งก้อน** ตรงกับชื่อในทะเบียน (รวม `PARTNER` / `PARTNER_EXT_DB` / `BI` / `ATMS` ของระบบรถร่วม) เช่น `"record_cases"` `"Boom_ETL"` (สคริปต์ที่รากต้อง import
  *    จาก registry) — ข้อความยาวที่แค่เอ่ยถึงชื่อคอลเลกชัน (เอกสาร API / ข้อความ error) ไม่นับ และคีย์ที่ส่ง
  *    เข้า `hrCol()` / `etlCol()` / `hrBucket()` ตรง ๆ ก็ไม่นับ (คีย์ `vehicles` บังเอิญชื่อเดียวกับคอลเลกชัน)
  * 2. `.collection("…")` / `.db("…")` ที่ส่งสตริงตรง ๆ — ต้องผ่าน `hrCol()` / `etlCol()` หรือชื่อจาก registry
@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BUCKETS, DB, ETL, HR } from "./lib/db/registry.mjs";
+import { ATMS, BI, BUCKETS, DB, ETL, HR, PARTNER, PARTNER_EXT_DB } from "./lib/db/registry.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SELF = path.basename(fileURLToPath(import.meta.url));
@@ -29,11 +29,24 @@ const ALLOW = {
   "app/recruitment/_components/admin/driver-profile.tsx": ["main_driver", "vehicles"],
 };
 
+/**
+ * ชื่อของระบบรถร่วมที่เป็นคำสามัญ — **ไม่นับในกฎข้อ 1 (สตริงทั้งก้อน) เท่านั้น** กฎข้อ 2 (`.collection("…")` /
+ * `.db("…")` ด้วยสตริง) ยังจับทุกชื่อเหมือนเดิม
+ * เหตุผล: คำเหล่านี้ซ้ำกับชื่อโดเมนสิทธิ์ (`lib/partner/rbac.ts`), ชื่อโฟลเดอร์อัปโหลด, ป้ายแหล่งข้อมูลของ hr
+ * (`"drivers"` `"atms"` ในหน้ารับสมัคร) ซึ่งไม่ใช่การเข้าถึงฐาน — ถ้านับจะต้องเขียนข้อยกเว้นรายไฟล์หลายสิบจุด
+ * ชื่อเฉพาะอื่นของรถร่วม (`payroll_entries`, `driver_ledger`, `vehiclemaster`, `mena-bi` …) นับทั้งหมด
+ */
+const GENERIC_WORDS = new Set(["contracts", "customers", "drivers", "quotations", "trips", "atms"]);
+
 const NAMES = new Set([
   ...Object.values(DB),
   ...Object.values(HR).map((def) => def.name),
   ...Object.values(BUCKETS).flatMap((b) => [b, `${b}.files`, `${b}.chunks`]),
   ...Object.values(ETL),
+  // ระบบรถร่วม (mena_partner) + db อ่านอย่างเดียวที่โค้ดรถร่วมใช้ (mena-bi, atms) — ดู GENERIC_WORDS
+  ...[...Object.values(PARTNER), ...Object.values(PARTNER_EXT_DB), ...Object.values(BI), ...Object.values(ATMS)].filter(
+    (name) => !GENERIC_WORDS.has(name),
+  ),
 ]);
 
 /**
@@ -105,8 +118,13 @@ function walk(dir) {
   return files;
 }
 
-/** คีย์ทะเบียนที่ส่งเข้าตัวเข้าถึงตรง ๆ เช่น `etlCol("vehicles")` / `etlCol<Doc>(\n "vehicles"` */
-const ACCESSOR_BEFORE_RE = /\b(?:hrCol|etlCol|hrBucket)(?:<[^()]*>)?\(\s*$/;
+/**
+ * คีย์ทะเบียนที่ส่งเข้าตัวเข้าถึงตรง ๆ เช่น `etlCol("vehicles")` / `etlCol<Doc>(\n "vehicles"`
+ * รถร่วม: `partnerCol("contracts")` · `partnerColOf(db, "contracts")` · `biCol("driverCost")` · `atmsCol(…)`
+ * (ตัวเข้าถึงทุกตัวรับเฉพาะคีย์จากทะเบียน — ชนิดของ TypeScript กันสตริงอิสระอีกชั้น)
+ */
+const ACCESSOR_BEFORE_RE =
+  /\b(?:(?:hrCol|etlCol|hrBucket|partnerCol|biCol|atmsCol)(?:<[^()]*>)?\(|partnerColOf(?:<[^()]*>)?\(\s*[\w$]+\s*,)\s*$/;
 const RAW_ACCESS_RE = /\.(collection|db)\(\s*["'`]/g;
 const MONGO_IMPORT_RE = /from\s+["'](?:@\/lib\/mongo|(?:\.{1,2}\/)+(?:lib\/)?mongo)(?:\.ts)?["']/g;
 
@@ -129,7 +147,7 @@ for (const file of walk(ROOT)) {
     problems.push(`${rel}:${lineOf(m.index)}  .${m[1]}("…") ด้วยสตริงตรง ๆ`);
   if (rel !== "lib/mongo.ts")
     for (const m of code.matchAll(MONGO_IMPORT_RE))
-      problems.push(`${rel}:${lineOf(m.index)}  import lib/mongo นอก lib/db — ใช้ hrCol/etlCol/hrBucket`);
+      problems.push(`${rel}:${lineOf(m.index)}  import lib/mongo นอก lib/db — ใช้ hrCol/etlCol/hrBucket/partnerCol`);
 }
 
 if (problems.length) {

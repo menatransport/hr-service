@@ -4,9 +4,9 @@
  */
 import "server-only"
 import * as XLSX from "xlsx"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
-export const ATT_COLL = "attendance_monthly"
-
+export const ATT_COLL = PARTNER.attendanceMonthly
 export interface AttendanceRow {
   driverName: string
   staffCode: string

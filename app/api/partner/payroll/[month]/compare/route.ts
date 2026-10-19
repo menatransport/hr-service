@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 /**
@@ -53,9 +52,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mon
   }
   if (Object.keys(fileRows).length === 0) return NextResponse.json({ error: "ไม่พบแถวสัญญา (MTxxx) ในชีต Summary" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
-  const entries = await db.collection("payroll_entries").find({ month }).toArray()
+  const pdb = await partnerDb()
+  const db = pdb
+  const entries = await partnerColOf(db, "payrollEntries").find({ month }).toArray()
   const eMap = Object.fromEntries(entries.map((e) => [e.contractCode as string, e]))
 
   const n = (v: unknown) => (typeof v === "number" ? v : 0)

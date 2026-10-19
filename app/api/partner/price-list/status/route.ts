@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-
-const DB   = PARTNER_DB
-const COLL = "master_price_list"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 const SALE_STATUSES = new Set(["ready", "repair15", "repair30", "review"])
 
 // field ที่แก้ได้จากหน้า price-list = field ที่เก็บ audit log
@@ -46,8 +42,8 @@ export async function POST(req: NextRequest) {
     repairEnd:   isRepair ? (body.repairEnd   ?? null) : null,
   }
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "masterPriceList")
 
   // อ่านค่าเดิมก่อน เพื่อ (ก) เช็คว่ามีทะเบียนนี้จริง (ข) เก็บ from ไว้ทำ diff
   const before = await col.findOne(

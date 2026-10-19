@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
 import { normPlateIT } from "@/lib/partner/insurance-tax"
 import {
@@ -13,10 +12,8 @@ import {
   type LedgerKind,
   type SourceType,
 } from "@/lib/partner/driver-ledger"
-
-const DB   = PARTNER_DB
-const COLL = "driver_ledger"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { PARTNER } from "@/lib/db/registry.mjs"
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 function round2(n: number): number {
@@ -35,8 +32,8 @@ export async function GET(req: NextRequest) {
   const contractCode = searchParams.get("contractCode")?.trim() ?? ""
   const plate        = searchParams.get("plate")?.trim() ?? ""
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {}
@@ -44,7 +41,7 @@ export async function GET(req: NextRequest) {
   else if (plate)   filter.platePlain = normPlateIT(plate) || plate
   else              filter.status = "active"
 
-  const docs = await db.collection(COLL)
+  const docs = await partnerColOf(db, "driverLedger")
     .find(filter)
     .sort({ contractCode: 1, createdAt: -1 })
     .toArray()
@@ -53,7 +50,7 @@ export async function GET(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payByEntry = new Map<string, any>()
   if (ids.length > 0) {
-    const payAgg = await db.collection("ledger_payments").aggregate([
+    const payAgg = await partnerColOf(db, "ledgerPayments").aggregate([
       { $match: { entryId: { $in: ids } } },
       { $sort: { month: 1 } },
       {
@@ -102,8 +99,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const session = await getPartnerSession()
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
   const now    = new Date().toISOString()
   const currentMonth = now.slice(0, 7)
 
@@ -132,7 +129,7 @@ export async function POST(req: NextRequest) {
     if (!itemId || !ObjectId.isValid(itemId)) {
       return NextResponse.json({ error: "convertFrom.itemId invalid" }, { status: 400 })
     }
-    const item = await db.collection("vehicle_insurance_tax").findOne({ _id: new ObjectId(itemId) })
+    const item = await partnerColOf(db, "vehicleInsuranceTax").findOne({ _id: new ObjectId(itemId) })
     if (!item) return NextResponse.json({ error: "insurance item not found" }, { status: 404 })
     if (!item.itemType || !((item.amount as number) > 0)) {
       return NextResponse.json({ error: "insurance item has no amount to convert" }, { status: 400 })
@@ -148,7 +145,7 @@ export async function POST(req: NextRequest) {
     // สัญญา/พขร. ปัจจุบันของทะเบียนนี้ ถ้า caller ไม่ได้ส่งมา
     if (!contractCode) {
       const platePlain = normPlateIT(licensePlate ?? "")
-      const contracts = await db.collection("contracts")
+      const contracts = await partnerColOf(db, "contracts")
         .find({ status: "active" })
         .project({ contractCode: 1, licensePlate: 1, driverName: 1 })
         .toArray()
@@ -166,7 +163,7 @@ export async function POST(req: NextRequest) {
     if (!daId || !ObjectId.isValid(daId)) {
       return NextResponse.json({ error: "convertFrom.id invalid" }, { status: 400 })
     }
-    const da = await db.collection("debt_acceptances").findOne({ _id: new ObjectId(daId) })
+    const da = await partnerColOf(db, "debtAcceptances").findOne({ _id: new ObjectId(daId) })
     if (!da) return NextResponse.json({ error: "debt acceptance not found" }, { status: 404 })
 
     // กันแปลงซ้ำ — ถ้าใบนี้ถูกแปลงเป็นรายการหนี้ไปแล้ว
@@ -203,7 +200,7 @@ export async function POST(req: NextRequest) {
     if (!ctId || !ObjectId.isValid(ctId)) {
       return NextResponse.json({ error: "convertFrom.id invalid" }, { status: 400 })
     }
-    const ct = await db.collection("contracts").findOne({ _id: new ObjectId(ctId) })
+    const ct = await partnerColOf(db, "contracts").findOne({ _id: new ObjectId(ctId) })
     if (!ct) return NextResponse.json({ error: "contract not found" }, { status: 404 })
     if (ct.ledgerDebtCode) {
       return NextResponse.json(
@@ -288,11 +285,11 @@ export async function POST(req: NextRequest) {
     updatedAt: now,
   }
 
-  const result = await db.collection(COLL).insertOne(entry as never)
+  const result = await partnerColOf(db, "driverLedger").insertOne(entry as never)
 
   // ── debt acceptance: ทำ flag ว่าแปลงเป็นรายการหนี้แล้ว (กันแปลงซ้ำ + โชว์ลิงก์) ──
   if (debtAcceptanceToMark) {
-    await db.collection("debt_acceptances").updateOne(
+    await partnerColOf(db, "debtAcceptances").updateOne(
       { _id: debtAcceptanceToMark._id },
       { $set: { ledgerDebtCode: debtCode, ledgerConvertedAt: now, updatedAt: now } }
     )
@@ -300,7 +297,7 @@ export async function POST(req: NextRequest) {
 
   // ── contract: ทำ flag รายการผ่อนรถที่สร้างใน ledger (กันสร้างซ้ำ + ลิงก์) ──
   if (contractToMark) {
-    await db.collection("contracts").updateOne(
+    await partnerColOf(db, "contracts").updateOne(
       { _id: contractToMark._id },
       { $set: { ledgerDebtCode: debtCode, ledgerConvertedAt: now, updatedAt: now } }
     )
@@ -310,7 +307,7 @@ export async function POST(req: NextRequest) {
   if (insuranceItemToClear) {
     const oldNotes = (insuranceItemToClear.notes as string) ?? ""
     const moveNote = `ย้ายไปหักผ่าน ledger ${debtCode}`
-    await db.collection("vehicle_insurance_tax").updateOne(
+    await partnerColOf(db, "vehicleInsuranceTax").updateOne(
       { _id: insuranceItemToClear._id },
       {
         $set: {
@@ -326,7 +323,7 @@ export async function POST(req: NextRequest) {
   }
 
   await logActivity({
-    entity: "driver_ledger",
+    entity: PARTNER.driverLedger,
     entityId: debtCode,
     action: "create",
     changes: {

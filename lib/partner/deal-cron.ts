@@ -1,8 +1,8 @@
 import "server-only"
-import type { Db } from "mongodb"
 import { AUTO_CLOSE_DAYS, DAYS_TO_COMPLETE, isStage, STAGE_LABEL, type Stage } from "@/lib/partner/deal-stage"
 import { LOSS_COLL, seedLossReasons } from "@/lib/partner/loss-reason"
 import { DEAL_COLL, closeLost, moveStage } from "@/lib/partner/deal-actions"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner"
 
 /**
  * งานรายวันของไปป์ไลน์ (เรียกจาก /api/cron/deals)
@@ -62,13 +62,13 @@ export function dealDailyActions(d: DealForCron, now = new Date()) {
   }
 }
 
-export async function runDealDailyJobs(db: Db, now = new Date(), opts: { apply?: boolean } = {}): Promise<CronReport> {
+export async function runDealDailyJobs(db: PartnerDb, now = new Date(), opts: { apply?: boolean } = {}): Promise<CronReport> {
   const apply = opts.apply === true
   const report: CronReport = { applied: apply, followUpDue: [], autoClosed: [], completed: [], errors: [] }
   await seedLossReasons(db)
 
-  const systemReason = await db.collection(LOSS_COLL).findOne({ code: "NO_ACTIVITY_30D" })
-  const deals = await db.collection(DEAL_COLL)
+  const systemReason = await partnerColOf(db, "lossReasons").findOne({ code: "NO_ACTIVITY_30D" })
+  const deals = await partnerColOf(db, "quotations")
     .find({ stage: { $nin: ["CLOSED_LOST", "COMPLETED_90D"] } })
     .project({ quotationNo: 1, stage: 1, stageBeforeHold: 1, salesName: 1, salesEmail: 1, lastActivityAt: 1, updatedAt: 1, createdAt: 1, nextFollowUpDate: 1, deliveredAt: 1 })
     .toArray()

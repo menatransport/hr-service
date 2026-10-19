@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
 import { hasPerm } from "@/lib/partner/rbac"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -21,8 +19,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   const { locked } = await req.json() as { locked?: boolean }
-  const client = await clientPromise
-  const col = client.db(DB).collection("contracts")
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "contracts")
   const doc = await col.findOne({ _id: new ObjectId(id) })
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 })
 

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getPromoUsage } from "@/lib/partner/promo-usage"
-
-const DB = PARTNER_DB
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * Promotion budget status per plate — SINGLE SOURCE OF TRUTH.
@@ -11,8 +9,8 @@ const DB = PARTNER_DB
  * vehicle-cost page always agree.
  */
 export async function GET() {
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   const usage = await getPromoUsage(db)
 

@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { TF_COLL, TF_CONFIG, DEFAULT_CONFIG, aggregateFromBI, computeRow, plateContractMap, type TripFuelConfig } from "@/lib/partner/trip-fuel"
+import { partnerDb, partnerColOf, type AnyDoc } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 async function getConfig(db: any, month: string): Promise<TripFuelConfig> {
-  const c = await db.collection(TF_CONFIG).findOne({ month })
+  const c = await (partnerColOf(db, "tripFuelConfig") as AnyDoc).findOne({ month })
   if (c) return { ...DEFAULT_CONFIG, ...c, month }
   // เดือนใหม่ — สืบทอดราคาจากเดือนล่าสุดที่เคยตั้ง
-  const prev = await db.collection(TF_CONFIG).find({}).sort({ month: -1 }).limit(1).toArray()
+  const prev = await (partnerColOf(db, "tripFuelConfig") as AnyDoc).find({}).sort({ month: -1 }).limit(1).toArray()
   return { ...DEFAULT_CONFIG, ...(prev[0] ?? {}), month }
 }
 
@@ -21,11 +20,11 @@ async function getConfig(db: any, month: string): Promise<TripFuelConfig> {
 export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get("month") ?? ""
   if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month=YYYY-MM required" }, { status: 400 })
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const [config, rows] = await Promise.all([
     getConfig(db, month),
-    db.collection(TF_COLL).find({ month }).sort({ driverName: 1 }).toArray(),
+    partnerColOf(db, "tripFuelMonthly").find({ month }).sort({ driverName: 1 }).toArray(),
   ])
   return NextResponse.json({ config, rows: rows.map((r: any) => ({ ...r, _id: r._id.toString() })) })
 }
@@ -35,18 +34,18 @@ export async function PUT(req: NextRequest) {
   const body = await req.json() as Partial<TripFuelConfig> & { month?: string }
   const month = body.month ?? ""
   if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month required" }, { status: 400 })
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
   const cfg: TripFuelConfig = { ...DEFAULT_CONFIG, ...(await getConfig(db, month)), ...body, month }
   const { month: _m, ...cfgSet } = cfg as any
   void _m
-  await db.collection(TF_CONFIG).updateOne({ month }, { $set: { ...cfgSet, month, updatedAt: new Date().toISOString() } }, { upsert: true })
+  await partnerColOf(db, "tripFuelConfig").updateOne({ month }, { $set: { ...cfgSet, month, updatedAt: new Date().toISOString() } }, { upsert: true })
   // recompute ทุกแถวของเดือน
-  const rows = await db.collection(TF_COLL).find({ month }).toArray()
+  const rows = await partnerColOf(db, "tripFuelMonthly").find({ month }).toArray()
   for (const r of rows) {
     const c = computeRow(r, cfg)
-    await db.collection(TF_COLL).updateOne({ _id: r._id }, { $set: {
+    await partnerColOf(db, "tripFuelMonthly").updateOne({ _id: r._id }, { $set: {
       dieselUsed: c.dieselUsed, dieselOver: c.dieselOver, dieselUnder: c.dieselUnder,
       ngvUsed: c.ngvUsed, ngvOver: c.ngvOver, ngvUnder: c.ngvUnder,
       overRaw: c.overRaw, overMoney: c.overMoney, underMoney: c.underMoney,
@@ -62,14 +61,14 @@ export async function POST(req: NextRequest) {
   if (!MONTH_RE.test(month ?? "") || action !== "sync") {
     return NextResponse.json({ error: "month + action:'sync' required" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   if (await monthClosed(db, month!)) return NextResponse.json(closedError(month!), { status: 423 })
   const cfg = await getConfig(db, month!)
   const [agg, pMap, existing] = await Promise.all([
-    aggregateFromBI(client, month!),
+    aggregateFromBI(pdb, month!),
     plateContractMap(db),
-    db.collection(TF_COLL).find({ month }).toArray(),
+    partnerColOf(db, "tripFuelMonthly").find({ month }).toArray(),
   ])
   const manual = new Map(existing.map((r: any) => [r.driverName, r]))
   const now = new Date().toISOString()
@@ -88,7 +87,7 @@ export async function POST(req: NextRequest) {
       syncedAt: now,
     }
     const c = computeRow(base, cfg)
-    await db.collection(TF_COLL).updateOne(
+    await partnerColOf(db, "tripFuelMonthly").updateOne(
       { month, driverName: d.driverName },
       { $set: c },
       { upsert: true }
@@ -103,9 +102,9 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json() as any
   const id = body.id as string
   if (!id || !ObjectId.isValid(id)) return NextResponse.json({ error: "id required" }, { status: 400 })
-  const client = await clientPromise
-  const db = client.db(DB)
-  const row = await db.collection(TF_COLL).findOne({ _id: new ObjectId(id) })
+  const pdb = await partnerDb()
+  const db = pdb
+  const row = await partnerColOf(db, "tripFuelMonthly").findOne({ _id: new ObjectId(id) })
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 })
   if (await monthClosed(db, row.month as string)) return NextResponse.json(closedError(row.month as string), { status: 423 })
   const cfg = await getConfig(db, row.month as string)
@@ -113,7 +112,7 @@ export async function PATCH(req: NextRequest) {
   const patch: any = {}
   for (const k of editable) if (body[k] !== undefined) patch[k] = k === "contractCode" || k === "notes" ? String(body[k]) : Number(body[k]) || 0
   const c = computeRow({ ...row, ...patch }, cfg)
-  await db.collection(TF_COLL).updateOne({ _id: row._id }, { $set: { ...patch,
+  await partnerColOf(db, "tripFuelMonthly").updateOne({ _id: row._id }, { $set: { ...patch,
     dieselUsed: c.dieselUsed, dieselOver: c.dieselOver, dieselUnder: c.dieselUnder,
     ngvUsed: c.ngvUsed, ngvOver: c.ngvOver, ngvUnder: c.ngvUnder,
     overRaw: c.overRaw, overMoney: c.overMoney, underMoney: c.underMoney,

@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "vehicle_costs"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const q        = searchParams.get("q")?.trim() ?? ""
   const category = searchParams.get("category")?.trim() ?? ""
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const match: Record<string, any> = {}
@@ -25,7 +21,7 @@ export async function GET(req: NextRequest) {
     ]
   }
 
-  const entries = await db.collection(COLL)
+  const entries = await partnerColOf(db, "vehicleCosts")
     .find(match)
     .sort({ date: -1 })
     .toArray()
@@ -90,7 +86,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing required fields" }, { status: 400 })
   }
 
-  const client = await clientPromise
+  const pdb = await partnerDb()
   const doc = {
     contractCode: body.contractCode.trim(),
     licensePlate: body.licensePlate?.trim() ?? "",
@@ -103,6 +99,6 @@ export async function POST(req: NextRequest) {
     createdAt:    new Date(),
   }
 
-  const result = await client.db(DB).collection(COLL).insertOne(doc)
+  const result = await partnerColOf(pdb, "vehicleCosts").insertOne(doc)
   return NextResponse.json({ _id: result.insertedId.toString(), ...doc }, { status: 201 })
 }

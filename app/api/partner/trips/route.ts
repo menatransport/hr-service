@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { nextMonth } from "@/lib/partner/utils"
-
-const DB   = PARTNER_DB
-const COLL = "trips"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const contractCode = searchParams.get("contractCode")?.trim() ?? ""
   const month        = searchParams.get("month")?.trim() ?? ""
   const plant        = searchParams.get("plant")?.trim() ?? ""
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "trips")
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {}
@@ -34,8 +30,8 @@ export async function POST(req: NextRequest) {
   if (!body.contractCode || !body.date) {
     return NextResponse.json({ error: "contractCode and date required" }, { status: 400 })
   }
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "trips")
   const doc    = { ...body, createdAt: new Date().toISOString() }
   const result = await col.insertOne(doc)
   return NextResponse.json({ _id: result.insertedId, ...doc }, { status: 201 })
@@ -58,8 +54,8 @@ export async function DELETE(req: NextRequest) {
   const filter: Record<string, any> = { date: { $gte: startStr, $lt: endStr } }
   if (contractCode) filter.contractCode = contractCode
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "trips")
   const result = await col.deleteMany(filter)
   return NextResponse.json({ deleted: result.deletedCount })
 }

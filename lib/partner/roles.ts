@@ -1,7 +1,6 @@
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { ROLES, type Role } from "@/lib/partner/rbac"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const ALLOWED_DOMAIN = "menatransport.co.th"
 
 /** @deprecated โมดูลเก่า — คงไว้เผื่อมีที่อ้างถึง · **ห้ามใช้ตัดสินสิทธิ์** (แค่บอกว่าอีเมลอยู่ในโดเมนบริษัท) */
@@ -40,8 +39,8 @@ let cache: { at: number; users: Map<string, Role> } | null = null
 
 async function loadUsers(): Promise<Map<string, Role>> {
   if (cache && Date.now() - cache.at < 60_000) return cache.users
-  const client = await clientPromise
-  const rows = await client.db(DB).collection("app_users").find({}).project({ email: 1, role: 1 }).toArray()
+  const pdb = await partnerDb()
+  const rows = await partnerColOf(pdb, "appUsers").find({}).project({ email: 1, role: 1 }).toArray()
   const users = new Map<string, Role>()
   for (const r of rows) {
     // บทบาทสะกดผิด/ไม่รู้จัก = viewer — ไม่เดาให้

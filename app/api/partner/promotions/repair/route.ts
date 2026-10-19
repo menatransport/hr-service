@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -9,8 +7,8 @@ export async function POST(req: Request) {
   if (!contractCode || !date || !description || amount == null) {
     return NextResponse.json({ error: "missing required fields" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const doc = {
     contractCode: String(contractCode),
     date: String(date),
@@ -23,6 +21,6 @@ export async function POST(req: Request) {
     reserve: true,
     createdAt: new Date(),
   }
-  const result = await db.collection("repair_claims").insertOne(doc)
+  const result = await partnerColOf(db, "repairClaims").insertOne(doc)
   return NextResponse.json({ _id: result.insertedId.toString(), ...doc }, { status: 201 })
 }

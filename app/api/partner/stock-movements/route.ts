@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId, AnyBulkWriteOperation } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -25,11 +25,10 @@ export async function GET(req: NextRequest) {
     ]
   }
 
-  const client = await clientPromise
-  const db     = client.db(PARTNER_DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const docs = await db
-    .collection("stock_movements")
+  const docs = await     partnerColOf(db, "stockMovements")
     .find(filter)
     .sort({ date: -1, wd: 1 })
     .toArray()
@@ -59,7 +58,7 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const client = await clientPromise
+  const pdb = await partnerDb()
   const now    = new Date()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ops: AnyBulkWriteOperation<any>[] = updates.map((u) => {
@@ -86,8 +85,7 @@ export async function PATCH(req: NextRequest) {
     }
   })
 
-  const result = await client.db(PARTNER_DB)
-    .collection("stock_movements")
+  const result = await     partnerColOf(pdb, "stockMovements")
     .bulkWrite(ops)
 
   return NextResponse.json({ ok: true, modified: result.modifiedCount, matched: result.matchedCount })

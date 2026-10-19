@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { nextMonth } from "@/lib/partner/utils"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 type Alert = {
   type: "negative_pay" | "insurance_expired" | "insurance_expiring" | "repair_budget_critical" | "trip_fee_mismatch" | "overdue_installment"
@@ -15,24 +13,23 @@ type Alert = {
 }
 
 export async function GET() {
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   const alerts: Alert[] = []
 
   // Latest month with payroll entries
-  const months = await db.collection("payroll_entries").distinct("month")
+  const months = await partnerColOf(db, "payrollEntries").distinct("month")
   months.sort((a: string, b: string) => b.localeCompare(a))
   const latestMonth = months[0] as string | undefined
 
   // Pre-load all driver names once (avoid N+1)
-  const allDrivers = await db.collection("drivers").find({}, { projection: { contractCode: 1, driverName: 1 } }).toArray()
+  const allDrivers = await partnerColOf(db, "drivers").find({}, { projection: { contractCode: 1, driverName: 1 } }).toArray()
   const driverNameMap = Object.fromEntries(allDrivers.map((d) => [d.contractCode as string, d.driverName as string]))
 
   // 1. Negative net pay in latest month
   if (latestMonth) {
-    const negativeEntries = await db
-      .collection("payroll_entries")
+    const negativeEntries = await       partnerColOf(db, "payrollEntries")
       .find({ month: latestMonth, netPay: { $lt: 0 } })
       .sort({ netPay: 1 })
       .toArray()
@@ -61,15 +58,14 @@ export async function GET() {
   const ITEM_LABELS: Record<string, string> = {
     insurance: "ประกันภัย", prb: "พรบ.", tax: "ภาษีทะเบียน", inspection: "ตรวจสภาพ",
   }
-  const latestItems = await db.collection("vehicle_insurance_tax").aggregate([
+  const latestItems = await partnerColOf(db, "vehicleInsuranceTax").aggregate([
     { $match: { itemType: { $exists: true } } },
     { $sort: { createdAt: -1 } },
     { $group: { _id: { plate: "$platePlain", itemType: "$itemType" }, latest: { $first: "$$ROOT" } } },
   ]).toArray()
 
   if (latestItems.length > 0) {
-    const activeContracts = await db
-      .collection("contracts")
+    const activeContracts = await       partnerColOf(db, "contracts")
       .find({ status: "active" }, { projection: { contractCode: 1, driverName: 1, licensePlate: 1 } })
       .toArray()
     const plateNorm = (p?: string) => (p ?? "").replace(/^[^0-9]*/, "").trim()
@@ -92,8 +88,7 @@ export async function GET() {
       })
     }
   } else {
-    const insuranceContracts = await db
-      .collection("contracts")
+    const insuranceContracts = await       partnerColOf(db, "contracts")
       .find(
         { taxExpiryDate: { $lte: in60 } },
         { projection: { contractCode: 1, driverName: 1, taxExpiryDate: 1 } }
@@ -115,13 +110,12 @@ export async function GET() {
   }
 
   // 3. Repair budget > 90% utilized
-  const configs = await db
-    .collection("promo_config")
+  const configs = await     partnerColOf(db, "promoConfig")
     .find({ contractCode: { $exists: true, $ne: "" }, repairBudget: { $gt: 0 } })
     .toArray()
 
   const contractCodes = configs.map((c) => c.contractCode as string)
-  const repairAgg = await db.collection("repair_claims").aggregate([
+  const repairAgg = await partnerColOf(db, "repairClaims").aggregate([
     { $match: { contractCode: { $in: contractCodes } } },
     { $group: { _id: "$contractCode", total: { $sum: "$amount" } } },
   ]).toArray()
@@ -148,13 +142,13 @@ export async function GET() {
     const start = `${latestMonth}-01`
     const end   = `${nextMonth(latestMonth)}-01`
 
-    const payrollEntries = await db.collection("payroll_entries")
+    const payrollEntries = await partnerColOf(db, "payrollEntries")
       .find({ month: latestMonth, transportFee: { $gt: 0 } })
       .toArray()
 
     if (payrollEntries.length > 0) {
       const entryCodeList = payrollEntries.map((e) => e.contractCode as string)
-      const tripAgg = await db.collection("trips").aggregate([
+      const tripAgg = await partnerColOf(db, "trips").aggregate([
         { $match: { contractCode: { $in: entryCodeList }, date: { $gte: start, $lt: end } } },
         { $group: { _id: "$contractCode", total: { $sum: "$tripFee" } } },
       ]).toArray()
@@ -180,8 +174,7 @@ export async function GET() {
   }
 
   // 5. Overdue installments
-  const overdueContracts = await db
-    .collection("contracts")
+  const overdueContracts = await     partnerColOf(db, "contracts")
     .find({ overdueCount: { $gt: 0 } }, { projection: { contractCode: 1, driverName: 1, overdueCount: 1, overdueAmount: 1 } })
     .sort({ overdueCount: -1 })
     .toArray()
@@ -200,7 +193,7 @@ export async function GET() {
 
   // ── ดีลในไปป์ไลน์ขาย: เลยวันติดตาม / ถูกระบบปิดเพราะเงียบ (รอเซลล์ระบุเหตุผลจริง) ──
   const todayISO = new Date().toISOString().slice(0, 10)
-  const dueDeals = await db.collection("quotations")
+  const dueDeals = await partnerColOf(db, "quotations")
     .find({ stage: "ON_HOLD", nextFollowUpDate: { $lte: todayISO } },
       { projection: { quotationNo: 1, customerName: 1, salesName: 1, nextFollowUpDate: 1 } })
     .limit(50).toArray()
@@ -213,7 +206,7 @@ export async function GET() {
     })
   }
 
-  const autoClosed = await db.collection("quotations")
+  const autoClosed = await partnerColOf(db, "quotations")
     .find({ stage: "CLOSED_LOST", lossNote: { $regex: "ระบบปิดให้อัตโนมัติ" } },
       { projection: { quotationNo: 1, customerName: 1, salesName: 1 } })
     .limit(50).toArray()

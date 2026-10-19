@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -110,8 +110,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Confirm: upsert by composite key (date + wd + mr + itemCode + amount) ───
-  const client = await clientPromise
-  const col    = client.db(PARTNER_DB).collection("stock_movements")
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "stockMovements")
   const now    = new Date()
 
   let upserted = 0, modified = 0

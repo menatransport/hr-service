@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "drivers"
-
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 function parseBool(v: unknown): boolean {
   if (typeof v === "boolean") return v
   const s = String(v ?? "").trim().toUpperCase()
@@ -33,8 +29,8 @@ export async function POST(req: NextRequest) {
   let upserted = 0
   let skipped  = 0
 
-  const client = await clientPromise
-  const coll   = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const coll   = partnerColOf(pdb, "drivers")
 
   for (const row of rows) {
     const firstName = parseStr(row["ชื่อ"])

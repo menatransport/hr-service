@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { calculatePayrollEntry } from "@/lib/partner/payroll-engine"
-
-const DB = PARTNER_DB
+import { partnerDb, partnerColOf } from "@/lib/db/partner"
 
 /**
  * POST /api/payroll/batch-create?month=YYYY-MM
@@ -23,15 +21,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "month required (YYYY-MM)" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
   if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
 
   // 1. All active drivers
-  const drivers = await db.collection("drivers").find({ status: "active" }).toArray()
+  const drivers = await partnerColOf(db, "drivers").find({ status: "active" }).toArray()
 
   // 2. Existing entries this month
-  const existingEntries = await db.collection("payroll_entries")
+  const existingEntries = await partnerColOf(db, "payrollEntries")
     .find({ month }, { projection: { contractCode: 1 } }).toArray()
   const existingCodes = new Set(existingEntries.map((e) => e.contractCode as string))
 
@@ -58,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   if (docs.length > 0) {
     try {
-      const result = await db.collection("payroll_entries").insertMany(docs, { ordered: false })
+      const result = await partnerColOf(db, "payrollEntries").insertMany(docs, { ordered: false })
       created = result.insertedCount
       errors  = docs.length - result.insertedCount
     } catch (e: unknown) {
