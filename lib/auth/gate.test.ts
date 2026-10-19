@@ -58,6 +58,15 @@ describe("public ของรถร่วม — ผ่านไม่ต้อ�
     check(anon("/trucksecret"), { action: "redirect", location: "/?next=%2Ftrucksecret" });
   });
   it("/api/publicity ไม่ใช่ public", () => check(anon("/api/publicity", "POST"), R401));
+  it("รูปแบรนด์ /partner/brand/* ที่ /trucks ใช้ — เปิดได้ไม่ต้องล็อกอิน", () =>
+    check(anon("/partner/brand/mena-logo.svg"), NEXT));
+  it("/partner/brandx ไม่ใช่ public", () =>
+    check(anon("/partner/brandx"), { action: "redirect", location: "/?next=%2Fpartner%2Fbrandx" }));
+  it("/partner/vendor-open-form.pdf (นอก brand) ยังต้องล็อกอิน", () =>
+    check(anon("/partner/vendor-open-form.pdf"), {
+      action: "redirect",
+      location: "/?next=%2Fpartner%2Fvendor-open-form.pdf",
+    }));
 });
 
 describe("/api/partner/cron/* ผ่านด่าน (route ตรวจ Bearer เอง)", () => {
