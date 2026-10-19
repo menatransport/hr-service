@@ -62,7 +62,7 @@ export function mapPath(p) {
   if (p.startsWith("components/")) return "components/partner/" + p.slice("components/".length)
   if (p === "types/index.ts") return "lib/partner/types/index.ts"
   if (p.startsWith("__tests__/")) return "lib/partner/__tests__/" + p.slice("__tests__/".length)
-  if (p === "test/server-only-stub.ts") return "lib/partner/test/server-only-stub.ts"
+  // test/server-only-stub.ts → ใช้ของ L1 ที่ราก (vitest.config.ts)
   if (p.startsWith("fonts/") || p.startsWith("templates/") || p.startsWith("data/")) return "partner-assets/" + p
   if (p.startsWith("public/")) return "public/partner/" + p.slice("public/".length)
   return null
