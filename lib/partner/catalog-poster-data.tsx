@@ -1,10 +1,10 @@
 import "server-only"
-import type { Db } from "mongodb"
 import { loadCatalogVehicles, type CatalogVehicle } from "@/lib/partner/catalog-pdf"
 import { getCatalogConfig, type CatalogConfig } from "@/lib/partner/catalog-config"
 import type { TruckCatalog } from "@/components/partner/catalog/truck-catalog-poster"
 import { promoCopy, type PromoSeg } from "@/lib/partner/promo-copy"
 import { displaySalePrice } from "@/lib/partner/sale-display"
+import { type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * แปลงข้อมูลรถ (ชุดเดียวกับ Catalog PDF) → props ของ TruckCatalogPoster
@@ -70,7 +70,7 @@ export function toPosterData(v: CatalogVehicle, cfg: CatalogConfig): TruckCatalo
 }
 
 /** โหลดข้อมูลโปสเตอร์ของทะเบียนเดียว — null ถ้าไม่พบรถ */
-export async function loadPosterData(db: Db, plate: string): Promise<TruckCatalog | null> {
+export async function loadPosterData(db: PartnerDb, plate: string): Promise<TruckCatalog | null> {
   const [vs, cfg] = await Promise.all([loadCatalogVehicles(db, [plate]), getCatalogConfig(db)])
   if (vs.length === 0) return null
   return toPosterData(vs[0], cfg)

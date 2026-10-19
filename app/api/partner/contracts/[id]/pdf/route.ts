@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import type { Contract } from "@/lib/partner/types"
 import { normPlate, type PromoMasterData } from "@/lib/partner/contract-docx"
 import { renderPdfmake } from "@/lib/partner/pdfmake-printer"
@@ -9,11 +8,11 @@ import { appendContractAttachments } from "@/lib/partner/pdf-attachments"
 import { withVehicleDetails } from "@/lib/partner/contract-vehicle"
 import { getCompanyVersion } from "@/lib/partner/company-config"
 import { applyCompany } from "@/lib/partner/contract-pdfmake-helpers"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
-
-const DB = PARTNER_DB
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -21,14 +20,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const builder = PDFMAKE_DOCS[type]
   if (!builder) return NextResponse.json({ error: "unsupported type" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
-  const found = (await db.collection("contracts").findOne({ _id: new ObjectId(id) })) as Contract | null
+  const pdb = await partnerDb()
+  const db = pdb
+  const found = (await partnerColOf(db, "contracts").findOne({ _id: new ObjectId(id) })) as Contract | null
   if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 })
   const contract = await withVehicleDetails(db, found as unknown as Record<string, unknown>) as unknown as Contract
 
   const plate = normPlate(contract.licensePlate)
-  const promos = (await db.collection("promotion_master").find({}).toArray()) as unknown as PromoMasterData[]
+  const promos = (await partnerColOf(db, "promotionMaster").find({}).toArray()) as unknown as PromoMasterData[]
   const promo = promos.find((p) => normPlate(p.licensePlate) === plate) ?? null
 
   // ใช้ชุดข้อมูลบริษัท "เวอร์ชันที่สัญญาจำไว้ตอนสร้าง" — พิมพ์ซ้ำกี่ครั้งก็ได้ชื่อผู้ลงนามชุดเดิม

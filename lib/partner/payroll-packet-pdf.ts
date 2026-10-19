@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 import "server-only"
-import type { Db } from "mongodb"
 import { prevMonth } from "@/lib/partner/utils"
 import { seg } from "@/lib/partner/pdfmake-printer"
+import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner-col"
 
 /**
  * ชุดอนุมัติเงินเดือนรถร่วม (Approval Packet) — pdfmake docDefinition
@@ -30,13 +30,13 @@ const tableLayout = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function buildPayrollPacket(db: Db | any, month: string): Promise<any> {
+export async function buildPayrollPacket(db: PartnerDb | any, month: string): Promise<any> {
   const [entries, prevEntries, drivers, status] = await Promise.all([
-    db.collection("payroll_entries").find({ month }).toArray(),
-    db.collection("payroll_entries").find({ month: prevMonth(month) })
+    (partnerColOf(db, "payrollEntries") as AnyDoc).find({ month }).toArray(),
+    (partnerColOf(db, "payrollEntries") as AnyDoc).find({ month: prevMonth(month) })
       .project({ totalIncome: 1, netPay: 1 }).toArray(),
-    db.collection("drivers").find({}).project({ contractCode: 1, driverName: 1, plant: 1, licensePlate: 1 }).toArray(),
-    db.collection("month_status").findOne({ month }),
+    (partnerColOf(db, "drivers") as AnyDoc).find({}).project({ contractCode: 1, driverName: 1, plant: 1, licensePlate: 1 }).toArray(),
+    (partnerColOf(db, "monthStatus") as AnyDoc).findOne({ month }),
   ])
   if (entries.length === 0) throw new Error(`งวด ${month} ยังไม่มีข้อมูลเงินเดือน`)
 

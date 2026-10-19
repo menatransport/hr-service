@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getPlateContractMap, normPlate } from "@/lib/partner/promo-usage"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 type PromoCat = "repair" | "pm" | "none"
 
@@ -37,8 +36,8 @@ export async function GET(req: NextRequest) {
   if (!month || !/^\d{4}-\d{2}$/.test(month))
     return NextResponse.json({ error: "month (YYYY-MM) required" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   // 1) stock_movements ของเดือนนั้น — ใช้ index บน date (YYYY-MM-DD เทียบแบบ string ได้)
   // เผื่อวันที่ถูกเก็บได้ทั้ง ค.ศ. และ พ.ศ. → กรองทั้งสอง era (มีจริงแค่ era เดียวในข้อมูล)
@@ -46,7 +45,7 @@ export async function GET(req: NextRequest) {
   const y = Number(yy)
   const altY = y > 2500 ? y - 543 : y + 543
   const ranges = [y, altY].map((yr) => ({ date: { $gte: `${yr}-${mm}-01`, $lte: `${yr}-${mm}-31` } }))
-  const moves = await db.collection("stock_movements")
+  const moves = await partnerColOf(db, "stockMovements")
     .find({ $or: ranges })
     .project({
       date: 1, wd: 1, mr: 1, purpose: 1, itemName: 1, itemCode: 1, itemGroup: 1,
@@ -58,7 +57,7 @@ export async function GET(req: NextRequest) {
   // 2) map mr -> เลขใบรับสภาพหนี้
   const mrs = [...new Set(moves.map((m) => String(m.mr ?? "")).filter(Boolean))]
   const das = mrs.length
-    ? await db.collection("debt_acceptances")
+    ? await partnerColOf(db, "debtAcceptances")
         .find({ repairOrderNo: { $in: mrs } })
         .project({ repairOrderNo: 1, debtAcceptanceNo: 1 })
         .toArray()

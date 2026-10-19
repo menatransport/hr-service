@@ -1,9 +1,9 @@
 import Link from "next/link"
 import { FileText, ArrowLeft } from "lucide-react"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { loadPosterData } from "@/lib/partner/catalog-poster-data"
 import TruckCatalogPoster, { MOCK_TRUCK } from "@/components/partner/catalog/truck-catalog-poster"
 import { PosterDownloadButton } from "@/components/partner/catalog/poster-download-button"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * โปสเตอร์แคตตาล็อกรายคัน — /catalog/poster?plate=สบ.70-6298 (ข้อมูลจริง) · ไม่ใส่ plate = mock NISSAN ME135
@@ -11,7 +11,7 @@ import { PosterDownloadButton } from "@/components/partner/catalog/poster-downlo
  */
 export default async function CatalogPosterPage({ searchParams }: { searchParams: Promise<{ plate?: string; fixed?: string }> }) {
   const { plate, fixed } = await searchParams
-  const db = (await clientPromise).db(PARTNER_DB)
+  const db = (await partnerDb())
   const real = plate ? await loadPosterData(db, plate) : null
   const poster = real ?? MOCK_TRUCK
   const notFound = !!plate && !real

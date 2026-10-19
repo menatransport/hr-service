@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { hasPerm } from "@/lib/partner/rbac"
 import { withVehicleDetails } from "@/lib/partner/contract-vehicle"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-
-const DB   = PARTNER_DB
-const COLL = "contracts"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 // field ที่ log การแก้ไข — เน้นการเงิน/กฎหมาย/วันที่ (ไม่ log พวก url ไฟล์แนบ ที่ log แยกแล้ว)
@@ -23,22 +21,26 @@ const AUDIT_FIELDS = [
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "contracts")
   const item   = await col.findOne({ _id: new ObjectId(id) })
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 })
   // ช่องข้อมูลรถที่ว่างในสัญญา → เติมจากทะเบียนรถ เอกสารจะได้ไม่พิมพ์เป็นเส้นประว่าง
-  return NextResponse.json(await withVehicleDetails(client.db(DB), item))
+  return NextResponse.json(await withVehicleDetails(pdb, item))
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const { id }   = await params
   const body     = await req.json()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { _id, createdAt, contractCode: _cc, ...update } = body
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "contracts")
   const now    = new Date().toISOString()
 
   const before = await col.findOne({ _id: new ObjectId(id) })
@@ -84,7 +86,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   }
 
   // Sync driver document
-  const drivers = client.db(DB).collection("drivers")
+  const drivers = partnerColOf(pdb, "drivers")
   await drivers.updateOne(
     { contractCode: result.contractCode },
     { $set: {
@@ -105,6 +107,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 // สัญญาลบถาวรไม่ได้ — ใช้ "ยกเลิกสัญญา" (เปลี่ยนสถานะเป็น terminated) แทน
 // เพื่อรักษาประวัติ/หลักฐาน (audit, เงินเดือน, หนี้ที่อ้างถึงสัญญานี้)
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   await params
   return NextResponse.json(
     { error: "ลบสัญญาถาวรไม่ได้ — กรุณาใช้ ‘ยกเลิกสัญญา’ (เปลี่ยนสถานะเป็นยกเลิก) แทน" },

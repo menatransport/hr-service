@@ -19,6 +19,9 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { collectExportedConsts, rewriteDbAccess } from "./db-access.mjs"
+import { addRouteGuards, loadRbac } from "./route-guard.mjs"
+
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, "../..")
 const argSrc = process.argv.indexOf("--src")
@@ -40,11 +43,11 @@ const OWNED_ROOTS = [
 const PARTIAL_ROOTS = { "app/api/partner": ["session"], "lib/partner": ["auth", "mongo.ts", "rbac.ts", "roles.ts", "public-routes.ts", "rbac.test.ts", "roles.test.ts", "public-routes.test.ts"] }
 
 // ── กลุ่มหน้าของระบบเดิม (ย้ายไปใต้ /partner) ───────────────────────────────────────
-export const PAGE_GROUPS = [
-  "adjustments", "admin", "alerts", "attendance", "catalog", "contracts", "driver-ledger", "drivers", "import",
-  "insurance-tax", "payroll", "payroll-extras", "price-list", "promotions", "quotations", "reports", "trip-fuel",
-  "trips", "vehicle-cost", "vehicles",
-]
+/** กลุ่มหน้าของระบบเดิม (ย้ายไปใต้ /partner) = โฟลเดอร์ชั้นแรกใต้ app/(app) ของต้นทาง ยกเว้น login */
+export const PAGE_GROUPS = [...new Set(
+  execFileSync("git", ["-C", SRC, "ls-files", "app/(app)"], { encoding: "utf8" })
+    .split("\n").map((f) => f.split("/")[2]).filter((g) => g && !g.includes(".") && g !== "login"),
+)]
 
 const DROP_LIB = new Set(["lib/auth.ts", "lib/mongo.ts", "lib/rbac.ts", "lib/roles.ts", "lib/public-routes.ts", "lib/public-routes.test.ts"])
 
@@ -187,7 +190,7 @@ function walk(dir, base = dir) {
   })
 }
 
-function main() {
+async function main() {
   const files = execFileSync("git", ["-C", SRC, "ls-files", "-z"], { encoding: "buffer", maxBuffer: 64 << 20 })
     .toString("utf8").split("\0").filter(Boolean)
   rmOwned()
@@ -215,9 +218,37 @@ function main() {
   const pDir = path.join(HERE, "patches")
   const patches = fs.existsSync(pDir) ? fs.readdirSync(pDir).filter((f) => f.endsWith(".patch")).sort() : []
   for (const f of patches) execFileSync("git", ["-C", ROOT, "apply", "--whitespace=nowarn", path.join(pDir, f)], { stdio: "inherit" })
+  // ขั้นเข้าถึงฐาน (lib/db/partner) — รันหลัง patches ชุดแรก บนไฟล์ทั้งหมดที่ codemod เป็นเจ้าของ + roles.ts (L4)
+  // ต้องรู้ค่าคงที่ชื่อคอลเลกชันที่ export ข้ามไฟล์ก่อน
+  const codeFiles = [...OWNED_ROOTS, ...Object.keys(PARTIAL_ROOTS)].flatMap((r) => {
+    const abs = path.join(ROOT, r)
+    if (!fs.existsSync(abs)) return []
+    return fs.statSync(abs).isDirectory() ? walk(abs).map((f) => path.join(r, f)) : [r]
+  }).filter((f) => /\.(ts|tsx|mts)$/.test(f) && !/^lib\/partner\/(auth\/|mongo\.ts$|rbac|public-routes)/.test(f) && !/^app\/api\/partner\/session\//.test(f))
+  const texts = new Map(codeFiles.map((f) => [f, fs.readFileSync(path.join(ROOT, f), "utf8")]))
+  const exported = collectExportedConsts([...texts.values()])
+  let dbChanged = 0
+  for (const [f, t] of texts) {
+    const out = rewriteDbAccess(f, t, exported)
+    if (out !== t) { fs.writeFileSync(path.join(ROOT, f), out); dbChanged++ }
+  }
+  // RBAC ชั้น route — ทุก handler ที่เขียนข้อมูลใน app/api/partner/**
+  const rbac = await loadRbac(ROOT)
+  let guards = 0, guardFiles = 0
+  for (const f of walk(path.join(ROOT, "app/api/partner")).map((x) => path.join("app/api/partner", x)).filter((x) => /\/route\.tsx?$/.test(x))) {
+    const abs = path.join(ROOT, f)
+    const { src, count } = addRouteGuards(f, fs.readFileSync(abs, "utf8"), rbac)
+    if (count) { fs.writeFileSync(abs, src); guards += count; guardFiles++ }
+  }
+  console.log(`route-guard: ${guards} handlers ใน ${guardFiles} ไฟล์`)
+  // patches-post — แก้มือหลังขั้นเข้าถึงฐาน
+  const ppDir = path.join(HERE, "patches-post")
+  const post = fs.existsSync(ppDir) ? fs.readdirSync(ppDir).filter((f) => f.endsWith(".patch")).sort() : []
+  for (const f of post) execFileSync("git", ["-C", ROOT, "apply", "--whitespace=nowarn", path.join(ppDir, f)], { stdio: "inherit" })
+  console.log(`db-access: ${dbChanged} files · patches-post ${post.length}`)
   console.log(`copied ${stats.copied} files · pages ${stats.pages} · routes ${stats.routes} · overrides ${walk(ovDir).length} · patches ${patches.length}`)
   console.log(`skipped ${stats.skipped.length}:`)
   for (const s of stats.skipped) console.log("  - " + s)
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main()
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main()

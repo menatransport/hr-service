@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { PARTNER } from "@/lib/db/registry.mjs"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -13,9 +14,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
 
-  const client = await clientPromise
-  const db     = client.db(DB)
-  const withdrawals = await db.collection("ledger_withdrawals")
+  const pdb = await partnerDb()
+  const db     = pdb
+  const withdrawals = await partnerColOf(db, "ledgerWithdrawals")
     .find({ entryId: id })
     .sort({ at: -1 })
     .toArray()
@@ -29,6 +30,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
  * guard: ถอนเกิน balance (paidAmount − withdrawnAmount) ไม่ได้
  */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
   const body = await req.json()
@@ -39,10 +44,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
   const rounded = Math.round(amount * 100) / 100
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const entry = await db.collection("driver_ledger").findOne({ _id: new ObjectId(id) })
+  const entry = await partnerColOf(db, "driverLedger").findOne({ _id: new ObjectId(id) })
   if (!entry) return NextResponse.json({ error: "entry not found" }, { status: 404 })
   if (entry.kind !== "deposit") {
     return NextResponse.json({ error: "withdraw is for deposit entries only" }, { status: 400 })
@@ -52,7 +57,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const session = await getPartnerSession()
 
   // atomic guard: เพิ่ม withdrawnAmount เฉพาะเมื่อ balance พอ (กัน race ถอนซ้อน)
-  const updated = await db.collection("driver_ledger").findOneAndUpdate(
+  const updated = await partnerColOf(db, "driverLedger").findOneAndUpdate(
     {
       _id: new ObjectId(id),
       kind: "deposit",
@@ -83,10 +88,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     by: session?.user?.email ?? "unknown",
     at: now,
   }
-  const result = await db.collection("ledger_withdrawals").insertOne(withdrawal)
+  const result = await partnerColOf(db, "ledgerWithdrawals").insertOne(withdrawal)
 
   await logActivity({
-    entity: "driver_ledger",
+    entity: PARTNER.driverLedger,
     entityId: (entry.debtCode as string) ?? "",
     action: "withdraw",
     changes: {

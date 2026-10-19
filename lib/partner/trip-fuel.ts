@@ -12,13 +12,13 @@
  *   คงเหลือ         = ค่าเที่ยว − หักเชื้อเพลิง − เงินเกินเรต + เงินคืน
  */
 import "server-only"
-import type { Db } from "mongodb"
 import { normPlate } from "@/lib/partner/promo-usage"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
+import { biCol } from "@/lib/db/partner"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
-export const TF_COLL = "trip_fuel_monthly"
-export const TF_CONFIG = "trip_fuel_config"
-const BI_DB = "mena-bi"
-
+export const TF_COLL = PARTNER.tripFuelMonthly
+export const TF_CONFIG = PARTNER.tripFuelConfig
 export interface TripFuelConfig {
   month: string          // "YYYY-MM"
   dieselPrice: number    // บาท/ลิตร (หักตามใช้จริง)
@@ -67,7 +67,7 @@ export function computeRow(row: any, cfg: TripFuelConfig): any {
  *  fleet: mixer = ไม่มีหาง (โม่) · trailer = มีหาง · all = ทั้งหมด — payroll Mixer ใช้ mixer เท่านั้น */
 export async function aggregateFromBI(client: any, month: string, fleet: "mixer" | "trailer" | "all" = "mixer") {
   const [y, m] = month.split("-").map((x) => parseInt(x, 10))
-  const bi = client.db(BI_DB).collection("driverCost")
+  const bi = await biCol("driverCost")
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const q: any = { _year: y, _month: m, "ประเภทรถร่วม": "รถร่วมมีนา", "สถานะตั๋ว": { $ne: "ยกเลิก" } }
   if (fleet === "mixer") q["$or"] = [{ "หาง": null }, { "หาง": "" }]
@@ -129,8 +129,8 @@ export async function aggregateFromBI(client: any, month: string, fleet: "mixer"
 }
 
 /** map ทะเบียน → contractCode จาก contracts (normalize) */
-export async function plateContractMap(db: Db): Promise<Map<string, string>> {
-  const cs = await db.collection("contracts").find({}).project({ contractCode: 1, licensePlate: 1, status: 1 }).toArray()
+export async function plateContractMap(db: PartnerDb): Promise<Map<string, string>> {
+  const cs = await partnerColOf(db, "contracts").find({}).project({ contractCode: 1, licensePlate: 1, status: 1 }).toArray()
   const map = new Map<string, string>()
   for (const c of cs) {
     const k = normPlate(c.licensePlate as string)

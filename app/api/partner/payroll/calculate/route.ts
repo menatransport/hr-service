@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { calculatePayrollEntry } from "@/lib/partner/payroll-engine"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /**
  * POST /api/payroll/calculate?month=YYYY-MM[&contractCode=MTL003]
@@ -16,6 +16,10 @@ const DB = PARTNER_DB
  * Returns { updated, errors, skipped }
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "finance")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -29,14 +33,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "month required (YYYY-MM)" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   let codes: string[]
   if (singleCode) {
     codes = [singleCode]
   } else {
-    const drivers = await db.collection("drivers").find({ status: "active" }, { projection: { contractCode: 1 } }).toArray()
+    const drivers = await partnerColOf(db, "drivers").find({ status: "active" }, { projection: { contractCode: 1 } }).toArray()
     codes = drivers.map((d) => d.contractCode as string)
   }
 
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest) {
       const result = await calculatePayrollEntry(db, code, month)
       if (!result) { skipped++; continue }
 
-      await db.collection("payroll_entries").updateOne(
+      await partnerColOf(db, "payrollEntries").updateOne(
         { contractCode: code, month },
         { $set: { ...result, updatedAt: now }, $setOnInsert: { createdAt: now } },
         { upsert: true }

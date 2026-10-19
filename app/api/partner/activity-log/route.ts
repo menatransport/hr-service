@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /** GET /api/activity-log?entity=<e>&entityId=<id> — ประวัติการแก้ไข (audit) ของ record นั้น */
 export async function GET(req: NextRequest) {
@@ -10,8 +9,8 @@ export async function GET(req: NextRequest) {
   if (!entity || !entityId) {
     return NextResponse.json({ error: "entity & entityId required" }, { status: 400 })
   }
-  const client = await clientPromise
-  const logs = await client.db(DB).collection("activity_log")
+  const pdb = await partnerDb()
+  const logs = await partnerColOf(pdb, "activityLog")
     .find({ entity, entityId })
     .sort({ editedAt: -1 })
     .limit(200)

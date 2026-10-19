@@ -1,4 +1,4 @@
-import type { Db } from "mongodb"
+import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner-col"
 
 /**
  * ล็อคงวดเงินเดือน — งวดที่ approved/locked แล้ว ห้ามแก้ข้อมูลต้นทางทุกชนิด
@@ -6,13 +6,13 @@ import type { Db } from "mongodb"
  * ใช้: const locked = await monthClosed(db, month); if (locked) return NextResponse.json(closedError(month), { status: 423 })
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function monthClosed(db: Db | any, month: string): Promise<boolean> {
+export async function monthClosed(db: PartnerDb | any, month: string): Promise<boolean> {
   if (!/^\d{4}-\d{2}$/.test(month)) return false
-  const doc = await db.collection("month_status").findOne({ month }, { projection: { phase: 1 } })
+  const doc = await (partnerColOf(db, "monthStatus") as AnyDoc).findOne({ month }, { projection: { phase: 1 } })
   if (doc?.phase === "approved" || doc?.phase === "locked") return true
   // chain lock: งวดถัดไปงวดใดอนุมัติ/ปิดแล้ว → งวดนี้แก้ไม่ได้ด้วย
   // (โซ่หนี้ยกยอด carryIn/carryOut + ledger ตัดยอดแล้ว — แก้ย้อนหลังทำเลขที่อนุมัติแล้วเพี้ยน)
-  const later = await db.collection("month_status").findOne(
+  const later = await (partnerColOf(db, "monthStatus") as AnyDoc).findOne(
     { month: { $gt: month }, phase: { $in: ["approved", "locked"] } }, { projection: { month: 1 } })
   return !!later
 }

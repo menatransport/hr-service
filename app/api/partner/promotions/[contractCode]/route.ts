@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getPromoUsage, normPlate } from "@/lib/partner/promo-usage"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 type Ctx = { params: Promise<{ contractCode: string }> }
 
@@ -18,17 +17,17 @@ type Ctx = { params: Promise<{ contractCode: string }> }
  */
 export async function GET(_req: Request, { params }: Ctx) {
   const { contractCode } = await params
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
-  const cfg = await db.collection("promo_config").findOne({ contractCode })
+  const cfg = await partnerColOf(db, "promoConfig").findOne({ contractCode })
   if (!cfg) return NextResponse.json({ error: "not found" }, { status: 404 })
 
-  const driver = await db.collection("drivers").findOne({ contractCode })
+  const driver = await partnerColOf(db, "drivers").findOne({ contractCode })
 
   const [repairClaims, pmRecords, usage] = await Promise.all([
-    db.collection("repair_claims").find({ contractCode }).sort({ date: -1 }).toArray(),
-    db.collection("pm_records").find({ contractCode }).sort({ year: -1, date: -1 }).toArray(),
+    partnerColOf(db, "repairClaims").find({ contractCode }).sort({ date: -1 }).toArray(),
+    partnerColOf(db, "pmRecords").find({ contractCode }).sort({ year: -1, date: -1 }).toArray(),
     getPromoUsage(db),
   ])
 

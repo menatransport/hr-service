@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { parseAttendanceSheet, ATT_COLL } from "@/lib/partner/attendance"
 import { plateContractMap } from "@/lib/partner/trip-fuel"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
-const DB = PARTNER_DB
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 /** นำเข้า Excel วันทำงาน พจร. — action=preview (ตรวจก่อน) | confirm (บันทึกทับของเดือน) */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const fd = await req.formData()
   const file = fd.get("file") as File | null
   const month = String(fd.get("month") ?? "")
@@ -24,8 +29,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "อ่านไฟล์ไม่สำเร็จ" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const pMap = await plateContractMap(db)
   const { normPlate } = await import("@/lib/partner/promo-usage")
 
@@ -48,9 +53,9 @@ export async function POST(req: NextRequest) {
   if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
   const session = await getPartnerSession()
   const now = new Date().toISOString()
-  await db.collection(ATT_COLL).deleteMany({ month })
+  await partnerColOf(db, "attendanceMonthly").deleteMany({ month })
   if (rows.length > 0) {
-    await db.collection(ATT_COLL).insertMany(rows.map((r) => ({
+    await partnerColOf(db, "attendanceMonthly").insertMany(rows.map((r) => ({
       ...r, month, importedAt: now, importedBy: session?.user?.email ?? "unknown",
     })))
   }

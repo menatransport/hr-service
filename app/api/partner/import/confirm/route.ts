@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import * as XLSX from "xlsx"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
-
-const DB = PARTNER_DB
 
 /**
  * POST /api/import/confirm
@@ -17,6 +17,10 @@ const DB = PARTNER_DB
  * Returns { upserted, modified, errors }
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "finance")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -47,9 +51,9 @@ export async function POST(req: NextRequest) {
     return isNaN(n) ? 0 : n
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
-  const col    = db.collection("payroll_entries")
+  const pdb = await partnerDb()
+  const db     = pdb
+  const col    = partnerColOf(db, "payrollEntries")
   const now    = new Date().toISOString()
 
   let upserted = 0

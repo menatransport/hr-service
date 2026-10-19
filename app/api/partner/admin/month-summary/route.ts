@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { isAdminRole } from "@/lib/partner/rbac"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { nextMonth } from "@/lib/partner/utils"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * GET /api/admin/month-summary?month=YYYY-MM
@@ -25,8 +24,8 @@ export async function GET(req: NextRequest) {
   const start = `${month}-01`
   const end   = `${nextMonth(month)}-01`
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   const [
     tripsCount,
@@ -36,10 +35,10 @@ export async function GET(req: NextRequest) {
     entries,
     activeDrivers,
   ] = await Promise.all([
-    db.collection("trips").countDocuments({ date: { $gte: start, $lt: end } }),
-    db.collection("fuel_records").countDocuments({ month }),
-    db.collection("repair_monthly").countDocuments({ month }),
-    db.collection("monthly_adjustments").countDocuments({
+    partnerColOf(db, "trips").countDocuments({ date: { $gte: start, $lt: end } }),
+    partnerColOf(db, "fuelRecords").countDocuments({ month }),
+    partnerColOf(db, "repairMonthly").countDocuments({ month }),
+    partnerColOf(db, "monthlyAdjustments").countDocuments({
       month,
       $or: [
         { otherIncomeWHT: { $ne: 0 } },
@@ -48,10 +47,10 @@ export async function GET(req: NextRequest) {
         { otherDeductNoWHT: { $ne: 0 } },
       ],
     }),
-    db.collection("payroll_entries")
+    partnerColOf(db, "payrollEntries")
       .find({ month }, { projection: { contractCode: 1, netPay: 1, transportFee: 1, fuel: 1, totalIncome: 1, totalDeductions: 1 } })
       .toArray(),
-    db.collection("drivers").countDocuments({ status: "active" }),
+    partnerColOf(db, "drivers").countDocuments({ status: "active" }),
   ])
 
   const totalNetPay    = entries.reduce((s, e) => s + (e.netPay as number ?? 0), 0)
@@ -67,7 +66,7 @@ export async function GET(req: NextRequest) {
   // Driver name lookup for problem list
   const problemCodes = Array.from(new Set([...noFuel, ...negPay.map((n) => n.contractCode)]))
   const driverDocs = problemCodes.length > 0
-    ? await db.collection("drivers")
+    ? await partnerColOf(db, "drivers")
         .find({ contractCode: { $in: problemCodes } }, { projection: { contractCode: 1, driverName: 1 } })
         .toArray()
     : []

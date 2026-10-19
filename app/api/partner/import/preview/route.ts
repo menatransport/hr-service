@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import * as XLSX from "xlsx"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -29,6 +30,10 @@ interface PreviewRow {
  * Does NOT write to DB.
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "finance")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })

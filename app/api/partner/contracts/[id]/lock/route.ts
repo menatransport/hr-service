@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
 import { hasPerm } from "@/lib/partner/rbac"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /** ล็อค/ปลดล็อคสัญญา — admin ขึ้นไปเท่านั้น · ล็อคแล้วห้ามแก้ทุกคนจนกว่าจะปลด */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "id invalid" }, { status: 400 })
 
@@ -21,8 +25,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   const { locked } = await req.json() as { locked?: boolean }
-  const client = await clientPromise
-  const col = client.db(DB).collection("contracts")
+  const pdb = await partnerDb()
+  const col = partnerColOf(pdb, "contracts")
   const doc = await col.findOne({ _id: new ObjectId(id) })
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 })
 

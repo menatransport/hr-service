@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -25,11 +26,10 @@ export async function GET(req: NextRequest) {
     ]
   }
 
-  const client = await clientPromise
-  const db     = client.db(PARTNER_DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const docs = await db
-    .collection("debt_acceptances")
+  const docs = await     partnerColOf(db, "debtAcceptances")
     .find(filter)
     .sort({ issueDate: -1 })
     .toArray()

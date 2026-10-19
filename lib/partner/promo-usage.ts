@@ -1,4 +1,4 @@
-import type { Db } from "mongodb"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * Single source of truth for promotion budget usage (ค่าซ่อม / PM) per vehicle.
@@ -62,7 +62,7 @@ interface PlateIdentity {
 }
 
 /** Canonical plate ↔ contract mapping. Priority: contracts > repair_monthly > gps_config. */
-export async function getPlateContractMap(db: Db): Promise<Map<string, PlateIdentity>> {
+export async function getPlateContractMap(db: PartnerDb): Promise<Map<string, PlateIdentity>> {
   const map = new Map<string, PlateIdentity>()
   const put = (plate: string | undefined, info: Partial<PlateIdentity>, overwrite: boolean) => {
     const key = normPlate(plate)
@@ -82,9 +82,9 @@ export async function getPlateContractMap(db: Db): Promise<Map<string, PlateIden
     }
   }
   const [gps, monthly, contracts] = await Promise.all([
-    db.collection("gps_config").find({}).project({ licensePlate: 1, contractCode: 1, truckNumber: 1 }).toArray(),
-    db.collection("repair_monthly").find({}).project({ licensePlate: 1, contractCode: 1, truckNumber: 1, driverName: 1 }).toArray(),
-    db.collection("contracts").find({}).project({ licensePlate: 1, contractCode: 1, truckNumber: 1, driverName: 1, startDate: 1, contractDate: 1 }).toArray(),
+    partnerColOf(db, "gpsConfig").find({}).project({ licensePlate: 1, contractCode: 1, truckNumber: 1 }).toArray(),
+    partnerColOf(db, "repairMonthly").find({}).project({ licensePlate: 1, contractCode: 1, truckNumber: 1, driverName: 1 }).toArray(),
+    partnerColOf(db, "contracts").find({}).project({ licensePlate: 1, contractCode: 1, truckNumber: 1, driverName: 1, startDate: 1, contractDate: 1 }).toArray(),
   ])
   for (const g of gps) put(g.licensePlate, { licensePlate: g.licensePlate, contractCode: g.contractCode, truckNumber: g.truckNumber }, false)
   for (const m of monthly) put(m.licensePlate, { licensePlate: m.licensePlate, contractCode: m.contractCode, truckNumber: m.truckNumber, driverName: m.driverName }, true)
@@ -131,21 +131,20 @@ export function pmWindow(startISO: string | undefined, todayISO: string): { from
  * Aggregate deduplicated repair + PM usage per plate.
  * @param year Buddhist/AD calendar year for the PM annual cap window (default: current year)
  */
-export async function getPromoUsage(db: Db, year?: number): Promise<Map<string, PlateUsage>> {
+export async function getPromoUsage(db: PartnerDb, year?: number): Promise<Map<string, PlateUsage>> {
   // เพดาน PM นับเป็น "รอบปีจากวันเริ่มสัญญา" ของแต่ละคัน — year param เดิมไม่ใช้แล้ว (คงไว้กัน signature พัง)
   void year
   const today = new Date().toISOString().slice(0, 10)
 
   const [identity, claims, movements, configs, pmManual] = await Promise.all([
     getPlateContractMap(db),
-    db.collection("repair_claims").find({}).toArray(),
-    db
-      .collection("stock_movements")
+    partnerColOf(db, "repairClaims").find({}).toArray(),
+          partnerColOf(db, "stockMovements")
       .find({ promoType: { $in: ["repair", "pm"] } })
       .project({ mr: 1, date: 1, amount: 1, licensePlate: 1, promoType: 1, pmType: 1 })
       .toArray(),
-    db.collection("promo_config").find({}).toArray(),
-    db.collection("pm_records").find({}).toArray(),
+    partnerColOf(db, "promoConfig").find({}).toArray(),
+    partnerColOf(db, "pmRecords").find({}).toArray(),
   ])
 
   // contractCode -> plate (reverse of identity map)
@@ -341,11 +340,11 @@ export async function getPromoUsage(db: Db, year?: number): Promise<Map<string, 
 }
 
 /** Claims whose contractCode has no known plate mapping (data-quality signal). */
-export async function getUnmappedClaims(db: Db): Promise<{ contractCode: string; total: number; count: number }[]> {
+export async function getUnmappedClaims(db: PartnerDb): Promise<{ contractCode: string; total: number; count: number }[]> {
   const identity = await getPlateContractMap(db)
   const ccKnown = new Set([...identity.values()].map((i) => i.contractCode).filter(Boolean))
   const out = new Map<string, { contractCode: string; total: number; count: number }>()
-  for (const c of await db.collection("repair_claims").find({}).toArray()) {
+  for (const c of await partnerColOf(db, "repairClaims").find({}).toArray()) {
     if (ccKnown.has(c.contractCode)) continue
     const cur = out.get(c.contractCode) ?? { contractCode: c.contractCode, total: 0, count: 0 }
     cur.total += num(c.amount)

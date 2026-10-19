@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "vehicle_master"
-
-// normalize ทะเบียน — ตัดคำนำหน้าที่ไม่ใช่เลข (สบ.71-1956 → 71-1956) เทียบกันแบบ digits
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
 
 /** หารถที่ทะเบียนซ้ำ (normalize) — คืน doc ถ้าเจอ */
@@ -12,7 +9,7 @@ const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim(
 async function findPlateDuplicate(db: any, plate: string) {
   const key = normPlate(plate)
   if (!key) return null
-  const rows = await db.collection(COLL).find({}, { projection: { licensePlate: 1 } }).toArray()
+  const rows = await (partnerColOf(db, "vehicleMaster") as AnyDoc).find({}, { projection: { licensePlate: 1 } }).toArray()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return rows.find((v: any) => normPlate(v.licensePlate) === key) ?? null
 }
@@ -37,12 +34,12 @@ export async function GET(req: NextRequest) {
   }
   if (status) filter.status = status
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
   const [items, contracts, prices] = await Promise.all([
-    db.collection(COLL).find(filter).sort({ truckNumber: 1, licensePlate: 1 }).toArray(),
-    db.collection("contracts").find({ status: "active" }, { projection: { licensePlate: 1, contractCode: 1 } }).toArray(),
-    db.collection("master_price_list").find({}, { projection: { licensePlate: 1, saleStatus: 1 } }).toArray(),
+    partnerColOf(db, "vehicleMaster").find(filter).sort({ truckNumber: 1, licensePlate: 1 }).toArray(),
+    partnerColOf(db, "contracts").find({ status: "active" }, { projection: { licensePlate: 1, contractCode: 1 } }).toArray(),
+    partnerColOf(db, "masterPriceList").find({}, { projection: { licensePlate: 1, saleStatus: 1 } }).toArray(),
   ])
 
   // fleetState (derived): working = ทะเบียนมีสัญญา active · ready = ว่าง + saleStatus ready
@@ -72,6 +69,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     truckType?:        string
     vehicleType?:      string
@@ -94,8 +95,8 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date()
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   // กันทะเบียนซ้ำ
   const plate = body.licensePlate?.trim() ?? ""
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
     if (dup) return NextResponse.json({ error: `ทะเบียน ${plate} มีอยู่แล้วในระบบ` }, { status: 409 })
   }
 
-  const result = await db.collection(COLL).insertOne({
+  const result = await partnerColOf(db, "vehicleMaster").insertOne({
     truckType:            body.truckType === "trailer" ? "trailer" : "mixer",
     vehicleType:          body.vehicleType?.trim()          ?? null,
     characteristic:       body.characteristic?.trim()       ?? null,

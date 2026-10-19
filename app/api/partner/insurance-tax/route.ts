@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
 import {
   normPlateIT,
@@ -9,24 +8,22 @@ import {
   type ItemType,
   type InsuranceItem,
 } from "@/lib/partner/insurance-tax"
-
-const DB   = PARTNER_DB
-const COLL = "vehicle_insurance_tax"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type ItemStatus = "active" | "expiring" | "expired" | "none"
 const WORST_RANK: Record<ItemStatus, number> = { none: 0, active: 1, expiring: 2, expired: 3 }
 
 export async function GET(req: NextRequest) {
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
   const plate  = req.nextUrl.searchParams.get("plate")?.trim()
 
   // ── GET ?plate=… → ประวัติ item docs ทุกประเภทของทะเบียนนั้น ใหม่สุดก่อน ──
   // (client จัดกลุ่มตาม itemType เอง; docs bundled เก่าไม่มี itemType → exclude)
   if (plate) {
     const platePlain = normPlateIT(plate) || plate
-    const items = await db
-      .collection(COLL)
+    const items = await       partnerColOf(db, "vehicleInsuranceTax")
       .find({ platePlain, itemType: { $exists: true } })
       .sort({ createdAt: -1 })
       .toArray()
@@ -35,15 +32,15 @@ export async function GET(req: NextRequest) {
 
   // ── GET (no params) → ทุกทะเบียนจาก vehicle_master + item ล่าสุดต่อประเภท ──
   const [vehicles, itemDocs, activeContracts] = await Promise.all([
-    db.collection("vehicle_master")
+    partnerColOf(db, "vehicleMaster")
       .find({})
       .project({ licensePlate: 1, truckNumber: 1, brand: 1, model: 1 })
       .toArray(),
-    db.collection(COLL)
+    partnerColOf(db, "vehicleInsuranceTax")
       .find({ itemType: { $exists: true } })
       .sort({ createdAt: -1 })
       .toArray(),
-    db.collection("contracts")
+    partnerColOf(db, "contracts")
       .find({ status: "active" })
       .project({ licensePlate: 1, driverName: 1, contractCode: 1 })
       .toArray(),
@@ -121,14 +118,18 @@ function buildItemDoc(body: Record<string, any>, licensePlate: string, platePlai
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
 
   if (!body.licensePlate) {
     return NextResponse.json({ error: "licensePlate required" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "vehicleInsuranceTax")
   const now    = new Date().toISOString()
 
   const licensePlate = body.licensePlate as string

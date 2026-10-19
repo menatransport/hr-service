@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Image from "next/image"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getCatalogConfig } from "@/lib/partner/catalog-config"
 import { loadPublicTrucks } from "@/lib/partner/public-trucks"
 import { siteUrl, fmtBaht } from "@/lib/partner/public-seo"
@@ -9,6 +8,7 @@ import { LeadForm } from "@/components/partner/public/lead-form"
 import { ThaiText, telHref } from "@/components/partner/public/thai-text"
 import { PrepStars, ReadyStars } from "@/components/partner/public/ready-stars"
 import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
+import { partnerDb } from "@/lib/db/partner"
 
 // ตัวกันพลาด — ปกติ lib/revalidate-public.ts สั่งล้างแคชทันทีที่ชุดรถว่างเปลี่ยน
 export const revalidate = 60
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 
 export default async function TrucksPage() {
   await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
-  const db = (await clientPromise).db(PARTNER_DB)
+  const db = (await partnerDb())
   const [trucks, cfg] = await Promise.all([loadPublicTrucks(), getCatalogConfig(db)])
   const readyCount = trucks.filter((t) => t.isReady).length
   const cheapest = trucks.reduce((m, t) => (t.display.monthlyPayment > 0 && (m === 0 || t.display.monthlyPayment < m) ? t.display.monthlyPayment : m), 0)

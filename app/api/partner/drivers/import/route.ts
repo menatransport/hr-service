@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "drivers"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 function parseBool(v: unknown): boolean {
   if (typeof v === "boolean") return v
   const s = String(v ?? "").trim().toUpperCase()
@@ -17,6 +15,10 @@ function parseStr(v: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const formData = await req.formData()
   const file = formData.get("file") as File | null
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 })
@@ -33,8 +35,8 @@ export async function POST(req: NextRequest) {
   let upserted = 0
   let skipped  = 0
 
-  const client = await clientPromise
-  const coll   = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const coll   = partnerColOf(pdb, "drivers")
 
   for (const row of rows) {
     const firstName = parseStr(row["ชื่อ"])

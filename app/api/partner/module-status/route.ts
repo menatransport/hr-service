@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "module_progress"
-
-// เก็บความคืบหน้าต่อโมดูล (ติ๊กข้อมูลครบ + วันที่คาดจะเสร็จ) — key = href
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 // สถานะ ready/testing/dev ยังอยู่ในโค้ด (lib/module-status.ts); ตรงนี้เป็น overlay ที่แก้ได้ในหน้าแรก
 
 export async function GET() {
-  const client = await clientPromise
-  const rows = await client.db(DB).collection(COLL).find({}).toArray()
+  const pdb = await partnerDb()
+  const rows = await partnerColOf(pdb, "moduleProgress").find({}).toArray()
   const map: Record<string, { dataComplete: boolean; expectedDate: string | null; updatedBy?: string; updatedAt?: string }> = {}
   for (const r of rows) {
     map[r.href as string] = {
@@ -24,6 +21,10 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("login")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     href?: string
     dataComplete?: boolean
@@ -41,8 +42,8 @@ export async function PATCH(req: NextRequest) {
   if (body.dataComplete !== undefined) $set.dataComplete = body.dataComplete === true
   if (body.expectedDate !== undefined) $set.expectedDate = (body.expectedDate ?? "").trim() || null
 
-  const client = await clientPromise
-  await client.db(DB).collection(COLL).updateOne(
+  const pdb = await partnerDb()
+  await partnerColOf(pdb, "moduleProgress").updateOne(
     { href },
     { $set },
     { upsert: true }

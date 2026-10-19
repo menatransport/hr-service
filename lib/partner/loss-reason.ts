@@ -1,5 +1,6 @@
-import type { Db } from "mongodb"
 import type { Stage } from "@/lib/partner/deal-stage"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
 /**
  * เหตุผลที่ดีลหลุด — master data แก้ได้ที่หน้าผู้ดูแล
@@ -7,8 +8,7 @@ import type { Stage } from "@/lib/partner/deal-stage"
  * หมายเหตุเพิ่มเติม (free text) กรอกได้เสมอ
  */
 
-export const LOSS_COLL = "loss_reasons"
-
+export const LOSS_COLL = PARTNER.lossReasons
 export interface LossReason {
   _id?: string
   code: string
@@ -72,17 +72,17 @@ export const reasonsForStage = (all: LossReason[], stage: string) =>
   all.filter((r) => r.isActive && !r.isSystem &&
     (r.applicableStages.includes("ALL") || r.applicableStages.includes(stage as Stage)))
 
-export async function listLossReasons(db: Db): Promise<LossReason[]> {
+export async function listLossReasons(db: PartnerDb): Promise<LossReason[]> {
   // ตารางว่าง = ยังไม่เคย seed → เติมให้ก่อน ไม่งั้นปิดดีลไม่ได้เพราะไม่มีเหตุผลให้เลือก
-  if (!(await db.collection(LOSS_COLL).findOne({}))) await seedLossReasons(db)
-  const rows = await db.collection(LOSS_COLL).find({}).sort({ group: 1, label: 1 }).toArray()
+  if (!(await partnerColOf(db, "lossReasons").findOne({}))) await seedLossReasons(db)
+  const rows = await partnerColOf(db, "lossReasons").find({}).sort({ group: 1, label: 1 }).toArray()
   return rows.map((r) => ({ ...r, _id: String(r._id) })) as unknown as LossReason[]
 }
 
 /** seed ครั้งแรก (ไม่ทับของที่แก้ไว้แล้ว — ยึดตาม code) */
-export async function seedLossReasons(db: Db): Promise<number> {
-  const existing = new Set((await db.collection(LOSS_COLL).find({}, { projection: { code: 1 } }).toArray()).map((r) => r.code))
+export async function seedLossReasons(db: PartnerDb): Promise<number> {
+  const existing = new Set((await partnerColOf(db, "lossReasons").find({}, { projection: { code: 1 } }).toArray()).map((r) => r.code))
   const missing = LOSS_REASON_SEED.filter((r) => !existing.has(r.code))
-  if (missing.length) await db.collection(LOSS_COLL).insertMany(missing.map((r) => ({ ...r })))
+  if (missing.length) await partnerColOf(db, "lossReasons").insertMany(missing.map((r) => ({ ...r })))
   return missing.length
 }

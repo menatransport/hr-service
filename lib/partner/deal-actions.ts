@@ -2,6 +2,8 @@ import "server-only"
 import { ObjectId, type Db } from "mongodb"
 import { checkTransition, isOpen, isStage, stageIndex, STAGE_LABEL, type DealFields, type Stage } from "@/lib/partner/deal-stage"
 import { listLossReasons, reasonsForStage } from "@/lib/partner/loss-reason"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
 /**
  * การกระทำกับดีล — ที่เดียวที่เขียนสถานะลง DB
@@ -9,9 +11,8 @@ import { listLossReasons, reasonsForStage } from "@/lib/partner/loss-reason"
  * (ยังใช้ collection quotations เดิม ไม่ย้ายที่เก็บ)
  */
 
-export const DEAL_COLL = "quotations"
-export const HISTORY_COLL = "deal_stage_history"
-
+export const DEAL_COLL = PARTNER.quotations
+export const HISTORY_COLL = PARTNER.dealStageHistory
 export interface ActionResult { ok: boolean; error?: string; missing?: string[] }
 export interface Actor { email: string; isAdmin: boolean }
 
@@ -19,21 +20,21 @@ const now = () => new Date().toISOString()
 
 /** อัปเดตดีล — driver type ของ $push เข้มเกินไปกับ schema แบบหลวมของเรา (route เดิมก็ใช้ any) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const update = (db: Db, id: string, u: any) => db.collection(DEAL_COLL).updateOne({ _id: new ObjectId(id) }, u)
+const update = (db: PartnerDb, id: string, u: any) => partnerColOf(db, "quotations").updateOne({ _id: new ObjectId(id) }, u)
 
-async function writeHistory(db: Db, dealId: string, from: string | null, to: string, by: string, note?: string, isAutomatic = false) {
-  await db.collection(HISTORY_COLL).insertOne({
+async function writeHistory(db: PartnerDb, dealId: string, from: string | null, to: string, by: string, note?: string, isAutomatic = false) {
+  await partnerColOf(db, "dealStageHistory").insertOne({
     dealId, fromStage: from, toStage: to, changedBy: by, changedAt: now(), isAutomatic, ...(note ? { note } : {}),
   })
 }
 
-export async function getDeal(db: Db, id: string) {
+export async function getDeal(db: PartnerDb, id: string) {
   if (!ObjectId.isValid(id)) return null
-  return db.collection(DEAL_COLL).findOne({ _id: new ObjectId(id) })
+  return partnerColOf(db, "quotations").findOne({ _id: new ObjectId(id) })
 }
 
 /** ทุกอย่างที่ถือว่าเป็น "ความเคลื่อนไหว" ของดีล (ใช้กับกฎปิดอัตโนมัติ 30 วัน) */
-export async function touchDeal(db: Db, id: string, by: string, action: string, note?: string) {
+export async function touchDeal(db: PartnerDb, id: string, by: string, action: string, note?: string) {
   await update(db, id, {
     $set: { lastActivityAt: now(), updatedAt: now() },
     $push: { timeline: { $each: [{ at: now(), by, action, ...(note ? { note } : {}) }] } },
@@ -41,7 +42,7 @@ export async function touchDeal(db: Db, id: string, by: string, action: string, 
 }
 
 /** ขยับขั้น (ไปหน้า 1 ขั้น หรือถอยขั้นสำหรับผู้ดูแล) */
-export async function moveStage(db: Db, id: string, to: string, actor: Actor, note?: string): Promise<ActionResult> {
+export async function moveStage(db: PartnerDb, id: string, to: string, actor: Actor, note?: string): Promise<ActionResult> {
   const deal = await getDeal(db, id)
   if (!deal) return { ok: false, error: "ไม่พบดีล" }
 
@@ -61,7 +62,7 @@ export async function moveStage(db: Db, id: string, to: string, actor: Actor, no
 }
 
 /** พักติดตาม — จำขั้นเดิมไว้ */
-export async function holdDeal(db: Db, id: string, actor: Actor, holdReason: string, nextFollowUpDate: string): Promise<ActionResult> {
+export async function holdDeal(db: PartnerDb, id: string, actor: Actor, holdReason: string, nextFollowUpDate: string): Promise<ActionResult> {
   const deal = await getDeal(db, id)
   if (!deal) return { ok: false, error: "ไม่พบดีล" }
   if (!isStage(deal.stage)) return { ok: false, error: "ดีลนี้พักหรือปิดไปแล้ว" }
@@ -84,7 +85,7 @@ export async function holdDeal(db: Db, id: string, actor: Actor, holdReason: str
 }
 
 /** กลับมาดำเนินการต่อ — คืนขั้นเดิม */
-export async function resumeDeal(db: Db, id: string, actor: Actor): Promise<ActionResult> {
+export async function resumeDeal(db: PartnerDb, id: string, actor: Actor): Promise<ActionResult> {
   const deal = await getDeal(db, id)
   if (!deal) return { ok: false, error: "ไม่พบดีล" }
   if (deal.stage !== "ON_HOLD") return { ok: false, error: "ดีลนี้ไม่ได้พักติดตามอยู่" }
@@ -101,7 +102,7 @@ export async function resumeDeal(db: Db, id: string, actor: Actor): Promise<Acti
 
 /** ปิดดีล (ปุ่ม Pass on) — บังคับเลือกเหตุผลของกลุ่มขั้นที่ดีลอยู่ */
 export async function closeLost(
-  db: Db, id: string, actor: Actor,
+  db: PartnerDb, id: string, actor: Actor,
   lossReasonId: string, lossNote?: string,
   opts: { isAutomatic?: boolean } = {},
 ): Promise<ActionResult> {
@@ -135,7 +136,7 @@ export async function closeLost(
  * แก้ได้เฉพาะดีลที่เหตุผลปัจจุบันเป็นของระบบ — ดีลที่คนปิดเองพร้อมเหตุผทางธุรกิจแล้วห้ามแก้ย้อนหลัง
  */
 export async function setLossReason(
-  db: Db, id: string, actor: Actor, lossReasonId: string, lossNote?: string,
+  db: PartnerDb, id: string, actor: Actor, lossReasonId: string, lossNote?: string,
 ): Promise<ActionResult> {
   const deal = await getDeal(db, id)
   if (!deal) return { ok: false, error: "ไม่พบดีล" }
@@ -174,7 +175,7 @@ const SCREENING_KEYS = [
   "noCriminalRecord", "notBlacklisted", "downPaymentReady", "canDriveMixer", "hasGuarantor",
 ] as const
 
-export async function saveFields(db: Db, id: string, actor: Actor, fields: Record<string, unknown>): Promise<ActionResult> {
+export async function saveFields(db: PartnerDb, id: string, actor: Actor, fields: Record<string, unknown>): Promise<ActionResult> {
   const deal = await getDeal(db, id)
   if (!deal) return { ok: false, error: "ไม่พบดีล" }
 
@@ -200,7 +201,7 @@ export async function saveFields(db: Db, id: string, actor: Actor, fields: Recor
 }
 
 /** แนบไฟล์ประกอบขั้น (ใบเสนอราคา/สลิปจอง/สัญญาลงนาม/รูปส่งมอบ) */
-export async function attachFile(db: Db, id: string, actor: Actor, type: string, url: string, label?: string): Promise<ActionResult> {
+export async function attachFile(db: PartnerDb, id: string, actor: Actor, type: string, url: string, label?: string): Promise<ActionResult> {
   const deal = await getDeal(db, id)
   if (!deal) return { ok: false, error: "ไม่พบดีล" }
   if (!url.trim()) return { ok: false, error: "ไม่มีไฟล์" }

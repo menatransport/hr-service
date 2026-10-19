@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export async function POST(req: Request) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("promotions")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
   const { contractCode, year, type, date, amount, notes } = body
   if (!contractCode || !year || !type || !date || amount == null) {
@@ -12,8 +16,8 @@ export async function POST(req: Request) {
   if (type !== "PM1" && type !== "PM2") {
     return NextResponse.json({ error: "type must be PM1 or PM2" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const doc = {
     contractCode: String(contractCode),
     year: Number(year),
@@ -25,6 +29,6 @@ export async function POST(req: Request) {
     confirmed: true,
     createdAt: new Date(),
   }
-  const result = await db.collection("pm_records").insertOne(doc)
+  const result = await partnerColOf(db, "pmRecords").insertOne(doc)
   return NextResponse.json({ _id: result.insertedId.toString(), ...doc }, { status: 201 })
 }

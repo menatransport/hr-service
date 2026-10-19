@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
-const DB = PARTNER_DB
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 /**
@@ -17,17 +18,21 @@ const r2 = (n: number) => Math.round(n * 100) / 100
  * ค่าดำเนินการ = 8% ของยอดเก็บรวม (สูตรไฟล์ — บรรทัด "ค่าดำเนินการ" ในคลังไม่นับซ้ำ)
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { month, action = "preview" } = await req.json() as { month?: string; action?: string }
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json({ error: "month required (YYYY-MM)" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
 
   // บรรทัดของงวด: chargeMonth ตรงเดือน หรือ (ไม่มี chargeMonth และวันที่เบิกอยู่ในเดือน)
-  const lines = await db.collection("stock_movements").find({
+  const lines = await partnerColOf(db, "stockMovements").find({
     $or: [
       { chargeMonth: month },
       { chargeMonth: { $exists: false }, date: { $gte: `${month}-01`, $lte: `${month}-31` } },
@@ -39,12 +44,12 @@ export async function POST(req: NextRequest) {
   const digits = (s: string) => (s ?? "").replace(/[^0-9]/g, "")
   const byPlate: Record<string, string> = {}
   const byTruck: Record<string, string> = {}
-  const contracts = await db.collection("contracts").find({}).project({ contractCode: 1, licensePlate: 1, truckNumber: 1 }).toArray()
+  const contracts = await partnerColOf(db, "contracts").find({}).project({ contractCode: 1, licensePlate: 1, truckNumber: 1 }).toArray()
   for (const c of contracts) {
     if (c.licensePlate) byPlate[digits(c.licensePlate as string)] ??= c.contractCode as string
     if (c.truckNumber) byTruck[c.truckNumber as string] ??= c.contractCode as string
   }
-  const drivers = await db.collection("drivers").find({}).project({ contractCode: 1, licensePlate: 1, truckNumber: 1, driverName: 1 }).toArray()
+  const drivers = await partnerColOf(db, "drivers").find({}).project({ contractCode: 1, licensePlate: 1, truckNumber: 1, driverName: 1 }).toArray()
   const nameByCode: Record<string, string> = {}
   for (const d of drivers) {
     if (d.licensePlate) byPlate[digits(d.licensePlate as string)] = d.contractCode as string
@@ -77,7 +82,7 @@ export async function POST(req: NextRequest) {
   }
 
   // เทียบของเดิมในงวด
-  const existing = await db.collection("repair_monthly").find({ month }).toArray()
+  const existing = await partnerColOf(db, "repairMonthly").find({ month }).toArray()
   const exMap = Object.fromEntries(existing.map((e) => [e.contractCode as string, e]))
   const num = (v: unknown) => (typeof v === "number" ? v : 0)
 
@@ -126,7 +131,7 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString()
   let upserted = 0
   for (const row of rows) {
-    await db.collection("repair_monthly").updateOne(
+    await partnerColOf(db, "repairMonthly").updateOne(
       { month, contractCode: row.contractCode },
       { $set: {
         month, contractCode: row.contractCode, driverName: row.driverName,

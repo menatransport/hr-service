@@ -1,11 +1,11 @@
 import "server-only"
-import type { Db } from "mongodb"
+import { partnerColOf, type PartnerDb, type AnyDoc } from "@/lib/db/partner-col"
+import { PARTNER } from "@/lib/db/registry.mjs"
 
 /** ระบบขาย — ใบเสนอราคา + CRM (เฟส 1) */
 
-export const QUOTE_COLL = "quotations"
-export const CUSTOMER_COLL = "customers"
-const COUNTERS = "ledger_counters" // ใช้ counter กลางร่วม (คนละ key)
+export const QUOTE_COLL = PARTNER.quotations
+export const CUSTOMER_COLL = PARTNER.customers
 
 export type QuoteStatus = "lead" | "quoted" | "booked" | "won" | "lost"
 export const QUOTE_STATUSES: QuoteStatus[] = ["lead", "quoted", "booked", "won", "lost"]
@@ -61,11 +61,11 @@ export interface Quotation extends QuotePricing {
 
 /** เลขที่ใบเสนอ QT + YYMM + running 3 หลักต่อเดือน (atomic) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function nextQuotationNo(db: Db | any): Promise<string> {
+export async function nextQuotationNo(db: PartnerDb | any): Promise<string> {
   const now = new Date()
   const yymm = `${String(now.getFullYear() % 100).padStart(2, "0")}${String(now.getMonth() + 1).padStart(2, "0")}`
   const key = `QT${yymm}`
-  const doc = await db.collection(COUNTERS).findOneAndUpdate(
+  const doc = await (partnerColOf(db, "ledgerCounters") as AnyDoc).findOneAndUpdate(
     { _id: key }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: "after" })
   return `${key.slice(0, 2)}-${yymm}-${String((doc?.seq as number) ?? 1).padStart(3, "0")}`
 }

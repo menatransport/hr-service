@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
-const DB = PARTNER_DB
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 /**
@@ -11,6 +12,10 @@ const r2 = (n: number) => Math.round(n * 100) / 100
  * แมพระบบ↔ไฟล์: รายการที่ย้ายไปเดินใน ledger (ค่างวด/ซ่อม/ดาวน์/ภาษีประกันบางสัญญา) บวกกลับเข้าช่องเทียบ
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ month: string }> }) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { month } = await params
   if (!/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: "month must be YYYY-MM" }, { status: 400 })
 
@@ -53,9 +58,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mon
   }
   if (Object.keys(fileRows).length === 0) return NextResponse.json({ error: "ไม่พบแถวสัญญา (MTxxx) ในชีต Summary" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
-  const entries = await db.collection("payroll_entries").find({ month }).toArray()
+  const pdb = await partnerDb()
+  const db = pdb
+  const entries = await partnerColOf(db, "payrollEntries").find({ month }).toArray()
   const eMap = Object.fromEntries(entries.map((e) => [e.contractCode as string, e]))
 
   const n = (v: unknown) => (typeof v === "number" ? v : 0)

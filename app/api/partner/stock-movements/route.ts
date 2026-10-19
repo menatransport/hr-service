@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId, AnyBulkWriteOperation } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -25,11 +27,10 @@ export async function GET(req: NextRequest) {
     ]
   }
 
-  const client = await clientPromise
-  const db     = client.db(PARTNER_DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const docs = await db
-    .collection("stock_movements")
+  const docs = await     partnerColOf(db, "stockMovements")
     .find(filter)
     .sort({ date: -1, wd: 1 })
     .toArray()
@@ -39,6 +40,10 @@ export async function GET(req: NextRequest) {
 
 // PATCH — bulk-set promoType on multiple movement items at once
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as { updates?: { id: string; promoType?: string; pmType?: string; chargeAmount?: number | null; chargeMonth?: string | null }[] }
   const updates = body.updates ?? []
 
@@ -59,7 +64,7 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const client = await clientPromise
+  const pdb = await partnerDb()
   const now    = new Date()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ops: AnyBulkWriteOperation<any>[] = updates.map((u) => {
@@ -86,8 +91,7 @@ export async function PATCH(req: NextRequest) {
     }
   })
 
-  const result = await client.db(PARTNER_DB)
-    .collection("stock_movements")
+  const result = await     partnerColOf(pdb, "stockMovements")
     .bulkWrite(ops)
 
   return NextResponse.json({ ok: true, modified: result.modifiedCount, matched: result.matchedCount })

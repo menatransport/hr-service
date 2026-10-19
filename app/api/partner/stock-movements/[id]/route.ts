@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "stock_movements"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 // PATCH — set which promotion covers this movement item: "" | "repair" | "pm"
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const body   = await req.json() as { promoType?: string }
 
@@ -17,8 +19,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "invalid promoType" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COLL).updateOne(
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "stockMovements").updateOne(
     { _id: new ObjectId(id) },
     { $set: { promoType, updatedAt: new Date() } }
   )

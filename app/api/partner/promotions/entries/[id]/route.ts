@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB  = PARTNER_DB
-const COL = "promotion_entries"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("promotions")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     active?: boolean
     disabledReason?: string | null
@@ -40,8 +42,8 @@ export async function PATCH(
   if (body.label !== undefined)   $set.label   = body.label
   if (body.details !== undefined) $set.details = body.details
 
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COL).updateOne(
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "promotionEntries").updateOne(
     { _id: oid },
     { $set }
   )
@@ -57,6 +59,10 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   let oid: ObjectId
   try {
@@ -65,8 +71,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COL).deleteOne({ _id: oid })
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "promotionEntries").deleteOne({ _id: oid })
 
   if (result.deletedCount === 0) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })

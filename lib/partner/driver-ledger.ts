@@ -1,5 +1,6 @@
 import "server-only"
 import { ObjectId } from "mongodb"
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
 
 /**
  * Unified driver debt/deposit ledger (สมุดหนี้/เงินสะสม พขร.)
@@ -60,12 +61,6 @@ export interface LedgerEntry {
   createdAt: string
   updatedAt: string
 }
-
-const LEDGER   = "driver_ledger"
-const PAYMENTS = "ledger_payments"
-const SKIPS    = "ledger_skips"
-const COUNTERS = "ledger_counters"
-
 function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
@@ -76,7 +71,7 @@ export async function nextDebtCode(db: any): Promise<string> {
   const now = new Date()
   const yymm = `${String(now.getFullYear() % 100).padStart(2, "0")}${String(now.getMonth() + 1).padStart(2, "0")}`
   const key = `DB${yymm}`
-  const doc = await db.collection(COUNTERS).findOneAndUpdate(
+  const doc = await (partnerColOf(db, "ledgerCounters") as AnyDoc).findOneAndUpdate(
     { _id: key },
     { $inc: { seq: 1 } },
     { upsert: true, returnDocument: "after" }
@@ -117,7 +112,7 @@ function baseDeduction(entry: any, month: string): number {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getLedgerDeductions(db: any, contractCode: string, month: string): Promise<{ entryId: string; debtCode: string; label: string; amount: number; type?: string }[]> {
-  const entries = await db.collection(LEDGER)
+  const entries = await (partnerColOf(db, "driverLedger") as AnyDoc)
     .find({ contractCode, status: "active", startMonth: { $lte: month } })
     .toArray()
   if (entries.length === 0) return []
@@ -125,8 +120,8 @@ export async function getLedgerDeductions(db: any, contractCode: string, month: 
   const ids = entries.map((e: { _id: ObjectId }) => e._id.toString())
 
   const [skips, payCounts] = await Promise.all([
-    db.collection(SKIPS).find({ entryId: { $in: ids }, month }).toArray(),
-    db.collection(PAYMENTS).aggregate([
+    (partnerColOf(db, "ledgerSkips") as AnyDoc).find({ entryId: { $in: ids }, month }).toArray(),
+    (partnerColOf(db, "ledgerPayments") as AnyDoc).aggregate([
       { $match: { entryId: { $in: ids } } },
       { $group: { _id: "$entryId", count: { $sum: 1 } } },
     ]).toArray(),
@@ -176,11 +171,11 @@ export async function settleLedgerMonth(db: any, contractCode: string, month: st
   const now = new Date().toISOString()
 
   for (const d of deductions) {
-    const existing = await db.collection(PAYMENTS).findOne({ entryId: d.entryId, month })
+    const existing = await (partnerColOf(db, "ledgerPayments") as AnyDoc).findOne({ entryId: d.entryId, month })
     if (existing) continue
 
     try {
-      await db.collection(PAYMENTS).insertOne({
+      await (partnerColOf(db, "ledgerPayments") as AnyDoc).insertOne({
         entryId: d.entryId,
         debtCode: d.debtCode,
         contractCode,
@@ -195,7 +190,7 @@ export async function settleLedgerMonth(db: any, contractCode: string, month: st
       throw e
     }
 
-    const updated = await db.collection(LEDGER).findOneAndUpdate(
+    const updated = await (partnerColOf(db, "driverLedger") as AnyDoc).findOneAndUpdate(
       { _id: new ObjectId(d.entryId) },
       { $inc: { paidAmount: d.amount }, $set: { updatedAt: now } },
       { returnDocument: "after" }
@@ -204,7 +199,7 @@ export async function settleLedgerMonth(db: any, contractCode: string, month: st
     // debt ครบยอด → ปิดเป็น paid (เผื่อเศษทศนิยม 0.005)
     if (updated && updated.kind === "debt" && updated.principal != null &&
         (updated.paidAmount as number) >= (updated.principal as number) - 0.005) {
-      await db.collection(LEDGER).updateOne(
+      await (partnerColOf(db, "driverLedger") as AnyDoc).updateOne(
         { _id: new ObjectId(d.entryId), status: "active" },
         { $set: { status: "paid", updatedAt: now } }
       )

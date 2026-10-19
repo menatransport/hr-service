@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -72,6 +74,10 @@ function parseRow(row: unknown[]) {
 // ── POST handler (action = preview | confirm) ─────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "vehiclecost")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -110,8 +116,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Confirm: upsert by composite key (date + wd + mr + itemCode + amount) ───
-  const client = await clientPromise
-  const col    = client.db(PARTNER_DB).collection("stock_movements")
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "stockMovements")
   const now    = new Date()
 
   let upserted = 0, modified = 0

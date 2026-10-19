@@ -5,20 +5,22 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import sharp from "sharp"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { uploadFile } from "@/lib/partner/spaces"
 import { isOwnStorageUrl, isRotatableImageUrl, parseRotateRequest } from "@/lib/partner/driver-photo"
+import { partnerCol } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export const runtime = "nodejs"
-
-const DB   = PARTNER_DB
-const COLL = "drivers"
 const MAX_BYTES = 20 * 1024 * 1024      // เท่ากับเพดานของ /api/upload
 const FETCH_TIMEOUT_MS = 15_000
 
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "id ไม่ถูกต้อง" }, { status: 400 })
 
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   const { field, deg } = parsed
 
-  const col = (await clientPromise).db(DB).collection(COLL)
+  const col = (await partnerCol("drivers"))
   const driver = await col.findOne({ _id: new ObjectId(id) }, { projection: { [field]: 1 } })
   if (!driver) return NextResponse.json({ error: "ไม่พบคนขับ" }, { status: 404 })
 

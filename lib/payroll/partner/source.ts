@@ -1,5 +1,6 @@
 import type { Document } from "mongodb";
 
+import type { PartnerName } from "../../db/partner";
 import { PARTNER } from "../../db/registry.mjs";
 import type { PeriodRef } from "../period";
 import type { PartnerContract, PartnerEntry, PartnerLink } from "./adapter";
@@ -69,7 +70,7 @@ export interface ReadCol {
 }
 
 export interface PartnerSourceDeps {
-  partner(name: string): Promise<ReadCol>;
+  partner(name: PartnerName): Promise<ReadCol>;
   links(): Promise<ReadCol>;
 }
 

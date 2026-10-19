@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { QUOTE_COLL, nextQuotationNo, type QuoteStatus } from "@/lib/partner/quotation"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
-const DB = PARTNER_DB
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
 
 /** GET /api/quotations?status=&q= — ลิสต์ใบเสนอ (ทั้งทีมเห็นทุกดีล) */
@@ -11,8 +12,8 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const status = sp.get("status")?.trim()
   const q = sp.get("q")?.trim()
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: any = {}
   if (status) filter.status = status
@@ -25,12 +26,16 @@ export async function GET(req: NextRequest) {
     { licensePlate: { $regex: q, $options: "i" } },
     { salesName: { $regex: q, $options: "i" } },
   ]
-  const rows = await db.collection(QUOTE_COLL).find(filter).sort({ createdAt: -1 }).limit(300).toArray()
+  const rows = await partnerColOf(db, "quotations").find(filter).sort({ createdAt: -1 }).limit(300).toArray()
   return NextResponse.json(rows.map((r) => ({ ...r, _id: String(r._id) })))
 }
 
 /** POST /api/quotations — สร้างใบเสนอ (salesperson = ผู้ใช้ login) */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const b = await req.json()
@@ -40,8 +45,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: isLead ? "กรุณาระบุชื่อลูกค้า" : "ต้องเลือกรถและลูกค้า" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const now = new Date().toISOString()
   const email = session.user?.email ?? "unknown"
   const salesName = (typeof b.salesName === "string" && b.salesName.trim()) || session.user?.name || email.split("@")[0]
@@ -77,6 +82,6 @@ export async function POST(req: NextRequest) {
     createdAt: now, updatedAt: now,
     timeline: [{ at: now, by: email, action: "สร้างใบเสนอ" }],
   }
-  const r = await db.collection(QUOTE_COLL).insertOne(doc)
+  const r = await partnerColOf(db, "quotations").insertOne(doc)
   return NextResponse.json({ ...doc, _id: String(r.insertedId) })
 }

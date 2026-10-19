@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { prevMonth } from "@/lib/partner/utils"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 /**
@@ -16,15 +16,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ mon
     return NextResponse.json({ error: "month must be YYYY-MM" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   const [entries, prevEntries, drivers, status] = await Promise.all([
-    db.collection("payroll_entries").find({ month }).toArray(),
-    db.collection("payroll_entries").find({ month: prevMonth(month) })
+    partnerColOf(db, "payrollEntries").find({ month }).toArray(),
+    partnerColOf(db, "payrollEntries").find({ month: prevMonth(month) })
       .project({ totalIncome: 1, totalDeductions: 1, netPay: 1 }).toArray(),
-    db.collection("drivers").find({}).project({ contractCode: 1, driverName: 1, plant: 1 }).toArray(),
-    db.collection("month_status").findOne({ month }),
+    partnerColOf(db, "drivers").find({}).project({ contractCode: 1, driverName: 1, plant: 1 }).toArray(),
+    partnerColOf(db, "monthStatus").findOne({ month }),
   ])
 
   const dMap = Object.fromEntries(drivers.map((d) => [d.contractCode as string, d]))
@@ -81,7 +81,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ mon
   })
 
   // ── หนี้/เงินสะสมทั้ง fleet (driver_ledger) ──
-  const ledger = await db.collection("driver_ledger").aggregate([
+  const ledger = await partnerColOf(db, "driverLedger").aggregate([
     { $match: { status: "active" } },
     { $group: {
       _id: "$kind",

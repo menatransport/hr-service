@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { normPlateIT } from "@/lib/partner/insurance-tax"
-
-const DB   = PARTNER_DB
-const COLL = "vehicle_insurance_tax"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const body   = await req.json()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { _id, createdAt, platePlain: _pp, ...update } = body
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "vehicleInsuranceTax")
   const now    = new Date().toISOString()
 
   // ทะเบียนเปลี่ยน → คำนวณ platePlain ใหม่
@@ -54,9 +56,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "vehicleInsuranceTax")
   await col.deleteOne({ _id: new ObjectId(id) })
   return NextResponse.json({ ok: true })
 }

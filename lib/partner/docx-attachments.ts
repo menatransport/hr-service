@@ -1,8 +1,8 @@
 import "server-only"
 import PizZip from "pizzip"
-import type { Db } from "mongodb"
 import type { Contract } from "@/lib/partner/types"
 import { resolveContractAttachments } from "@/lib/partner/pdf-attachments"
+import { type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * ต่อเอกสารแนบ (รูปบัตร ปชช./ใบขับขี่/ทะเบียนบ้าน ฯลฯ) ท้ายไฟล์ .docx
@@ -67,7 +67,7 @@ function imageParagraphs(heading: string, relId: string, drawId: number, cx: num
 
 /** ต่อรูปแนบท้าย .docx ที่ render แล้ว — คืน buffer ใหม่ (ไม่มีรูป/ดึงไม่ได้ = คืนของเดิม) */
 export async function appendDocxAttachments(
-  db: Db, contract: Contract, docxBuffer: Buffer, type: string,
+  db: PartnerDb, contract: Contract, docxBuffer: Buffer, type: string,
 ): Promise<Buffer> {
   const entries = await resolveContractAttachments(db, contract, type)
   if (entries.length === 0) return docxBuffer

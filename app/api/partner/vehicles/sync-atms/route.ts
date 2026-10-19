@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB        = PARTNER_DB
-const COLL      = "vehicle_master"
-const ATMS_DB   = "atms"
-const ATMS_COLL = "vehiclemaster"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb, atmsCol } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 /** ค่าจาก ATMS ที่ถือว่า "ว่าง" — pandas export ทิ้ง "nan"/"-" ไว้ */
 function clean(v: unknown): string {
   const s = String(v ?? "").trim()
@@ -18,9 +14,13 @@ function clean(v: unknown): string {
  * (middleware บังคับ admin สำหรับ method ที่ไม่ใช่ GET อยู่แล้ว)
  */
 export async function POST() {
-  const client = await clientPromise
-  const app  = client.db(DB).collection(COLL)
-  const atms = client.db(ATMS_DB).collection(ATMS_COLL)
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
+  const pdb = await partnerDb()
+  const app  = partnerColOf(pdb, "vehicleMaster")
+  const atms = await atmsCol("vehicleMaster")
 
   // index ทะเบียน → เอกสาร ATMS (ถ้าทะเบียนซ้ำใน ATMS ใช้ตัวแรก)
   const atmsRows = await atms.find({}).toArray()

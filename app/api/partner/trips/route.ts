@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { nextMonth } from "@/lib/partner/utils"
-
-const DB   = PARTNER_DB
-const COLL = "trips"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const contractCode = searchParams.get("contractCode")?.trim() ?? ""
   const month        = searchParams.get("month")?.trim() ?? ""
   const plant        = searchParams.get("plant")?.trim() ?? ""
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "trips")
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {}
@@ -30,18 +28,26 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
   if (!body.contractCode || !body.date) {
     return NextResponse.json({ error: "contractCode and date required" }, { status: 400 })
   }
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "trips")
   const doc    = { ...body, createdAt: new Date().toISOString() }
   const result = await col.insertOne(doc)
   return NextResponse.json({ _id: result.insertedId, ...doc }, { status: 201 })
 }
 
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { searchParams } = req.nextUrl
   const contractCode = searchParams.get("contractCode")?.trim() ?? ""
   const month        = searchParams.get("month")?.trim() ?? ""
@@ -58,8 +64,8 @@ export async function DELETE(req: NextRequest) {
   const filter: Record<string, any> = { date: { $gte: startStr, $lt: endStr } }
   if (contractCode) filter.contractCode = contractCode
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "trips")
   const result = await col.deleteMany(filter)
   return NextResponse.json({ deleted: result.deletedCount })
 }

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { moveStage, holdDeal, resumeDeal, closeLost, attachFile, saveFields, getDeal, type Actor, setLossReason } from "@/lib/partner/deal-actions"
 import { checkAdvance, screeningChecklist, type DealFields } from "@/lib/partner/deal-stage"
 import { listLossReasons, reasonsForStage } from "@/lib/partner/loss-reason"
-
-const DB = PARTNER_DB
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /**
  * การกระทำกับดีลในไปป์ไลน์ — กติกาทั้งหมดตรวจซ้ำฝั่ง server เสมอ
@@ -20,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const session = await getPartnerSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const db = (await clientPromise).db(DB)
+  const db = (await partnerDb())
   const deal = await getDeal(db, id)
   if (!deal) return NextResponse.json({ error: "ไม่พบดีล" }, { status: 404 })
 
@@ -42,6 +41,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 /** POST — action: advance | move | hold | resume | close | reason | fields | attach */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const session = await getPartnerSession()
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const b = await req.json().catch(() => null)
   if (!b?.action) return NextResponse.json({ error: "ไม่ได้ระบุการกระทำ" }, { status: 400 })
 
-  const db = (await clientPromise).db(DB)
+  const db = (await partnerDb())
   let result
 
   switch (b.action) {

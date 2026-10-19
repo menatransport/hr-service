@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { nextMonth } from "@/lib/partner/utils"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const month = searchParams.get("month")?.trim() ?? ""
   if (!month) return NextResponse.json({ error: "month required" }, { status: 400 })
 
-  const client  = await clientPromise
-  const db      = client.db(DB)
-  const entries = await db.collection("payroll_entries").find({ month }).toArray()
-  const drivers = await db.collection("drivers").find({ status: "active" }).sort({ contractCode: 1 }).toArray()
+  const pdb  = await partnerDb()
+  const db      = pdb
+  const entries = await partnerColOf(db, "payrollEntries").find({ month }).toArray()
+  const drivers = await partnerColOf(db, "drivers").find({ status: "active" }).sort({ contractCode: 1 }).toArray()
   const startStr = `${month}-01`
   const endStr   = `${nextMonth(month)}-01`
 
-  const tripAgg = await db.collection("trips").aggregate([
+  const tripAgg = await partnerColOf(db, "trips").aggregate([
     {
       $match: {
         date: { $gte: startStr, $lt: endStr },

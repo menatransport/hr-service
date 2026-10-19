@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export async function POST(req: Request) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("promotions")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
   const { contractCode, date, description, mr, amount } = body
   if (!contractCode || !date || !description || amount == null) {
     return NextResponse.json({ error: "missing required fields" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const doc = {
     contractCode: String(contractCode),
     date: String(date),
@@ -23,6 +27,6 @@ export async function POST(req: Request) {
     reserve: true,
     createdAt: new Date(),
   }
-  const result = await db.collection("repair_claims").insertOne(doc)
+  const result = await partnerColOf(db, "repairClaims").insertOne(doc)
   return NextResponse.json({ _id: result.insertedId.toString(), ...doc }, { status: 201 })
 }

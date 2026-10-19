@@ -1,3 +1,4 @@
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 /**
  * สถานะการผ่อนของคนขับ (derived — ไม่เก็บใน DB)
  *   paying  = Active ผ่อนชำระอยู่
@@ -11,7 +12,6 @@
  *  3. ไม่มี ledger ค่างวด: ไม่มีสัญญาในระบบ → paying (คนขับใหม่/รหัสหาไม่เจอ)
  *     contracts.monthlyInstallment > 0 → paying · ไม่มีค่างวดเลย → paidoff
  */
-import type { Db } from "mongodb"
 
 export type InstallmentState = "paying" | "paidoff"
 
@@ -28,16 +28,16 @@ export const INSTALLMENT_LABEL: Record<InstallmentState, string> = {
   paidoff: "ปิดงวดแล้ว",
 }
 
-export async function computeInstallmentStates(db: Db, codes: string[]): Promise<Map<string, InstallmentState>> {
+export async function computeInstallmentStates(db: PartnerDb, codes: string[]): Promise<Map<string, InstallmentState>> {
   const out = new Map<string, InstallmentState>()
   const uniq = [...new Set(codes.map((c) => (c ?? "").trim()).filter(Boolean))]
   if (uniq.length === 0) return out
 
   const [contracts, ledgers] = await Promise.all([
-    db.collection("contracts")
+    partnerColOf(db, "contracts")
       .find({ contractCode: { $in: uniq } }, { projection: { contractCode: 1, status: 1, monthlyInstallment: 1 } })
       .toArray(),
-    db.collection("driver_ledger")
+    partnerColOf(db, "driverLedger")
       .find(
         { contractCode: { $in: uniq }, "source.type": "vehicle_installment", status: { $ne: "cancelled" } },
         { projection: { contractCode: 1, status: 1, principal: 1, paidAmount: 1 } },

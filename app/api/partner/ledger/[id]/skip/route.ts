@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { PARTNER } from "@/lib/db/registry.mjs"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -16,6 +17,10 @@ const MONTH_RE = /^\d{4}-\d{2}$/
  * overrideAmount > 0 = หักเดือนนั้นเป็นยอดพิเศษแทน monthlyAmount
  */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
   const body = await req.json()
@@ -31,14 +36,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     overrideAmount = Math.round(body.overrideAmount * 100) / 100
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const entry = await db.collection("driver_ledger").findOne({ _id: new ObjectId(id) })
+  const entry = await partnerColOf(db, "driverLedger").findOne({ _id: new ObjectId(id) })
   if (!entry) return NextResponse.json({ error: "entry not found" }, { status: 404 })
 
   // เดือนที่ตัดยอดไปแล้ว skip ไม่มีผล — กันความสับสน
-  const paid = await db.collection("ledger_payments").findOne({ entryId: id, month })
+  const paid = await partnerColOf(db, "ledgerPayments").findOne({ entryId: id, month })
   if (paid) {
     return NextResponse.json({ error: `month ${month} already settled — skip has no effect` }, { status: 409 })
   }
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const session = await getPartnerSession()
   const now = new Date().toISOString()
 
-  await db.collection("ledger_skips").updateOne(
+  await partnerColOf(db, "ledgerSkips").updateOne(
     { entryId: id, month },
     {
       $set: {
@@ -63,7 +68,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   const reason = (body.reason as string | undefined)?.trim() ?? ""
   await logActivity({
-    entity: "driver_ledger",
+    entity: PARTNER.driverLedger,
     entityId: (entry.debtCode as string) ?? "",
     action: overrideAmount && overrideAmount > 0 ? "override" : "skip",
     changes: {
@@ -78,6 +83,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
 /** DELETE /api/ledger/[id]/skip — ลบ skip/override ของเดือน (month จาก body หรือ ?month=) */
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
 
@@ -92,9 +101,9 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "month required (YYYY-MM)" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
-  const result = await db.collection("ledger_skips").deleteOne({ entryId: id, month })
+  const pdb = await partnerDb()
+  const db     = pdb
+  const result = await partnerColOf(db, "ledgerSkips").deleteOne({ entryId: id, month })
   if (result.deletedCount === 0) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   return NextResponse.json({ ok: true })

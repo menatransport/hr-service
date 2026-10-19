@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -106,6 +108,10 @@ function parseRow(row: unknown[]) {
 // ── POST handler (action = preview | confirm) ─────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "vehiclecost")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -141,12 +147,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ไม่พบข้อมูลในไฟล์ หรือรูปแบบไม่ถูกต้อง" }, { status: 422 })
   }
 
-  const client = await clientPromise
-  const db     = client.db(PARTNER_DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
   // ── Map 1: employeeCode → contractCode via drivers.staffCode ────────────────
   const empCodes = [...new Set(parsed.map((r) => r.employeeCode).filter(Boolean))]
-  const driverDocs = await db.collection("drivers").find(
+  const driverDocs = await partnerColOf(db, "drivers").find(
     { staffCode: { $in: empCodes } },
     { projection: { staffCode: 1, contractCode: 1 } }
   ).toArray()
@@ -155,7 +161,7 @@ export async function POST(req: NextRequest) {
   )
 
   // ── Map 2 & 3: licensePlate / truckNumber → contractCode via contracts ───────
-  const contractDocs = await db.collection("contracts").find(
+  const contractDocs = await partnerColOf(db, "contracts").find(
     {},
     { projection: { contractCode: 1, licensePlate: 1, truckNumber: 1 } }
   ).toArray()
@@ -198,7 +204,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Confirm: upsert into debt_acceptances ────────────────────────────────────
-  const col = db.collection("debt_acceptances")
+  const col = partnerColOf(db, "debtAcceptances")
   let upserted = 0, skipped = 0
 
   for (const row of rows) {

@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { renderPdfmake } from "@/lib/partner/pdfmake-printer"
 import { catalogDocDef, loadCatalogVehicles, loadImages } from "@/lib/partner/catalog-pdf"
 import { getCatalogConfig } from "@/lib/partner/catalog-config"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
-const DB = PARTNER_DB
-
 /** Catalog 1 หน้า ของรถทะเบียนเดียว — GET /api/catalog/<plate>/pdf (?download=1 = บังคับดาวน์โหลด) */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ plate: string }> }) {
   const { plate } = await params
   const p = decodeURIComponent(plate).trim()
   if (!p) return NextResponse.json({ error: "plate required" }, { status: 400 })
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const [vs, cfg] = await Promise.all([loadCatalogVehicles(db, [p]), getCatalogConfig(db)])
   if (vs.length === 0) return NextResponse.json({ error: `ไม่พบรถทะเบียน ${p}` }, { status: 404 })
   try {

@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { logActivity } from "@/lib/partner/activity-log"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 // ยืนยัน/ยกเลิกการตัดงบของ claim (กติกา: ทีมต้องระบุก่อน งบถึงถูกตัด)
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("promotions")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   let oid: ObjectId
   try {
@@ -22,13 +26,13 @@ export async function PATCH(
   if (typeof body.confirmed !== "boolean") {
     return NextResponse.json({ error: "confirmed (boolean) required" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
-  const before = await db.collection("repair_claims").findOne({ _id: oid })
+  const pdb = await partnerDb()
+  const db = pdb
+  const before = await partnerColOf(db, "repairClaims").findOne({ _id: oid })
   if (!before) return NextResponse.json({ error: "not found" }, { status: 404 })
 
   // ยืนยัน = เปลี่ยน reserve → actual (ตัดงบถาวร): เคลียร์ flag reserve ด้วย
-  await db.collection("repair_claims").updateOne(
+  await partnerColOf(db, "repairClaims").updateOne(
     { _id: oid },
     { $set: { confirmed: body.confirmed, reserve: false, confirmedAt: body.confirmed ? new Date() : null } }
   )
@@ -55,6 +59,10 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   let oid: ObjectId
   try {
@@ -62,9 +70,9 @@ export async function DELETE(
   } catch {
     return NextResponse.json({ error: "invalid id" }, { status: 400 })
   }
-  const client = await clientPromise
-  const db = client.db(DB)
-  const result = await db.collection("repair_claims").deleteOne({ _id: oid })
+  const pdb = await partnerDb()
+  const db = pdb
+  const result = await partnerColOf(db, "repairClaims").deleteOne({ _id: oid })
   if (result.deletedCount === 0) return NextResponse.json({ error: "not found" }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

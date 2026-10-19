@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { runDealDailyJobs } from "@/lib/partner/deal-cron"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
-
-const DB = PARTNER_DB
 
 /**
  * งานรายวันของไปป์ไลน์ขายรถร่วม — Vercel Cron เรียกทุกวัน 08:00 (ตั้งใน vercel.json)
@@ -24,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (!who) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   // เรียกมือเปล่า ๆ = พรีวิวเท่านั้น (กันเผลอปิดดีลยกแผง) · Vercel Cron หรือใส่ ?apply=1 ถึงจะเขียนจริง
   const apply = who === "cron" || req.nextUrl.searchParams.get("apply") === "1"
-  const db = (await clientPromise).db(DB)
+  const db = (await partnerDb())
   const report = await runDealDailyJobs(db, new Date(), { apply })
   return NextResponse.json({
     ok: true,

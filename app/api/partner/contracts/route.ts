@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { ensureFirstVersion } from "@/lib/partner/company-config"
 import type { Contract, Driver } from "@/lib/partner/types"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
-
-const DB   = PARTNER_DB
-const COLL = "contracts"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const q      = searchParams.get("q")?.trim() ?? ""
   const status = searchParams.get("status")?.trim() ?? ""
   const plant  = searchParams.get("plant")?.trim() ?? ""
 
-  const client = await clientPromise
-  const col    = client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const col    = partnerColOf(pdb, "contracts")
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {}
@@ -42,21 +40,25 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const body: Contract = await req.json()
 
   if (!body.contractCode || !body.buyerName || !body.driverName) {
     return NextResponse.json({ error: "contractCode, buyerName, driverName required" }, { status: 400 })
   }
 
-  const client    = await clientPromise
-  const contracts = client.db(DB).collection(COLL)
-  const drivers   = client.db(DB).collection("drivers")
+  const pdb    = await partnerDb()
+  const contracts = partnerColOf(pdb, "contracts")
+  const drivers   = partnerColOf(pdb, "drivers")
 
   const now = new Date().toISOString()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { _id, ...rest } = body
   // จำเวอร์ชันข้อมูลบริษัท/ผู้ลงนามที่ใช้ตอนสร้าง — พิมพ์เอกสารซ้ำภายหลังต้องได้ชื่อชุดเดิม
-  const company = await ensureFirstVersion(client.db(DB))
+  const company = await ensureFirstVersion(pdb)
   const doc = { ...rest, companyVersion: company.version, createdAt: now, updatedAt: now }
 
   const existing = await contracts.findOne({ contractCode: body.contractCode })

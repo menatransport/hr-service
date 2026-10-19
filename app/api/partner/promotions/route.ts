@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getPromoUsage, normPlate } from "@/lib/partner/promo-usage"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * Promotion summary per contract.
@@ -11,11 +10,10 @@ const DB = PARTNER_DB
  * so this list always matches the vehicle-cost page.
  */
 export async function GET() {
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
-  const configs = await db
-    .collection("promo_config")
+  const configs = await     partnerColOf(db, "promoConfig")
     .find({ contractCode: { $exists: true, $ne: "" } })
     .sort({ contractCode: 1 })
     .toArray()
@@ -23,7 +21,7 @@ export async function GET() {
   const contractCodes = configs.map((c) => c.contractCode as string)
 
   const [drivers, usage] = await Promise.all([
-    db.collection("drivers").find({ contractCode: { $in: contractCodes } }).toArray(),
+    partnerColOf(db, "drivers").find({ contractCode: { $in: contractCodes } }).toArray(),
     getPromoUsage(db),
   ])
   const driverMap = Object.fromEntries(drivers.map((d) => [d.contractCode, d]))

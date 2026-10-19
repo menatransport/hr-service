@@ -1,8 +1,8 @@
 import "server-only"
 import { ObjectId } from "mongodb"
-import type { Db } from "mongodb"
 import type { Contract } from "@/lib/partner/types"
 import { pageFooter } from "@/lib/partner/contract-pdfmake-helpers"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -50,7 +50,7 @@ function buildEntries(type: string, driver: any, contract: Contract): Entry[] {
  */
 /** รายการเอกสารแนบจริง (มี url) ของสัญญา — ใช้ร่วมทั้ง PDF และ DOCX */
 export async function resolveContractAttachments(
-  db: Db, contract: Contract, type: string,
+  db: PartnerDb, contract: Contract, type: string,
 ): Promise<{ url: string; heading: string }[]> {
   const entries = buildEntries(type, null, contract) // placeholder — เติม driver แล้ว rebuild
   if (entries.length === 0) return [] // creditor/promotion — ไม่ต้องหา driver
@@ -59,16 +59,16 @@ export async function resolveContractAttachments(
   let driver: any = null
   const driverId = (contract as any).driverId as string | undefined
   if (driverId && ObjectId.isValid(driverId)) {
-    driver = await db.collection("drivers").findOne({ _id: new ObjectId(driverId) })
+    driver = await partnerColOf(db, "drivers").findOne({ _id: new ObjectId(driverId) })
   }
   if (!driver && contract.contractCode) {
-    driver = await db.collection("drivers").findOne({ contractCode: contract.contractCode })
+    driver = await partnerColOf(db, "drivers").findOne({ contractCode: contract.contractCode })
   }
   return buildEntries(type, driver, contract).filter((e) => e.url) as { url: string; heading: string }[]
 }
 
 export async function appendContractAttachments(
-  db: Db, contract: Contract, docDef: any, type: string,
+  db: PartnerDb, contract: Contract, docDef: any, type: string,
 ): Promise<void> {
   const real = await resolveContractAttachments(db, contract, type)
   if (real.length === 0) return

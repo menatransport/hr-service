@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { getPromoUsage } from "@/lib/partner/promo-usage"
+import { partnerDb } from "@/lib/db/partner"
 
 /**
  * Combined promotion usage per plate (repair + PM), from the shared
@@ -8,8 +8,8 @@ import { getPromoUsage } from "@/lib/partner/promo-usage"
  * stock_movements(promoType), deduplicated by MR.
  */
 export async function GET() {
-  const client = await clientPromise
-  const db = client.db(PARTNER_DB)
+  const pdb = await partnerDb()
+  const db = pdb
 
   const usage = await getPromoUsage(db)
 

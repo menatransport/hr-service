@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "drivers"
-
-// Column order for the exported sheet
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 const HEADERS: { key: string; label: string }[] = [
   { key: "staffCode",    label: "รหัสพนักงาน" },
   { key: "firstName",   label: "ชื่อ" },
@@ -24,8 +20,8 @@ const HEADERS: { key: string; label: string }[] = [
 ]
 
 export async function GET() {
-  const client = await clientPromise
-  const drivers = await client.db(DB).collection(COLL)
+  const pdb = await partnerDb()
+  const drivers = await partnerColOf(pdb, "drivers")
     .find({})
     .sort({ firstName: 1, lastName: 1 })
     .toArray()

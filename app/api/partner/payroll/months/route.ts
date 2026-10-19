@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { prevMonth } from "@/lib/partner/utils"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export async function GET() {
-  const client = await clientPromise
-  const db = client.db(DB)
-  const existing = (await db.collection("payroll_entries").distinct("month")) as string[]
+  const pdb = await partnerDb()
+  const db = pdb
+  const existing = (await partnerColOf(db, "payrollEntries").distinct("month")) as string[]
 
   // Always include current month and the two preceding months (use Bangkok time UTC+7)
   const nowBKK = new Date(Date.now() + 7 * 60 * 60 * 1000)

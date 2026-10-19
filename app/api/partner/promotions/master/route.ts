@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
-const DB = PARTNER_DB
 const norm = (s: string) => (s ?? "").replace(/\s+/g, "").replace(/^สบ\.?/, "").trim()
 
 /**
@@ -11,9 +11,9 @@ const norm = (s: string) => (s ?? "").replace(/\s+/g, "").replace(/^สบ\.?/, 
  */
 export async function GET(req: NextRequest) {
   const plate = req.nextUrl.searchParams.get("plate")?.trim() ?? ""
-  const client = await clientPromise
-  const db = client.db(DB)
-  const all = await db.collection("promotion_master").find({}).sort({ licensePlate: 1 }).toArray()
+  const pdb = await partnerDb()
+  const db = pdb
+  const all = await partnerColOf(db, "promotionMaster").find({}).sort({ licensePlate: 1 }).toArray()
 
   // ── ไม่ระบุทะเบียน → array ทั้งหมด (backward-compatible กับ contracts/new) ──
   if (!plate) {

@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm, isAdminRole } from "@/lib/partner/rbac"
 import { SALES_PEOPLE } from "@/lib/partner/quotation-people"
 import { QUOTE_COLL } from "@/lib/partner/quotation"
-
-const DB = PARTNER_DB
-const COLL = "sales_people"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 /** รวมชื่อตั้งต้นในโค้ด + ชื่อที่ทีมเพิ่มเองผ่านหน้าจอ (ไม่ซ้ำ) */
 async function listNames(): Promise<string[]> {
-  const client = await clientPromise
-  const rows = await client.db(DB).collection(COLL).find({}).project({ name: 1, _id: 0 }).toArray()
+  const pdb = await partnerDb()
+  const rows = await partnerColOf(pdb, "salesPeople").find({}).project({ name: 1, _id: 0 }).toArray()
   const added = rows.map((r) => String(r.name ?? "").trim()).filter(Boolean)
   const seen = new Set<string>()
   return [...SALES_PEOPLE, ...added].filter((n) => {
@@ -26,12 +24,12 @@ async function listNames(): Promise<string[]> {
 
 /** Master รายคน — ชื่อที่ยังไม่มีใน DB (ค่าตั้งต้นในโค้ด) คืนเป็นแถว _id ว่าง แก้ไม่ได้จนกว่าจะ seed */
 async function listPeople() {
-  const client = await clientPromise
-  const db = client.db(DB)
-  const rows = await db.collection(COLL).find({}).sort({ name: 1 }).toArray()
+  const pdb = await partnerDb()
+  const db = pdb
+  const rows = await partnerColOf(db, "salesPeople").find({}).sort({ name: 1 }).toArray()
   const inDb = new Set(rows.map((r) => String(r.name ?? "").trim().toLowerCase()))
   // นับใบเสนอราคาต่อชื่อ — ใช้เตือนตอนแก้ชื่อ/ลบ
-  const counts = await db.collection(QUOTE_COLL).aggregate([
+  const counts = await partnerColOf(db, "quotations").aggregate([
     { $group: { _id: "$salesName", n: { $sum: 1 } } },
   ]).toArray()
   const quoteCount = new Map(counts.map((c) => [String(c._id ?? "").trim().toLowerCase(), c.n as number]))
@@ -71,6 +69,10 @@ export async function GET(req: NextRequest) {
 
 /** POST — เพิ่มผู้ขายใหม่ (สิทธิ์ sales ขึ้นไป เพิ่มได้จาก dropdown ตอนออกใบเสนอราคา) */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   const email = (session?.user?.email ?? "").trim().toLowerCase()
   const role = await resolveRole(email)
@@ -85,8 +87,8 @@ export async function POST(req: NextRequest) {
   const dup = existing.find((n) => n.toLowerCase() === name.toLowerCase())
   if (dup) return NextResponse.json({ error: `มีชื่อ "${dup}" อยู่แล้ว`, names: existing }, { status: 409 })
 
-  const client = await clientPromise
-  await client.db(DB).collection(COLL).insertOne({
+  const pdb = await partnerDb()
+  await partnerColOf(pdb, "salesPeople").insertOne({
     name,
     email: String(body?.email ?? "").trim(),
     phone: String(body?.phone ?? "").trim(),
@@ -99,6 +101,10 @@ export async function POST(req: NextRequest) {
 /** PATCH — แก้ชื่อ/email/เบอร์ (admin) · เปลี่ยนชื่อจะ rename salesName ในใบเสนอราคาเดิมตามไปด้วย
  *  เพราะยอดคอมจับกลุ่มด้วยชื่อ (lib/commission.ts) ไม่ตามไปด้วยยอดจะแตกเป็นสองก้อน */
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const admin = await adminOnly()
   if (!admin) return NextResponse.json({ error: "เฉพาะแอดมิน" }, { status: 403 })
 
@@ -106,9 +112,9 @@ export async function PATCH(req: NextRequest) {
   const id = String(body?._id ?? "")
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "bad id" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
-  const cur = await db.collection(COLL).findOne({ _id: new ObjectId(id) })
+  const pdb = await partnerDb()
+  const db = pdb
+  const cur = await partnerColOf(db, "salesPeople").findOne({ _id: new ObjectId(id) })
   if (!cur) return NextResponse.json({ error: "ไม่พบผู้ขายรายนี้" }, { status: 404 })
 
   const oldName = String(cur.name ?? "").trim()
@@ -124,12 +130,12 @@ export async function PATCH(req: NextRequest) {
   const $set: Record<string, unknown> = { name, updatedAt: new Date().toISOString(), updatedBy: admin.email }
   if (body?.email !== undefined) $set.email = String(body.email).trim()
   if (body?.phone !== undefined) $set.phone = String(body.phone).trim()
-  await db.collection(COLL).updateOne({ _id: new ObjectId(id) }, { $set })
+  await partnerColOf(db, "salesPeople").updateOne({ _id: new ObjectId(id) }, { $set })
 
   // ชื่อเปลี่ยน → ตามไปแก้ salesName ในใบเสนอราคาเดิม ยอดคอมจะได้ไม่แตก
   let renamed = 0
   if (name !== oldName && oldName) {
-    const r = await db.collection(QUOTE_COLL).updateMany({ salesName: oldName }, { $set: { salesName: name } })
+    const r = await partnerColOf(db, "quotations").updateMany({ salesName: oldName }, { $set: { salesName: name } })
     renamed = r.modifiedCount
   }
   return NextResponse.json({ ok: true, renamed, names: await listNames() })
@@ -137,21 +143,25 @@ export async function PATCH(req: NextRequest) {
 
 /** DELETE — ลบผู้ขายออกจาก master (admin) · กันลบคนที่ยังมีใบเสนอราคาผูกอยู่ */
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const admin = await adminOnly()
   if (!admin) return NextResponse.json({ error: "เฉพาะแอดมิน" }, { status: 403 })
 
   const id = String((await req.json())?._id ?? "")
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "bad id" }, { status: 400 })
 
-  const client = await clientPromise
-  const db = client.db(DB)
-  const cur = await db.collection(COLL).findOne({ _id: new ObjectId(id) })
+  const pdb = await partnerDb()
+  const db = pdb
+  const cur = await partnerColOf(db, "salesPeople").findOne({ _id: new ObjectId(id) })
   if (!cur) return NextResponse.json({ error: "ไม่พบผู้ขายรายนี้" }, { status: 404 })
 
-  const used = await db.collection(QUOTE_COLL).countDocuments({ salesName: String(cur.name ?? "") })
+  const used = await partnerColOf(db, "quotations").countDocuments({ salesName: String(cur.name ?? "") })
   if (used > 0) {
     return NextResponse.json({ error: `ลบไม่ได้ — มีใบเสนอราคาผูกกับชื่อนี้อยู่ ${used} ใบ` }, { status: 409 })
   }
-  await db.collection(COLL).deleteOne({ _id: new ObjectId(id) })
+  await partnerColOf(db, "salesPeople").deleteOne({ _id: new ObjectId(id) })
   return NextResponse.json({ ok: true, names: await listNames() })
 }

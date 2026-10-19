@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "trips"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 interface TripRow {
   contractCode: string
   date: string
@@ -19,13 +17,17 @@ interface TripRow {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as { rows: TripRow[] }
   if (!Array.isArray(body.rows) || body.rows.length === 0) {
     return NextResponse.json({ error: "rows array required" }, { status: 400 })
   }
 
-  const client  = await clientPromise
-  const col     = client.db(DB).collection(COLL)
+  const pdb  = await partnerDb()
+  const col     = partnerColOf(pdb, "trips")
   const now     = new Date().toISOString()
 
   // Collect ldtNumbers from incoming rows (only non-empty ones)

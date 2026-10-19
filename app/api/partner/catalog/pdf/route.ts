@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { renderPdfmake } from "@/lib/partner/pdfmake-printer"
 import { catalogDocDef, loadCatalogVehicles, loadImages } from "@/lib/partner/catalog-pdf"
 import { getCatalogConfig } from "@/lib/partner/catalog-config"
+import { partnerDb } from "@/lib/db/partner"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
-const DB = PARTNER_DB
-
 /**
  * Catalog รวมเล่ม — GET /api/catalog/pdf            = รถพร้อมขายทุกคัน (saleStatus ready + ไม่มีสัญญา) 1 หน้า/คัน
  *                    GET /api/catalog/pdf?plates=a,b = เฉพาะทะเบียนที่ระบุ
@@ -15,8 +13,8 @@ const DB = PARTNER_DB
 export async function GET(req: NextRequest) {
   const platesParam = req.nextUrl.searchParams.get("plates")?.trim() ?? ""
   const plates = platesParam ? platesParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 60) : undefined
-  const client = await clientPromise
-  const db = client.db(DB)
+  const pdb = await partnerDb()
+  const db = pdb
   const [vs, cfg] = await Promise.all([loadCatalogVehicles(db, plates), getCatalogConfig(db)])
   if (vs.length === 0) return NextResponse.json({ error: "ไม่มีรถพร้อมขาย" }, { status: 404 })
   try {

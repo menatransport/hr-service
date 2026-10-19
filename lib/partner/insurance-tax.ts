@@ -1,4 +1,5 @@
 import "server-only"
+import { partnerColOf, type AnyDoc } from "@/lib/db/partner-col"
 
 /** "สบ.71-1515" → "71-1515" (เหมือน normPlate ใน lib/contract-docx.ts) */
 export function normPlateIT(p?: string | null): string {
@@ -64,8 +65,6 @@ export interface InsuranceCycle {
   createdAt: string
   updatedAt: string
 }
-
-const COLL = "vehicle_insurance_tax"
 const EXPIRING_DAYS = 60
 
 /** สถานะแสดงผล: active(ปกติ) | expiring(หมดใน<=60วัน) | expired | renewed */
@@ -124,8 +123,7 @@ function sumItemDeductions(items: any[], month: string): number | null {
 export async function getInsuranceDeductionForPlate(db: any, licensePlate: string, month: string): Promise<number | null> {
   const platePlain = normPlateIT(licensePlate)
   if (!platePlain) return null
-  const items = await db
-    .collection(COLL)
+  const items = await     (partnerColOf(db, "vehicleInsuranceTax") as AnyDoc)
     .find({ platePlain, itemType: { $exists: true } })
     .project({ itemType: 1, collectStart: 1, collectEnd: 1, monthlyInstallment: 1, createdAt: 1 })
     .toArray()
@@ -140,8 +138,7 @@ export async function getInsuranceDeductionMap(db: any, month: string, plates: s
   for (const p of plates) out.set(normPlateIT(p), null)
   if (plains.length === 0) return out
 
-  const items = await db
-    .collection(COLL)
+  const items = await     (partnerColOf(db, "vehicleInsuranceTax") as AnyDoc)
     .find({ platePlain: { $in: plains }, itemType: { $exists: true } })
     .project({ platePlain: 1, itemType: 1, collectStart: 1, collectEnd: 1, monthlyInstallment: 1, createdAt: 1 })
     .toArray()

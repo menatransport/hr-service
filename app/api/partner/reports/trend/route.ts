@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB = PARTNER_DB
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
 
 export async function GET() {
-  const client = await clientPromise
-  const db     = client.db(DB)
+  const pdb = await partnerDb()
+  const db     = pdb
 
-  const agg = await db.collection("payroll_entries").aggregate([
+  const agg = await partnerColOf(db, "payrollEntries").aggregate([
     {
       $group: {
         _id:            "$month",

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
 import { computeInstallmentStates, type DriverListStatus } from "@/lib/partner/driver-state"
-
-const DB   = PARTNER_DB
-const COLL = "drivers"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const q      = searchParams.get("q")?.trim() ?? ""
@@ -28,9 +26,9 @@ export async function GET(req: NextRequest) {
   else if (status === "inactive") { filter.status = "inactive"; filter.exitType = { $in: [null, ""] } }
   else if (wantCounts)            { /* นับทุกสถานะ — ไม่กรอง */ }
 
-  const client = await clientPromise
-  const db     = client.db(DB)
-  const raw    = await db.collection(COLL)
+  const pdb = await partnerDb()
+  const db     = pdb
+  const raw    = await partnerColOf(db, "drivers")
     .find(filter)
     .sort({ firstName: 1, lastName: 1 })
     .toArray()
@@ -64,6 +62,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     prefix?:       string
     firstName:     string
@@ -97,8 +99,8 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date()
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COLL).insertOne({
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "drivers").insertOne({
     prefix:       body.prefix?.trim() || "นาย",
     firstName:    body.firstName.trim(),
     lastName:     body.lastName.trim(),

@@ -1,12 +1,12 @@
 import "server-only"
 import fs from "fs"
 import path from "path"
-import type { Db } from "mongodb"
 import sharp from "sharp"
 import { COMPANY } from "@/lib/partner/contract-pdfmake-helpers"
 import { seg } from "@/lib/partner/pdfmake-printer"
 import type { CatalogConfig } from "@/lib/partner/catalog-config"
 import { promoCopy, type PromoSeg } from "@/lib/partner/promo-copy"
+import { partnerColOf, type PartnerDb } from "@/lib/db/partner-col"
 
 /**
  * Catalog รายคัน — 1 หน้า A4/คัน (pdfmake, Sarabun, โทนทองเดียวกับใบเสนอราคา)
@@ -56,12 +56,12 @@ export interface CatalogVehicle {
 }
 
 /** โหลดข้อมูลรถสำหรับ catalog — plates ว่าง = ทุกคันที่พร้อมขาย (saleStatus ready + ไม่มีสัญญา active) */
-export async function loadCatalogVehicles(db: Db, plates?: string[]): Promise<CatalogVehicle[]> {
+export async function loadCatalogVehicles(db: PartnerDb, plates?: string[]): Promise<CatalogVehicle[]> {
   const [vehicles, prices, promos, contracts] = await Promise.all([
-    db.collection("vehicle_master").find({}).toArray(),
-    db.collection("master_price_list").find({}).toArray(),
-    db.collection("promotion_master").find({}).toArray(),
-    db.collection("contracts").find({ status: "active" }, { projection: { licensePlate: 1 } }).toArray(),
+    partnerColOf(db, "vehicleMaster").find({}).toArray(),
+    partnerColOf(db, "masterPriceList").find({}).toArray(),
+    partnerColOf(db, "promotionMaster").find({}).toArray(),
+    partnerColOf(db, "contracts").find({ status: "active" }, { projection: { licensePlate: 1 } }).toArray(),
   ])
   const priceBy = new Map(prices.map((p) => [normPlate(p.licensePlate as string), p]))
   const promoBy = new Map(promos.map((p) => [normPlate(p.licensePlate as string), p]))

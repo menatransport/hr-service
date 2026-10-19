@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB  = PARTNER_DB
-const COL = "promotion_entries"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET() {
-  const client = await clientPromise
-  const docs = await client.db(DB).collection(COL)
+  const pdb = await partnerDb()
+  const docs = await partnerColOf(pdb, "promotionEntries")
     .find({})
     .sort({ licensePlate: 1, proType: 1 })
     .toArray()
@@ -35,6 +33,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("promotions")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     licensePlate: string
     proType: string
@@ -47,8 +49,8 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date()
-  const client = await clientPromise
-  const result = await client.db(DB).collection(COL).insertOne({
+  const pdb = await partnerDb()
+  const result = await partnerColOf(pdb, "promotionEntries").insertOne({
     licensePlate:   body.licensePlate,
     proType:        body.proType,
     label:          body.label,

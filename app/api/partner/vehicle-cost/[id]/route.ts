@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
-
-const DB   = PARTNER_DB
-const COLL = "vehicle_costs"
-
+import { partnerColOf } from "@/lib/db/partner-col"
+import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
-  const client  = await clientPromise
-  const result  = await client.db(DB).collection(COLL).deleteOne({ _id: new ObjectId(id) })
+  const pdb  = await partnerDb()
+  const result  = await partnerColOf(pdb, "vehicleCosts").deleteOne({ _id: new ObjectId(id) })
   if (result.deletedCount === 0)
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json({ ok: true })
