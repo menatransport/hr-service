@@ -1,0 +1,456 @@
+/**
+ * ธีมของระบบรถร่วม (ย้ายจาก mena-partner-driver/app/globals.css) — **ห้ามรั่วออกนอก `.partner-theme`**
+ *
+ * ไฟล์นี้สร้างโดย `node scripts/partner-codemod/build-theme-css.mjs` จาก
+ * `scripts/partner-codemod/partner-theme.template.css` — แก้ที่ template แล้วสร้างใหม่ อย่าแก้ไฟล์นี้ตรง ๆ
+ *
+ * ทำไมเขียนแบบนี้
+ * - Next คอมไพล์ CSS แต่ละไฟล์ที่ import แยกกัน → ไฟล์นี้คือ Tailwind อีกชุดหนึ่ง ไม่ปนกับ `app/globals.css` ของ hr
+ * - ธีมทั้งหมดเป็น `reference` — **ไม่ปล่อยตัวแปรใด ๆ ออก `:root`** (ของเดิมเขียนทับ zinc/emerald/blue/red/amber/purple,
+ *   --font-sans, --radius-*, --color-primary … ถ้าหลุดไป `:root` สีและฟอนต์ทั้ง hr จะเปลี่ยนทันที)
+ * - ค่าจริงของทุกตัวแปรประกาศใต้ `.partner-theme` (div ห่อใน layout + `<body>` ตอนอยู่หน้ารถร่วม ให้ portal/dialog ได้ด้วย)
+ * - utility ที่ได้จึงเป็นรูปเดียวกับของ hr (`var(--color-x)`) — ถ้าไฟล์นี้ค้างอยู่ตอนกลับไปหน้า hr ก็ไม่เปลี่ยนอะไร
+ * - ไม่มี preflight (ของ hr โหลดอยู่แล้ว) · สแกนเฉพาะโฟลเดอร์รถร่วม (`source(none)` + `@source`)
+ * - โหมดมืด = class `dark` บน `<html>` เหมือนของเดิม (`@custom-variant` มีผลเฉพาะในไฟล์นี้)
+ */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme) theme(reference);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@source "../app/partner";
+@source "../app/(partner-public)";
+@source "../components/partner";
+@source "../lib/partner";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ตัวแปรที่ utility อ้าง — reference = รู้ชื่อแต่ไม่ปล่อยออก :root (ค่าจริงอยู่ใน .partner-theme ด้านล่าง) */
+@theme reference {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-hairline: var(--hairline);
+  --color-soft: var(--soft);
+  --color-track: var(--track);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-fill: var(--brand-fill);
+  --color-ink-deep: var(--ink-deep);
+  --color-ok: var(--ok);
+  --color-ok-fill: var(--ok-fill);
+  --color-warn: var(--warn);
+  --color-warn-fill: var(--warn-fill);
+  --color-bad: var(--bad);
+  --color-bad-fill: var(--bad-fill);
+  --color-bad-ink: var(--bad-ink);
+  --color-bad-tint: var(--bad-tint);
+  --color-bad-tint-2: var(--bad-tint-2);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+.partner-theme {
+  /* ── ค่ามาตรฐานของ Tailwind ทั้งชุด (สร้างจาก node_modules/tailwindcss/theme.css) ── */
+/* @@STOCK_THEME_VARS@@ */
+
+  /* ── Octo Code design system (ของเดิม @theme) — เขียนทับสเกลสีหลักเฉพาะในโซนรถร่วม ── */
+  --color-zinc-50:  #F6F8FA;
+  --color-zinc-100: #E6EDF3;
+  --color-zinc-200: #C9D1D9;
+  --color-zinc-300: #B1BAC4;
+  --color-zinc-400: #8B949E;
+  --color-zinc-500: #6E7681;
+  --color-zinc-600: #484F58;
+  --color-zinc-700: #30363D;
+  --color-zinc-800: #21262D;
+  --color-zinc-900: #161B22;
+  --color-zinc-950: #0D1117;
+
+  --color-emerald-50:  #DAFBE1;
+  --color-emerald-100: #ACEEBB;
+  --color-emerald-200: #7EE787;
+  --color-emerald-300: #56D364;
+  --color-emerald-400: #3FB950;
+  --color-emerald-500: #2EA043;
+  --color-emerald-600: #238636;
+  --color-emerald-700: #2EA043;
+  --color-emerald-800: #1B6E2E;
+  --color-emerald-900: #12451F;
+  --color-emerald-950: #071F10;
+
+  --color-blue-50:  #DDF4FF;
+  --color-blue-100: #B6E3FF;
+  --color-blue-200: #80CCFF;
+  --color-blue-300: #79C0FF;
+  --color-blue-400: #58A6FF;
+  --color-blue-500: #2F81F7;
+  --color-blue-600: #1F6FEB;
+  --color-blue-700: #1158C7;
+  --color-blue-800: #0D419D;
+  --color-blue-900: #0C2D6B;
+  --color-blue-950: #051D4D;
+
+  --color-red-50:  #FFEBE9;
+  --color-red-100: #FFCECB;
+  --color-red-200: #FFABA8;
+  --color-red-300: #FFA198;
+  --color-red-400: #FF7B72;
+  --color-red-500: #F85149;
+  --color-red-600: #DA3633;
+  --color-red-700: #B62324;
+  --color-red-800: #8E1519;
+  --color-red-900: #67060C;
+  --color-red-950: #490202;
+
+  --color-amber-50:  #FFF8C5;
+  --color-amber-100: #FAE17D;
+  --color-amber-200: #EAC54F;
+  --color-amber-300: #E3B341;
+  --color-amber-400: #E3B341;
+  --color-amber-500: #D29922;
+  --color-amber-600: #BF8700;
+  --color-amber-700: #9E6A03;
+  --color-amber-800: #845306;
+  --color-amber-900: #693E00;
+  --color-amber-950: #3B2300;
+
+  --color-purple-50:  #FBEFFF;
+  --color-purple-100: #ECD8FF;
+  --color-purple-200: #D8B9FF;
+  --color-purple-300: #C297FF;
+  --color-purple-400: #A371F7;
+  --color-purple-500: #8957E5;
+  --color-purple-600: #8250DF;
+  --color-purple-700: #6E40C9;
+  --color-purple-800: #553098;
+  --color-purple-900: #3C1E70;
+  --color-purple-950: #271052;
+  --color-violet-50:  #FBEFFF;
+  --color-violet-100: #ECD8FF;
+  --color-violet-200: #D8B9FF;
+  --color-violet-300: #C297FF;
+  --color-violet-400: #A371F7;
+  --color-violet-500: #8957E5;
+  --color-violet-600: #8250DF;
+  --color-violet-700: #6E40C9;
+  --color-violet-800: #553098;
+  --color-violet-900: #3C1E70;
+  --color-violet-950: #271052;
+
+  --font-mono: var(--font-jbmono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── ของเดิม @theme inline (shadcn) — ชี้ไปตัวแปรเชิงความหมายด้านล่าง ── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-hairline: var(--hairline);
+  --color-soft: var(--soft);
+  --color-track: var(--track);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-fill: var(--brand-fill);
+  --color-ink-deep: var(--ink-deep);
+  --color-ok: var(--ok);
+  --color-ok-fill: var(--ok-fill);
+  --color-warn: var(--warn);
+  --color-warn-fill: var(--warn-fill);
+  --color-bad: var(--bad);
+  --color-bad-fill: var(--bad-fill);
+  --color-bad-ink: var(--bad-ink);
+  --color-bad-tint: var(--bad-tint);
+  --color-bad-tint-2: var(--bad-tint-2);
+
+  /* ── ของเดิม :root (โหมดสว่าง) ── */
+  --radius: 0.375rem;
+  --font-sans: var(--font-inter), var(--font-noto-thai), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --default-font-family: var(--font-sans);
+  --default-mono-font-family: var(--font-mono);
+
+  --card: #FFFFFF;
+  --card-foreground: #1F2328;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F2328;
+  --primary: #1F883D;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F6F8FA;
+  --secondary-foreground: #1F2328;
+  --muted: #F6F8FA;
+  --muted-foreground: #656D76;
+  --accent: #F6F8FA;
+  --accent-foreground: #1F2328;
+  --destructive: #CF222E;
+  --border: #D0D7DE;
+  --input: #D0D7DE;
+  --ring: #0969DA;
+  --background: #FFFFFF;
+  --foreground: #1F2328;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Gold brand theme (2026-08-06) */
+  --gold-grad: linear-gradient(135deg, #8C6B1F 0%, #C9A227 30%, #E7C86E 50%, #C9A227 70%, #8C6B1F 100%);
+  --gold-grad-hover: linear-gradient(135deg, #78591A 0%, #B08C1F 30%, #D9B85A 50%, #B08C1F 70%, #78591A 100%);
+  --gold-ink: #3F3000;
+  --green-grad: linear-gradient(135deg, #031B14 0%, #0A3328 30%, #165443 60%, #031B14 100%);
+  --gold: #C9A227;
+  --gold-lt: #E7C86E;
+
+  /* Sales pipeline tokens (2026-10-08) — แก้คู่กับ docs/design-tokens.json ของ repo เดิม */
+  --surface:    #FFFFFF;
+  --surface-2:  #F6F8FA;
+  --hairline:   #D0D7DE;
+  --soft:       #5F666E;
+  --track:      #E6EDF3;
+  --brand-ink:  #7A5C14;
+  --brand-on-ink: #E7C86E;
+  --brand-fill: #8C6B1F;
+  --ink-deep:   #031B14;
+  --ok:        #165443;
+  --ok-fill:   #2A6E56;
+  --warn:      #9A6700;
+  --warn-fill: #9A6700;
+  --bad:       #CF222E;
+  --bad-fill:  #CF222E;
+  --bad-ink:   #A40E26;
+  --bad-tint:  #FFF5F4;
+  --bad-tint-2:#FFEBE9;
+  --phase-1: #5E8878;
+  --phase-2: #4E8F77;
+  --phase-3: #2A6E56;
+  --phase-4: #165443;
+  --phase-5: #9A6700;
+  --phase-0: #C9D1D9;
+  --heat-0: #F6F8FA;
+  --heat-1: #E8F3EE;
+  --heat-2: #B9D9CB;
+  --heat-3: #2A6E56;
+  --heat-4: #165443;
+  --heat-1-ink: #165443;
+  --heat-2-ink: #0E3A2C;
+  --heat-on:    #FFFFFF;
+}
+
+/* ── ของเดิม .dark (โหมดมืด — ค่าเริ่มต้นของระบบรถร่วม) ── */
+.dark .partner-theme {
+  --background: #0D1117;
+  --foreground: #E6EDF3;
+  --card: #161B22;
+  --card-foreground: #E6EDF3;
+  --popover: #1C2128;
+  --popover-foreground: #E6EDF3;
+  --primary: #238636;
+  --primary-foreground: #FFFFFF;
+  --secondary: #21262D;
+  --secondary-foreground: #E6EDF3;
+  --muted: #21262D;
+  --muted-foreground: #8B949E;
+  --accent: #21262D;
+  --accent-foreground: #E6EDF3;
+  --destructive: #F85149;
+  --border: #30363D;
+  --input: #30363D;
+  --ring: #2F81F7;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  --surface:    #161B22;
+  --surface-2:  #21262D;
+  --hairline:   #30363D;
+  --soft:       #8B949E;
+  --track:      #21262D;
+  --brand-ink:  #E7C86E;
+  --brand-fill: #C9A227;
+  --ink-deep:   #0B2B22;
+  --ok:        #56D364;
+  --ok-fill:   #3FB950;
+  --warn:      #E3B341;
+  --warn-fill: #E3B341;
+  --bad:       #FF7B72;
+  --bad-fill:  #F85149;
+  --bad-ink:   #FF9492;
+  --bad-tint:  rgba(248, 81, 73, 0.12);
+  --bad-tint-2:rgba(248, 81, 73, 0.2);
+  --phase-1: #A8CFC0;
+  --phase-2: #8FB3A5;
+  --phase-3: #6FA794;
+  --phase-4: #4E8F77;
+  --phase-5: #E3B341;
+  --phase-0: #30363D;
+  --heat-0: #21262D;
+  --heat-1: #12362B;
+  --heat-2: #1B5140;
+  --heat-1-ink: #7EE787;
+  --heat-2-ink: #ACEEBB;
+}
+
+/* ── ของเดิม @layer base — จำกัดในโซนรถร่วม ── */
+@layer base {
+  .partner-theme,
+  .partner-theme * {
+    border-color: var(--color-border);
+    outline-color: color-mix(in oklab, var(--color-ring) 50%, transparent);
+  }
+  .partner-theme {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    letter-spacing: 0;
+  }
+  .partner-theme :is(h1, h2, h3) {
+    letter-spacing: -0.02em;
+  }
+  .partner-theme :is(code, kbd, samp, pre) {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .partner-theme .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  .partner-theme .text-kpi {
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: var(--font-jbmono), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  .partner-theme .num {
+    font-family: var(--font-jbmono), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+.partner-theme .gold-grad { background: var(--gold-grad); }
+.partner-theme .green-grad { background: var(--green-grad); }
+
+/* ปุ่ม/ลิงก์แอ็กชันหลักทั้งระบบรถร่วม → ทอง (จำกัดเฉพาะ element เชิงปุ่ม) */
+.partner-theme :is(button.bg-emerald-600, a.bg-emerald-600, label.bg-emerald-600,
+button.bg-blue-600, a.bg-blue-600,
+button.bg-zinc-900, a.bg-zinc-900,
+button.bg-zinc-800, a.bg-zinc-800,
+button.bg-primary, a.bg-primary) {
+  background: var(--gold-grad) !important;
+  color: var(--gold-ink) !important;
+  border-color: transparent !important;
+  font-weight: 600;
+}
+.partner-theme :is(button.bg-emerald-600, a.bg-emerald-600, label.bg-emerald-600,
+button.bg-blue-600, a.bg-blue-600,
+button.bg-zinc-900, a.bg-zinc-900,
+button.bg-zinc-800, a.bg-zinc-800,
+button.bg-primary, a.bg-primary):hover {
+  background: var(--gold-grad-hover) !important;
+  color: var(--gold-ink) !important;
+}
+
+/* A11y: focus ring ที่มองเห็นชัด + เคารพ reduced-motion — เฉพาะในโซนรถร่วม */
+.partner-theme :where(a, button, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #C9A227;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .partner-theme *, .partner-theme *::before, .partner-theme *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
