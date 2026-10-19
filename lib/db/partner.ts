@@ -58,3 +58,17 @@ export async function atmsCol<T extends Document = Document>(key: AtmsKey): Prom
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyDoc = any;
+
+/** ชื่อจริงของคอลเลกชันรถร่วม (ค่าใน `PARTNER`) */
+export type PartnerName = (typeof PARTNER)[PartnerKey];
+const NAME_TO_KEY = new Map(Object.entries(PARTNER).map(([k, v]) => [v as string, k as PartnerKey]));
+
+/**
+ * แบบรับ **ชื่อจริง** จากทะเบียน (`partnerColByName(PARTNER.drivers)`) — สำหรับโค้ดที่ส่งค่า `PARTNER.x` ต่อกันเป็นทอด
+ * ชนิดรับเฉพาะชื่อในทะเบียน + ตรวจซ้ำตอนรัน (ชื่อนอกทะเบียน = โยน error ไม่เปิดคอลเลกชันมั่ว)
+ */
+export async function partnerColByName<T extends Document = Document>(name: PartnerName): Promise<Collection<T>> {
+  const key = NAME_TO_KEY.get(name);
+  if (!key) throw new Error(`partnerColByName: "${name}" ไม่อยู่ในทะเบียน PARTNER`);
+  return partnerCol<T>(key);
+}
