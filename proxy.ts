@@ -1,52 +1,71 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { decideGate, needsPartnerRole } from "@/lib/auth/gate";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
+import type { Role } from "@/lib/partner/rbac";
 
 /**
- * ด่านล็อกอิน — ไม่มี session ที่ลายเซ็นถูกต้องและยังไม่หมดอายุ = เข้าไม่ได้
+ * ด่านเดียวของทั้งแอป — hr-service + ระบบรถร่วม (ย้ายมาจาก mena-partner-driver 19 ต.ค. 2569)
  *
  * ชื่อไฟล์คือ `proxy.ts` ไม่ใช่ `middleware.ts` — Next 16 เปลี่ยนชื่อ convention นี้แล้ว
- * (ของเดิมยังทำงานได้แต่ขึ้นคำเตือนตอน build)
+ * **ตรรกะทั้งหมดอยู่ใน `lib/auth/gate.ts` (pure, มีเทสต์เป็นตาราง)** — ไฟล์นี้แค่อ่านคุกกี้ หา role
+ * แล้วแปลงคำตัดสินเป็น response
  *
- * ครอบสองอย่าง:
- * 1. **หน้า `/home` · `/desk/**`** → เด้งกลับหน้าล็อกอิน พร้อมจำปลายทางเดิมไว้ใน `next`
- *    (ลิงก์จากกระดิ่งแจ้งเตือน/บุ๊กมาร์กจึงพากลับมาที่เคสเดิมได้หลังล็อกอิน)
- * 2. **คำสั่งที่เขียนข้อมูล** (`POST`/`PATCH`/`PUT`/`DELETE` ใต้ `/api/**`) → 401
- *    เพราะทุกคำสั่งเหล่านี้ลงชื่อผู้ทำใน `complaint_logs` ของ NCAC · `GET` ยังปล่อยผ่าน
- *    (หน้าที่เรียกมันอยู่ใต้ `/desk/**` ซึ่งถูกกั้นไปแล้วตั้งแต่ชั้นบน)
+ * กฎเดิมของ hr ยังอยู่ครบ:
+ * 1. หน้า `/home` · `/desk/**` · `/payroll/**` · `/recruitment/admin/**` → เด้งหน้าล็อกอินพร้อม `next`
+ * 2. คำสั่งที่เขียนข้อมูลใต้ `/api/**` → 401 · `GET` ยังปล่อยผ่าน (หน้าที่เรียกถูกกั้นแล้วชั้นบน)
+ *    ยกเว้น `/api/auth/*` และ `/api/recruitment/public/*` (ใบสมัครงานจากคนนอก — ตรวจซ้ำใน `lib/recruitment/`;
+ *    รูปเอกสารผู้สมัครอัปผ่าน `/api/recruitment/public/uploads` · `/api/uploads` ไม่เปิดให้คนนอกตั้งแต่ 1 ต.ค. 2026)
  *
- * รันบน Edge จึงใช้ได้เฉพาะของใน `lib/auth/token.ts` (Web Crypto ล้วน) —
- * `lib/auth/session.ts` ใช้ `cookies()` ของ Node เอามาที่นี่ไม่ได้
+ * กฎของรถร่วม:
+ * - `/api/partner/**` **ทุก method ต้องล็อกอิน** (มีข้อมูลเงิน/สัญญา) · เขียน = RBAC ตามบทบาท
+ * - หน้า `/partner/**` ต้องล็อกอิน · ฝ่ายขายเห็นแค่ราคาขาย/ใบเสนอราคา/catalog
+ * - public: `/trucks` `/sitemap.xml` `/robots.txt` `/og/*` `/api/public/*` · `/api/partner/cron/*` (route ตรวจ Bearer เอง)
+ *
+ * **runtime = Node.js** (ค่าเริ่มต้นของ proxy ใน Next 16 และตั้งเป็นอย่างอื่นไม่ได้ — ดู
+ * `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md` หัวข้อ Runtime)
+ * จึงหา role จาก `mena_partner.app_users` ได้ตรงที่นี่ — โหลดโมดูล Mongo แบบ dynamic import
+ * **เฉพาะคำขอใต้ `/partner` และ `/api/partner` ที่ล็อกอินแล้ว** คำขอของ hr ไม่แตะฐานเพิ่มเลย
+ * (`resolveRole` cache 60 วิ · ฐานล่ม = viewer)
+ *
+ * route ของรถร่วมควรตรวจซ้ำด้วย `requirePartnerPerm()` (`lib/partner/auth/server.ts`) — Next แนะนำ
+ * ไม่ให้พึ่ง proxy อย่างเดียว เพราะ matcher เปลี่ยนแล้วด่านหลุดได้เงียบ ๆ
  */
 
-const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+async function partnerRole(email: string | undefined): Promise<Role> {
+  try {
+    const { resolveRole } = await import("@/lib/partner/roles");
+    return await resolveRole(email);
+  } catch {
+    return "viewer";
+  }
+}
 
 export default async function proxy(request: NextRequest) {
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
-  if (session) return NextResponse.next();
-
   const { pathname, search } = request.nextUrl;
+  const authenticated = Boolean(session);
 
-  if (pathname.startsWith("/api/")) {
-    if (!WRITE_METHODS.has(request.method)) return NextResponse.next();
-    // ทางล็อกอิน/ออกจากระบบต้องผ่านได้เสมอ ไม่งั้นจะล็อกอินไม่ได้ทั้งระบบ
-    if (pathname.startsWith("/api/auth/")) return NextResponse.next();
-    /* ใบสมัครงานมาจากคนนอกที่ไม่มีวันมีบัญชีในระบบ — เส้นใต้ `public/` จึงต้อง
-       เขียนข้อมูลได้โดยไม่ต้องล็อกอิน · ทุกเส้นในกลุ่มนี้รับเฉพาะข้อมูลของผู้ยิงเอง
-       และตรวจความยินยอม/คำตอบซ้ำในชั้นข้อมูลอีกที (ดู `lib/recruitment/`)
-       ส่วนเส้นจัดการคำถามและใบสมัครอยู่นอก `public/` จึงยังถูกกันไว้ตามเดิม */
-    /* รูปเอกสารของผู้สมัครอัปผ่าน `/api/recruitment/public/uploads` (S3 private) แล้ว —
-       `/api/uploads` (รูปแนบคำร้อง → Spaces สาธารณะ) จึงไม่เปิดให้คนนอกอีก (1 ต.ค. 2026) */
-    if (pathname.startsWith("/api/recruitment/public/")) return NextResponse.next();
-    return NextResponse.json(
-      { error: "หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง" },
-      { status: 401 },
-    );
+  const role = needsPartnerRole(pathname, authenticated)
+    ? await partnerRole(session?.user.email)
+    : null;
+
+  const decision = decideGate({
+    pathname,
+    search,
+    method: request.method,
+    authenticated,
+    role,
+  });
+
+  switch (decision.action) {
+    case "next":
+      return NextResponse.next();
+    case "redirect":
+      return NextResponse.redirect(new URL(decision.location, request.url));
+    case "json":
+      return NextResponse.json({ error: decision.error }, { status: decision.status });
   }
-
-  const login = new URL("/", request.url);
-  login.searchParams.set("next", `${pathname}${search}`);
-  return NextResponse.redirect(login);
 }
 
 export const config = {
@@ -55,11 +74,15 @@ export const config = {
      ซึ่งเป็นที่ที่ฝ่ายบุคคลเห็นข้อมูลส่วนบุคคลของผู้สมัครทุกคน */
   /* `/payroll/**` เห็นเงินเดือนของพนักงานทุกคน — ข้อมูลที่อ่อนไหวที่สุดในระบบ
      ทุกหน้าใต้เส้นนี้ต้องล็อกอินเสมอ ไม่มีหน้าสาธารณะเลยสักหน้า */
+  /* `/partner/**` ระบบรถร่วม — สัญญา/เงินคนขับ ต้องล็อกอินทุกหน้า
+     หน้าเว็บขายรถสาธารณะ (`/trucks`, `/og/*`, SEO) อยู่นอก matcher จึงไม่ผ่านด่านเลย
+     ส่วน `/api/public/*` อยู่ใต้ `/api/:path*` แต่ gate ปล่อยผ่านทุก method */
   matcher: [
     "/home/:path*",
     "/desk/:path*",
     "/recruitment/admin/:path*",
     "/payroll/:path*",
+    "/partner/:path*",
     "/api/:path*",
   ],
 };

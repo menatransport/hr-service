@@ -1,11 +1,16 @@
 /**
- * เส้นทางที่เปิดสาธารณะ (ไม่ต้อง login) — ใช้ใน middleware
- * แคบที่สุดเท่าที่พอใช้: หน้าเว็บขายรถ + API สาธารณะ + ไฟล์ SEO
+ * เส้นทางที่เปิดสาธารณะ (ไม่ต้อง login) ของระบบรถร่วม — ใช้ใน `lib/auth/gate.ts`
+ * แคบที่สุดเท่าที่พอใช้: หน้าเว็บขายรถ + API สาธารณะ + ไฟล์ SEO (อยู่ที่รากของเว็บ ไม่อยู่ใต้ /partner)
+ *
+ * เปิดทุก method — `/api/public/*` มีฟอร์มลูกค้าทิ้งเบอร์ (POST) ที่คนนอกต้องส่งได้
  */
 const PUBLIC_EXACT = new Set(["/trucks", "/sitemap.xml", "/robots.txt"])
-// /api/cron/* ไม่ได้เปิดโล่ง — route ตรวจ Bearer CRON_SECRET เอง ที่ต้องปล่อยผ่านตรงนี้
-// เพราะ getToken() จะเอา Authorization: Bearer <CRON_SECRET> ไปถอดเป็นโทเคน next-auth แล้วตก 401 ก่อนถึง route
-const PUBLIC_PREFIXES = ["/trucks/", "/api/public/", "/og/", "/api/cron/"]
+/*
+ * `/api/partner/cron/*` ไม่ได้เปิดโล่ง — route ตรวจ `Bearer CRON_SECRET` เอง ที่ต้องปล่อยผ่านตรงนี้
+ * เพราะด่านกลางเคยกิน `Authorization: Bearer <CRON_SECRET>` จนตก 401 ก่อนถึง route (cron ไม่วิ่ง ต.ค. 2569)
+ * `/api/cron/*` ของ hr ไม่อยู่ในรายการนี้ — ใช้กฎของ hr ตามเดิม (GET ผ่าน)
+ */
+const PUBLIC_PREFIXES = ["/trucks/", "/api/public/", "/og/", "/api/partner/cron/"]
 
 export function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true

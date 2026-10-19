@@ -49,16 +49,46 @@ export function hasPerm(role: string | undefined | null, domain: PermDomain): bo
 
 export const isAdminRole = (role?: string | null) => role === "admin" || role === "superadmin"
 
-/** ฝ่ายขาย: เข้าได้แค่หน้าราคาขาย (ดู) + ใบเสนอราคา/ดีล + หน้าหลัก */
+/*
+ * หลังรวมเข้า hr-service ทุกหน้าของรถร่วมอยู่ใต้ `/partner` และ API อยู่ใต้ `/api/partner`
+ * — ตัด prefix ทิ้งก่อนแล้วใช้ตารางเดิม ตารางจึงเหมือนของเดิมทุกช่อง (เทียบใน rbac.test.ts)
+ * พาธแบบเดิม (ไม่มี prefix) ยังตอบเหมือนเดิมเพื่อไม่ให้ export เดิมเปลี่ยนความหมาย
+ */
+export const PARTNER_PAGE_PREFIX = "/partner"
+export const PARTNER_API_PREFIX = "/api/partner"
+
+function stripPrefix(pathname: string, prefix: string, replacement: string): string | null {
+  if (pathname === prefix) return replacement || "/"
+  if (pathname.startsWith(prefix + "/") || pathname.startsWith(prefix + "?")) {
+    const out = replacement + pathname.slice(prefix.length)
+    return out.startsWith("/") ? out : "/" + out
+  }
+  return null
+}
+
+/** `/partner/x` → `/x` · `/partner` → `/` · อื่น ๆ คืนตามเดิม */
+export function legacyPagePath(pathname: string): string {
+  return stripPrefix(pathname, PARTNER_PAGE_PREFIX, "") ?? pathname
+}
+
+/** `/api/partner/x` → `/api/x` · อื่น ๆ คืนตามเดิม */
+export function legacyApiPath(pathname: string): string {
+  return stripPrefix(pathname, PARTNER_API_PREFIX, "/api") ?? pathname
+}
+
+/** ฝ่ายขาย: เข้าได้แค่หน้าราคาขาย (ดู) + ใบเสนอราคา/ดีล + หน้าหลัก (`/partner` หรือ `/` แบบเดิม) */
 export const SALESPERSON_PAGES = ["/price-list", "/quotations", "/catalog"]
-export function salespersonPageAllowed(pathname: string): boolean {
+/** หน้าที่ฝ่ายขายถูกพาไปเมื่อเปิดหน้านอกรายการ */
+export const SALESPERSON_HOME = "/partner/price-list"
+export function salespersonPageAllowed(rawPathname: string): boolean {
+  const pathname = legacyPagePath(rawPathname)
   if (pathname === "/") return true
   return SALESPERSON_PAGES.some((base) => pathname === base || pathname.startsWith(base + "/") || pathname.startsWith(base + "?"))
 }
 
 /** map path ของ API → โดเมนสิทธิ์ (สำหรับ middleware) — คืน null = default-closed (admin ขึ้นไป) */
 export function domainOfApiPath(pathname: string): PermDomain | null {
-  const p = pathname
+  const p = legacyApiPath(pathname)
   if (p.startsWith("/api/drivers") || p.startsWith("/api/vehicles") || p.startsWith("/api/price-list")) return "masterdata"
   if (p.startsWith("/api/contracts")) return "contracts"
   if (p.startsWith("/api/quotations") || p.startsWith("/api/customers")) return "sales"
