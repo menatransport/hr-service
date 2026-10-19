@@ -1,10 +1,13 @@
 import Image from "next/image"
 import Link from "next/link"
 import { Prompt } from "next/font/google"
+import "@/styles/partner-theme.css"
 import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { PartnerThemeRoot } from "@/components/partner/theme-root"
 import { getCatalogConfig } from "@/lib/partner/catalog-config"
 import { ContactBar } from "@/components/partner/public/contact-bar"
 import { ThaiText, telHref } from "@/components/partner/public/thai-text"
+import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
 
 /**
  * หน้าเว็บสาธารณะ (ขายรถ /trucks) — ไม่มี sidebar, ไม่ต้อง login, light mode คงที่
@@ -42,13 +45,16 @@ const SOCIALS = [
 ]
 
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
+  await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
   const cfg = await getCatalogConfig((await clientPromise).db(PARTNER_DB))
 
   return (
     <div
       style={{ ...BRAND, colorScheme: "light" }}
-      className={`${prompt.className} min-h-screen flex flex-col bg-[var(--mena-paper)] text-[var(--mena-ink)]`}
+      className={`partner-theme ${prompt.className} min-h-screen flex flex-col bg-[var(--mena-paper)] text-[var(--mena-ink)]`}
     >
+      {/* โซนสาธารณะสว่างเสมอ — ถอด `dark` ที่อาจค้างจากหน้าหลังบ้าน (ผ่าน client navigation) */}
+      <PartnerThemeRoot fontVars={prompt.className} forceLight />
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-[var(--mena-line)]">
         <div className="max-w-6xl mx-auto px-4 h-[72px] flex items-center gap-6">
           <Link href="/trucks" className="flex items-center gap-3 shrink-0">

@@ -133,7 +133,7 @@ export function Sidebar() {
     const cur = new URLSearchParams(search)
     const matches = (href: string) => {
       const { path, params } = splitHref(href)
-      const pathOk = path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/")
+      const pathOk = path === "/partner" ? pathname === "/partner" : pathname === path || pathname.startsWith(path + "/")
       return pathOk && params.every(([k, v]) => cur.get(k) === v)
     }
     const all = [...GROUPS.flatMap((g) => g.items.map((i) => i.href)), ...ADMIN_NAV.map((i) => i.href)].filter(matches)

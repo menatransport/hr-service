@@ -5,7 +5,7 @@ export type ModuleStatus = "ready" | "testing" | "dev"
 
 /** สถานะต่อ path — ระบุเฉพาะที่พร้อม/กำลังทดสอบ ที่เหลือ default = dev */
 export const MODULE_STATUS: Record<string, ModuleStatus> = {
-  "/":                   "ready", // หน้าหลัก/คู่มือ
+  "/partner":            "ready", // หน้าหลัก/คู่มือ
   // ข้อมูลหลัก — พร้อมใช้งานแล้ว
   "/partner/drivers":            "ready",
   "/partner/drivers?status=exit": "ready",

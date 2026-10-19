@@ -1,0 +1,131 @@
+diff --git a/app/(partner-public)/layout.tsx b/app/(partner-public)/layout.tsx
+index ee4036c..c70f2c0 100644
+--- a/app/(partner-public)/layout.tsx
++++ b/app/(partner-public)/layout.tsx
+@@ -1,10 +1,13 @@
+ import Image from "next/image"
+ import Link from "next/link"
+ import { Prompt } from "next/font/google"
++import "@/styles/partner-theme.css"
+ import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
++import { PartnerThemeRoot } from "@/components/partner/theme-root"
+ import { getCatalogConfig } from "@/lib/partner/catalog-config"
+ import { ContactBar } from "@/components/partner/public/contact-bar"
+ import { ThaiText, telHref } from "@/components/partner/public/thai-text"
++import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
+ 
+ /**
+  * หน้าเว็บสาธารณะ (ขายรถ /trucks) — ไม่มี sidebar, ไม่ต้อง login, light mode คงที่
+@@ -42,13 +45,16 @@ const SOCIALS = [
+ ]
+ 
+ export default async function PublicLayout({ children }: { children: React.ReactNode }) {
++  await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
+   const cfg = await getCatalogConfig((await clientPromise).db(PARTNER_DB))
+ 
+   return (
+     <div
+       style={{ ...BRAND, colorScheme: "light" }}
+-      className={`${prompt.className} min-h-screen flex flex-col bg-[var(--mena-paper)] text-[var(--mena-ink)]`}
++      className={`partner-theme ${prompt.className} min-h-screen flex flex-col bg-[var(--mena-paper)] text-[var(--mena-ink)]`}
+     >
++      {/* โซนสาธารณะสว่างเสมอ — ถอด `dark` ที่อาจค้างจากหน้าหลังบ้าน (ผ่าน client navigation) */}
++      <PartnerThemeRoot fontVars={prompt.className} forceLight />
+       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-[var(--mena-line)]">
+         <div className="max-w-6xl mx-auto px-4 h-[72px] flex items-center gap-6">
+           <Link href="/trucks" className="flex items-center gap-3 shrink-0">
+diff --git a/app/(partner-public)/trucks/page.tsx b/app/(partner-public)/trucks/page.tsx
+index a454e10..6882013 100644
+--- a/app/(partner-public)/trucks/page.tsx
++++ b/app/(partner-public)/trucks/page.tsx
+@@ -8,6 +8,7 @@ import { TruckBrowser } from "@/components/partner/public/truck-browser"
+ import { LeadForm } from "@/components/partner/public/lead-form"
+ import { ThaiText, telHref } from "@/components/partner/public/thai-text"
+ import { PrepStars, ReadyStars } from "@/components/partner/public/ready-stars"
++import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
+ 
+ // ตัวกันพลาด — ปกติ lib/revalidate-public.ts สั่งล้างแคชทันทีที่ชุดรถว่างเปลี่ยน
+ export const revalidate = 60
+@@ -19,6 +20,7 @@ export const metadata: Metadata = {
+ }
+ 
+ export default async function TrucksPage() {
++  await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
+   const db = (await clientPromise).db(PARTNER_DB)
+   const [trucks, cfg] = await Promise.all([loadPublicTrucks(), getCatalogConfig(db)])
+   const readyCount = trucks.filter((t) => t.isReady).length
+diff --git a/app/api/public/trucks/route.ts b/app/api/public/trucks/route.ts
+index f202af6..51d6300 100644
+--- a/app/api/public/trucks/route.ts
++++ b/app/api/public/trucks/route.ts
+@@ -1,11 +1,13 @@
+ import { NextResponse } from "next/server"
+ import { loadPublicTrucks } from "@/lib/partner/public-trucks"
++import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
+ 
+ // ตัวกันพลาด — ปกติ lib/revalidate-public.ts สั่งล้างแคชทันทีที่ชุดรถว่างเปลี่ยน
+ export const revalidate = 60
+ 
+ /** API สาธารณะ — ข้อมูลผ่าน toPublicTruck() allowlist เท่านั้น (ดู lib/public-trucks.ts) */
+ export async function GET() {
++  await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
+   const trucks = await loadPublicTrucks()
+   return NextResponse.json({ trucks, count: trucks.length })
+ }
+diff --git a/app/robots.ts b/app/robots.ts
+index 135503c..9347596 100644
+--- a/app/robots.ts
++++ b/app/robots.ts
+@@ -6,7 +6,8 @@ export default function robots(): MetadataRoute.Robots {
+     rules: [{
+       userAgent: "*",
+       allow: ["/trucks", "/og/"],
+-      disallow: ["/api/partner/", "/partner/admin/", "/login", "/partner/payroll", "/partner/drivers", "/partner/contracts", "/partner/vehicle-cost", "/partner/vehicles", "/partner/quotations", "/partner/reports", "/partner/catalog", "/partner/price-list", "/partner/promotions"],
++      // ระบบภายในรถร่วมย้ายมาอยู่ใต้ /partner ทั้งหมด (เดิมไล่ทีละกลุ่ม) · API ทุกตัวไม่ต้องเก็บ
++      disallow: ["/api/", "/partner/"],
+     }],
+     sitemap: siteUrl("/sitemap.xml"),
+   }
+diff --git a/app/sitemap.ts b/app/sitemap.ts
+index 4370c03..a7385ad 100644
+--- a/app/sitemap.ts
++++ b/app/sitemap.ts
+@@ -1,10 +1,12 @@
+ import type { MetadataRoute } from "next"
+ import { loadPublicTrucks } from "@/lib/partner/public-trucks"
+ import { siteUrl } from "@/lib/partner/public-seo"
++import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
+ 
+ export const revalidate = 3600
+ 
+ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
++  await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
+   const trucks = await loadPublicTrucks()   // รถว่างทุกคัน (★ พร้อมขาย + ที่กำลังเตรียม) — ที่ขายแล้วไม่เข้า sitemap
+   return [
+     { url: siteUrl("/trucks"), changeFrequency: "daily", priority: 1 },
+diff --git a/components/partner/sidebar.tsx b/components/partner/sidebar.tsx
+index ab7359f..51cbd18 100644
+--- a/components/partner/sidebar.tsx
++++ b/components/partner/sidebar.tsx
+@@ -133,7 +133,7 @@ export function Sidebar() {
+     const cur = new URLSearchParams(search)
+     const matches = (href: string) => {
+       const { path, params } = splitHref(href)
+-      const pathOk = path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/")
++      const pathOk = path === "/partner" ? pathname === "/partner" : pathname === path || pathname.startsWith(path + "/")
+       return pathOk && params.every(([k, v]) => cur.get(k) === v)
+     }
+     const all = [...GROUPS.flatMap((g) => g.items.map((i) => i.href)), ...ADMIN_NAV.map((i) => i.href)].filter(matches)
+diff --git a/lib/partner/module-status.ts b/lib/partner/module-status.ts
+index 1b63ca7..e0317a0 100644
+--- a/lib/partner/module-status.ts
++++ b/lib/partner/module-status.ts
+@@ -5,7 +5,7 @@ export type ModuleStatus = "ready" | "testing" | "dev"
+ 
+ /** สถานะต่อ path — ระบุเฉพาะที่พร้อม/กำลังทดสอบ ที่เหลือ default = dev */
+ export const MODULE_STATUS: Record<string, ModuleStatus> = {
+-  "/":                   "ready", // หน้าหลัก/คู่มือ
++  "/partner":            "ready", // หน้าหลัก/คู่มือ
+   // ข้อมูลหลัก — พร้อมใช้งานแล้ว
+   "/partner/drivers":            "ready",
+   "/partner/drivers?status=exit": "ready",

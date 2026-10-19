@@ -8,6 +8,7 @@ import { TruckBrowser } from "@/components/partner/public/truck-browser"
 import { LeadForm } from "@/components/partner/public/lead-form"
 import { ThaiText, telHref } from "@/components/partner/public/thai-text"
 import { PrepStars, ReadyStars } from "@/components/partner/public/ready-stars"
+import { deferPrerenderWithoutDb } from "@/lib/partner/build-guard"
 
 // ตัวกันพลาด — ปกติ lib/revalidate-public.ts สั่งล้างแคชทันทีที่ชุดรถว่างเปลี่ยน
 export const revalidate = 60
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
 }
 
 export default async function TrucksPage() {
+  await deferPrerenderWithoutDb()   // build ที่ไม่มี MONGO_URI — ดู lib/partner/build-guard.ts
   const db = (await clientPromise).db(PARTNER_DB)
   const [trucks, cfg] = await Promise.all([loadPublicTrucks(), getCatalogConfig(db)])
   const readyCount = trucks.filter((t) => t.isReady).length
