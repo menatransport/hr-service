@@ -1,0 +1,123 @@
+import { NextRequest, NextResponse } from "next/server"
+import { ObjectId } from "mongodb"
+import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+import { monthClosed, closedError } from "@/lib/partner/month-lock"
+import { TF_COLL, TF_CONFIG, DEFAULT_CONFIG, aggregateFromBI, computeRow, plateContractMap, type TripFuelConfig } from "@/lib/partner/trip-fuel"
+
+const DB = PARTNER_DB
+const MONTH_RE = /^\d{4}-\d{2}$/
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+async function getConfig(db: any, month: string): Promise<TripFuelConfig> {
+  const c = await db.collection(TF_CONFIG).findOne({ month })
+  if (c) return { ...DEFAULT_CONFIG, ...c, month }
+  // เดือนใหม่ — สืบทอดราคาจากเดือนล่าสุดที่เคยตั้ง
+  const prev = await db.collection(TF_CONFIG).find({}).sort({ month: -1 }).limit(1).toArray()
+  return { ...DEFAULT_CONFIG, ...(prev[0] ?? {}), month }
+}
+
+// GET ?month=YYYY-MM → { config, rows }
+export async function GET(req: NextRequest) {
+  const month = req.nextUrl.searchParams.get("month") ?? ""
+  if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month=YYYY-MM required" }, { status: 400 })
+  const client = await clientPromise
+  const db = client.db(DB)
+  const [config, rows] = await Promise.all([
+    getConfig(db, month),
+    db.collection(TF_COLL).find({ month }).sort({ driverName: 1 }).toArray(),
+  ])
+  return NextResponse.json({ config, rows: rows.map((r: any) => ({ ...r, _id: r._id.toString() })) })
+}
+
+// PUT — บันทึก config ราคาของเดือน แล้วคำนวณทุกแถวใหม่
+export async function PUT(req: NextRequest) {
+  const body = await req.json() as Partial<TripFuelConfig> & { month?: string }
+  const month = body.month ?? ""
+  if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month required" }, { status: 400 })
+  const client = await clientPromise
+  const db = client.db(DB)
+  if (await monthClosed(db, month)) return NextResponse.json(closedError(month), { status: 423 })
+  const cfg: TripFuelConfig = { ...DEFAULT_CONFIG, ...(await getConfig(db, month)), ...body, month }
+  const { month: _m, ...cfgSet } = cfg as any
+  void _m
+  await db.collection(TF_CONFIG).updateOne({ month }, { $set: { ...cfgSet, month, updatedAt: new Date().toISOString() } }, { upsert: true })
+  // recompute ทุกแถวของเดือน
+  const rows = await db.collection(TF_COLL).find({ month }).toArray()
+  for (const r of rows) {
+    const c = computeRow(r, cfg)
+    await db.collection(TF_COLL).updateOne({ _id: r._id }, { $set: {
+      dieselUsed: c.dieselUsed, dieselOver: c.dieselOver, dieselUnder: c.dieselUnder,
+      ngvUsed: c.ngvUsed, ngvOver: c.ngvOver, ngvUnder: c.ngvUnder,
+      overRaw: c.overRaw, overMoney: c.overMoney, underMoney: c.underMoney,
+      fuelDeduct: c.fuelDeduct, netAfterFuel: c.netAfterFuel,
+    } })
+  }
+  return NextResponse.json({ ok: true, recomputed: rows.length })
+}
+
+// POST { month, action: "sync" } — ดึงสรุปจาก BI (เก็บค่าที่แก้มือไว้: ยกเข้า/ยกออก/หมายเหตุ)
+export async function POST(req: NextRequest) {
+  const { month, action } = await req.json() as { month?: string; action?: string }
+  if (!MONTH_RE.test(month ?? "") || action !== "sync") {
+    return NextResponse.json({ error: "month + action:'sync' required" }, { status: 400 })
+  }
+  const client = await clientPromise
+  const db = client.db(DB)
+  if (await monthClosed(db, month!)) return NextResponse.json(closedError(month!), { status: 423 })
+  const cfg = await getConfig(db, month!)
+  const [agg, pMap, existing] = await Promise.all([
+    aggregateFromBI(client, month!),
+    plateContractMap(db),
+    db.collection(TF_COLL).find({ month }).toArray(),
+  ])
+  const manual = new Map(existing.map((r: any) => [r.driverName, r]))
+  const now = new Date().toISOString()
+  const { normPlate } = await import("@/lib/partner/promo-usage")
+
+  let upserted = 0
+  for (const d of agg.drivers) {
+    const old: any = manual.get(d.driverName) ?? {}
+    const base = {
+      month, ...d,
+      contractCode: pMap.get(normPlate(d.licensePlate)) ?? old.contractCode ?? "",
+      // ค่าที่ทีมกรอกมือ — คงไว้ตอน re-sync
+      dieselCarryIn: old.dieselCarryIn ?? 0, dieselCarryOut: old.dieselCarryOut ?? 0,
+      ngvCarryIn: old.ngvCarryIn ?? 0, ngvCarryOut: old.ngvCarryOut ?? 0,
+      notes: old.notes ?? "",
+      syncedAt: now,
+    }
+    const c = computeRow(base, cfg)
+    await db.collection(TF_COLL).updateOne(
+      { month, driverName: d.driverName },
+      { $set: c },
+      { upsert: true }
+    )
+    upserted++
+  }
+  return NextResponse.json({ ok: true, biRows: agg.rows, drivers: upserted })
+}
+
+// PATCH { id, ...fields } — แก้ยกเข้า/ยกออก/สัญญา/หมายเหตุ รายแถว แล้วคำนวณใหม่
+export async function PATCH(req: NextRequest) {
+  const body = await req.json() as any
+  const id = body.id as string
+  if (!id || !ObjectId.isValid(id)) return NextResponse.json({ error: "id required" }, { status: 400 })
+  const client = await clientPromise
+  const db = client.db(DB)
+  const row = await db.collection(TF_COLL).findOne({ _id: new ObjectId(id) })
+  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 })
+  if (await monthClosed(db, row.month as string)) return NextResponse.json(closedError(row.month as string), { status: 423 })
+  const cfg = await getConfig(db, row.month as string)
+  const editable = ["dieselCarryIn", "dieselCarryOut", "ngvCarryIn", "ngvCarryOut", "contractCode", "notes"] as const
+  const patch: any = {}
+  for (const k of editable) if (body[k] !== undefined) patch[k] = k === "contractCode" || k === "notes" ? String(body[k]) : Number(body[k]) || 0
+  const c = computeRow({ ...row, ...patch }, cfg)
+  await db.collection(TF_COLL).updateOne({ _id: row._id }, { $set: { ...patch,
+    dieselUsed: c.dieselUsed, dieselOver: c.dieselOver, dieselUnder: c.dieselUnder,
+    ngvUsed: c.ngvUsed, ngvOver: c.ngvOver, ngvUnder: c.ngvUnder,
+    overRaw: c.overRaw, overMoney: c.overMoney, underMoney: c.underMoney,
+    fuelDeduct: c.fuelDeduct, netAfterFuel: c.netAfterFuel,
+  } })
+  return NextResponse.json({ ok: true })
+}

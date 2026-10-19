@@ -1,0 +1,306 @@
+diff --git a/app/api/partner/ledger/route.ts b/app/api/partner/ledger/route.ts
+index 8963e13..8900d83 100644
+--- a/app/api/partner/ledger/route.ts
++++ b/app/api/partner/ledger/route.ts
+@@ -1,3 +1,4 @@
++/* eslint-disable prefer-const -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ import { NextRequest, NextResponse } from "next/server"
+ import { ObjectId } from "mongodb"
+ import { getPartnerSession } from "@/lib/partner/auth/server"
+diff --git a/app/api/partner/payroll/[month]/compare/route.ts b/app/api/partner/payroll/[month]/compare/route.ts
+index 5189e64..2bd7f09 100644
+--- a/app/api/partner/payroll/[month]/compare/route.ts
++++ b/app/api/partner/payroll/[month]/compare/route.ts
+@@ -1,3 +1,4 @@
++/* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ import { NextRequest, NextResponse } from "next/server"
+ import clientPromise, { PARTNER_DB } from "@/lib/partner/mongo"
+ 
+diff --git a/app/partner/adjustments/[month]/page.tsx b/app/partner/adjustments/[month]/page.tsx
+index 2ac7e18..a3555a9 100644
+--- a/app/partner/adjustments/[month]/page.tsx
++++ b/app/partner/adjustments/[month]/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState, useCallback } from "react"
+diff --git a/app/partner/admin/users/page.tsx b/app/partner/admin/users/page.tsx
+index f1f5dc4..d6f100b 100644
+--- a/app/partner/admin/users/page.tsx
++++ b/app/partner/admin/users/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useCallback, useEffect, useState } from "react"
+diff --git a/app/partner/alerts/page.tsx b/app/partner/alerts/page.tsx
+index 7ee605e..a160c2c 100644
+--- a/app/partner/alerts/page.tsx
++++ b/app/partner/alerts/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useMemo, useState } from "react"
+diff --git a/app/partner/attendance/page.tsx b/app/partner/attendance/page.tsx
+index ddc7efc..8a2da1c 100644
+--- a/app/partner/attendance/page.tsx
++++ b/app/partner/attendance/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /**
+diff --git a/app/partner/contracts/[id]/page.tsx b/app/partner/contracts/[id]/page.tsx
+index 0dac11f..187474c 100644
+--- a/app/partner/contracts/[id]/page.tsx
++++ b/app/partner/contracts/[id]/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/purity, react-hooks/set-state-in-effect, react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState } from "react"
+diff --git a/app/partner/contracts/new/page.tsx b/app/partner/contracts/new/page.tsx
+index 5979f35..7522f30 100644
+--- a/app/partner/contracts/new/page.tsx
++++ b/app/partner/contracts/new/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useState, useEffect, useRef, useCallback } from "react"
+diff --git a/app/partner/driver-ledger/page.tsx b/app/partner/driver-ledger/page.tsx
+index 2c93eb6..4ba4794 100644
+--- a/app/partner/driver-ledger/page.tsx
++++ b/app/partner/driver-ledger/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /**
+diff --git a/app/partner/drivers/[id]/page.tsx b/app/partner/drivers/[id]/page.tsx
+index 98d12d1..3bd7dad 100644
+--- a/app/partner/drivers/[id]/page.tsx
++++ b/app/partner/drivers/[id]/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useRef, useState } from "react"
+diff --git a/app/partner/drivers/page.tsx b/app/partner/drivers/page.tsx
+index f72a251..05b1a12 100644
+--- a/app/partner/drivers/page.tsx
++++ b/app/partner/drivers/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect, react-hooks/static-components -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react"
+diff --git a/app/partner/insurance-tax/page.tsx b/app/partner/insurance-tax/page.tsx
+index cde3d1c..66a3011 100644
+--- a/app/partner/insurance-tax/page.tsx
++++ b/app/partner/insurance-tax/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /**
+diff --git a/app/partner/insurance-tax/shared.tsx b/app/partner/insurance-tax/shared.tsx
+index 7e083f5..57edd28 100644
+--- a/app/partner/insurance-tax/shared.tsx
++++ b/app/partner/insurance-tax/shared.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect, react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /** ส่วนแชร์ของโมดูลภาษี & ประกันภัย — types / helpers / ฟอร์มรายการ / ManageDrawer
+diff --git a/app/partner/payroll/[month]/approval/page.tsx b/app/partner/payroll/[month]/approval/page.tsx
+index 66a5cbb..023559f 100644
+--- a/app/partner/payroll/[month]/approval/page.tsx
++++ b/app/partner/payroll/[month]/approval/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useCallback, useEffect, useState } from "react"
+diff --git a/app/partner/payroll/[month]/page.tsx b/app/partner/payroll/[month]/page.tsx
+index 22e7e13..0512751 100644
+--- a/app/partner/payroll/[month]/page.tsx
++++ b/app/partner/payroll/[month]/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState } from "react"
+diff --git a/app/partner/payroll/sop/page.tsx b/app/partner/payroll/sop/page.tsx
+index 443a972..e411095 100644
+--- a/app/partner/payroll/sop/page.tsx
++++ b/app/partner/payroll/sop/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import Link from "next/link"
+diff --git a/app/partner/promotions/page.tsx b/app/partner/promotions/page.tsx
+index 8f10746..39a7e61 100644
+--- a/app/partner/promotions/page.tsx
++++ b/app/partner/promotions/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState, useMemo, useCallback, useRef } from "react"
+diff --git a/app/partner/quotations/[id]/page.tsx b/app/partner/quotations/[id]/page.tsx
+index 4b507b2..5a19972 100644
+--- a/app/partner/quotations/[id]/page.tsx
++++ b/app/partner/quotations/[id]/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+diff --git a/app/partner/quotations/page.tsx b/app/partner/quotations/page.tsx
+index 0635658..60273d0 100644
+--- a/app/partner/quotations/page.tsx
++++ b/app/partner/quotations/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable prefer-const, react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+diff --git a/app/partner/quotations/pipeline/page.tsx b/app/partner/quotations/pipeline/page.tsx
+index 034fbb7..7b394d1 100644
+--- a/app/partner/quotations/pipeline/page.tsx
++++ b/app/partner/quotations/pipeline/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useCallback, useEffect, useMemo, useState } from "react"
+diff --git a/app/partner/quotations/sales-people/page.tsx b/app/partner/quotations/sales-people/page.tsx
+index 4661044..bd2d42d 100644
+--- a/app/partner/quotations/sales-people/page.tsx
++++ b/app/partner/quotations/sales-people/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useCallback, useEffect, useState } from "react"
+diff --git a/app/partner/reports/promotions/page.tsx b/app/partner/reports/promotions/page.tsx
+index b9591b9..6356764 100644
+--- a/app/partner/reports/promotions/page.tsx
++++ b/app/partner/reports/promotions/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useMemo, useState } from "react"
+diff --git a/app/partner/trip-fuel/page.tsx b/app/partner/trip-fuel/page.tsx
+index 59facb1..8752027 100644
+--- a/app/partner/trip-fuel/page.tsx
++++ b/app/partner/trip-fuel/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /**
+diff --git a/app/partner/vehicle-cost/page.tsx b/app/partner/vehicle-cost/page.tsx
+index d3bcc80..7e1f538 100644
+--- a/app/partner/vehicle-cost/page.tsx
++++ b/app/partner/vehicle-cost/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect, react/no-unescaped-entities -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import React, { useEffect, useState, useCallback } from "react"
+diff --git a/app/partner/vehicles/page.tsx b/app/partner/vehicles/page.tsx
+index 1deff70..89757f0 100644
+--- a/app/partner/vehicles/page.tsx
++++ b/app/partner/vehicles/page.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState, useMemo, useCallback, useRef } from "react"
+diff --git a/components/partner/command-palette.tsx b/components/partner/command-palette.tsx
+index 346ae14..dc71de6 100644
+--- a/components/partner/command-palette.tsx
++++ b/components/partner/command-palette.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useMemo, useRef, useState } from "react"
+diff --git a/components/partner/module-status-board.tsx b/components/partner/module-status-board.tsx
+index b312ce7..3c48637 100644
+--- a/components/partner/module-status-board.tsx
++++ b/components/partner/module-status-board.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState, useCallback } from "react"
+diff --git a/components/partner/navbar.tsx b/components/partner/navbar.tsx
+index c8e081f..d4c3633 100644
+--- a/components/partner/navbar.tsx
++++ b/components/partner/navbar.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState } from "react"
+diff --git a/components/partner/pagination.tsx b/components/partner/pagination.tsx
+index e6229fc..95058b4 100644
+--- a/components/partner/pagination.tsx
++++ b/components/partner/pagination.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /**
+diff --git a/components/partner/price-history-drawer.tsx b/components/partner/price-history-drawer.tsx
+index 6a40c0b..32fb29c 100644
+--- a/components/partner/price-history-drawer.tsx
++++ b/components/partner/price-history-drawer.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useState } from "react"
+diff --git a/components/partner/sidebar.tsx b/components/partner/sidebar.tsx
+index 51cbd18..f9ed4ab 100644
+--- a/components/partner/sidebar.tsx
++++ b/components/partner/sidebar.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ import { useEffect, useMemo, useState, Suspense } from "react"
+diff --git a/components/partner/thai-date-input.tsx b/components/partner/thai-date-input.tsx
+index 27a6bd8..25db236 100644
+--- a/components/partner/thai-date-input.tsx
++++ b/components/partner/thai-date-input.tsx
+@@ -1,3 +1,4 @@
++/* eslint-disable react-hooks/set-state-in-effect -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ "use client"
+ 
+ /**
+diff --git a/lib/partner/payroll-packet-pdf.ts b/lib/partner/payroll-packet-pdf.ts
+index 8feb186..4d99c49 100644
+--- a/lib/partner/payroll-packet-pdf.ts
++++ b/lib/partner/payroll-packet-pdf.ts
+@@ -1,3 +1,4 @@
++/* eslint-disable @typescript-eslint/no-explicit-any -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ import "server-only"
+ import type { Db } from "mongodb"
+ import { prevMonth } from "@/lib/partner/utils"
+diff --git a/lib/partner/trip-fuel.ts b/lib/partner/trip-fuel.ts
+index ad73143..504aa58 100644
+--- a/lib/partner/trip-fuel.ts
++++ b/lib/partner/trip-fuel.ts
+@@ -1,3 +1,4 @@
++/* eslint-disable @typescript-eslint/no-require-imports -- โค้ดเดิมจาก mena-partner-driver ย้ายมาโดยไม่แก้ตรรกะ (scripts/partner-codemod/lint-legacy-disable.mjs) */
+ /**
+  * เฟส 1 payroll: สรุปค่าเที่ยว + กระทบยอดเชื้อเพลิง ต่อ พขร. ต่อเดือน
+  * แหล่งข้อมูล: mena-bi.driverCost (ระดับใบ LDT, sync จาก ATMS) — cluster เดียวกับแอป
