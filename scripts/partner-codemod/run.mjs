@@ -64,6 +64,7 @@ export function mapPath(p) {
   if (p.startsWith("__tests__/")) return "lib/partner/__tests__/" + p.slice("__tests__/".length)
   // test/server-only-stub.ts → ใช้ของ L1 ที่ราก (vitest.config.ts)
   if (p.startsWith("fonts/") || p.startsWith("templates/") || p.startsWith("data/")) return "partner-assets/" + p
+  if (p === "public/login-bg.jpg") return null // ใช้แค่หน้า login เดิมซึ่งถูกทิ้ง
   if (p.startsWith("public/")) return "public/partner/" + p.slice("public/".length)
   return null
 }
