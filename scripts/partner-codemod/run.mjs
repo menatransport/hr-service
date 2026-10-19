@@ -37,7 +37,7 @@ const OWNED_ROOTS = [
   "app/robots.ts",
 ]
 // app/api/partner/** ยกเว้น session (L4) · lib/partner/** ยกเว้นของ L4 + mongo.ts
-const PARTIAL_ROOTS = { "app/api/partner": ["session"], "lib/partner": ["auth", "mongo.ts", "rbac.ts", "roles.ts", "public-routes.ts"] }
+const PARTIAL_ROOTS = { "app/api/partner": ["session"], "lib/partner": ["auth", "mongo.ts", "rbac.ts", "roles.ts", "public-routes.ts", "rbac.test.ts", "roles.test.ts", "public-routes.test.ts"] }
 
 // ── กลุ่มหน้าของระบบเดิม (ย้ายไปใต้ /partner) ───────────────────────────────────────
 export const PAGE_GROUPS = [
