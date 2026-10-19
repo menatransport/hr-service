@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --tsconfig tsconfig.json --test \"lib/**/*.test.ts\"",
+    "test": "npm run test:node && npm run test:partner",
+    "test:node": "tsx --tsconfig tsconfig.json --test \"lib/!(partner)/**/*.test.ts\" \"lib/*.test.ts\"",
+    "test:partner": "vitest run --passWithNoTests",
     "verify:payroll": "tsx --tsconfig tsconfig.json scripts/verify-payroll-templates.ts",
     "snapshot:payroll": "tsx --tsconfig tsconfig.json scripts/write-payroll-snapshot.ts"
   },
