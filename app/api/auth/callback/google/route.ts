@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { callbackUrl, exchangeCodeForIdToken } from "@/lib/auth/google";
+import {
+  callbackUrl,
+  exchangeCodeForIdToken,
+  googleClientId,
+  verifyGoogleIdToken,
+} from "@/lib/auth/google";
 import { sessionCookieOptions } from "@/lib/auth/session";
 import {
   NEXT_COOKIE,
@@ -47,7 +52,23 @@ function backToLogin(
 
 const text = (value: string | null | undefined): string => value?.trim() ?? "";
 
-function toSessionUser(user: AuthUserDto): SessionUser {
+/**
+ * อีเมลจาก id_token **ที่ตรวจลายเซ็น/aud/iss/โดเมนแล้ว** — ใช้หาบทบาทในระบบรถร่วม
+ *
+ * ตรวจไม่ผ่าน (เช่น ดึงกุญแจของ Google ไม่ได้ชั่วคราว) = ไม่ใส่อีเมล แต่ **ไม่ล้มการล็อกอิน**
+ * ของ hr — NCAC ตรวจ id_token แล้วว่าเป็นพนักงานจริง ผู้ใช้จึงยังใช้งานฝั่ง hr ได้ตามเดิม
+ * แค่ฝั่งรถร่วมจะได้บทบาท `viewer` (default-closed) จนกว่าจะล็อกอินใหม่
+ */
+async function verifiedEmail(idToken: string): Promise<string | undefined> {
+  try {
+    return (await verifyGoogleIdToken(idToken, { clientId: googleClientId() })).email;
+  } catch (err) {
+    console.warn("[auth] ตรวจ id_token เพื่อเอาอีเมลไม่ผ่าน:", err instanceof Error ? err.message : err);
+    return undefined;
+  }
+}
+
+function toSessionUser(user: AuthUserDto, email?: string): SessionUser {
   const employeeId = text(user.employee_id) || text(user.username);
   const name = `${text(user.firstname)} ${text(user.lastname)}`.trim();
 
@@ -62,6 +83,7 @@ function toSessionUser(user: AuthUserDto): SessionUser {
     positionLevel: text(user.position_level) || null,
     site: text(user.site) || "—",
     imageUrl: text(user.image_url) || null,
+    ...(email ? { email } : {}),
   };
 }
 
@@ -93,7 +115,7 @@ export async function GET(request: NextRequest) {
   try {
     const idToken = await exchangeCodeForIdToken(code, callbackUrl(request));
     const result = await loginWithGoogle(idToken);
-    const user = toSessionUser(result.user ?? {});
+    const user = toSessionUser(result.user ?? {}, await verifiedEmail(idToken));
 
     if (!user.employeeId) {
       return backToLogin(
