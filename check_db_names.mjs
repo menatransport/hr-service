@@ -27,6 +27,8 @@ const EXTS = new Set([".ts", ".tsx", ".mts", ".mjs", ".js", ".cjs"]);
 const ALLOW = {
   /* ป้าย “ที่มาของข้อมูล” บนหัวการ์ดในหน้าประวัติ พจส. — ข้อความบนจอ ไม่ได้ใช้คิวรี */
   "app/recruitment/_components/admin/driver-profile.tsx": ["main_driver", "vehicles"],
+  /* โฟลเดอร์อัปโหลดรูปรถบน DO Spaces — ไม่ใช่คอลเลกชัน (ชื่อชน Boom_ETL.vehicles) */
+  "app/partner/vehicles/page.tsx": ["vehicles"],
 };
 
 /**

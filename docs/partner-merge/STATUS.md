@@ -1,6 +1,22 @@
 # สถานะงานรวม partner → hr-service
 
-อัปเดตโดย L1 · branch รวม `feat/partner-merge` · **ยังไม่มีอะไรถูก push / deploy**
+อัปเดตโดย L1 · branch รวม `feat/partner-merge` · **ปิดงานแล้ว (19 ต.ค. 2569) — ยังไม่มีอะไรถูก push / deploy**
+
+## ผลปิดงาน (หลังรวม L5 รอบสอง)
+
+| ตรวจ | ผล |
+|---|---|
+| `npx next typegen` | exit 0 |
+| `npx tsc --noEmit` | 0 error |
+| `npm test` — node:test | 452/452 |
+| `npm test` — vitest (`lib/partner/**`) | 473/473 · 24 ไฟล์ |
+| `npm run build` | exit 0 |
+| `node check_db_names.mjs` | 4 จุด = baseline เดิมใน `lib/payroll` (ไม่เพิ่ม) |
+| `MONGO_DB` ในโค้ดรถร่วม | 0 |
+| import `next-auth` | 0 · ไม่อยู่ใน package.json |
+| route ชนกับ hr | 0 |
+| CSS ของ hr เทียบก่อนรวม | คลาสหาย 0 · ไฟล์เล็ก 2 ไฟล์เหมือนเดิมทุกไบต์ · ไฟล์หลักเท่ากับหลังรวมรอบแรก (เพิ่มเฉพาะคลาสของหน้า driver-links) |
+
 
 ## Baseline (ก่อนเริ่ม, c7b8e55 + 512dc10)
 
@@ -16,9 +32,9 @@
 
 | เลน | branch | สถานะ | merge commit | หลังรวม (typegen → tsc → test → build) |
 |---|---|---|---|---|
-| L1 รากฐาน/รวม | `feat/partner-merge` | รวม 4 เลนแล้ว รอ L5 รอบสอง | 363b247 (รอยต่อ) | tsc 0 · node 452/452 · vitest 386/386 (23 ไฟล์) · build 0 |
+| L1 รากฐาน/รวม | `feat/partner-merge` | ปิดงาน | 363b247 (รอยต่อ) | tsc 0 · node 452/452 · vitest 386/386 (23 ไฟล์) · build 0 |
 | L4 ล็อกอิน/สิทธิ์ | `feat/pm-l4-auth` @83892f9 | รวมแล้ว | 98d2620 | tsc 0 · node 383 · vitest 155 · build 0 |
-| L5 ย้ายโค้ด | `feat/pm-l5-migrate` @346191a | รวมรอบแรกแล้ว · รอบสอง = แปลงโค้ดให้ผ่าน check_db_names | e3935ae | tsc 0 · node 383 · vitest 386 · build 0 |
+| L5 ย้ายโค้ด | `feat/pm-l5-migrate` @346191a → @26f6625 | รวมครบสองรอบ (รอบสอง: 335 จุด → `partnerCol`, shim → `lib/db/partner*.ts`, `requirePartnerPerm` 85 handler) | e3935ae · 1450df8 | tsc 0 · node 383 · vitest 386 · build 0 |
 | L2 ข้อมูลคนขับ | `feat/pm-l2-data` @2267735 | รวมแล้ว | bdb68b2 | tsc 0 · node 410 · vitest 386 · build 0 |
 | L3 เงินเดือน | `feat/pm-l3-payroll` @604d438 | รวมแล้ว | 8e8fe33 | tsc 0 · node 444 · vitest 386 · build 0 |
 

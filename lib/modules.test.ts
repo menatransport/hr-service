@@ -15,11 +15,15 @@ test("เมนูรถร่วมครบ 21 กลุ่มงาน แล
   const items = partner.items.flatMap((i) => [i, ...(i.children ?? [])]);
   const hrefs = items.flatMap((i) => [i.href, ...(i.match ? [i.match] : [])]);
   for (const h of hrefs) assert.ok(h.startsWith("/partner/") || h === "/trucks", h);
-  const groups = new Set(hrefs.map((h) => h.split("/")[h === "/trucks" ? 1 : 2]));
+  /* เทียบเป็น path เต็ม (`/partner/<กลุ่ม>`) ไม่ใช่ชื่อกลุ่มเปล่า — ชื่ออย่าง "vehicles" ชนชื่อคอลเลกชัน
+     ใน registry แล้ว check_db_names จะนับเป็นชื่อพิมพ์เอง */
+  const groups = new Set(hrefs.map((h) => (h === "/trucks" ? h : `/partner/${h.split("/")[2]}`)));
   const expected = [
-    "contracts", "drivers", "payroll", "payroll-extras", "driver-ledger", "trips", "trip-fuel",
-    "vehicles", "vehicle-cost", "insurance-tax", "quotations", "price-list", "promotions", "catalog",
-    "reports", "alerts", "attendance", "adjustments", "import", "admin", "trucks",
+    "/partner/contracts", "/partner/drivers", "/partner/payroll", "/partner/payroll-extras",
+    "/partner/driver-ledger", "/partner/trips", "/partner/trip-fuel", "/partner/vehicles",
+    "/partner/vehicle-cost", "/partner/insurance-tax", "/partner/quotations", "/partner/price-list",
+    "/partner/promotions", "/partner/catalog", "/partner/reports", "/partner/alerts",
+    "/partner/attendance", "/partner/adjustments", "/partner/import", "/partner/admin", "/trucks",
   ];
   for (const g of expected) assert.ok(groups.has(g), `ขาด ${g}`);
   assert.equal(expected.length, 21);
