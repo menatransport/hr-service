@@ -4,6 +4,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { logActivity } from "@/lib/partner/activity-log"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
 import { PARTNER } from "@/lib/db/registry.mjs"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const MONTH_RE = /^\d{4}-\d{2}$/
 const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -24,6 +25,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 // POST — บันทึกจ่ายรายงวด (manual) + แนบหลักฐาน
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "id invalid" }, { status: 400 })
 
@@ -99,6 +104,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
 // DELETE — ยกเลิกการจ่ายของเดือน (คืนยอด)
 export async function DELETE(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "id invalid" }, { status: 400 })
   const { month } = await req.json() as { month?: string }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const q        = searchParams.get("q")?.trim() ?? ""
@@ -71,6 +72,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     contractCode: string
     licensePlate: string

@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 // field อ่อนไหว (โกงเงินเดือนได้) — log เฉพาะพวกนี้ ไม่ log ที่อยู่/เบอร์
@@ -18,6 +19,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const body = await req.json() as {
     prefix?:        string
@@ -142,6 +147,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const pdb  = await partnerDb()
   const result  = await partnerColOf(pdb, "drivers")

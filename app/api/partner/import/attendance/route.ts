@@ -4,11 +4,16 @@ import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { parseAttendanceSheet, ATT_COLL } from "@/lib/partner/attendance"
 import { plateContractMap } from "@/lib/partner/trip-fuel"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 /** นำเข้า Excel วันทำงาน พจร. — action=preview (ตรวจก่อน) | confirm (บันทึกทับของเดือน) */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const fd = await req.formData()
   const file = fd.get("file") as File | null
   const month = String(fd.get("month") ?? "")

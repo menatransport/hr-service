@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { nextMonth } from "@/lib/partner/utils"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const contractCode = searchParams.get("contractCode")?.trim() ?? ""
@@ -26,6 +27,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
   if (!body.contractCode || !body.date) {
     return NextResponse.json({ error: "contractCode and date required" }, { status: 400 })
@@ -38,6 +43,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { searchParams } = req.nextUrl
   const contractCode = searchParams.get("contractCode")?.trim() ?? ""
   const month        = searchParams.get("month")?.trim() ?? ""

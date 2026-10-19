@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { QUOTE_COLL, QUOTE_STATUSES, QUOTE_STATUS_LABEL, type QuoteStatus } from "@/lib/partner/quotation"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -17,6 +18,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 /** PATCH — เปลี่ยนสถานะ pipeline / เงินจอง / แก้ราคา (บันทึก timeline) */
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "bad id" }, { status: 400 })
   const session = await getPartnerSession()

@@ -20,6 +20,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { collectExportedConsts, rewriteDbAccess } from "./db-access.mjs"
+import { addRouteGuards, loadRbac } from "./route-guard.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, "../..")
@@ -189,7 +190,7 @@ function walk(dir, base = dir) {
   })
 }
 
-function main() {
+async function main() {
   const files = execFileSync("git", ["-C", SRC, "ls-files", "-z"], { encoding: "buffer", maxBuffer: 64 << 20 })
     .toString("utf8").split("\0").filter(Boolean)
   rmOwned()
@@ -231,6 +232,15 @@ function main() {
     const out = rewriteDbAccess(f, t, exported)
     if (out !== t) { fs.writeFileSync(path.join(ROOT, f), out); dbChanged++ }
   }
+  // RBAC ชั้น route — ทุก handler ที่เขียนข้อมูลใน app/api/partner/**
+  const rbac = await loadRbac(ROOT)
+  let guards = 0, guardFiles = 0
+  for (const f of walk(path.join(ROOT, "app/api/partner")).map((x) => path.join("app/api/partner", x)).filter((x) => /\/route\.tsx?$/.test(x))) {
+    const abs = path.join(ROOT, f)
+    const { src, count } = addRouteGuards(f, fs.readFileSync(abs, "utf8"), rbac)
+    if (count) { fs.writeFileSync(abs, src); guards += count; guardFiles++ }
+  }
+  console.log(`route-guard: ${guards} handlers ใน ${guardFiles} ไฟล์`)
   // patches-post — แก้มือหลังขั้นเข้าถึงฐาน
   const ppDir = path.join(HERE, "patches-post")
   const post = fs.existsSync(ppDir) ? fs.readdirSync(ppDir).filter((f) => f.endsWith(".patch")).sort() : []
@@ -241,4 +251,4 @@ function main() {
   for (const s of stats.skipped) console.log("  - " + s)
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main()
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main()

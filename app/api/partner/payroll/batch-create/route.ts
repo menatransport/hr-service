@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { calculatePayrollEntry } from "@/lib/partner/payroll-engine"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /**
  * POST /api/payroll/batch-create?month=YYYY-MM
@@ -15,6 +16,10 @@ import { partnerDb, partnerColOf } from "@/lib/db/partner"
  * Returns { created, skipped, errors }
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { searchParams } = req.nextUrl
   const month = searchParams.get("month")?.trim() ?? ""
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {

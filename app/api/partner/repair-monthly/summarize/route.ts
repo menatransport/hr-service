@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -16,6 +17,10 @@ const r2 = (n: number) => Math.round(n * 100) / 100
  * ค่าดำเนินการ = 8% ของยอดเก็บรวม (สูตรไฟล์ — บรรทัด "ค่าดำเนินการ" ในคลังไม่นับซ้ำ)
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { month, action = "preview" } = await req.json() as { month?: string; action?: string }
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json({ error: "month required (YYYY-MM)" }, { status: 400 })

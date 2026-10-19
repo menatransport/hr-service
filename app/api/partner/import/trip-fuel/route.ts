@@ -3,6 +3,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { TF_COLL, parseTripSummarySheet } from "@/lib/partner/trip-fuel"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const MONTH_RE = /^\d{4}-\d{2}$/
 
@@ -11,6 +12,10 @@ const MONTH_RE = /^\d{4}-\d{2}$/
  * action=preview (ตรวจ+จับคู่สัญญาก่อน) | confirm (แทนที่ข้อมูลทั้งเดือน — ไฟล์คือ source of truth)
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const fd = await req.formData()
   const file = fd.get("file") as File | null
   const month = String(fd.get("month") ?? "")

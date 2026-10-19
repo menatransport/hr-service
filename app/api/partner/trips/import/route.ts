@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 interface TripRow {
   contractCode: string
   date: string
@@ -15,6 +16,10 @@ interface TripRow {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as { rows: TripRow[] }
   if (!Array.isArray(body.rows) || body.rows.length === 0) {
     return NextResponse.json({ error: "rows array required" }, { status: 400 })

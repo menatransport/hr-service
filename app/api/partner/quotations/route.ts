@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { QUOTE_COLL, nextQuotationNo, type QuoteStatus } from "@/lib/partner/quotation"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
 
@@ -30,6 +31,10 @@ export async function GET(req: NextRequest) {
 
 /** POST /api/quotations — สร้างใบเสนอ (salesperson = ผู้ใช้ login) */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const b = await req.json()

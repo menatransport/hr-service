@@ -5,6 +5,7 @@ import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { EXTRA_TYPE_MAP } from "@/lib/partner/payroll-extras"
 import { normPlate } from "@/lib/partner/promo-usage"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -20,6 +21,10 @@ export async function GET(req: NextRequest) {
 // POST — เพิ่มรายการเดี่ยว { month, type, contractCode?, driverName?, licensePlate?, amount, wht?, note? }
 // หรือ batch นำเข้า { month, type, action: "import", lines: [{ ref, amount, note? }] } — ref = สัญญา/ทะเบียน/ชื่อ
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as any
   const month = String(body.month ?? "")
   if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month ไม่ถูกต้อง" }, { status: 400 })
@@ -107,6 +112,10 @@ export async function POST(req: NextRequest) {
 
 // PATCH { id, amount?, wht?, note? }
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as any
   if (!body.id || !ObjectId.isValid(body.id)) return NextResponse.json({ error: "id required" }, { status: 400 })
   const $set: any = {}
@@ -122,6 +131,10 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE { id } | { importBatch } — middleware บังคับ admin+
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as any
   const pdb = await partnerDb()
   const col = partnerColOf(pdb, "payrollExtras")

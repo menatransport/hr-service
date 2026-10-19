@@ -3,6 +3,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import * as XLSX from "xlsx"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
@@ -72,6 +73,10 @@ function parseRow(row: unknown[]) {
 // ── POST handler (action = preview | confirm) ─────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("vehiclecost")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "vehiclecost")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })

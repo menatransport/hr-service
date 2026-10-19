@@ -4,6 +4,7 @@ import { hasPerm } from "@/lib/partner/rbac"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { calculatePayrollEntry } from "@/lib/partner/payroll-engine"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** GET /api/adjustments?month=YYYY-MM — list all adjustments for a month */
 export async function GET(req: NextRequest) {
@@ -23,6 +24,10 @@ export async function GET(req: NextRequest) {
 
 /** PUT /api/adjustments — upsert one adjustment, then recalculate payroll for that driver */
 export async function PUT(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session || !hasPerm(session.user?.role, "finance")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })

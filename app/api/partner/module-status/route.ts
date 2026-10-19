@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 // สถานะ ready/testing/dev ยังอยู่ในโค้ด (lib/module-status.ts); ตรงนี้เป็น overlay ที่แก้ได้ในหน้าแรก
 
 export async function GET() {
@@ -19,6 +20,10 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("login")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     href?: string
     dataComplete?: boolean

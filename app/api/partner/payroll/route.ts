@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { computePayroll } from "@/lib/partner/utils"
 import type { PayrollEntry } from "@/lib/partner/types"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const month = searchParams.get("month")?.trim() ?? ""
@@ -15,6 +16,10 @@ export async function GET(req: NextRequest) {
 
 /** DELETE /api/payroll?month=YYYY-MM — admin batch-delete all entries for a month */
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { searchParams } = req.nextUrl
   const month = searchParams.get("month")?.trim() ?? ""
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -28,6 +33,10 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body: PayrollEntry = await req.json()
   if (!body.contractCode || !body.month) {
     return NextResponse.json({ error: "contractCode and month required" }, { status: 400 })

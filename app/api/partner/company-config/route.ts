@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { getCompanyConfig, getCompanyVersion, listCompanyVersions, saveCompanyConfig, type CompanyConfig } from "@/lib/partner/company-config"
 import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** ข้อมูลบริษัท/ผู้ลงนามบนสัญญา — อ่านได้ทุกคนที่ล็อกอิน (เอกสารต้องใช้) แก้ได้เฉพาะ admin */
 export async function GET(req: NextRequest) {
@@ -13,6 +14,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   const role = session?.user?.role ?? ""
   if (!["admin", "superadmin"].includes(role)) {

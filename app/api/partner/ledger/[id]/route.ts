@@ -4,6 +4,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
 import { PARTNER } from "@/lib/db/registry.mjs"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 const STATUSES = ["active", "paid", "paused", "cancelled"] as const
@@ -13,6 +14,10 @@ const STATUSES = ["active", "paid", "paused", "cancelled"] as const
  * (pause = status "paused", resume = "active", cancel = "cancelled")
  */
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
   const body = await req.json()
@@ -70,6 +75,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
 /** DELETE /api/ledger/[id] — ลบได้เฉพาะ entry ที่ยังไม่มี payment (ลบ skips/withdrawals ที่ค้างด้วย) */
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
 

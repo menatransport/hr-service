@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { computePayroll } from "@/lib/partner/utils"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ month: string; contractCode: string }> }
 
 export async function GET(_req: NextRequest, { params }: Ctx) {
@@ -14,6 +15,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { month, contractCode } = await params
   const body   = await req.json()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -34,6 +39,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { month, contractCode } = await params
   const pdb = await partnerDb()
   if (await monthClosed(pdb, month)) return NextResponse.json(closedError(month), { status: 423 })

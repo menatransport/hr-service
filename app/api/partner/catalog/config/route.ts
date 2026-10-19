@@ -3,6 +3,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { hasPerm } from "@/lib/partner/rbac"
 import { CATALOG_COLL, DEFAULT_CATALOG_CONFIG, getCatalogConfig, sanitizeCatalogConfig, type CatalogConfig } from "@/lib/partner/catalog-config"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** template ข้อความ Catalog — GET ทุกคนที่ล็อกอิน · PUT สิทธิ์ masterdata (admin/fleet) */
 export async function GET() {
@@ -11,6 +12,10 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   const role = (session?.user as { role?: string } | undefined)?.role
   if (!hasPerm(role, "masterdata")) return NextResponse.json({ error: "ไม่มีสิทธิ์แก้ template" }, { status: 403 })

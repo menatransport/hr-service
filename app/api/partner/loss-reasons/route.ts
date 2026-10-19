@@ -3,6 +3,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { LOSS_COLL, listLossReasons, seedLossReasons } from "@/lib/partner/loss-reason"
 import { ObjectId } from "mongodb"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** master เหตุผลที่ดีลหลุด — ทุกคนที่ล็อกอินอ่านได้ แก้ได้เฉพาะ admin */
 export async function GET() {
@@ -12,6 +13,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!["admin", "superadmin"].includes(session?.user?.role ?? "")) {
     return NextResponse.json({ error: "ต้องเป็นผู้ดูแลระบบ" }, { status: 403 })
@@ -34,6 +39,10 @@ export async function POST(req: NextRequest) {
 
 /** PATCH — เปิด/ปิดการใช้งาน หรือแก้ข้อความ (ของระบบแก้ข้อความได้ แต่ปิดไม่ได้) */
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!["admin", "superadmin"].includes(session?.user?.role ?? "")) {
     return NextResponse.json({ error: "ต้องเป็นผู้ดูแลระบบ" }, { status: 403 })

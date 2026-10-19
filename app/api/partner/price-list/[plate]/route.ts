@@ -5,6 +5,7 @@ import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const NUM_FIELDS = [
   "totalSalePrice", "downPayment", "cashDown", "remainingInstallment",
@@ -16,6 +17,10 @@ type Ctx = { params: Promise<{ plate: string }> }
 
 /** PUT /api/price-list/[plate] — แก้ตัวเลขราคาขาย + บันทึกประวัติ (activity_log → drawer ประวัติราคา) */
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   const role = await resolveRole(session?.user?.email)
   if (!hasPerm(role, "masterdata"))

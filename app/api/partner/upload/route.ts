@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { uploadFile } from "@/lib/partner/spaces"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
+import { canUpload } from "@/lib/partner/rbac"
 
 export const runtime = "nodejs"
 
 const MAX_SIZE = 20 * 1024 * 1024  // 20 MB
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs) — อัปโหลด: ทุกบทบาทที่เขียนได้อย่างน้อยหนึ่งโดเมน (เหมือน lib/auth/gate.ts)
+  const perm = await requirePartnerPerm("login")
+  if (perm instanceof Response) return perm
+  if (!canUpload(perm.user.role)) return NextResponse.json({ error: "Forbidden — ไม่มีสิทธิ์อัปโหลด" }, { status: 403 })
+
   try {
     const form = await req.formData()
     const file = form.get("file") as File | null

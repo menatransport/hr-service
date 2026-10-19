@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb"
 import { monthClosed, closedError } from "@/lib/partner/month-lock"
 import { TF_COLL, TF_CONFIG, DEFAULT_CONFIG, aggregateFromBI, computeRow, plateContractMap, type TripFuelConfig } from "@/lib/partner/trip-fuel"
 import { partnerDb, partnerColOf, type AnyDoc } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 const MONTH_RE = /^\d{4}-\d{2}$/
 
@@ -31,6 +32,10 @@ export async function GET(req: NextRequest) {
 
 // PUT — บันทึก config ราคาของเดือน แล้วคำนวณทุกแถวใหม่
 export async function PUT(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as Partial<TripFuelConfig> & { month?: string }
   const month = body.month ?? ""
   if (!MONTH_RE.test(month)) return NextResponse.json({ error: "month required" }, { status: 400 })
@@ -57,6 +62,10 @@ export async function PUT(req: NextRequest) {
 
 // POST { month, action: "sync" } — ดึงสรุปจาก BI (เก็บค่าที่แก้มือไว้: ยกเข้า/ยกออก/หมายเหตุ)
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { month, action } = await req.json() as { month?: string; action?: string }
   if (!MONTH_RE.test(month ?? "") || action !== "sync") {
     return NextResponse.json({ error: "month + action:'sync' required" }, { status: 400 })
@@ -99,6 +108,10 @@ export async function POST(req: NextRequest) {
 
 // PATCH { id, ...fields } — แก้ยกเข้า/ยกออก/สัญญา/หมายเหตุ รายแถว แล้วคำนวณใหม่
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as any
   const id = body.id as string
   if (!id || !ObjectId.isValid(id)) return NextResponse.json({ error: "id required" }, { status: 400 })

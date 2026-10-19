@@ -6,6 +6,7 @@ import { hasPerm } from "@/lib/partner/rbac"
 import { EXIT_TYPE_LABEL } from "@/lib/partner/driver-state"
 import type { ExitType } from "@/lib/partner/types"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -20,6 +21,10 @@ const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim(
  * body { exitType, exitReason?, endDate }  · สิทธิ์ masterdata
  */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "id invalid" }, { status: 400 })
 

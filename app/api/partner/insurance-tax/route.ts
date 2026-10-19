@@ -9,6 +9,7 @@ import {
   type InsuranceItem,
 } from "@/lib/partner/insurance-tax"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type ItemStatus = "active" | "expiring" | "expired" | "none"
 const WORST_RANK: Record<ItemStatus, number> = { none: 0, active: 1, expiring: 2, expired: 3 }
 
@@ -116,6 +117,10 @@ function buildItemDoc(body: Record<string, any>, licensePlate: string, platePlai
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
 
   if (!body.licensePlate) {

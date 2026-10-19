@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { partnerDb, partnerColOf, atmsCol } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 /** ค่าจาก ATMS ที่ถือว่า "ว่าง" — pandas export ทิ้ง "nan"/"-" ไว้ */
 function clean(v: unknown): string {
   const s = String(v ?? "").trim()
@@ -12,6 +13,10 @@ function clean(v: unknown): string {
  * (middleware บังคับ admin สำหรับ method ที่ไม่ใช่ GET อยู่แล้ว)
  */
 export async function POST() {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const pdb = await partnerDb()
   const app  = partnerColOf(pdb, "vehicleMaster")
   const atms = await atmsCol("vehicleMaster")

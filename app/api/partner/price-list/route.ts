@@ -5,6 +5,7 @@ import { resolveRole } from "@/lib/partner/roles"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export async function GET() {
   const pdb = await partnerDb()
@@ -61,6 +62,10 @@ const NUM_FIELDS = [
 ] as const
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   const role = await resolveRole(session?.user?.email)
   if (!hasPerm(role, "masterdata"))

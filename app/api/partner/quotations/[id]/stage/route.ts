@@ -4,6 +4,7 @@ import { moveStage, holdDeal, resumeDeal, closeLost, attachFile, saveFields, get
 import { checkAdvance, screeningChecklist, type DealFields } from "@/lib/partner/deal-stage"
 import { listLossReasons, reasonsForStage } from "@/lib/partner/loss-reason"
 import { partnerDb } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /**
  * การกระทำกับดีลในไปป์ไลน์ — กติกาทั้งหมดตรวจซ้ำฝั่ง server เสมอ
@@ -40,6 +41,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 /** POST — action: advance | move | hold | resume | close | reason | fields | attach */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const session = await getPartnerSession()
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

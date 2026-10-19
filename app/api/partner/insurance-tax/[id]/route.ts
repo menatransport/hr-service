@@ -4,9 +4,14 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { diffFields, logActivity } from "@/lib/partner/activity-log"
 import { normPlateIT } from "@/lib/partner/insurance-tax"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const body   = await req.json()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -50,6 +55,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const pdb = await partnerDb()
   const col    = partnerColOf(pdb, "vehicleInsuranceTax")

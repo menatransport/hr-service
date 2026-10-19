@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/partner/activity-log"
 import { hasPerm } from "@/lib/partner/rbac"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -16,6 +17,10 @@ const LABEL: Record<string, string> = { active: "ใช้งาน", completed:
  * ผล: คนขับของสัญญานี้ขึ้นแท็บ "Active (ปิดงวดแล้ว)" ทันที (lib/driver-state ข้อ 1)
  */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "id invalid" }, { status: 400 })
 

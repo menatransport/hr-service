@@ -3,6 +3,7 @@ import { ensureFirstVersion } from "@/lib/partner/company-config"
 import type { Contract, Driver } from "@/lib/partner/types"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const q      = searchParams.get("q")?.trim() ?? ""
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const body: Contract = await req.json()
 
   if (!body.contractCode || !body.buyerName || !body.driverName) {

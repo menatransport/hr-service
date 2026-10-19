@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { CUSTOMER_COLL } from "@/lib/partner/quotation"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /** GET /api/customers?q= — ค้นหา/ลิสต์ลูกค้า (ทีมเห็นทั้งหมด) */
 export async function GET(req: NextRequest) {
@@ -21,6 +22,10 @@ export async function GET(req: NextRequest) {
 
 /** POST /api/customers — สร้างลูกค้าใหม่ */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const body = await req.json() as {

@@ -14,6 +14,7 @@ import {
 } from "@/lib/partner/driver-ledger"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
 import { PARTNER } from "@/lib/db/registry.mjs"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const MONTH_RE = /^\d{4}-\d{2}$/
 
 function round2(n: number): number {
@@ -96,6 +97,10 @@ export async function GET(req: NextRequest) {
  *   { convertFrom: { type: "debt_acceptance", id } }     → ดึงยอดจาก debt_acceptances
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const body = await req.json()
   const session = await getPartnerSession()
 

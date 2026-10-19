@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { logActivity } from "@/lib/partner/activity-log"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 // เฉพาะ field ไฟล์แนบ 5 ชนิด — จัดการได้ทุก user ที่ login (ไม่ใช่แก้ข้อมูลสัญญา)
@@ -34,6 +35,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
 /** PATCH /api/contracts/[id]/attachment — แนบ/ลบ ไฟล์เอกสาร (url = "" คือลบ) + บันทึก audit */
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   const body = await req.json() as { field?: string; url?: string }
   const field = body.field ?? ""

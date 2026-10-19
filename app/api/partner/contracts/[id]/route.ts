@@ -6,6 +6,7 @@ import { hasPerm } from "@/lib/partner/rbac"
 import { withVehicleDetails } from "@/lib/partner/contract-vehicle"
 import { revalidatePublicTrucks } from "@/lib/partner/revalidate-public"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 type Ctx = { params: Promise<{ id: string }> }
 
 // field ที่ log การแก้ไข — เน้นการเงิน/กฎหมาย/วันที่ (ไม่ log พวก url ไฟล์แนบ ที่ log แยกแล้ว)
@@ -28,6 +29,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("contracts")
+  if (perm instanceof Response) return perm
+
   const { id }   = await params
   const body     = await req.json()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -101,6 +106,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 // สัญญาลบถาวรไม่ได้ — ใช้ "ยกเลิกสัญญา" (เปลี่ยนสถานะเป็น terminated) แทน
 // เพื่อรักษาประวัติ/หลักฐาน (audit, เงินเดือน, หนี้ที่อ้างถึงสัญญานี้)
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   await params
   return NextResponse.json(
     { error: "ลบสัญญาถาวรไม่ได้ — กรุณาใช้ ‘ยกเลิกสัญญา’ (เปลี่ยนสถานะเป็นยกเลิก) แทน" },

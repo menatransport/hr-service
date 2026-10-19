@@ -3,6 +3,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { invalidateRoleCache } from "@/lib/partner/roles"
 import { ROLES } from "@/lib/partner/rbac"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 async function requireSuperadmin() {
   const session = await getPartnerSession()
   const role = (session?.user as { role?: string } | undefined)?.role
@@ -18,6 +19,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("manage_users")
+  if (perm instanceof Response) return perm
+
   const session = await requireSuperadmin()
   if (!session) return NextResponse.json({ error: "superadmin only" }, { status: 403 })
   const body = await req.json() as { email?: string; role?: string }
@@ -38,6 +43,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("manage_users")
+  if (perm instanceof Response) return perm
+
   if (!(await requireSuperadmin())) return NextResponse.json({ error: "superadmin only" }, { status: 403 })
   const { email } = await req.json() as { email?: string }
   if (!email) return NextResponse.json({ error: "email required" }, { status: 400 })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { partnerDb, partnerColOf, type AnyDoc } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 const normPlate = (p?: string | null) => (p ?? "").replace(/^[^0-9]*/, "").trim()
 
 /** หารถที่ทะเบียนซ้ำ (normalize) — คืน doc ถ้าเจอ */
@@ -67,6 +68,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("masterdata")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as {
     truckType?:        string
     vehicleType?:      string

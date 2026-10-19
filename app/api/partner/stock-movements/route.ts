@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ObjectId, AnyBulkWriteOperation } from "mongodb"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
 
 // PATCH — bulk-set promoType on multiple movement items at once
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const body = await req.json() as { updates?: { id: string; promoType?: string; pmType?: string; chargeAmount?: number | null; chargeMonth?: string | null }[] }
   const updates = body.updates ?? []
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPartnerSession } from "@/lib/partner/auth/server"
 import { settleLedgerMonth } from "@/lib/partner/driver-ledger"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 /**
  * สถานะรอบเดือนเงินเดือน — 5 ขั้น (ตาม SOP ปิดงวด):
@@ -52,6 +53,10 @@ export async function GET(req: NextRequest) {
  *  - set    : เซ็ตตรงๆ (admin+ — ใช้แก้สถานการณ์/legacy {month, phase})
  */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const role  = (session.user as { role?: string } | undefined)?.role ?? "viewer"

@@ -4,6 +4,7 @@ import { getPartnerSession } from "@/lib/partner/auth/server"
 import { logActivity } from "@/lib/partner/activity-log"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
 import { PARTNER } from "@/lib/db/registry.mjs"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -28,6 +29,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
  * guard: ถอนเกิน balance (paidAmount − withdrawnAmount) ไม่ได้
  */
 export async function POST(req: NextRequest, { params }: Ctx) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("finance")
+  if (perm instanceof Response) return perm
+
   const { id } = await params
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 })
   const body = await req.json()

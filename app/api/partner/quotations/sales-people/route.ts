@@ -6,6 +6,7 @@ import { hasPerm, isAdminRole } from "@/lib/partner/rbac"
 import { SALES_PEOPLE } from "@/lib/partner/quotation-people"
 import { QUOTE_COLL } from "@/lib/partner/quotation"
 import { partnerDb, partnerColOf } from "@/lib/db/partner"
+import { requirePartnerPerm } from "@/lib/partner/auth/server"
 /** รวมชื่อตั้งต้นในโค้ด + ชื่อที่ทีมเพิ่มเองผ่านหน้าจอ (ไม่ซ้ำ) */
 async function listNames(): Promise<string[]> {
   const pdb = await partnerDb()
@@ -67,6 +68,10 @@ export async function GET(req: NextRequest) {
 
 /** POST — เพิ่มผู้ขายใหม่ (สิทธิ์ sales ขึ้นไป เพิ่มได้จาก dropdown ตอนออกใบเสนอราคา) */
 export async function POST(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const session = await getPartnerSession()
   const email = (session?.user?.email ?? "").trim().toLowerCase()
   const role = await resolveRole(email)
@@ -95,6 +100,10 @@ export async function POST(req: NextRequest) {
 /** PATCH — แก้ชื่อ/email/เบอร์ (admin) · เปลี่ยนชื่อจะ rename salesName ในใบเสนอราคาเดิมตามไปด้วย
  *  เพราะยอดคอมจับกลุ่มด้วยชื่อ (lib/commission.ts) ไม่ตามไปด้วยยอดจะแตกเป็นสองก้อน */
 export async function PATCH(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("sales")
+  if (perm instanceof Response) return perm
+
   const admin = await adminOnly()
   if (!admin) return NextResponse.json({ error: "เฉพาะแอดมิน" }, { status: 403 })
 
@@ -133,6 +142,10 @@ export async function PATCH(req: NextRequest) {
 
 /** DELETE — ลบผู้ขายออกจาก master (admin) · กันลบคนที่ยังมีใบเสนอราคาผูกอยู่ */
 export async function DELETE(req: NextRequest) {
+  // RBAC ชั้น route (scripts/partner-codemod/route-guard.mjs)
+  const perm = await requirePartnerPerm("admin")
+  if (perm instanceof Response) return perm
+
   const admin = await adminOnly()
   if (!admin) return NextResponse.json({ error: "เฉพาะแอดมิน" }, { status: 403 })
 
