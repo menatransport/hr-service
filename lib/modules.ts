@@ -1,5 +1,26 @@
 import {
+  BadgeCheck,
+  Banknote,
+  Bell,
+  BookImage,
   BookUser,
+  CalendarCheck,
+  ChartColumn,
+  FileText,
+  Fuel,
+  Gift,
+  Globe,
+  HandCoins,
+  Handshake,
+  Link2,
+  MapPinned,
+  Receipt,
+  Settings,
+  SlidersHorizontal,
+  Tag,
+  Upload,
+  UserCog,
+  Wrench,
   Bookmark,
   BriefcaseBusiness,
   Building2,
@@ -32,7 +53,7 @@ import type { LucideIcon } from "lucide-react";
  * เพิ่มเมนูใหม่ = เพิ่มรายการที่นี่ที่เดียว ทั้ง Home และแถบข้างตามเอง
  */
 
-export type ModuleId = "driver" | "office" | "master";
+export type ModuleId = "driver" | "office" | "master" | "partner";
 
 export interface ModuleItem {
   /** ใช้เป็นชื่อ view transition ด้วย — ห้ามซ้ำข้ามกลุ่ม */
@@ -124,6 +145,13 @@ export const MODULES: ModuleGroup[] = [
         href: "/recruitment/admin/drivers",
         icon: BookUser,
       },
+      {
+        id: "driver-links",
+        label: "คนขับรถร่วม ↔ พจส.",
+        desc: "จับคู่คนขับรถร่วมกับทะเบียน · ตัวเลขคนขับทั้งบริษัท",
+        href: "/desk/driver-links",
+        icon: Link2,
+      },
     ],
   },
   {
@@ -194,6 +222,92 @@ export const MODULES: ModuleGroup[] = [
         desc: "เอกสาร API และคอนโซลทดสอบ",
         href: "/recruitment/admin/settings/api-docs",
         icon: Code2,
+      },
+    ],
+  },
+  {
+    /*
+     * ระบบรถร่วม Mixer (ย้ายมาจาก mena-partner-driver) — ครบ 21 กลุ่มงานของระบบเดิม
+     * จัดเป็น 5 หมวดตามแถบข้างของระบบเดิม (ระบบสัญญา / ขาย / โปรโมชั่น / เงินเดือน / ผู้ดูแล)
+     * ให้หน้า Home ไม่ท่วม · `id` ขึ้นต้น `pt-` ทุกตัว กันชนกับเมนูของ hr (เช่น `payroll`)
+     * · `/trucks` เป็นเว็บสาธารณะอยู่ที่ราก ไม่อยู่ใต้ `/partner`
+     */
+    id: "partner",
+    label: "รถร่วม Mixer",
+    tagline: "สัญญา · ขายรถ · เงินเดือนคนขับรถร่วม",
+    caption: "ระบบรถร่วม ตั้งแต่ขายรถ ทำสัญญา จนถึงปิดงวดเงินเดือนคนขับรถร่วม",
+    icon: Handshake,
+    items: [
+      {
+        id: "pt-alerts",
+        label: "แจ้งเตือนรถร่วม",
+        desc: "เรื่องที่ต้องตามในระบบรถร่วม",
+        href: "/partner/alerts",
+        icon: Bell,
+      },
+      {
+        id: "pt-contract",
+        label: "ระบบสัญญา",
+        desc: "คนขับ · รถ · ราคาขาย · สัญญา",
+        href: "/partner/contracts",
+        icon: FileText,
+        children: [
+          { id: "pt-drivers", label: "คนขับรถร่วม", desc: "ผ่อนอยู่ / ปิดงวดแล้ว / พ้นสภาพ", href: "/partner/drivers", icon: BookUser },
+          { id: "pt-vehicles", label: "รถ", desc: "วิ่งงานอยู่ / พร้อมขาย / ระหว่างดำเนินการ", href: "/partner/vehicles", icon: Truck },
+          { id: "pt-price-list", label: "ราคาขาย", desc: "ราคาขายรายคัน", href: "/partner/price-list", icon: Tag },
+          { id: "pt-contracts", label: "สัญญา", desc: "สัญญาซื้อขาย ว่าจ้าง ค้ำประกัน", href: "/partner/contracts", icon: FileText },
+        ],
+      },
+      {
+        id: "pt-sales",
+        label: "ระบบขาย",
+        desc: "ดีล · ใบเสนอราคา · แคตตาล็อก · เว็บขายรถ",
+        href: "/partner/quotations",
+        icon: Receipt,
+        children: [
+          { id: "pt-quotations", label: "ดีล & ใบเสนอราคา", desc: "ไปป์ไลน์ ค่าคอม ทีมขาย", href: "/partner/quotations", icon: Receipt },
+          { id: "pt-catalog", label: "Catalog รถ", desc: "แคตตาล็อกรายคัน PDF", href: "/partner/catalog", icon: BookImage },
+          { id: "pt-trucks", label: "เว็บขายรถ", desc: "หน้าเว็บสาธารณะ", href: "/trucks", icon: Globe },
+        ],
+      },
+      {
+        id: "pt-promo",
+        label: "โปรโมชั่น",
+        desc: "งบซ่อม · PM · รายงานสรุปโปรฯ",
+        href: "/partner/promotions",
+        icon: Gift,
+      },
+      {
+        id: "pt-pay",
+        label: "เงินเดือนรถร่วม",
+        desc: "ค่าเที่ยว · ค่าใช้จ่ายรถ · วันทำงาน · ปิดงวด",
+        href: "/partner/payroll",
+        icon: Banknote,
+        children: [
+          { id: "pt-trips", label: "เที่ยววิ่ง", desc: "เที่ยวรายสัญญา", href: "/partner/trips", icon: MapPinned },
+          { id: "pt-trip-fuel", label: "ค่าเที่ยว & เชื้อเพลิง", desc: "สรุปจาก BI ต่อเดือน", href: "/partner/trip-fuel", icon: Fuel },
+          { id: "pt-vehicle-cost", label: "ค่าใช้จ่ายรถ", desc: "ซ่อม · ยาง · ล้างรถ", href: "/partner/vehicle-cost", icon: Wrench },
+          { id: "pt-insurance-tax", label: "ภาษี & ประกันภัย", desc: "ต่อภาษี ประกัน พรบ.", href: "/partner/insurance-tax", icon: BadgeCheck },
+          { id: "pt-attendance", label: "วันทำงาน พจร.", desc: "วันทำงานรายเดือน", href: "/partner/attendance", icon: CalendarCheck },
+          { id: "pt-payroll-extras", label: "รับ-หักอื่นๆ", desc: "รายการรับ/หักนอกสูตร", href: "/partner/payroll-extras", icon: SlidersHorizontal },
+          { id: "pt-payroll", label: "เงินเดือน", desc: "คำนวณและปิดงวด", href: "/partner/payroll", icon: Banknote },
+          { id: "pt-driver-ledger", label: "หนี้สิน & เงินสะสม", desc: "ยอดยกมา ผ่อนหนี้ เงินสำรอง", href: "/partner/driver-ledger", icon: HandCoins },
+          { id: "pt-adjustments", label: "รายการปรับปรุง", desc: "ปรับยอดรายเดือน", href: "/partner/adjustments", icon: SlidersHorizontal },
+          { id: "pt-reports", label: "รายงาน", desc: "รายงานรถร่วม", href: "/partner/reports", icon: ChartColumn },
+        ],
+      },
+      {
+        id: "pt-admin",
+        label: "ผู้ดูแลรถร่วม",
+        desc: "นำเข้า Excel · ข้อมูลบริษัท · รอบเดือน · ผู้ใช้ & สิทธิ์",
+        href: "/partner/admin",
+        icon: Settings,
+        children: [
+          { id: "pt-import", label: "นำเข้า Excel", desc: "นำเข้าข้อมูลจากไฟล์", href: "/partner/import", icon: Upload },
+          { id: "pt-admin-company", label: "ข้อมูลบริษัท & ผู้ลงนาม", desc: "ใช้ในเอกสารสัญญา", href: "/partner/admin/company", icon: Building2 },
+          { id: "pt-admin-month", label: "จัดการรอบเดือน", desc: "เปิด/ปิดรอบเดือน", href: "/partner/admin/month", icon: Settings },
+          { id: "pt-admin-users", label: "ผู้ใช้ & สิทธิ์", desc: "บทบาท 6 ระดับของรถร่วม", href: "/partner/admin/users", icon: UserCog },
+        ],
       },
     ],
   },
