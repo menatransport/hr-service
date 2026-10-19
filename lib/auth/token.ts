@@ -23,7 +23,7 @@ export const NEXT_COOKIE = "hrs.oauth_next";
  * จะทำให้คนที่เปิดลิงก์มาตรง ๆ ถูกเด้งไปล็อกอินแล้วโผล่ที่ `/home` แทนที่จะได้
  * ไปที่หน้าที่เขาตั้งใจจะเปิด (ลิงก์ในเมลแจ้งฝ่ายชี้มาที่ `/payroll/intake`)
  */
-const NEXT_PREFIXES = ["/home", "/desk", "/payroll"];
+const NEXT_PREFIXES = ["/home", "/desk", "/payroll", "/partner"];
 
 export function safeNextPath(value: string | null | undefined): string | null {
   if (!value || value.startsWith("//")) return null;
@@ -54,6 +54,14 @@ export interface SessionUser {
   site: string;
   /** `image_url` — ส่วนใหญ่คือรูปบัญชี Google ที่ NCAC บันทึกไว้ตอนล็อกอินครั้งแรก */
   imageUrl: string | null;
+  /**
+   * อีเมลบริษัทจาก claim `email` ของ Google id_token (**ตรวจลายเซ็น/aud/iss แล้วเท่านั้น**
+   * — ดู `verifyGoogleIdToken()`) · NCAC ไม่คืนอีเมลมาเลย จึงต้องเก็บเองตอนล็อกอิน
+   *
+   * ใช้หาบทบาทในระบบรถร่วม (`mena_partner.app_users` คีย์ด้วยอีเมล) · **optional** เพื่อให้
+   * คุกกี้ที่ออกก่อนเพิ่มช่องนี้ยังอ่านได้ — ไม่มีอีเมล = บทบาท `viewer` จนกว่าจะล็อกอินใหม่
+   */
+  email?: string;
 }
 
 export interface SessionPayload {
