@@ -1906,6 +1906,14 @@
   --tone-glow: rgba(15, 118, 110, 0.4);
   --tone-grad: linear-gradient(135deg, #7ae8d3 0%, #22b59b 50%, #0c625c 100%);
 }
+/* รถร่วม Mixer (ย้ายมาจาก mena-partner) — สีม่วง แยกจากสามกลุ่มเดิมชัด */
+.tone-partner {
+  --tone: #7c3aed;
+  --tone-soft: #efe7fd;
+  --tone-ink: #5b21b6;
+  --tone-glow: rgba(124, 58, 237, 0.38);
+}
+
 [data-theme="hrs-dark"] .tone-driver {
   --tone: #f0a43a;
   --tone-soft: #3a2c10;
@@ -1920,6 +1928,11 @@
   --tone: #2fc7b4;
   --tone-soft: color-mix(in oklab, #14b8a6 18%, #161c1b);
   --tone-ink: #5fe0cf;
+}
+[data-theme="hrs-dark"] .tone-partner {
+  --tone: #a78bfa;
+  --tone-soft: #2a2140;
+  --tone-ink: #c4b5fd;
 }
 
 /* ─────────────────────────────────────────── เชลล์ “Night Route” (สไตล์ menaIT V.2)

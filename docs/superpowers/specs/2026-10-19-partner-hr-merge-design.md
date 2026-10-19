@@ -122,3 +122,21 @@ total            = etlActive + partnerActive − linkedDistinct
 ## นอกขอบเขต
 - ไฟล์ Tiger Soft · cutover · DNS/โดเมน · Vercel · push
 - การเชื่อมฐานจริงทุกรูปแบบระหว่างพัฒนา — สคริปต์ที่ต้องใช้ข้อมูลจริงเขียนไว้ให้เจ้าของรันเอง
+
+## การแบ่งงาน (19 ต.ค. 2569)
+
+งานถูกแบ่งเป็น 5 เลนขนานกัน แต่ละเลนมี worktree/branch ของตัวเอง แล้วรวมกลับที่ `feat/partner-merge` — ตารางเจ้าของไฟล์และสัญญากลางอยู่ที่ `docs/partner-merge/LANES.md` · สถานะ/หลักฐานอยู่ที่ `docs/partner-merge/STATUS.md`
+
+| เลน | ส่วนของสเปก |
+|---|---|
+| L1 | รากฐาน (test runner, เมนู, vercel, env) + รวมงาน |
+| L2 | ส่วนที่ 1 สายเชื่อมคนขับ (รับ `lib/partner-link/**` ไปเป็น `lib/driver-links/**`) |
+| L3 | ส่วนที่ 2 ยอดรถร่วมเข้า `/payroll/summary` |
+| L4 | ด่านเดียว + session (รวมการดึง `email` จาก Google `id_token` ลง session) |
+| L5 | ส่วนที่ 3 ย้ายโค้ด + `styles/partner-theme.css` |
+
+## พฤติกรรมที่เปลี่ยนจากระบบเดิมโดยตั้งใจ (ต้องแจ้งผู้ใช้)
+
+- คนในโดเมนที่ไม่มีแถวใน `app_users` เดิมได้ `salesperson` → ตอนนี้ได้ `viewer` (เห็นได้ แก้ไม่ได้) — admin ต้องเพิ่มแถวให้ฝ่ายขายก่อนวันตัดระบบ
+- ฐานล่มตอนหา role เดิมได้ `admin` (fail-open) → ตอนนี้ได้ `viewer` (fail-closed)
+- บทบาทเปลี่ยนแล้วมีผลเมื่อล็อกอินใหม่ (session อายุสูงสุด 8 ชม.) ถ้า L4 เก็บ role ไว้ใน session

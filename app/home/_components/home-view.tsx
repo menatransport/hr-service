@@ -180,7 +180,7 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
         </div>
       </section>
 
-      <main className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-full flex-1 grid-cols-3 items-start gap-[clamp(14px,1.8vw,28px)] px-[clamp(24px,5vw,72px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2">
+      <main className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-full flex-1 grid-cols-4 items-start gap-[clamp(14px,1.8vw,28px)] px-[clamp(24px,5vw,72px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2">
         {MODULES.map((group, i) => (
           <GroupColumn key={group.id} group={group} index={i} />
         ))}
@@ -417,7 +417,7 @@ function MobileHome({
         <div
           role="tablist"
           aria-label="กลุ่มงาน"
-          className="grid shrink-0 grid-cols-3 gap-1 rounded-full border border-line bg-base-100 p-1 elev-card"
+          className="grid shrink-0 grid-cols-4 gap-1 rounded-full border border-line bg-base-100 p-1 elev-card"
         >
           {MODULES.map((g) => {
             const active = g.id === current.id;
