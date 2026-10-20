@@ -50,6 +50,7 @@ export function CandidatesScreen({
   docSlots,
   blacklist,
   initialRef = "",
+  initialRc = false,
 }: {
   initialRequisitions: Requisition[];
   initialApplications: ApplicationSummary[];
@@ -60,6 +61,8 @@ export function CandidatesScreen({
   blacklist: BlacklistEntry[];
   /** เลขที่ใบสมัครจาก `?ref=` — คิวงานหรือตารางคำขอส่งมาเพื่อเปิดตรงที่แถวนั้นเลย */
   initialRef?: string;
+  /** `?rc=1` — เปิดกล่องข้อมูล RC ของใบ `initialRef` ทันที */
+  initialRc?: boolean;
 }) {
   const [requisitions, setRequisitions] = useState(initialRequisitions);
   const [applications, setApplications] = useState(initialApplications);
@@ -70,6 +73,7 @@ export function CandidatesScreen({
       rows={applications}
       setRows={setApplications}
       initialTerm={initialRef}
+      initialRc={initialRc}
       contactOptions={contactOptions}
       docSlots={docSlots}
       blacklist={blacklist}

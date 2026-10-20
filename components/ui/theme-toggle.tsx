@@ -76,20 +76,24 @@ export function ThemeToggleRow() {
   );
 }
 
-/** ปุ่มเต็ม (พื้น teal) ในเมนูผู้ใช้ของเชลล์ — วางคู่กับ `LogoutTile` แทนปุ่ม “ตั้งค่า” ของ menaIT */
-export function ThemeToggleTile() {
+/** แถวเมนูในกล่องเมนูผู้ใช้ของเชลล์ (`UserMenu`) — ข้อความสลับด้วย CSS เหมือนแบบอื่น */
+export function ThemeToggleMenuItem() {
   return (
     <button
       type="button"
+      role="menuitem"
       onClick={toggle}
       aria-label="สลับธีมสว่าง / มืด"
-      className="group flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-primary-content transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+      className="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left text-13-5 transition-colors hover:bg-base-200"
     >
-      <ThemeIcons size={16} />
-      <span className="text-14 font-medium">
+      <span className="flex-none text-mut">
+        <ThemeIcons size={16} />
+      </span>
+      <span className="flex-1">
         <span className="theme-label theme-label-light">โหมดสว่าง</span>
         <span className="theme-label theme-label-dark">โหมดมืด</span>
       </span>
+      <span className="flex-none text-11 text-mut">สลับ</span>
     </button>
   );
 }

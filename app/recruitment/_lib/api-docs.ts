@@ -52,11 +52,20 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/recruitment/", "/api/drivers/", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.0.0";
-export const API_DOCS_UPDATED = "2026-10-01";
+export const API_DOCS_VERSION = "4.1.0";
+export const API_DOCS_UPDATED = "2026-10-19";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-10-19",
+    version: "4.1.0",
+    changes: [
+      "ทะเบียน พจส. อ่านจากทะเบียนของฝ่ายบุคคล (นำเข้า Excel ทะเบียน 2026 + รับเข้าจากหน้าติดตามพนักงานใหม่) แทน `Boom_ETL.main_driver` · `status` ตามทะเบียนนั้น",
+      "`GET /api/drivers/{drivercode}` — เพิ่ม `license.number` · `license.type` · `idCard.number` (เลขบัตร 13 หลัก ตัวเลขล้วน) · `contact.phoneAlt` · `contact.emergency` · พ้นสภาพแล้วเป็น `null` ทั้งกลุ่มตามเดิม (เลขบัญชีธนาคารไม่ออกทาง API)",
+      "เพิ่ม `PATCH /api/drivers/{drivercode}` — แก้ประวัติ ส่งเฉพาะช่องที่เปลี่ยน · ตอบรูปเดียวกับ `GET`",
+    ],
+  },
   {
     date: "2026-10-01",
     version: "4.0.0",
@@ -207,8 +216,29 @@ export const API_GROUPS: ApiGroup[] = [
         access: "login",
         params: [P("drivercode", "รหัส พจส.")],
         response:
-          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone }, license: { expiryDate, daysLeft }, idCard: { expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
+          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
         errors: [{ status: 404, when: "ไม่พบรหัส พจส. ในทะเบียน" }],
+      },
+      {
+        method: "PATCH",
+        path: "/api/drivers/{drivercode}",
+        summary: "แก้ประวัติ พจส.",
+        description:
+          "ส่งเฉพาะช่องที่เปลี่ยน (ค่าว่าง = ล้างช่องนั้น ยกเว้นช่องบังคับ) · ลงประวัติการแก้พร้อมผู้แก้ · ช่องที่แก้แล้วการนำเข้า Excel รอบถัดไปจะไม่ทับ · คนพ้นสภาพแล้วแก้ช่องข้อมูลส่วนบุคคลไม่ได้",
+        access: "login",
+        params: [
+          P("drivercode", "รหัส พจส."),
+          { name: "driverName · ownerType (1–4) · branch · customer · plant · position · vehicleCode · startDate", in: "body", type: "string", desc: "ข้อมูลทะเบียน · วันที่เป็น YYYY-MM-DD" },
+          { name: "phone · phoneAlt", in: "body", type: "string", desc: "เบอร์ 9–10 หลัก · เบอร์อื่นคั่นด้วยจุลภาค" },
+          { name: "licenseNo · licenseType · licenseExpiryDate · nationalId", in: "body", type: "string", desc: "เลขบัตร 13 หลักต้องผ่านหลักตรวจสอบ" },
+          { name: "emergencyContactName · emergencyContactRelation · emergencyContactPhone", in: "body", type: "string", desc: "ผู้ติดต่อฉุกเฉิน" },
+          { name: "bankAccountNo · bankBranch", in: "body", type: "string", desc: "บัญชีกสิกรไทย 10 หลัก · สาขา" },
+        ],
+        response: "รูปเดียวกับ GET /api/drivers/{drivercode}",
+        errors: [
+          { status: 400, when: "ช่องที่แก้ไม่ได้ ค่าไม่ถูกต้อง หรือแก้ข้อมูลส่วนบุคคลของคนที่พ้นสภาพ" },
+          { status: 404, when: "ไม่พบรหัส พจส. ในทะเบียน" },
+        ],
       },
       {
         method: "GET",
@@ -433,6 +463,7 @@ export const API_GROUPS: ApiGroup[] = [
           { name: "hireType", in: "body", type: '"replace" | "new_rate"', required: true, desc: "แทนคนเดิม / อัตราใหม่" },
           { name: "replaceDrivercode", in: "body", type: "string", desc: "พจส. ที่จะแทน (บังคับเมื่อ replace)" },
           { name: "replaceReasonNote", in: "body", type: "string", desc: "รายละเอียดเพิ่มเติม" },
+          { name: "slots", in: "body", type: "{ vehicleCode, trainerDrivercode }[]", desc: "รถ / ครูฝึกรายอัตรา — ช่องที่ i ลงใบที่ i (ไม่ส่ง = ใช้สองช่องข้างล่างทุกใบ)" },
           { name: "vehicleCode / trainerDrivercode / note", in: "body", type: "string", desc: "รถ / ครูฝึก / หมายเหตุ" },
         ],
         response: "Requisition[]",

@@ -138,7 +138,7 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   interview_waiting: "รอผลการสัมภาษณ์",
   interview_passed: "ผ่านการสัมภาษณ์",
   cancelled: "ยกเลิก",
-  training: "เริ่มฝึกงาน",
+  training: "ฝึกงาน",
   working: "ปฏิบัติงาน",
 };
 
@@ -689,8 +689,12 @@ export function sectionTitle(id: SectionId): string {
  * เจอในทะเบียน พจส. (ชื่อ-นามสกุล **หรือ** เบอร์ตรง) → ฝึกงาน = `training` ·
  * ทำงานอยู่ = `working` · พ้นสภาพแล้ว = ไม่นำเข้า · ไม่เจอ → ส่งมาภายใน
  * `recentDays` วัน = `pending_contact` ไม่งั้นไม่นำเข้า
+ *
+ * Sync รอบถัดไป (20 ต.ค. 2026 · Bew): ใบที่ส่งหลังใบล่าสุดที่เคยนำเข้า (`since`) หรือแถวที่วางมาเอง
+ * = ใบใหม่ → `pending_contact` แม้เจอในทะเบียนว่าพ้นสภาพแล้ว (สมัครกลับมาใหม่) · แถวที่ชีตเขียนว่า
+ * แบล็คลิส/Black List = `blacklist` → ใบ “ยกเลิก” ติด Blacklist ไม่ว่าส่งมาเมื่อไหร่
  */
-export type ImportOutcome = "training" | "working" | "pending_contact";
+export type ImportOutcome = "training" | "working" | "pending_contact" | "blacklist";
 
 export type ImportSkipReason =
   /** แถวที่นำเข้าไปแล้วรอบก่อน (เวลาส่ง + เบอร์เดิม) */
@@ -718,6 +722,10 @@ export interface ImportRow {
   driverName: string;
   /** รหัสสถานะล่าสุดจาก ATMS เช่น `A` `ฝ` `ลอ` */
   workStatus: string;
+  /** ใบใหม่ที่ชื่อ/เบอร์ตรงกับคนติด Blacklist — เช่น `DRV-69-0012 สมชาย ใจดี (เบอร์)` */
+  blacklistHit?: string;
+  /** สถานะที่ฝ่ายบุคคลเขียนไว้ในชีต (คอลัมน์ “สถานะสัมภาษณ์”) */
+  sheetStatus?: string;
 }
 
 export interface ImportAnswerStat {
@@ -736,6 +744,8 @@ export interface ImportReport {
   batch: string;
   sheet: string;
   recentDays: number;
+  /** ใบที่ส่งหลังเวลานี้ = ใบใหม่ (ใบล่าสุดที่เคยนำเข้า) · `null` = ทุกแถวที่วางมาเป็นใบใหม่ */
+  since: string | null;
   totalRows: number;
   counts: Record<ImportOutcome, number>;
   skipped: Record<ImportSkipReason, number>;

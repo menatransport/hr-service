@@ -4,13 +4,16 @@ import {
   BadgeCheck,
   Building2,
   CalendarDays,
+  CarFront,
   ClipboardList,
   Hash,
   IdCard,
+  Landmark,
   MapPin,
   MessageSquareText,
   Phone,
   ShieldOff,
+  Siren,
   Truck,
   User,
   UserMinus,
@@ -19,32 +22,37 @@ import type { LucideIcon } from "lucide-react";
 
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
 import { DriverDocumentSlots } from "@/app/recruitment/_components/admin/driver-document-slots";
-import { DriverIdCardExpiry } from "@/app/recruitment/_components/admin/driver-id-card-expiry";
+import { DriverProfileEdit } from "@/app/recruitment/_components/admin/driver-profile-edit";
+import { DriverProfileTabs } from "@/app/recruitment/_components/admin/driver-profile-tabs";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { DriverWorkYear } from "@/app/recruitment/_components/admin/driver-work-year";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
 import {
+  expiryState,
+  formatExpiryGap,
   formatLicenseGap,
   formatTenure,
   formatThaiDate,
+  formatBankAccount,
   formatThaiDateTime,
   isProbation,
+  DRIVER_BANK_NAME,
   licenseState,
+  missingRequiredDocs,
   resignedMediaPurgeDate,
+  type DriverProfileTab,
   type DriverRecord,
 } from "@/app/recruitment/_lib/drivers/types";
+import { formatNationalId } from "@/app/recruitment/_lib/form";
 import { exitTypeLabel } from "@/app/recruitment/_lib/resign-reasons/types";
 
 /**
- * ประวัติคนขับรายคน — **ช่องที่มาจาก ETL อ่านอย่างเดียวทั้งหมด**
+ * ประวัติคนขับรายคน — ประวัติมาจากการนำเข้า Excel ทะเบียน 2026 / หน้าติดตามพนักงานใหม่
  *
- * แก้ได้เฉพาะสามอย่างที่เป็นฟิลด์ของ hr-service เอง ซึ่ง sync ไม่แตะ: รูปประจำตัว
- * สถานะการจ้าง และวันหมดอายุบัตรประชาชน · **อย่าเปิดช่องแก้ให้ฟิลด์อื่น** รอบ sync
- * ถัดไปจะดันกลับเงียบ ๆ แล้วหน้าจอจะโกหกว่าบันทึกไว้แล้ว
+ * **แก้ได้ทุกช่อง** ผ่านปุ่ม “แก้ไขข้อมูล” (`driver-profile-edit.tsx` · ช่องที่แก้แล้วการนำเข้า Excel
+ * รอบหน้าไม่ทับ) · รูปประจำตัว สถานะการจ้าง วันหมดอายุบัตร และแฟ้มเอกสาร มีตัวแก้ของตัวเองในที่
  *
- * ทุกกล่องติด **ป้ายชื่อคอลเลกชันต้นทาง** ไว้มุมขวา (`main_driver` / `vehicles` /
- * `employee_work_status`) — เวลาข้อมูลไม่ตรง ฝ่ายบุคคลชี้ให้ไอทีได้ทันทีว่าต้องไป
- * ตามที่ระบบไหน แทนที่จะแจ้งว่า “ข้อมูลในเว็บผิด” แล้วไล่หากันเอง
+ * ไม่แสดงชื่อคอลเลกชันต้นทางบนหน้าจอ (Bew 19 ต.ค. 2569) — เป็นศัพท์ไอที ผู้ใช้ไม่ได้ใช้
  *
  * **หน้าตาต่างกันสองแบบตามสถานะ** — ดู `DriverProfile` ว่าอะไรถูกซ่อนบ้าง
  * เมื่อคนคนนั้นพ้นสภาพแล้ว
@@ -52,12 +60,21 @@ import { exitTypeLabel } from "@/app/recruitment/_lib/resign-reasons/types";
  * เป็น server component เกือบทั้งก้อน — มีแค่รูปประจำตัวกับปุ่มเปลี่ยนสถานะ
  * ที่เป็น client component
  */
-export function DriverProfile({ driver }: { driver: DriverRecord }) {
+export function DriverProfile({
+  driver,
+  tab = "info",
+}: {
+  driver: DriverRecord;
+  /** แท็บที่เปิดตอนโหลด — จาก `?tab=` */
+  tab?: DriverProfileTab;
+}) {
   const expiry = licenseState(driver.licenseDaysLeft);
+  const idCardState = expiryState(driver.idCardDaysLeft);
+  const idCardTone = idCardState === "expired" ? "alert" : idCardState === "soon" ? "sla" : "mut";
 
   /**
    * พ้นสภาพแล้ว = **ซ่อนข้อมูลส่วนบุคคลที่ไม่มีเหตุให้ใช้ต่อ**
-   * (เบอร์โทรศัพท์ · วันหมดอายุใบขับขี่ · เลขบัตรประชาชนเมื่อระบบมีวันหลัง)
+   * (เบอร์โทรศัพท์ · ใบขับขี่ · บัตรประชาชน · ผู้ติดต่อฉุกเฉิน · บัญชีรับเงิน)
    *
    * เก็บไว้ในฐานข้อมูลเหมือนเดิม แค่ไม่แสดงบนหน้าจอ — ข้อมูลพวกนี้มีไว้ใช้ตอน
    * จ่ายงานกับตามตัว ซึ่งหมดความจำเป็นไปพร้อมกับการพ้นสภาพ · สิ่งที่ยังต้องใช้
@@ -66,18 +83,14 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
    *
    * ถ้าจะเพิ่มฟิลด์ที่เป็นข้อมูลส่วนบุคคลในอนาคต **ต้องมาเพิ่มเงื่อนไขตรงนี้ด้วย**
    */
-  const hidePersonal = !driver.active && !driver.noWorkRecord;
-  const statusText = driver.active
-    ? "ปฏิบัติงานอยู่"
-    : driver.noWorkRecord
-      ? "ไม่มีข้อมูลการทำงาน"
-      : "พ้นสภาพแล้ว";
+  const hidePersonal = !driver.active;
+  const statusText = driver.active ? "ปฏิบัติงานอยู่" : "พ้นสภาพแล้ว";
 
   return (
     <div className="flex flex-col gap-5 animate-rise">
       {/* ทั้งหน้าแบนอยู่บนแผ่นเนื้อหาแผ่นเดียว (13 ต.ค. 2569) — หัวคั่นจากเนื้อหาด้วยเส้นเต็มแผ่น
           แต่ละส่วนข้างล่างคั่นด้วยเส้นบาง ไม่มีการ์ดซ้อน */}
-      <header className="sheet-bleed flex flex-col gap-4 border-b border-line px-(--sheet-px) pt-4 pb-5 sm:pt-5">
+      <header className="sheet-bleed flex flex-col gap-4 px-(--sheet-px) pt-4 sm:pt-5">
         <Link
           href="/recruitment/admin/drivers"
           className="group flex w-fit items-center gap-1.5 text-13 text-mut transition-colors hover:text-primary"
@@ -92,8 +105,7 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
         </Link>
 
         <div className="flex flex-wrap items-center gap-4">
-        {/* กดที่วงรูปเพื่อเพิ่ม/เปลี่ยนรูป — บันทึกลง `master_driver` ของเราเอง
-            ไม่ใช่ `Boom_ETL` จึงไม่หายเมื่อ ETL sync รอบถัดไป */}
+        {/* กดที่วงรูปเพื่อเพิ่ม/เปลี่ยนรูป — บันทึกลง `master_driver` */}
         <DriverAvatar driver={driver} size="xl" />
 
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -130,144 +142,235 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
 
       {hidePersonal ? <ResignPanel driver={driver} /> : null}
 
-      {/* ไม่มี `items-start` โดยตั้งใจ — คอลัมน์ขวา (ช่องแนบเอกสาร) ต้องยืดเท่าแถว
-          แล้วเลื่อนข้างในเอง ไม่งั้นกล่องที่ยาวกว่าจะดันแถวจนฝั่งซ้ายเหลือช่องว่างห้อยท้าย
-          (ดูคอมเมนต์ใน `driver-document-slots.tsx`) */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-0">
-        <div className="flex flex-col gap-6 lg:pr-6">
-          <Section title="ข้อมูลทะเบียน" source="main_driver">
-            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <Field icon={Hash} label="รหัสพนักงานขับรถ" value={driver.drivercode} mono />
-              <Field icon={User} label="ชื่อ – สกุล" value={driver.name} />
-              {hidePersonal ? (
-                <Hidden icon={Phone} label="เบอร์โทรศัพท์" />
-              ) : (
-                <Field
-                  icon={Phone}
-                  label="เบอร์โทรศัพท์"
-                  value={driver.phone}
-                  href={driver.phone ? `tel:${driver.phone.replace(/[^\d+]/g, "")}` : undefined}
-                  mono
-                />
-              )}
-              <Field
-                icon={Building2}
-                label="ประเภทพนักงาน"
-                value={driver.ownerTypeLabel}
-                /* ป้ายที่แปลแล้วกับรหัสดิบไม่ตรงกันเมื่อไร ให้เห็นรหัสดิบด้วย
-                   จะได้ตามกลับไปที่ต้นทางถูก (ดู `OWNER_TYPE_LABELS`) */
+      {/* แบ่งเป็นแท็บ (19 ต.ค. 2569) — ข้อมูลทั่วไป / เอกสาร / ปฏิทิน · แถบเตือนกับข้อมูลพ้นสภาพ
+          อยู่เหนือแท็บ เพราะต้องเห็นไม่ว่าจะเปิดแท็บไหน */}
+      <DriverProfileTabs
+        initial={tab}
+        missingDocs={missingRequiredDocs(driver.documents).length}
+        info={
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-0">
+            <div className="flex flex-col gap-6 lg:pr-6">
+              <Section
+                title="ข้อมูลการจ้าง"
+                action={<DriverProfileEdit driver={driver} scope="info" />}
                 note={
-                  driver.ownerTypeLabel !== driver.ownerType ? `รหัส ${driver.ownerType}` : undefined
-                }
-              />
-              <Field
-                icon={MapPin}
-                label="สาขา"
-                value={driver.siteLabel}
-                note={driver.siteKey ? undefined : `รหัสสาขา ${driver.branch || "ว่าง"}`}
-              />
-              <Field
-                icon={CalendarDays}
-                label="วันเริ่มงาน"
-                value={formatThaiDate(driver.startDateISO, "full")}
-                note={
-                  driver.tenureMonths !== null
-                    ? `อายุงาน ${formatTenure(driver.tenureMonths, driver.tenureDays)}`
+                  driver.profileEditedAt
+                    ? `แก้ไขล่าสุด ${formatThaiDateTime(driver.profileEditedAt)}${
+                        driver.profileEditedBy ? ` · ${driver.profileEditedBy}` : ""
+                      }`
                     : undefined
                 }
-                noteTone={isProbation(driver.tenureMonths) ? "primary" : "mut"}
-              />
-              {hidePersonal ? (
-                <Hidden icon={IdCard} label="ใบขับขี่หมดอายุ" />
-              ) : (
-                <Field
-                  icon={IdCard}
-                  label="ใบขับขี่หมดอายุ"
-                  value={formatThaiDate(driver.licenseExpiryISO, "full")}
-                  note={
-                    driver.licenseExpiryISO ? formatLicenseGap(driver.licenseDaysLeft) : undefined
-                  }
-                  noteTone={expiry === "expired" ? "alert" : expiry === "soon" ? "sla" : "mut"}
-                />
-              )}
-              {/* บัตรประชาชนเป็นช่องเดียวในกล่องนี้ที่กรอกเองได้ — ไม่มีใน ETL
-                  (ดูหัวไฟล์ `driver-id-card-expiry.tsx`) · ซ่อนตามกติกาเดียวกับ
-                  ใบขับขี่เมื่อพ้นสภาพแล้ว ไม่งั้นเปิดช่องให้แก้ข้อมูลส่วนบุคคล
-                  ของคนที่ไม่ได้ทำงานแล้ว */}
-              {hidePersonal ? (
-                <Hidden icon={IdCard} label="บัตรประชาชนหมดอายุ" />
-              ) : (
-                <DriverIdCardExpiry driver={driver} />
-              )}
-              <Field
-                icon={BadgeCheck}
-                label="สถานะในทะเบียน"
-                value={statusText}
-                note={
-                  driver.resignation
-                    ? `พ้นสภาพ ${formatThaiDate(driver.resignation.dateISO)}`
-                    : undefined
-                }
-              />
-            </dl>
-          </Section>
+              >
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  <Field icon={Hash} label="รหัสพนักงานขับรถ" value={driver.drivercode} mono />
+                  <Field icon={User} label="ชื่อ – สกุล" value={driver.name} />
+                  <Field
+                    icon={Building2}
+                    label="ประเภทพนักงาน"
+                    value={driver.ownerTypeLabel}
+                    /* ป้ายที่แปลแล้วกับรหัสดิบไม่ตรงกันเมื่อไร ให้เห็นรหัสดิบด้วย
+                       จะได้ตามกลับไปที่ต้นทางถูก (ดู `OWNER_TYPE_LABELS`) */
+                    note={
+                      driver.ownerTypeLabel !== driver.ownerType ? `รหัส ${driver.ownerType}` : undefined
+                    }
+                  />
+                  <Field
+                    icon={BadgeCheck}
+                    label="สถานะในทะเบียน"
+                    value={statusText}
+                    note={
+                      driver.resignation
+                        ? `พ้นสภาพ ${formatThaiDate(driver.resignation.dateISO)}`
+                        : undefined
+                    }
+                  />
+                  <Field
+                    icon={MapPin}
+                    label="สาขา"
+                    value={driver.siteLabel}
+                    note={driver.siteKey ? undefined : `รหัสสาขา ${driver.branch || "ว่าง"}`}
+                  />
+                  <Field
+                    icon={CalendarDays}
+                    label="วันเริ่มงาน"
+                    value={formatThaiDate(driver.startDateISO, "full")}
+                    note={
+                      driver.tenureMonths !== null
+                        ? `อายุงาน ${formatTenure(driver.tenureMonths, driver.tenureDays)}`
+                        : undefined
+                    }
+                    noteTone={isProbation(driver.tenureMonths) ? "primary" : "mut"}
+                  />
+                  <Field icon={Building2} label="ลูกค้า" value={driver.customer} />
+                  <Field
+                    icon={MapPin}
+                    label="แพล้นท์"
+                    value={driver.plant}
+                    note={driver.position || undefined}
+                  />
+                </dl>
+              </Section>
 
-          <Section title="รถที่ประจำการ" source="vehicles">
-            {driver.vehicle ? (
-              <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                <Field icon={Hash} label="เลขรถ" value={driver.vehicle.code} mono />
-                <Field icon={Truck} label="ทะเบียนรถ" value={driver.vehicle.plateNo} mono />
-                <Field
-                  icon={Truck}
-                  label="ประเภทรถ"
-                  value={driver.vehicle.vehicleType}
-                  note={driver.vehicle.mix ?? undefined}
-                />
-                <Field
-                  icon={Truck}
-                  label="ยี่ห้อ / รุ่น"
-                  value={[driver.vehicle.brand, driver.vehicle.model].filter(Boolean).join(" / ")}
-                />
-                <Field icon={Building2} label="ลูกค้า" value={driver.vehicle.fleet} />
-                <Field icon={MapPin} label="แพล้นท์" value={driver.vehicle.plant} />
-              </dl>
-            ) : (
-              <Blank>
-                {driver.vehicleRef
-                  ? `ทะเบียนรถไม่มีรายการ “${driver.vehicleRef}” — รถอาจถูกถอนออกจากทะเบียนแล้ว`
-                  : "ยังไม่ได้ประจำรถคันใด"}
-              </Blank>
-            )}
-          </Section>
-        </div>
+            </div>
+            <div className="flex flex-col gap-6 border-t border-line pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+              <Section title="ช่องทางติดต่อ">
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  {hidePersonal ? (
+                    <>
+                      <Hidden icon={Phone} label="เบอร์โทรศัพท์" />
+                      <Hidden icon={Siren} label="ผู้ติดต่อฉุกเฉิน" />
+                    </>
+                  ) : (
+                    <>
+                      <Field
+                        icon={Phone}
+                        label="เบอร์โทรศัพท์"
+                        value={driver.phone}
+                        href={driver.phone ? `tel:${driver.phone.replace(/[^\d+]/g, "")}` : undefined}
+                        note={driver.phoneAlt ? `เบอร์อื่น ${driver.phoneAlt}` : undefined}
+                        mono
+                      />
+                      {/* ชื่อกับเบอร์ผู้ติดต่อฉุกเฉินอยู่ช่องเดียวกัน — ไม่ต้องไล่หาสองที่ */}
+                      <Field
+                        icon={Siren}
+                        label="ผู้ติดต่อฉุกเฉิน"
+                        value={[
+                          driver.emergencyContactName,
+                          driver.emergencyContactRelation ? `(${driver.emergencyContactRelation})` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        note={driver.emergencyContactPhone || undefined}
+                        noteHref={
+                          driver.emergencyContactPhone
+                            ? `tel:${driver.emergencyContactPhone.replace(/[^\d+]/g, "")}`
+                            : undefined
+                        }
+                      />
+                    </>
+                  )}
+                </dl>
+              </Section>
 
-        {/* คอลัมน์ขวา — ช่องแนบเอกสาร ต่อที่เก็บจริงแล้ว · บัตรประชาชน/ใบขับขี่สแกน
-            วันหมดอายุตอนแนบ (ดูหัวไฟล์ `driver-document-slots.tsx`) */}
-        <DriverDocumentSlots driver={driver} hidePersonal={hidePersonal} />
-      </div>
 
-      {/* ปฏิทินอยู่นอก grid สองคอลัมน์ — ปฏิทินรายวันต้องการความกว้างเต็มหน้า
-          ช่องวันถึงจะใหญ่พอใส่ทั้งวันที่และรหัสสถานะให้อ่านออก */}
-      {driver.work ? (
-        <DriverWorkYear driver={driver} work={driver.work} />
-      ) : (
-        <section className="flex flex-col gap-2 border-t border-line pt-6">
-          <div className="flex items-center gap-2.5">
-            <CalendarDays size={16} strokeWidth={1.8} aria-hidden className="text-mut" />
-            <h2 className="text-14 font-semibold">ปฏิทินการทำงาน</h2>
-            <span className="rounded-full border border-line px-2 py-0.5 font-mono text-10-5 text-mut">
-              employee_work_status
-            </span>
+              <Section title="รถที่ประจำการ">
+                {driver.vehicle ? (
+                  <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <Field icon={Hash} label="เลขรถ" value={driver.vehicle.code} mono />
+                    <Field icon={Truck} label="ทะเบียนรถ" value={driver.vehicle.plateNo} mono />
+                    <Field
+                      icon={Truck}
+                      label="ประเภทรถ"
+                      value={driver.vehicle.vehicleType}
+                      note={driver.vehicle.mix ?? undefined}
+                    />
+                    <Field
+                      icon={Truck}
+                      label="ยี่ห้อ / รุ่น"
+                      value={[driver.vehicle.brand, driver.vehicle.model].filter(Boolean).join(" / ")}
+                    />
+                    <Field icon={Building2} label="กลุ่มรถ (ETL)" value={driver.vehicle.fleet} />
+                    <Field icon={MapPin} label="แพล้นท์ของรถ (ETL)" value={driver.vehicle.plant} />
+                  </dl>
+                ) : (
+                  <Blank>
+                    {driver.vehicleRef
+                      ? `ทะเบียนรถไม่มีรายการ “${driver.vehicleRef}” — รถอาจถูกถอนออกจากทะเบียนแล้ว`
+                      : "ยังไม่ได้ประจำรถคันใด"}
+                  </Blank>
+                )}
+              </Section>
+            </div>
           </div>
-          <Blank>ไม่พบบันทึกสถานะการทำงานของรหัสนี้</Blank>
-          <p className="text-11-5 text-mut">
-            วันเริ่มงาน {formatThaiDate(driver.startDateISO, "full") || "ไม่มีข้อมูล"}
-            {driver.tenureMonths !== null
-              ? ` · อายุงาน ${formatTenure(driver.tenureMonths, driver.tenureDays)}`
-              : ""}
-          </p>
-        </section>
-      )}
+        }
+        docs={
+          <div className="flex flex-col gap-6">
+            {/* แก้ทุกช่องรวมวันหมดอายุผ่านปุ่ม “แก้ไข” ที่เดียว · ซ่อนข้อมูลส่วนบุคคลเมื่อพ้นสภาพแล้ว */}
+            <Section
+              title="เอกสารประจำตัว · บัญชีรับเงิน"
+              action={<DriverProfileEdit driver={driver} scope="docs" />}
+            >
+              <div className="flex flex-col divide-y divide-line">
+                <DocGroup icon={IdCard} title="บัตรประชาชน">
+                  {hidePersonal ? (
+                    <Hidden label="เลขบัตรประชาชน" />
+                  ) : (
+                    <>
+                      <Field
+                        label="เลขบัตรประชาชน"
+                        value={driver.nationalId ? formatNationalId(driver.nationalId) : ""}
+                        mono
+                      />
+                      <Field
+                        label="วันหมดอายุ"
+                        value={formatThaiDate(driver.idCardExpiryISO, "full")}
+                        note={driver.idCardExpiryISO ? formatExpiryGap(driver.idCardDaysLeft) : undefined}
+                        noteTone={idCardTone}
+                      />
+                    </>
+                  )}
+                </DocGroup>
+
+                <DocGroup
+                  icon={CarFront}
+                  title="ใบขับขี่"
+                  badge={!hidePersonal && driver.licenseType ? `ชนิด ${driver.licenseType}` : undefined}
+                >
+                  {hidePersonal ? (
+                    <Hidden label="เลขที่ใบขับขี่" />
+                  ) : (
+                    <>
+                      <Field label="เลขที่ใบขับขี่" value={driver.licenseNo} mono />
+                      <Field
+                        label="วันหมดอายุ"
+                        value={formatThaiDate(driver.licenseExpiryISO, "full")}
+                        note={
+                          driver.licenseExpiryISO ? formatLicenseGap(driver.licenseDaysLeft) : undefined
+                        }
+                        noteTone={expiry === "expired" ? "alert" : expiry === "soon" ? "sla" : "mut"}
+                      />
+                    </>
+                  )}
+                </DocGroup>
+
+                <DocGroup icon={Landmark} title={`บัญชี${DRIVER_BANK_NAME}`}>
+                  {hidePersonal ? (
+                    <Hidden label="เลขที่บัญชี" />
+                  ) : (
+                    <>
+                      <Field
+                        label="เลขที่บัญชี"
+                        value={driver.bankAccountNo ? formatBankAccount(driver.bankAccountNo) : ""}
+                        mono
+                      />
+                      <Field label="สาขาธนาคาร" value={driver.bankBranch} />
+                    </>
+                  )}
+                </DocGroup>
+              </div>
+            </Section>
+
+            <div className="border-t border-line pt-6">
+              <DriverDocumentSlots driver={driver} hidePersonal={hidePersonal} />
+            </div>
+          </div>
+        }
+        work={
+          driver.work ? (
+            <DriverWorkYear driver={driver} work={driver.work} />
+          ) : (
+            <section className="flex flex-col gap-2">
+              <Blank>ไม่พบบันทึกสถานะการทำงานของรหัสนี้</Blank>
+              <p className="text-11-5 text-mut">
+                วันเริ่มงาน {formatThaiDate(driver.startDateISO, "full") || "ไม่มีข้อมูล"}
+                {driver.tenureMonths !== null
+                  ? ` · อายุงาน ${formatTenure(driver.tenureMonths, driver.tenureDays)}`
+                  : ""}
+              </p>
+            </section>
+          )
+        }
+      />
     </div>
   );
 }
@@ -276,24 +379,25 @@ export function DriverProfile({ driver }: { driver: DriverRecord }) {
 
 function Section({
   title,
-  source,
+  action,
+  note,
   children,
 }: {
   title: string;
-  /** ชื่อคอลเลกชันต้นทางของข้อมูลในกล่องนี้ */
-  source: string;
+  /** ปุ่มท้ายหัวกล่อง เช่น “แก้ไขข้อมูล” */
+  action?: React.ReactNode;
+  /** บรรทัดเล็กใต้หัวกล่อง */
+  note?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-4 border-t border-line pt-6 first:border-t-0 first:pt-0">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-14 font-semibold">{title}</h2>
-        <span
-          title="คอลเลกชันต้นทางของข้อมูลในกล่องนี้"
-          className="flex-none rounded-full border border-line px-2 py-0.5 font-mono text-10-5 text-mut"
-        >
-          {source}
-        </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-14 font-semibold">{title}</h2>
+          {action ? <div className="flex flex-none items-center gap-2">{action}</div> : null}
+        </div>
+        {note ? <p className="text-11-5 text-mut">{note}</p> : null}
       </div>
       {children}
     </section>
@@ -307,14 +411,18 @@ function Field({
   note,
   noteTone = "mut",
   href,
+  noteHref,
   mono,
 }: {
-  icon: LucideIcon;
+  /** ไม่ใส่ = ไม่มีไอคอนหน้าช่อง (ช่องในกลุ่มเอกสาร — หัวกลุ่มมีไอคอนแล้ว) */
+  icon?: LucideIcon;
   label: string;
   value: string;
   note?: string;
   noteTone?: "mut" | "sla" | "alert" | "primary";
   href?: string;
+  /** ลิงก์ของบรรทัดรอง เช่น เบอร์ผู้ติดต่อฉุกเฉิน */
+  noteHref?: string;
   mono?: boolean;
 }) {
   const tone =
@@ -335,7 +443,9 @@ function Field({
 
   return (
     <div className="flex min-w-0 gap-2.5">
-      <Icon size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
+      {Icon ? (
+        <Icon size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
+      ) : null}
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-11-5 text-mut">{label}</dt>
         <dd className="m-0 flex flex-col gap-0.5">
@@ -346,9 +456,53 @@ function Field({
           ) : (
             body
           )}
-          {note ? <span className={`text-11-5 ${tone}`}>{note}</span> : null}
+          {note ? (
+            noteHref ? (
+              <a
+                href={noteHref}
+                className={`w-fit font-mono text-12 transition-colors hover:text-primary ${tone}`}
+              >
+                {note}
+              </a>
+            ) : (
+              <span className={`text-11-5 ${tone}`}>{note}</span>
+            )
+          ) : null}
         </dd>
       </div>
+    </div>
+  );
+}
+
+/**
+ * เอกสารหนึ่งใบ = หนึ่งแถว — หัวแถว (ไอคอน + ชื่อเอกสาร) ซ้าย ช่องของใบนั้นขวา
+ * ช่องในแถวจึงตั้งชื่อสั้นได้ (“วันหมดอายุ”) เพราะหัวแถวบอกแล้วว่าของใบไหน
+ * จอเล็ก = หัวแถวขึ้นบรรทัดบน ช่องเรียงลงมา
+ */
+function DocGroup({
+  icon: Icon,
+  title,
+  badge,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  /** บรรทัดเล็กใต้ชื่อเอกสาร เช่น ชนิดใบขับขี่ */
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-6">
+      <div className="flex items-start gap-2.5">
+        <span className="flex size-8 flex-none items-center justify-center rounded-field bg-primary/10 text-primary">
+          <Icon size={15} strokeWidth={1.8} aria-hidden />
+        </span>
+        <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">
+          <h3 className="text-13 font-semibold leading-tight">{title}</h3>
+          {badge ? <span className="text-11-5 text-mut">{badge}</span> : null}
+        </div>
+      </div>
+      <dl className="grid gap-x-10 gap-y-3 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">{children}</dl>
     </div>
   );
 }
@@ -377,10 +531,12 @@ function Blank({ children }: { children: React.ReactNode }) {
  * อ่านได้ว่า “ระบบไม่เคยมีข้อมูลนี้” ซึ่งไม่จริง และคนที่ต้องใช้จริงจะไม่รู้ว่า
  * ต้องไปขอจากใคร
  */
-function Hidden({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+function Hidden({ icon: Icon, label }: { icon?: LucideIcon; label: string }) {
   return (
     <div className="flex min-w-0 gap-2.5">
-      <Icon size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
+      {Icon ? (
+        <Icon size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
+      ) : null}
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-11-5 text-mut">{label}</dt>
         <dd className="m-0 flex items-center gap-1.5">
@@ -424,9 +580,6 @@ function ResignPanel({ driver }: { driver: DriverRecord }) {
       <div className="flex items-center gap-2.5">
         <UserMinus size={16} strokeWidth={1.8} aria-hidden className="flex-none text-mut" />
         <h2 className="text-14 font-semibold">ข้อมูลการพ้นสภาพ</h2>
-        <span className="rounded-full border border-line bg-base-100 px-2 py-0.5 font-mono text-10-5 text-mut">
-          hr_service
-        </span>
         {/* ใบลาออก + แบบสอบถามลาออก เติมจากข้อมูลชุดนี้ */}
         <span className="ml-auto">
           <ResignDocumentsButton driver={driver} variant="label" />

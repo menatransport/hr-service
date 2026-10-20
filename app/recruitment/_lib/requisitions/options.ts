@@ -7,6 +7,7 @@ import {
   readApplicationsWithSnapshot,
 } from "@/app/recruitment/_lib/applications";
 import { LINKABLE_STATUSES } from "./types";
+import { getRepairStatuses, type RepairStatus } from "./repair-status";
 
 /**
  * ตัวเลือกของดรอปดาวน์ในหน้าขอสรรหา — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
@@ -41,6 +42,8 @@ export interface DriverOption extends PickOption {
 export interface VehicleOption extends PickOption {
   plate?: string;
   brand?: string;
+  /** ประเภทรถ เช่น “Mixer 10 ล้อ” — ขึ้นในขั้นยานยนต์ของเส้นทาง พจส.ใหม่ */
+  type?: string;
   plant?: string;
   customer?: string;
   position?: string;
@@ -53,6 +56,8 @@ export interface RequisitionOptions {
   plants: PickOption[];
   /** ใบสมัครที่ผูกกับอัตราได้ — ทุกสถานะยกเว้นยกเลิก (ดู `LINKABLE_STATUSES`) */
   candidates: PickOption[];
+  /** ทะเบียน → สถานะซ่อมปัจจุบัน **เฉพาะคันที่ไม่ปกติ** (ดู `repair-status.ts`) */
+  repairs: Record<string, RepairStatus>;
   /**
    * อ่านชุดไหนไม่สำเร็จบ้าง — หน้าจอขึ้นแถบเตือนแล้ว**ยังใช้งานต่อได้**
    * คำขอที่บันทึกไว้แล้วไม่ได้ขึ้นกับตัวเลือกพวกนี้เลย
@@ -65,6 +70,7 @@ const EMPTY: RequisitionOptions = {
   vehicles: [],
   plants: [],
   candidates: [],
+  repairs: {},
   failed: [],
 };
 
@@ -77,7 +83,7 @@ const EMPTY: RequisitionOptions = {
 const THAI_ORDER = new Intl.Collator("th", { numeric: true });
 const thai = (a: PickOption, b: PickOption) => THAI_ORDER.compare(a.label, b.label);
 
-async function loadDrivers(): Promise<DriverOption[]> {
+export async function loadDrivers(): Promise<DriverOption[]> {
   const docs = await readDrivers<{
     drivercode?: string;
     driverName?: string;
@@ -130,18 +136,19 @@ function fromFleet(fleet: string): { customer?: string; position?: string } {
   return { ...(customer ? { customer } : {}), ...(position ? { position } : {}) };
 }
 
-async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plants: PickOption[] }> {
+export async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plants: PickOption[] }> {
   const vehicleCol = await etlCol<{
     code?: string;
     plate_no?: string;
     brand?: string;
     plant?: string;
     fleet?: string;
+    vehicle_type?: string;
   }>("vehicles");
   const docs = await vehicleCol
     .find(
       { active: true },
-      { projection: { code: 1, plate_no: 1, brand: 1, plant: 1, fleet: 1 } },
+      { projection: { code: 1, plate_no: 1, brand: 1, plant: 1, fleet: 1, vehicle_type: 1 } },
     )
     .toArray();
 
@@ -161,6 +168,7 @@ async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plants: Pick
         label: code ? `${code} — ${rest}` : rest,
         plate,
         brand: (v.brand ?? "").trim(),
+        ...((v.vehicle_type ?? "").trim() ? { type: (v.vehicle_type ?? "").trim() } : {}),
         ...(plant && plant !== "Unknown" ? { plant } : {}),
         ...fromFleet(v.fleet ?? ""),
       };
@@ -201,10 +209,11 @@ async function loadCandidates(): Promise<PickOption[]> {
  * โหลดหน้าฟรี ๆ · ชุดที่พังไม่ลากชุดที่เหลือลงไปด้วย (`allSettled`)
  */
 export async function getRequisitionOptions(): Promise<RequisitionOptions> {
-  const [drivers, vehicles, candidates] = await Promise.allSettled([
+  const [drivers, vehicles, candidates, repairs] = await Promise.allSettled([
     loadDrivers(),
     loadVehicles(),
     loadCandidates(),
+    getRepairStatuses(),
   ]);
 
   const failed: string[] = [];
@@ -218,6 +227,8 @@ export async function getRequisitionOptions(): Promise<RequisitionOptions> {
     vehicles: vehicles.status === "fulfilled" ? vehicles.value.vehicles : [],
     plants: vehicles.status === "fulfilled" ? vehicles.value.plants : [],
     candidates: candidates.status === "fulfilled" ? candidates.value : [],
+    /* อ่านสถานะซ่อมไม่ได้ = ทุกคันขึ้นเป็นปกติ ไม่ใช่เรื่องที่ต้องขึ้นแถบเตือน */
+    repairs: repairs.status === "fulfilled" ? repairs.value : {},
     failed,
   };
 }

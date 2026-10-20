@@ -16,12 +16,10 @@ import {
 } from "@/app/recruitment/_lib/drivers/types";
 
 /**
- * ช่อง “บัตรประชาชนหมดอายุ” บนหน้าประวัติ — **ช่องเดียวในกล่องนั้นที่แก้ได้**
+ * ช่อง “บัตรประชาชนหมดอายุ” บนหน้าประวัติ — แก้ในที่ได้ (ช่องอื่นแก้ผ่านปุ่ม “แก้ไขข้อมูล”)
  *
- * ทุกช่องข้าง ๆ มาจาก `Boom_ETL.main_driver` ซึ่ง sync ทับเป็นรอบ จึงอ่านอย่างเดียว
- * แต่วันหมดอายุบัตรประชาชน **ไม่มีอยู่ในต้นทางเลย** (ETL ส่งมาแค่ `driver_expiry_date`
- * ของใบขับขี่) ถ้าไม่มีที่ให้กรอก ครึ่งหนึ่งของศูนย์เอกสารจะว่างไปตลอดกาล
- * — เหตุผลเต็มอยู่ที่ `setDriverIdCardExpiry()` ใน `lib/drivers/registry.ts`
+ * แยกตัวแก้ไว้เพราะมีปุ่มอ่านจากรูปบัตร และเก็บผู้กรอกไว้ที่ `idCardExpiryUpdatedBy`
+ * (ตัวนำเข้า Excel ไม่ทับค่าที่กรอกที่นี่) — ดู `setDriverIdCardExpiry()` ใน `lib/drivers/registry.ts`
  *
  * กดดินสอแล้ว **ช่องอ่านสลับเป็นช่องกรอกในที่เดิม** ไม่ใช่เปิดกล่องลอย — ของที่
  * แก้คือวันที่เดียว การเปิดโมดัลทั้งใบเพื่อกรอกช่องเดียวคือสองคลิกที่ไม่ได้ให้อะไร
@@ -33,7 +31,16 @@ import {
  * ปุ่ม “อ่านจากรูปบัตร” ถ่าย/เลือกรูปบัตรแล้วอ่านวันหมดอายุด้วย `id-card-ocr.ts`
  * (อ่านในเบราว์เซอร์ รูปไม่ถูกเก็บที่ไหน) — ผลแค่เติมลงช่องกรอก **ยังต้องกดบันทึกเอง**
  */
-export function DriverIdCardExpiry({ driver }: { driver: DriverRecord }) {
+export function DriverIdCardExpiry({
+  driver,
+  label = "บัตรประชาชนหมดอายุ",
+  bare = false,
+}: {
+  driver: DriverRecord;
+  label?: string;
+  /** ไม่วาดไอคอนหน้าช่อง — ใช้ในกลุ่มเอกสารที่หัวกลุ่มมีไอคอนแล้ว */
+  bare?: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(driver.idCardExpiryISO);
@@ -124,11 +131,13 @@ export function DriverIdCardExpiry({ driver }: { driver: DriverRecord }) {
 
   return (
     <div className="flex min-w-0 gap-2.5">
-      <IdCard size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
+      {bare ? null : (
+        <IdCard size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
+      )}
 
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <dt className="flex items-center gap-1.5 text-11-5 text-mut">
-          บัตรประชาชนหมดอายุ
+          {label}
           <button
             type="button"
             onClick={() => picker.current?.click()}

@@ -4,7 +4,7 @@ import ExcelJS from "exceljs";
 import { etlCol, hrCol } from "@/lib/db";
 import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { nextSeq } from "@/lib/db/counters";
-import { snapshotOf } from "./applications";
+import { listBlacklist, snapshotOf } from "./applications";
 import { EXIT_STATUS_CODES, workStatusFullLabel } from "./drivers/types";
 import {
   composeName,
@@ -13,8 +13,9 @@ import {
   isValidThaiNationalId,
   validateDocumentField,
 } from "./form";
-import { listActiveQuestions } from "./questions";
-import { nameKey } from "./types";
+import { FORM_SHEET_HEADERS } from "./form-sheet-headers";
+import { listActiveQuestions, RecruitmentError } from "./questions";
+import { findBlacklistHit, nameKey, OTHER_EXIT_REASON, EXIT_REASON_NOTE_MAX } from "./types";
 import {
   DOCUMENT_FIELDS,
   EMPTY_DOCUMENT_DATA,
@@ -22,6 +23,8 @@ import {
   EMPTY_INTERVIEW,
   type AnswerMap,
   type AnswerValue,
+  type BlacklistEntry,
+  type BlacklistHit,
   type ApplicationFile,
   type ApplicationStatus,
   type ConsentRecord,
@@ -67,6 +70,12 @@ const DUPLICATE_BLOCKING_STATUSES = new Set([
 ]);
 const DUPLICATE_WINDOW_DAYS = 30;
 const TRAINING_WINDOW_DAYS = 30;
+/** คอลัมน์ “สถานะสัมภาษณ์” ของชีตเขียนว่า `แบล็คลิส(นัดเริ่มงานหลายรอบไม่มา)` / `❌ Black List (พจส.เก่า)` */
+const BLACKLIST_RE = /แบล็[คก]|black\s*-?\s*list/i;
+const MAX_PASTE_ROWS = 2_000;
+
+/** ที่มาของแถว — ไฟล์ .xlsx (อัป/ชี้ path) หรือข้อความที่คัดลอกแถวจากชีตมาวาง */
+export type ImportSource = { buffer: Buffer | ArrayBuffer } | { text: string };
 
 /* ------------------------------------------------------------------ ข้อความ/ตัวเลข */
 
@@ -755,6 +764,8 @@ interface ImportedApplicationDoc {
 
 interface ParsedRow {
   row: number;
+  /** คอลัมน์ “สถานะสัมภาษณ์” ที่ฝ่ายบุคคลเขียนไว้ในชีต */
+  sheetStatus: string;
   submittedAtISO: string;
   submittedBkkKey: string;
   bkkYy: string;
@@ -820,6 +831,97 @@ async function loadWorksheet(buffer: Buffer | ArrayBuffer): Promise<ExcelJS.Work
   );
 }
 
+/** ข้อความที่คัดลอกจาก Google Sheets/Excel — คั่นแท็บ · เซลล์ที่มีขึ้นบรรทัด/เครื่องหมายคำพูดถูกครอบด้วย `"…"` */
+function parseTsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch !== '"') cell += ch;
+      else if (text[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else quoted = false;
+    } else if (ch === '"' && cell === "") quoted = true;
+    else if (ch === "\t") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else cell += ch;
+  }
+  if (cell || row.length) rows.push([...row, cell]);
+  return rows.filter((r) => r.some((c) => c.trim()));
+}
+
+/**
+ * “ประทับเวลา” ที่คัดลอกมาเป็นข้อความ เช่น `20/10/2026 12:29:30` · `20/10/2569, 12:29` · `2026-10-20 12:29:30`
+ * → `Date` แบบเดียวกับที่ exceljs คืน (ฟิลด์ UTC = เวลาตามผนังกรุงเทพฯ ดู `timestampInstant()`)
+ * · วัน/เดือน ตามแบบไทย — สลับเป็น เดือน/วัน เฉพาะเมื่อเลขตัวที่สองเกิน 12
+ */
+function parseTimestampText(raw: string): Date | null {
+  const s = normalizeText(raw);
+  let y: number;
+  let mo: number;
+  let d: number;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?/.exec(s);
+  if (m) [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  else {
+    m = /^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?/.exec(s);
+    if (!m) return null;
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    y = Number(m[3]);
+    [d, mo] = b > 12 ? [b, a] : [a, b];
+  }
+  if (y > 2400) y -= 543;
+  let hh = Number(m[4]);
+  if (/pm/i.test(s) && hh < 12) hh += 12;
+  if (/am/i.test(s) && hh === 12) hh = 0;
+  const [mi, ss, ms] = [Number(m[5]), Number(m[6] ?? 0), Number((m[7] ?? "0").padEnd(3, "0"))];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || hh > 23 || mi > 59 || ss > 59) return null;
+  return new Date(Date.UTC(y, mo - 1, d, hh, mi, ss, ms));
+}
+
+/**
+ * แถวที่วางมา → ชีตในหน่วยความจำ ให้ตัวอ่านแถวเดิมทำงานต่อได้ทั้งหมด · แถวแรกมี “ประทับเวลา” = หัวตาราง
+ * ไม่มี = ใช้ลำดับคอลัมน์ของชีตจริง (`FORM_SHEET_HEADERS` — ต้องคัดลอกทั้งแถวเริ่มคอลัมน์ A)
+ */
+function worksheetFromText(text: string): ExcelJS.Worksheet {
+  const lines = parseTsv(text);
+  if (!lines.length) throw new RecruitmentError("ไม่พบข้อมูลที่วางมา");
+
+  const hasHeader = lines[0].some((c) => normalizeText(c) === "ประทับเวลา");
+  const headers = hasHeader ? lines[0] : [...FORM_SHEET_HEADERS];
+  const body = hasHeader ? lines.slice(1) : lines;
+  if (body.length > MAX_PASTE_ROWS) throw new RecruitmentError(`วางได้ครั้งละไม่เกิน ${MAX_PASTE_ROWS.toLocaleString("th-TH")} แถว`);
+
+  const tsIdx = headers.findIndex((h) => normalizeText(h) === "ประทับเวลา");
+  const stamps = body.map((cells) => parseTimestampText(cells[tsIdx] ?? ""));
+  if (!stamps.some(Boolean)) {
+    throw new RecruitmentError(
+      hasHeader
+        ? "อ่านคอลัมน์ “ประทับเวลา” ไม่ได้สักแถว"
+        : "อ่านคอลัมน์ “ประทับเวลา” ไม่ได้ — คัดลอกทั้งแถวเริ่มคอลัมน์ A หรือคัดลอกแถวหัวตารางมาด้วย",
+    );
+  }
+
+  const ws = new ExcelJS.Workbook().addWorksheet("วางจาก Excel");
+  ws.addRow(headers);
+  body.forEach((cells, i) => {
+    const values: unknown[] = cells.map((c) => (c.trim() ? c : null));
+    values[tsIdx] = stamps[i] ?? (cells[tsIdx]?.trim() || null);
+    ws.addRow(values);
+  });
+  return ws;
+}
+
 function readHeaders(ws: ExcelJS.Worksheet): { headers: ExcelHeader[]; originalText: Map<number, string> } {
   const headers: ExcelHeader[] = [];
   const originalText = new Map<number, string>();
@@ -870,6 +972,7 @@ interface ColumnMap {
   workZoneCol: number | null;
   readyDateCol: number | null;
   hrContactCol: number | null;
+  sheetStatusCol: number | null;
 }
 
 function buildColumnMap(headers: ExcelHeader[], questions: Question[], counters: Counters): ColumnMap {
@@ -926,6 +1029,7 @@ function buildColumnMap(headers: ExcelHeader[], questions: Question[], counters:
     workZoneCol: findCol(headers, ["สนใจทำงานเขตไหน"]),
     readyDateCol: findCol(headers, ["เริ่มงานได้วันที่"]),
     hrContactCol: findCol(headers, ["ติดต่อเจ้าหน้าที่ฝ่ายบุคคล"]),
+    sheetStatusCol: findColExact(headers, "สถานะสัมภาษณ์"),
   };
 }
 
@@ -1156,6 +1260,7 @@ function parseRow(
 
   return {
     row: rowNumber,
+    sheetStatus: cols.sheetStatusCol ? cellText(row.getCell(cols.sheetStatusCol).value) : "",
     submittedAtISO,
     submittedBkkKey,
     bkkYy,
@@ -1178,23 +1283,58 @@ function parseRow(
 
 interface BuildResult {
   report: ImportReport;
-  toInsert: { parsed: ParsedRow; outcome: ImportOutcome; driver: DriverLite | null; matchedBy: MatchedBy }[];
+  toInsert: {
+    parsed: ParsedRow;
+    outcome: ImportOutcome;
+    driver: DriverLite | null;
+    matchedBy: MatchedBy;
+    hit?: BlacklistHit & { row?: number };
+  }[];
+}
+
+/**
+ * เส้นแบ่ง “ใบใหม่” — `createdAt` ของใบล่าสุดที่เคยนำเข้าจากฟอร์ม (Sync ครั้งก่อน) · ยังไม่เคยนำเข้าเลย
+ * = ย้อนหลัง `recentDays` วัน · แถวที่วางมาเองถือเป็นใบใหม่ทุกแถว (`null`)
+ */
+async function resolveSince(source: ImportSource, recentDays: number, now: Date): Promise<string | null> {
+  if ("text" in source) return null;
+  const col = await hrCol("applications");
+  const last = await col
+    .find({ importKey: { $exists: true, $ne: "" } }, { projection: { createdAt: 1 } })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .next();
+  return typeof last?.createdAt === "string"
+    ? last.createdAt
+    : new Date(now.getTime() - recentDays * 86_400_000).toISOString();
+}
+
+/** สถานะในชีต → หมายเหตุเหตุผลที่ยกเลิก (ตัดอีโมจิ/ช่องว่างหัวท้าย) */
+function blacklistNote(sheetStatus: string): string {
+  return sheetStatus.replace(/^[^\p{L}\p{N}]+/u, "").trim().slice(0, EXIT_REASON_NOTE_MAX) || "Blacklist";
+}
+
+function describeHit(hit: BlacklistHit): string {
+  return `${hit.ref} ${hit.fullName} (${hit.by.map((b) => (b === "phone" ? "เบอร์" : "ชื่อ")).join("+")})`;
 }
 
 async function buildImport(
-  buffer: Buffer | ArrayBuffer,
+  source: ImportSource,
   opts: { recentDays: number; now?: Date },
 ): Promise<BuildResult> {
   const recentDays = Math.min(60, Math.max(1, Math.round(opts.recentDays)));
   const now = opts.now ?? new Date();
   const nowKey = bangkokDateKey(now);
 
-  const [ws, questions, drivers] = await Promise.all([
-    loadWorksheet(buffer),
+  const [ws, questions, drivers, since, savedBlacklist] = await Promise.all([
+    "text" in source ? worksheetFromText(source.text) : loadWorksheet(source.buffer),
     listActiveQuestions(),
     loadDriverLites(),
+    resolveSince(source, recentDays, now),
+    listBlacklist(),
   ]);
   const driverIndex = buildDriverIndex(drivers);
+  const isNew = (r: ParsedRow) => since === null || r.submittedAtISO > since;
 
   const { headers, originalText } = readHeaders(ws);
   const counters: Counters = {
@@ -1226,10 +1366,29 @@ async function buildImport(
     parsedRows.push(result);
   }
 
+  // ---------- แถวที่ชีตเขียนว่า Blacklist — แยกกองก่อนตัดซ้ำ ไม่งั้นใบที่ส่งมาใหม่ทีหลังจะกลบเครื่องหมายนี้ทิ้ง ----------
+  const duplicateRows = new Set<ParsedRow>();
+  const blacklistReps = new Set<ParsedRow>();
+  {
+    const byPerson = new Map<string, ParsedRow[]>();
+    for (const r of parsedRows) {
+      if (!BLACKLIST_RE.test(r.sheetStatus)) continue;
+      const key = digitsOnly(r.phoneRaw) || nameKey(r.matchFullName);
+      byPerson.set(key, [...(byPerson.get(key) ?? []), r]);
+    }
+    for (const rows of byPerson.values()) {
+      rows.sort((a, b) => b.submittedAtISO.localeCompare(a.submittedAtISO));
+      blacklistReps.add(rows[0]);
+      for (const extra of rows.slice(1)) duplicateRows.add(extra);
+    }
+  }
+  const blacklisted = (r: ParsedRow) => BLACKLIST_RE.test(r.sheetStatus);
+
   // ---------- ตัดซ้ำ: จับคู่ พจส. คนเดียวกัน เก็บใบล่าสุด ----------
   const byDriver = new Map<string, ParsedRow[]>();
   const unmatched: ParsedRow[] = [];
   for (const r of parsedRows) {
+    if (blacklisted(r)) continue;
     if (r.driver) {
       const arr = byDriver.get(r.driver.code) ?? [];
       arr.push(r);
@@ -1239,7 +1398,6 @@ async function buildImport(
     }
   }
 
-  const duplicateRows = new Set<ParsedRow>();
   const driverRepresentative = new Map<string, ParsedRow>();
   for (const [code, rows] of byDriver) {
     rows.sort((a, b) => b.submittedAtISO.localeCompare(a.submittedAtISO));
@@ -1267,12 +1425,18 @@ async function buildImport(
     parsed: ParsedRow;
     outcome: ImportOutcome | null;
     skip: ImportSkipReason | null;
+    /** ใบใหม่ที่ชนกับ Blacklist — `row` = ชนกับแถว Blacklist ในรอบเดียวกันนี้ (ยังไม่มีเลขใบ) */
+    hit?: BlacklistHit & { row?: number };
   };
   const classified: Classified[] = [];
 
   for (const r of parsedRows) {
     if (duplicateRows.has(r)) {
       classified.push({ parsed: r, outcome: null, skip: "duplicate" });
+      continue;
+    }
+    if (blacklistReps.has(r)) {
+      classified.push({ parsed: r, outcome: "blacklist", skip: null });
       continue;
     }
     if (r.driver) {
@@ -1288,7 +1452,12 @@ async function buildImport(
         classified.push({ parsed: r, outcome: "working", skip: null });
         continue;
       }
-      classified.push({ parsed: r, outcome: null, skip: "resigned" });
+      // พ้นสภาพแล้วแต่ส่งใบมาหลัง Sync ครั้งก่อน = สมัครกลับมาใหม่ → รอการติดต่อ (หมายเหตุว่าเคยเป็น พจส.)
+      classified.push(
+        isNew(r)
+          ? { parsed: r, outcome: "pending_contact", skip: null }
+          : { parsed: r, outcome: null, skip: "resigned" },
+      );
       continue;
     }
     if (!phoneRepresentative.has(r)) {
@@ -1296,59 +1465,78 @@ async function buildImport(
       classified.push({ parsed: r, outcome: null, skip: "duplicate" });
       continue;
     }
-    const age = daysBetweenKeys(r.submittedBkkKey, nowKey);
-    if (age <= recentDays) {
-      classified.push({ parsed: r, outcome: "pending_contact", skip: null });
-    } else {
-      classified.push({ parsed: r, outcome: null, skip: "not_found_old" });
-    }
+    classified.push(
+      isNew(r)
+        ? { parsed: r, outcome: "pending_contact", skip: null }
+        : { parsed: r, outcome: null, skip: "not_found_old" },
+    );
   }
 
-  // ---------- กันซ้ำกับใบที่มีอยู่แล้วในฐาน (เฉพาะกลุ่ม pending_contact) ----------
-  const pendingCandidates = classified.filter((c) => c.outcome === "pending_contact");
+  // ---------- กันซ้ำกับใบที่มีอยู่แล้วในฐาน ----------
   const existingImportKeys = new Set<string>();
+  /** เบอร์ → `createdAt` ทุกใบในฐาน — ใบที่สร้างหลังเวลาส่งแถวนี้แล้ว = คนนี้มีใบในระบบแล้ว
+   *  (กันแถวที่วางมาซึ่งเวลาไม่มีมิลลิวินาที และใบที่ฝ่ายบุคคลสร้างเองด้วยมือ) */
+  const existingByPhone = new Map<string, string[]>();
   let existingPhoneHits = new Set<string>();
 
-  if (pendingCandidates.length || classified.some((c) => c.outcome)) {
+  const candidates = classified.filter((c) => c.outcome);
+  if (candidates.length) {
     const col = await hrCol("applications");
 
     const keys = await col.distinct("importKey", { importKey: { $exists: true, $ne: "" } });
     for (const k of keys) if (typeof k === "string") existingImportKeys.add(k);
 
-    if (pendingCandidates.length) {
-      const phones = [...new Set(pendingCandidates.map((c) => digitsOnly(c.parsed.phoneRaw)).filter(Boolean))];
-      const since = new Date(now.getTime() - DUPLICATE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
-      const existing = await col
-        .find(
-          { phone: { $in: phones }, createdAt: { $gte: since } },
-          { projection: { phone: 1, status: 1 } },
-        )
-        .toArray();
-      // เอาเฉพาะสถานะที่ยัง "กำลังพิจารณาอยู่" ตามกติกาเดียวกับ guardDuplicate()
-      existingPhoneHits = new Set(
-        existing
-          .filter((d) => !DUPLICATE_BLOCKING_STATUSES.has(String(d.status)))
-          .map((d) => String(d.phone)),
-      );
+    const phones = [...new Set(candidates.map((c) => digitsOnly(c.parsed.phoneRaw)).filter(Boolean))];
+    const windowStart = new Date(now.getTime() - DUPLICATE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
+    const existing = await col
+      .find({ phone: { $in: phones } }, { projection: { phone: 1, status: 1, createdAt: 1 } })
+      .toArray();
+    for (const d of existing) {
+      const list = existingByPhone.get(String(d.phone)) ?? [];
+      list.push(String(d.createdAt ?? ""));
+      existingByPhone.set(String(d.phone), list);
     }
+    // เอาเฉพาะสถานะที่ยัง "กำลังพิจารณาอยู่" ตามกติกาเดียวกับ guardDuplicate()
+    existingPhoneHits = new Set(
+      existing
+        .filter((d) => String(d.createdAt ?? "") >= windowStart && !DUPLICATE_BLOCKING_STATUSES.has(String(d.status)))
+        .map((d) => String(d.phone)),
+    );
   }
 
   for (const c of classified) {
     if (c.outcome === null) continue;
-    const importKey = computeImportKey(c.parsed);
-    if (existingImportKeys.has(importKey)) {
+    const phone = digitsOnly(c.parsed.phoneRaw);
+    const submittedSecond = c.parsed.submittedAtISO.slice(0, 19);
+    if (
+      existingImportKeys.has(computeImportKey(c.parsed)) ||
+      (existingByPhone.get(phone) ?? []).some((at) => at.slice(0, 19) >= submittedSecond)
+    ) {
       c.outcome = null;
       c.skip = "already_imported";
       continue;
     }
-    if (c.outcome === "pending_contact" && existingPhoneHits.has(digitsOnly(c.parsed.phoneRaw))) {
+    if (c.outcome === "pending_contact" && existingPhoneHits.has(phone)) {
       c.outcome = null;
       c.skip = "duplicate";
     }
   }
 
+  // ---------- ใบใหม่ที่ชื่อ/เบอร์ตรงกับ Blacklist (ในระบบ + แถว Blacklist ของรอบนี้) ----------
+  const blacklistPool: (BlacklistEntry & { row?: number })[] = [
+    ...savedBlacklist,
+    ...classified
+      .filter((c) => c.outcome === "blacklist")
+      .map((c) => ({ ref: `แถว ${c.parsed.row}`, fullName: c.parsed.matchFullName, phone: c.parsed.phoneRaw, row: c.parsed.row })),
+  ];
+  for (const c of classified) {
+    if (c.outcome !== "pending_contact") continue;
+    const hit = findBlacklistHit({ ref: "", fullName: c.parsed.matchFullName, phone: c.parsed.phoneRaw }, blacklistPool);
+    if (hit) c.hit = { ...hit, row: blacklistPool.find((e) => e.ref === hit.ref)?.row };
+  }
+
   // ---------- นับผล ----------
-  const counts: Record<ImportOutcome, number> = { training: 0, working: 0, pending_contact: 0 };
+  const counts: Record<ImportOutcome, number> = { training: 0, working: 0, pending_contact: 0, blacklist: 0 };
   const skipped: Record<ImportSkipReason, number> = {
     already_imported: 0,
     resigned: 0,
@@ -1379,11 +1567,13 @@ async function buildImport(
         driverCode: parsed.driver?.code ?? "",
         driverName: parsed.driver?.name ?? "",
         workStatus: parsed.driver?.latestStatus ?? "",
+        ...(c.hit ? { blacklistHit: describeHit(c.hit) } : {}),
+        ...(parsed.sheetStatus ? { sheetStatus: parsed.sheetStatus } : {}),
       });
     }
 
     if (c.outcome) {
-      toInsert.push({ parsed, outcome: c.outcome, driver: parsed.driver, matchedBy: parsed.matchedBy });
+      toInsert.push({ parsed, outcome: c.outcome, driver: parsed.driver, matchedBy: parsed.matchedBy, hit: c.hit });
     }
   }
 
@@ -1429,6 +1619,7 @@ async function buildImport(
     batch: "",
     sheet: ws.name,
     recentDays,
+    since,
     totalRows,
     counts,
     skipped,
@@ -1459,10 +1650,10 @@ function reserveRefBlock(yy: string, count: number): Promise<number> {
 
 /** ตรวจไฟล์อย่างเดียว ไม่เขียนอะไรลงฐานข้อมูลทั้งสิ้น */
 export async function previewImport(
-  buffer: Buffer | ArrayBuffer,
+  source: ImportSource,
   opts: { recentDays: number; now?: Date },
 ): Promise<ImportReport> {
-  const { report } = await buildImport(buffer, opts);
+  const { report } = await buildImport(source, opts);
   return report;
 }
 
@@ -1471,11 +1662,11 @@ export async function previewImport(
  * `by` คือชื่อผู้กดนำเข้า (จาก `editor()`) ใช้ลงไทม์ไลน์ของใบที่ได้ผลลัพธ์ training/working
  */
 export async function commitImport(
-  buffer: Buffer | ArrayBuffer,
+  source: ImportSource,
   opts: { recentDays: number; now?: Date },
   by: string,
 ): Promise<ImportReport> {
-  const { report, toInsert } = await buildImport(buffer, opts);
+  const { report, toInsert } = await buildImport(source, opts);
   const now = opts.now ?? new Date();
   const importedAt = now.toISOString();
 
@@ -1507,15 +1698,25 @@ export async function commitImport(
     });
   }
 
-  const docs: ImportedApplicationDoc[] = toInsert.map(({ parsed, outcome, driver, matchedBy }) => {
+  const docs: ImportedApplicationDoc[] = toInsert.map(({ parsed, outcome, driver, matchedBy, hit }) => {
     const ref = refByRow.get(parsed.row)!;
+    const isBlacklist = outcome === "blacklist";
+    /* ใบใหม่ที่ควรรู้ก่อนโทร — เคยเป็น พจส. (พ้นสภาพแล้ว) · ชื่อ/เบอร์ตรงกับคนติด Blacklist */
+    const flags = [
+      outcome === "pending_contact" && driver
+        ? `เคยเป็น พจส. ${driver.code} ${driver.name} · ${workStatusFullLabel(driver.latestStatus)}`
+        : "",
+      hit
+        ? `⚠ ตรงกับ Blacklist ${describeHit({ ...hit, ref: (hit.row && refByRow.get(hit.row)) || hit.ref })}`
+        : "",
+    ].filter(Boolean);
     const timeline: TimelineEntry[] = [
       {
         at: parsed.submittedAtISO,
         from: null,
         to: "pending_contact",
         by: "ผู้สมัคร",
-        note: "ส่งใบสมัครผ่าน Google Form",
+        note: ["ส่งใบสมัครผ่าน Google Form", ...flags].join(" · "),
       },
     ];
     if ((outcome === "training" || outcome === "working") && driver) {
@@ -1526,6 +1727,15 @@ export async function commitImport(
         to: outcome,
         by,
         note: `นำเข้าจาก Google Form — ตรงกับ พจส. ${driver.code} ${driver.name} (จับคู่ด้วย ${matchedByText}) · สถานะล่าสุด ${workStatusFullLabel(driver.latestStatus)}`,
+      });
+    }
+    if (isBlacklist) {
+      timeline.push({
+        at: importedAt,
+        from: "pending_contact",
+        to: "cancelled",
+        by,
+        note: `นำเข้าจาก Google Form — ชีตระบุ “${parsed.sheetStatus}” · ติด Blacklist`,
       });
     }
 
@@ -1543,14 +1753,14 @@ export async function commitImport(
 
     const doc: ImportedApplicationDoc = {
       ref,
-      status: outcome,
+      status: isBlacklist ? "cancelled" : outcome,
       fullName: parsed.fullNameRaw,
       phone: parsed.phoneRaw,
       contactOwner: "",
       interview: { ...EMPTY_INTERVIEW },
-      exitReason: "",
-      exitReasonNote: "",
-      blacklist: false,
+      exitReason: isBlacklist ? OTHER_EXIT_REASON : "",
+      exitReasonNote: isBlacklist ? blacklistNote(parsed.sheetStatus) : "",
+      blacklist: isBlacklist,
       answers: parsed.answers,
       questionSnapshot: snapshot,
       files: [],
@@ -1564,7 +1774,8 @@ export async function commitImport(
       importKey: computeImportKey(parsed),
       importedAt,
       legacyRow: parsed.legacyRow,
-      driverCode: driver?.code ?? "",
+      /* ผูกรหัสเฉพาะคนที่ยังอยู่ในทะเบียน — ใบสมัครใหม่ของคนที่พ้นสภาพแล้วยังไม่ใช่ พจส. คนเดิม */
+      driverCode: outcome === "training" || outcome === "working" ? (driver?.code ?? "") : "",
     };
     return doc;
   });

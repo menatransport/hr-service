@@ -285,14 +285,14 @@ function MenuTile({ item }: { item: ModuleItem }) {
 
 /**
  * เมนูที่มี subgroup (เช่น ค่าจ้างและสวัสดิการ) — หัวข้อเป็นปุ่มพับ/กาง ลูกเรียงใต้เส้นประสีกลุ่มที่ลากลง
- * จากกึ่งกลางไอคอนหัวข้อ · กางไว้ตั้งแต่แรก (การ์ดยังมีที่พอ) · ลูกแต่ละตัวห่อ
+ * จากกึ่งกลางไอคอนหัวข้อ · พับไว้ตั้งแต่แรก กดหัวข้อจึงกาง · ลูกแต่ละตัวห่อ
  * `<ViewTransition name="menu-<child.id>">` ให้บินไปเป็นแถวลูกในแถบข้างได้เหมือนเมนูปกติ
  *
  * ลูกถูกถอดออกจาก DOM ตอนพับ — ถ้าซ่อนไว้เฉย ๆ ตอนกดย้อนกลับจากหน้าใน แถวในแถบข้าง
  * จะหดหายเข้าไปในก้อนที่สูงศูนย์แทนที่จะครอสเฟด
  */
 function SubGroupTile({ item }: { item: ModuleItem }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const children = item.children ?? [];
   const listId = `home-sub-${item.id}`;
 

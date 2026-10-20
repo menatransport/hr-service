@@ -2,6 +2,8 @@ import { IdentityProvider } from "@/components/auth/identity-provider";
 import { PayrollNavList } from "@/components/payroll/payroll-nav";
 import { AppShell } from "@/components/shell/app-shell";
 import { getDeskIdentity } from "@/lib/auth/session";
+import { SOON } from "@/lib/modules";
+import { notFound } from "next/navigation";
 
 /**
  * กรอบของโมดูลค่าจ้างและสวัสดิการ — `AppShell` ชุดเดียวกับ `/desk` (สไตล์ menaIT V.2 โทน teal)
@@ -17,6 +19,9 @@ import { getDeskIdentity } from "@/lib/auth/session";
  * ของพนักงานทุกคน เป็นข้อมูลที่อ่อนไหวที่สุดในระบบ ห้ามมีหน้าไหนใต้กรอบนี้เปิดสาธารณะ
  */
 export default async function PayrollLayout({ children }: LayoutProps<"/payroll">) {
+  // เมนูนี้ยัง “เร็ว ๆ นี้” — เปิดเฉพาะตอน dev (ดู `SOON` ใน lib/modules.ts)
+  if (SOON) notFound();
+
   const identity = await getDeskIdentity();
 
   return (

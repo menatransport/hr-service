@@ -1,10 +1,8 @@
 import {
   BookUser,
   ChartColumn,
-  ClipboardList,
   FileCode2,
   FolderOpen,
-  GraduationCap,
   LayoutGrid,
   ListChecks,
   Settings,
@@ -12,6 +10,7 @@ import {
   UserMinus,
   UserRoundSearch,
   Wallet,
+  Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -100,29 +99,21 @@ export const adminNav: AdminNavGroup[] = [
   {
     section: "การสรรหา",
     items: [
-      /* คำขอกับผู้สมัครแยกเป็นสองหน้าอีกครั้ง (14 ต.ค. 2026) — เคยรวมเป็นสองแท็บ
-         ช่วง 22 ก.ย.–14 ต.ค. · ลิงก์เก่า `/requisitions?tab=candidates` ยังส่งต่อมาที่
-         หน้าผู้สมัครให้ ดู `recruitment-screens.tsx` */
+      /* ขออัตรา + Onboarding + ติดตามฝึกงาน รวมเป็นหน้าเดียว (14 ต.ค. 2026) — `/requisitions`
+         redirect มาแท็บอัตราว่าง · ตารางรายวัน (`/trainees`) เป็นมุมมองหนึ่งของหน้านี้ */
       {
-        href: `${ADMIN_ROOT}/requisitions`,
-        label: "ขออัตราสรรหาพนักงาน",
-        icon: ClipboardList,
+        href: `${ADMIN_ROOT}/onboarding`,
+        label: "ติดตามพนักงานใหม่",
+        icon: Workflow,
         ready: true,
-        blurb: "อัตราที่จัดส่งขอ และสถานะการหาคนของแต่ละอัตรา",
+        blurb: "อัตราว่าง · ผู้สมัคร · ฝึกงาน · รับรถ ในตารางเดียว",
       },
       {
         href: `${ADMIN_ROOT}/candidates`,
-        label: "ผู้สมัคร",
+        label: "ผู้สมัคร (RC)",
         icon: UserRoundSearch,
         ready: true,
         blurb: "ใบสมัครที่เข้ามา ติดต่อ นัดสัมภาษณ์ และผูกกับอัตราที่ขอไว้",
-      },
-      {
-        href: `${ADMIN_ROOT}/trainees`,
-        label: "ติดตามฝึกงาน",
-        icon: GraduationCap,
-        ready: true,
-        blurb: "ตารางเช็กรายวันของพนักงานใหม่และคนที่ยังฝึกงานอยู่",
       },
       {
         href: `${ADMIN_ROOT}/questions`,

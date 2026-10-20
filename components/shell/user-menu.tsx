@@ -1,13 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-import { LogoutTile } from "@/components/auth/logout-button";
+import { LogoutMenuItem } from "@/components/auth/logout-button";
 import { Avatar } from "@/components/ui/avatar";
-import { ThemeToggleTile } from "@/components/ui/theme-toggle";
-import { MODULES } from "@/lib/modules";
+import { ThemeToggleMenuItem } from "@/components/ui/theme-toggle";
 
 export interface ShellUser {
   name: string;
@@ -24,10 +22,9 @@ export interface ShellUser {
  *
  * - ปุ่มกระจก (รูป · ชื่อ · แผนก · ลูกศร) ขยายนิดตอนชี้
  * - **เดสก์ท็อปกางเองตอนชี้ (hover)** มือถือกดเพื่อกาง · กดซ้ำ / คลิกนอก / Esc เพื่อปิด
- * - ในกล่อง: ทุกเมนูของทุกกลุ่มเป็นไอคอนเรียงสามคอลัมน์ต่อกลุ่ม → บัตรผู้ใช้ (รหัส · ชื่อ ·
- *   แผนก) → ปุ่มเต็มสองปุ่ม (สลับธีม แทน “ตั้งค่า” ของ menaIT · ออกจากระบบ)
+ * - ในกล่อง: แค่เรื่องบัญชี — ชื่อ · หน่วยงาน · รหัส → สลับธีม · ออกจากระบบ
+ *   (20 ต.ค. 2569 · Bew เอากริดเมนูทุกกลุ่มออก — ซ้ำกับหน้า Home และแถบข้าง)
  *
- * เมนูมาจาก `lib/modules.ts` ชุดเดียวกับหน้า Home และแถบข้าง — เพิ่มเมนูที่นั่นที่เดียว
  * กล่องกางใต้ปุ่ม (absolute) จึงต้องตั้ง `text-ink` เอง เพราะแถบบนเป็นตัวหนังสือขาว
  */
 export function UserMenu({ user, compact = false }: { user: ShellUser; /** ปุ่มเตี้ยสำหรับแถบบนของหน้าใน (56px) */ compact?: boolean }) {
@@ -98,73 +95,20 @@ export function UserMenu({ user, compact = false }: { user: ShellUser; /** ป�
       >
         <div
           role="menu"
-          aria-label="เมนูทั้งหมด"
-          className="max-h-[80dvh] w-[calc(100vw-1.5rem)] overflow-y-auto rounded-2xl border border-line bg-base-100 p-2 text-ink shadow-2xl sm:w-[min(calc(100vw-2rem),780px)]"
+          aria-label="เมนูผู้ใช้"
+          className="w-64 rounded-2xl border border-line bg-base-100 p-1.5 text-ink shadow-2xl"
         >
-          <div className="flex flex-col gap-2 p-2 sm:flex-row">
-            {MODULES.map((group, gi) => (
-              <Fragment key={group.id}>
-                {gi > 0 ? <div aria-hidden className="mx-2 h-px bg-line sm:mx-0 sm:my-2 sm:h-auto sm:w-px" /> : null}
-                {/* กว้างตามจำนวนเมนู (สูงสุดสามคอลัมน์) — กลุ่มเมนูน้อยไม่ต้องกินที่เท่ากลุ่มใหญ่ */}
-                <div
-                  className={`tone-${group.id} min-w-0`}
-                  style={{ flex: `${Math.min(group.items.length, 3)} 1 0%` }}
-                >
-                  <h3 className="mb-2 px-2 text-12 font-semibold text-mut">{group.label}</h3>
-                  <div
-                    className="grid gap-2"
-                    style={{ gridTemplateColumns: `repeat(${Math.min(group.items.length, 3)}, minmax(0, 1fr))` }}
-                  >
-                    {group.items.map((item) => {
-                      const tile = (
-                        <>
-                          <span className="grid size-10 place-items-center rounded-xl bg-base-200 text-mut transition-colors duration-200 group-hover/item:bg-(--tone) group-hover/item:text-white">
-                            <item.icon size={20} strokeWidth={1.8} aria-hidden />
-                          </span>
-                          <span className="text-center text-11 leading-tight font-medium text-pretty text-mut transition-colors duration-200 group-hover/item:text-(--tone-ink)">
-                            {item.label}
-                          </span>
-                        </>
-                      );
-                      return item.soon ? (
-                        <span
-                          key={item.id}
-                          title="เร็ว ๆ นี้"
-                          className="flex cursor-not-allowed flex-col items-center gap-2 rounded-xl p-2 opacity-50"
-                        >
-                          {tile}
-                        </span>
-                      ) : (
-                        <Link
-                          key={item.id}
-                          href={item.href}
-                          role="menuitem"
-                          onClick={() => setOpen(false)}
-                          className="group/item flex flex-col items-center gap-2 rounded-xl p-2 transition-all duration-200 hover:bg-(--tone-soft)"
-                        >
-                          {tile}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              </Fragment>
-            ))}
+          <div className="flex items-center gap-3 px-2.5 pt-2 pb-3">
+            <Avatar name={user.name} src={user.imageUrl} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-14 font-semibold">{user.name}</p>
+              <p className="truncate text-12 text-mut">{user.role}</p>
+              <p className="text-11 text-mut tabular-nums">ID {user.employeeId}</p>
+            </div>
           </div>
-
-          <div className="border-t border-line p-2">
-            <div className="mb-3 flex items-center gap-3 rounded-xl bg-linear-to-r from-primary/5 to-[#f8b545]/12 p-3">
-              <Avatar name={user.name} src={user.imageUrl} size="md" className="shadow-md" />
-              <div className="min-w-0 flex-1">
-                <p className="text-15 font-bold">ID: {user.employeeId}</p>
-                <p className="truncate text-12 text-mut">{user.name}</p>
-                <p className="truncate text-12 text-mut">{user.role}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <ThemeToggleTile />
-              <LogoutTile />
-            </div>
+          <div className="border-t border-line pt-1.5">
+            <ThemeToggleMenuItem />
+            <LogoutMenuItem />
           </div>
         </div>
       </div>

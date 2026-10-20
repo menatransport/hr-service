@@ -95,7 +95,7 @@ const FIRST_DIR: Partial<Record<SortKey, SortDir>> = {
 };
 
 /** จำนวนคอลัมน์ของตาราง — แถวที่กางออกใช้ `colSpan` นี้ให้เต็มความกว้าง */
-const COLUMNS = 10;
+const COLUMNS = 8;
 
 const deptOptions: SelectOption[] = [
   { value: "all", label: "ทุกฝ่าย" },
@@ -115,11 +115,22 @@ const pageSizeOptions: SelectOption[] = PAGE_SIZES.map((n) => ({
 }));
 
 /**
- * เซลล์ข้อมูลหนึ่งช่อง — เส้นคั่นทุกคอลัมน์เหมือนสเปรดชีต ตากวาดข้ามคอลัมน์ไม่หลุดแถว
+ * เซลล์ข้อมูลหนึ่งช่อง — เส้นคั่นแค่แนวนอน (20 ต.ค. 2026 เลิกเส้นแนวตั้งแบบสเปรดชีต
+ * ตารางโล่งขึ้น ตาวิ่งตามแถวด้วยลายสลับ + hover แทน)
  * (เขียนเป็นค่าคงที่แทน `[&>td]:…` บน `<tr>` เพราะตัวหลังชนะคลาสของ `td` เอง
  * ด้วย specificity — เซลล์ที่อยากได้ padding ต่างจากเพื่อนจะแก้ไม่ได้เลย)
  */
-const cell = "border-r border-line/50 px-3 py-2 align-middle";
+const cell = "overflow-hidden px-3 py-2.5 align-middle";
+
+/**
+ * รายละเอียดย่อหนึ่งบรรทัดใต้หัวเรื่อง — ตัดเครื่องหมายคำพูดหัวท้าย (ผู้บันทึกมักแปะข้อความ
+ * ที่คัดลอกมาในเครื่องหมายคำพูด) และยุบช่องว่าง/ขึ้นบรรทัดให้เหลือช่องเดียว ข้อความเต็มอยู่ในแผงที่กางออก
+ */
+function detailSnippet(detail: string): string {
+  return detail
+    .replace(/\s+/g, " ")
+    .replace(/^[\s"“”']+|[\s"“”']+$/g, "");
+}
 
 /**
  * ค่าที่ใช้เรียงของแต่ละคอลัมน์
@@ -358,18 +369,16 @@ export function RecordCaseView({
         {/* ── จอ ≥md: ตารางแบบสเปรดชีต หัวตารางตรึง เส้นตารางครบทุกช่อง ── */}
         <SummaryBody className="hidden md:block">
           <div className="max-h-[78dvh] overflow-auto">
-            <table className="w-full min-w-[1120px] border-collapse text-left text-12-5">
+            {/*
+             * `table-fixed` = ความกว้างคอลัมน์ยึดตามหัวตาราง ไม่ยืดตามข้อความ
+             * (เดิมเป็น auto — รายละเอียดยาว ๆ ใต้หัวเรื่องดันตารางกว้างจนคอลัมน์ขวาหลุดจอ)
+             * หัวเรื่องกินที่ที่เหลือทั้งหมด แล้วตัดด้วย `truncate` · จอแคบกว่า min-w ค่อยเลื่อนแนวนอน
+             */}
+            <table className="w-full min-w-[960px] table-fixed border-collapse text-left text-12-5">
               <thead>
                 <tr className="bg-head [&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-line-strong [&>th]:bg-head">
-                  {/* ช่องเลขแถวแบบสเปรดชีต — ไม่ใช่ข้อมูลของเคส จึงไม่ให้เรียง */}
-                  <th
-                    scope="col"
-                    className="w-10 border-r border-line px-2 py-2 text-center text-11 font-medium text-mut"
-                  >
-                    <span className="sr-only">ลำดับ</span>#
-                  </th>
                   <Th
-                    className="w-[152px]"
+                    className="w-[132px]"
                     sortKey="code"
                     active={sortKey}
                     dir={sortDir}
@@ -381,34 +390,34 @@ export function RecordCaseView({
                     หัวเรื่อง
                   </Th>
                   <Th
-                    className="w-[168px]"
+                    className="w-[16%]"
                     sortKey="category"
                     active={sortKey}
                     dir={sortDir}
                     onSort={sortBy}
                   >
-                    ประเภทเคส
+                    ประเภท
                   </Th>
                   <Th
-                    className="w-[128px]"
+                    className="w-[112px]"
                     sortKey="occurredOn"
                     active={sortKey}
                     dir={sortDir}
                     onSort={sortBy}
                   >
-                    วันที่ของเคส
+                    วันที่
                   </Th>
                   <Th
-                    className="w-[164px]"
+                    className="w-[12%]"
                     sortKey="department"
                     active={sortKey}
                     dir={sortDir}
                     onSort={sortBy}
                   >
-                    ฝ่ายที่เกี่ยวข้อง
+                    ฝ่าย
                   </Th>
                   <Th
-                    className="w-[150px]"
+                    className="w-[10%]"
                     sortKey="recorder"
                     active={sortKey}
                     dir={sortDir}
@@ -416,14 +425,8 @@ export function RecordCaseView({
                   >
                     ผู้บันทึก
                   </Th>
-                  <th
-                    scope="col"
-                    className="w-14 border-r border-line px-3 py-2 text-center font-medium text-mut"
-                  >
-                    ไฟล์
-                  </th>
                   <Th
-                    className="w-[132px]"
+                    className="w-[120px]"
                     sortKey="status"
                     active={sortKey}
                     dir={sortDir}
@@ -470,13 +473,7 @@ export function RecordCaseView({
                               `hover:bg-base-200/70 ${i % 2 ? "bg-base-200/35" : ""}`
                         }`}
                       >
-                        <td
-                          className={`relative border-r border-line px-2 py-2 text-center align-middle text-11 tabular-nums ${
-                            expanded
-                              ? "bg-base-300/70 font-semibold text-ink"
-                              : "bg-base-200/70 text-mut"
-                          }`}
-                        >
+                        <td className={`${cell} relative whitespace-nowrap`}>
                           {/* แถบชี้แถวที่เปิดอยู่ — เส้นเดียวกับที่อยู่ซ้ายของแผงข้างล่าง */}
                           {expanded ? (
                             <span
@@ -484,9 +481,6 @@ export function RecordCaseView({
                               className="absolute inset-y-0 left-0 w-[3px] bg-primary"
                             />
                           ) : null}
-                          {sliceFrom + i + 1}
-                        </td>
-                        <td className={`${cell} whitespace-nowrap`}>
                           <span className="flex items-center gap-1.5">
                             {/* ปุ่มจริงหนึ่งปุ่มไว้ให้คีย์บอร์ด/screen reader — ทั้งแถวก็ยังคลิกได้เหมือนเดิม */}
                             <button
@@ -516,19 +510,35 @@ export function RecordCaseView({
                             </span>
                           </span>
                         </td>
-                        <td className={cell}>
-                          <span className="block font-medium text-pretty">{r.title}</span>
+                        {/*
+                         * หัวเรื่อง = บรรทัดเดียว + รายละเอียดย่อบรรทัดเดียว ตัดด้วย `truncate` เสมอ
+                         * แถวจึงสูงเท่ากันทุกแถว กวาดตาง่าย · ชี้ค้างเห็นข้อความเต็มผ่าน `title`
+                         * ผู้เกี่ยวข้อง/ไฟล์แนบย้ายมาเป็นไอคอนท้ายบรรทัดนี้ (เดิมแยกคอลัมน์ “ไฟล์”)
+                         */}
+                        <td className={cell} title={r.title}>
+                          <span className="block truncate font-medium text-ink">{r.title}</span>
                           {/* กางแผงแล้วซ่อนบรรทัดย่อทิ้ง — ข้างล่างมีข้อความเต็มอยู่แล้ว */}
                           {expanded ? null : (
-                            <span className="mt-0.5 flex items-center gap-2 text-11-5 text-mut">
-                              <span className="truncate">{r.detail}</span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-2.5 text-11-5 text-mut">
+                              <span className="min-w-0 flex-1 truncate">
+                                {detailSnippet(r.detail)}
+                              </span>
                               {r.involved.length ? (
                                 <span
-                                  className="flex flex-none items-center gap-1"
-                                  title={r.involved.join(" · ")}
+                                  className="flex flex-none items-center gap-1 tabular-nums"
+                                  title={`ผู้เกี่ยวข้อง: ${r.involved.join(" · ")}`}
                                 >
                                   <Users size={12} strokeWidth={1.8} aria-hidden />
                                   {r.involved.length}
+                                </span>
+                              ) : null}
+                              {r.attachments.length ? (
+                                <span
+                                  className="flex flex-none items-center gap-1 tabular-nums"
+                                  title={`ไฟล์แนบ ${r.attachments.length} ไฟล์`}
+                                >
+                                  <Paperclip size={12} strokeWidth={1.8} aria-hidden />
+                                  {r.attachments.length}
                                 </span>
                               ) : null}
                             </span>
@@ -541,7 +551,10 @@ export function RecordCaseView({
                               strokeWidth={1.7}
                               className="flex-none text-mut"
                             />
-                            <span className="truncate">
+                            <span
+                              className="truncate"
+                              title={recordCategoryLabel(categories, r.category)}
+                            >
                               {recordCategoryLabel(categories, r.category)}
                             </span>
                           </span>
@@ -561,16 +574,8 @@ export function RecordCaseView({
                             </span>
                           </span>
                         </td>
-                        <td className={`${cell} truncate`}>{r.recorder.name}</td>
-                        <td className={`${cell} text-center text-mut tabular-nums`}>
-                          {r.attachments.length ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Paperclip size={12} strokeWidth={1.8} aria-hidden />
-                              {r.attachments.length}
-                            </span>
-                          ) : (
-                            <span aria-hidden>—</span>
-                          )}
+                        <td className={`${cell} truncate`} title={r.recorder.name}>
+                          {r.recorder.name}
                         </td>
                         <td className={cell}>
                           <RecordStatusBadge status={r.status} />
@@ -655,14 +660,14 @@ export function RecordCaseView({
                     </button>
                     <span className="font-mono text-11-5 text-mut">{r.code}</span>
                     <RecordStatusBadge status={r.status} />
-                    <span className="min-w-0 flex-1 text-14 font-medium text-pretty">
+                    <span className="line-clamp-2 min-w-0 flex-1 text-14 font-medium text-pretty">
                       {r.title}
                     </span>
                   </div>
 
                   {expanded ? null : (
                     <p className="line-clamp-2 text-12-5 leading-[1.7] text-mut text-pretty">
-                      {r.detail}
+                      {detailSnippet(r.detail)}
                     </p>
                   )}
 
@@ -813,7 +818,7 @@ function Th({
     <th
       scope="col"
       aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className={`border-r border-line p-0 font-medium ${className}`}
+      className={`p-0 font-medium ${className}`}
     >
       <button
         type="button"

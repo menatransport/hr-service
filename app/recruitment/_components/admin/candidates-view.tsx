@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import Link from "next/link";
 import {
   Check,
+  ClipboardList,
   Copy,
   FilePenLine,
   Loader2,
@@ -30,11 +32,17 @@ import {
   type TableSort,
 } from "@/app/recruitment/_components/admin/candidate-insights";
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
+import { CandidateRcForm } from "@/app/recruitment/_components/admin/candidate-rc-form";
+import { outcomeGroup, outcomeLabel } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
+import { XlsxMenuButton } from "@/components/ui/xlsx-export-button";
+import { FormSyncDialog, type FormSyncMode } from "@/app/recruitment/_components/admin/form-import-dialog";
 import { requestJson } from "@/lib/http";
 import { alertError } from "@/lib/swal";
+import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
+import type { ApplicationFormExport } from "@/app/recruitment/_lib/applications";
 import {
   displayAnswer,
   findByRole,
@@ -53,9 +61,11 @@ import {
   type ApplicationSummary,
   type BlacklistEntry,
   type BlacklistHit,
+  type QuestionKind,
   findBlacklistHit,
 } from "@/app/recruitment/_lib/types";
 import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
+import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
 
 /**
  * หน้า “ผู้สมัคร” — ตารางแบบสเปรดชีตที่ฝ่ายบุคคลทำงานได้จบในตารางเดียว
@@ -257,6 +267,112 @@ const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
  */
 const DEFAULT_SORT: TableSort = { column: "createdAt", dir: "desc" };
 
+/**
+ * คอลัมน์ Excel — ตามคอลัมน์บนจอ (เหตุผล/Blacklist โผล่ตามมุมมองเดียวกัน) + ของที่จอซ่อนไว้ใน
+ * tooltip/ปุ่ม: เลขที่ใบสมัคร · เวลานัด · ผลสัมภาษณ์ · Driver Rating
+ */
+function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean): XlsxColumn<Row>[] {
+  const text = (id: ColumnId) => COLUMNS.find((c) => c.id === id)!.text;
+  return [
+    { header: "เลขที่ใบสมัคร", width: 14, kind: "code", value: (a) => a.ref },
+    { header: "ชื่อ–นามสกุล", width: 28, value: (a) => a.fullName },
+    { header: "ประทับเวลา", width: 17, kind: "datetime", value: (a) => xlsxDate(a.createdAt) },
+    { header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (a) => formatPhone(a.phone) },
+    { header: "สนใจงานเขต", width: 18, value: (a) => a.workZone },
+    {
+      header: "ความพร้อมเริ่มงาน",
+      width: 16,
+      kind: "date",
+      /* ตอบเป็นวันที่ = วันที่จริง · ตอบเป็นข้อความ (“พร้อมทันที”) = ข้อความตามที่ตอบ */
+      value: (a) => xlsxDate(/^\d{4}-\d{2}-\d{2}$/.test(a.readyToStart) ? a.readyToStart : "") ?? a.readyToStart,
+    },
+    { header: "นัดสัมภาษณ์", width: 13, kind: "date", value: (a) => xlsxDate(a.interview.date) },
+    { header: "เวลานัด", width: 9, kind: "code", value: (a) => a.interview.time },
+    {
+      header: "สถานะการสมัคร",
+      width: 20,
+      kind: "status",
+      value: (a) => STATUS_LABEL[a.status],
+      tone: (a) => (a.status === "cancelled" ? "alert" : a.status === "working" || a.status === "training" ? "ok" : null),
+    },
+    ...(showReason
+      ? [{ header: "เหตุผลที่ยกเลิก", width: 26, value: text("exitReason") } satisfies XlsxColumn<Row>]
+      : []),
+    ...(showBlacklist
+      ? [
+          {
+            header: "Blacklist",
+            width: 16,
+            kind: "status",
+            value: text("blacklist"),
+            tone: (a) => (a.blacklist || a.blacklistHit ? "alert" : "mut"),
+          } satisfies XlsxColumn<Row>,
+        ]
+      : []),
+    { header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner },
+    {
+      header: "Driver Rating",
+      width: 12,
+      kind: "decimal",
+      value: (a) => (a.rating.average === null ? null : Math.round(a.rating.average * 100) / 100),
+    },
+    { header: "ระดับ Rating", width: 12, kind: "status", value: (a) => levelOf(a.rating.average)?.label },
+  ];
+}
+
+/** ความกว้างคอลัมน์คำตอบตามชนิดคำถาม — ข้อความยาวกว้าง วันที่/ตัวเลขแคบ */
+const FORM_WIDTH: Record<QuestionKind, number> = {
+  text: 22,
+  textarea: 40,
+  single: 20,
+  multi: 28,
+  date: 13,
+  tel: 15,
+  nid: 17,
+  number: 11,
+};
+
+type FormRow = Row & { form: Record<string, string> };
+
+/**
+ * ชีตเดียวของไฟล์ — คอลัมน์ตาราง (`candidateXlsxColumns`) ต่อด้วยคำตอบในฟอร์มทั้งใบ
+ * (รวมเป็นชีตเดียว 20 ต.ค. 2026 · Bew: จัดการง่ายกว่าสองชีต) · แถว = ที่เห็นอยู่ ลำดับเดียวกับตาราง
+ * · ตารางถือแค่รูปย่อ จึงดึงคำตอบเต็มตอนกดส่งออก (`POST /api/recruitment/applications/export`)
+ */
+async function candidateSheet(
+  visible: Row[],
+  showReason: boolean,
+  showBlacklist: boolean,
+): Promise<Pick<XlsxSheet<FormRow>, "columns" | "rows">> {
+  const form = await requestJson<ApplicationFormExport>(
+    "/api/recruitment/applications/export",
+    { method: "POST", body: { ids: visible.map((a) => a.id) } },
+    "ดึงข้อมูลใบสมัครไม่สำเร็จ",
+  );
+  const byId = new Map(form.rows.map((r) => [r.id, r.values]));
+
+  return {
+    rows: visible.map((a) => ({ ...a, form: byId.get(a.id) ?? {} })),
+    columns: [
+      ...candidateXlsxColumns(showReason, showBlacklist),
+      ...form.columns.map(
+        (q): XlsxColumn<FormRow> => ({
+          header: q.label,
+          width: FORM_WIDTH[q.kind] ?? 22,
+          kind: q.kind === "date" ? "date" : q.kind === "number" ? "decimal" : q.kind === "tel" || q.kind === "nid" ? "code" : "text",
+          value: (a) => {
+            const v = a.form[q.id];
+            if (!v) return null;
+            if (q.kind === "date") return xlsxDate(v) ?? v;
+            if (q.kind === "number") return Number.isFinite(Number(v)) ? Number(v) : v;
+            return v;
+          },
+        }),
+      ),
+    ],
+  };
+}
+
 /** ค่าที่คอลัมน์นี้ใช้ในรายการติ๊ก — ไม่ได้กำหนด `facet` ไว้ก็ใช้ค่าที่ขึ้นบนจอ */
 function facetOf(
   column: (typeof COLUMNS)[number],
@@ -273,6 +389,7 @@ export function CandidatesView({
   rows,
   setRows,
   initialTerm = "",
+  initialRc = false,
   contactOptions = [],
   docSlots,
   requisitions = [],
@@ -290,6 +407,8 @@ export function CandidatesView({
    * กำลังกรองอะไรอยู่และล้างทิ้งได้ด้วยปุ่มเดียว ต่างจากคำค้นที่ซ่อนอยู่ในช่องพิมพ์
    */
   initialTerm?: string;
+  /** `?rc=1` จากหน้าติดตามพนักงานใหม่ — เปิดกล่องข้อมูล RC ของใบ `initialTerm` ทันที */
+  initialRc?: boolean;
   /** รายชื่อเจ้าหน้าที่ฝ่ายบุคคลจากคลังคำถาม */
   contactOptions?: string[];
   docSlots: DocSlot[];
@@ -325,6 +444,12 @@ export function CandidatesView({
     ];
   }, [rows, blacklist]);
 
+  /** ใบสมัคร → คำขอที่ผูกไว้ — ลิงก์ไปเส้นทางพนักงานใหม่ของคนนั้น */
+  const rqByApplication = useMemo(
+    () => new Map(requisitions.filter((r) => r.match).map((r) => [r.match!.applicationId, r])),
+    [requisitions],
+  );
+
   /* จับเฉพาะใบที่รอการติดต่อ — จังหวะเดียวที่การเตือนมีประโยชน์คือก่อนยกหูโทร */
   const enriched = useMemo<Row[]>(
     () =>
@@ -336,7 +461,17 @@ export function CandidatesView({
     [rows, blacklistIndex],
   );
 
+  /** กล่องข้อมูล RC — ใบสมัครที่ผูกคำขอแล้วเท่านั้น */
+  const [rcFor, setRcFor] = useState<{ application: ApplicationSummary; requisition: Requisition } | null>(() => {
+    if (!initialRc || !initialTerm) return null;
+    const application = rows.find((a) => a.ref.toUpperCase() === initialTerm.trim().toUpperCase());
+    const requisition = application && requisitions.find((r) => r.match?.applicationId === application.id);
+    return application && requisition ? { application, requisition } : null;
+  });
+
   const [opening, setOpening] = useState<string | null>(null);
+  /* Sync ใบสมัครจาก Google Form — วางแถว (ทุกโหมด) / ชี้ path ไฟล์ (เฉพาะ dev) */
+  const [syncMode, setSyncMode] = useState<FormSyncMode | null>(null);
   const [drafting, setDrafting] = useState<Application | null>(null);
   /** ฉบับที่กล่องทำเอกสารเปิดขึ้นมาก่อน — ปุ่มดาวเปิดตรงที่ Driver Rating */
   const [draftDoc, setDraftDoc] = useState<HrDocId | undefined>(undefined);
@@ -584,8 +719,33 @@ export function CandidatesView({
                   “จัดการ” ตัวเดียวกับตารางคำขอ · ปุ่ม “เปิด Job บน ATMs” (แถวที่กำลัง
                   ฝึกงาน) ถูกถอดออกชั่วคราวตามคำสั่งเจ้าของงาน 29 ก.ย. 2026 — ยังไม่ได้ต่อสาย
                   จริงอยู่แล้ว (รอ URL/API จากฝ่ายบุคคล) กลับมาใส่เมื่อได้ปลายทางจริง */}
-              <th className="sticky top-0 z-10 w-[132px] border-b border-line-strong bg-head px-3 py-2.5 text-right font-mono text-10-5 font-semibold tracking-[0.07em] text-mut whitespace-nowrap uppercase">
-                จัดการ
+              {/* หัวคอลัมน์จัดการถือปุ่ม Excel ของทั้งตาราง (20 ต.ค. 2026) — หน้านี้ไม่มีแถบเครื่องมือ
+                  และไม่เพิ่มแถวเหนือตาราง (กติกา 14 ต.ค.) · ส่งออกแถวที่กรอง/เรียงอยู่ */}
+              <th className="sticky top-0 z-10 w-[132px] border-b border-line-strong bg-head px-2 py-1 text-right whitespace-nowrap">
+                <span className="sr-only">จัดการ</span>
+                <XlsxMenuButton
+                  onImport={() => setSyncMode("paste")}
+                  importLabel="นำเข้า · วางแถวใบสมัคร"
+                  importHint="คัดลอกแถวจากชีต “การตอบแบบฟอร์ม 1”"
+                  onSync={process.env.NODE_ENV === "development" ? () => setSyncMode("path") : undefined}
+                  syncHint="ชี้ path ไฟล์ใบสมัคร พจส. บนเครื่องนี้"
+                  name="ผู้สมัคร"
+                  count={visible.length}
+                  className="ml-auto py-1 pr-1.5 pl-2.5 text-12"
+                  build={async () => ({
+                    sheet: "ผู้สมัคร",
+                    title: "ผู้สมัคร",
+                    filter: columns
+                      .filter((c) => filters[c.id]?.length)
+                      .map((c) => `${c.label}: ${filters[c.id]!.join(", ")}`)
+                      .join(" · "),
+                    total: rows.length,
+                    ...(await candidateSheet(visible, showReason, showBlacklist)),
+                  })}
+                />
+                {syncMode ? (
+                  <FormSyncDialog mode={syncMode} onClose={() => setSyncMode(null)} onImported={setRows} />
+                ) : null}
               </th>
             </tr>
           </thead>
@@ -614,8 +774,17 @@ export function CandidatesView({
                         <span className="font-medium whitespace-nowrap text-ink">
                           {a.fullName}
                         </span>
-                        <span className="font-mono text-10-5 tracking-wider text-primary">
+                        <span className="flex items-center gap-1.5 font-mono text-10-5 tracking-wider text-primary">
                           {a.ref}
+                          {rqByApplication.get(a.id) ? (
+                            <Link
+                              href={`${ADMIN_ROOT}/onboarding/${rqByApplication.get(a.id)!.id}`}
+                              title="ดูเส้นทางพนักงานใหม่"
+                              className="rounded-selector bg-soft px-1 hover:bg-primary/15"
+                            >
+                              {rqByApplication.get(a.id)!.code} ↗
+                            </Link>
+                          ) : null}
                         </span>
                       </div>
                     </div>
@@ -665,6 +834,15 @@ export function CandidatesView({
 
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-1.5">
+                      {/* ข้อมูล RC → หน้าติดตามพนักงานใหม่ · ปลด/ลาออกทำที่นี่ที่เดียว */}
+                      {!locked && rqByApplication.get(a.id) ? (
+                        <RcButton
+                          requisition={rqByApplication.get(a.id)!}
+                          name={a.fullName}
+                          onOpen={() => setRcFor({ application: a, requisition: rqByApplication.get(a.id)! })}
+                        />
+                      ) : null}
+
                       {/* Driver Rating — สรุปคะแนนบนตัวปุ่มเลย (ดาว + เฉลี่ย) สีตามระดับ
                           กดแล้วเปิดกล่องทำเอกสารตรงที่ฉบับ Driver Rating เพื่อให้คะแนนต่อ */}
                       {!locked ? (
@@ -734,6 +912,22 @@ export function CandidatesView({
         ) : null}
       </div>
 
+      {rcFor ? (
+        <CandidateRcForm
+          requisitionId={rcFor.requisition.id}
+          code={rcFor.requisition.code}
+          name={rcFor.application.fullName}
+          status={rcFor.application.status}
+          contactOwner={rcFor.application.contactOwner}
+          onClose={() => setRcFor(null)}
+          onSaved={(next) =>
+            setRequisitions?.((prev) =>
+              prev.map((r) => (r.id === next.id ? { ...r, drivercode: next.drivercode, outcome: next.outcome } : r)),
+            )
+          }
+        />
+      ) : null}
+
       {drafting ? (
         <HrDocumentMaker
           application={drafting}
@@ -758,6 +952,25 @@ export function CandidatesView({
  * ดีเยี่ยม/ดี = เขียว · ปานกลาง = เหลือง · ต่ำ/เสี่ยง = แดง · ยังไม่มีคะแนน = เทา
  * `title` บอกระดับ ผลรวม และจำนวนข้อที่ประเมินแล้ว — ไม่ต้องเปิดกล่องก็รู้ว่าครบหรือยัง
  */
+/** ปุ่มข้อมูล RC — ใบที่มีผลสิ้นสุดแล้ว (ปลด/ลาออก …) ขึ้นเป็นสีแดงพร้อมป้าย */
+function RcButton({ requisition, name, onOpen }: { requisition: Requisition; name: string; onOpen: () => void }) {
+  const ended = ["withdrawn", "lost"].includes(outcomeGroup(requisition.outcome));
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={ended ? `ข้อมูล RC · ${outcomeLabel(requisition.outcome)}` : "ข้อมูล RC"}
+      className={`inline-flex h-8 items-center justify-center gap-1 rounded-selector border px-2 transition-colors ${
+        ended ? "border-alert/30 text-alert hover:bg-alert/10" : "border-line text-mut hover:border-primary/40 hover:text-primary"
+      }`}
+    >
+      <ClipboardList size={14} strokeWidth={1.9} aria-hidden />
+      {ended ? <span className="text-11-5 font-medium">{outcomeLabel(requisition.outcome)}</span> : null}
+      <span className="sr-only">ข้อมูล RC ของ {name}</span>
+    </button>
+  );
+}
+
 function RatingButton({
   rating,
   name,

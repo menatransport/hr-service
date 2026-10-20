@@ -58,12 +58,19 @@ export const OTHER = "other";
  */
 export type ReplaceReason = string;
 
-export type HireType = "replace" | "new_rate";
+/**
+ * `unspecified` = คำขอที่นำเข้าจากไฟล์ Onboarding ของฝ่ายบุคคล (ไฟล์ไม่ได้บอกว่าแทนใครหรืออัตราใหม่)
+ * — **ฟอร์มไม่มีตัวเลือกนี้** และ `POST` ไม่รับ ใบที่แจ้งผ่านระบบต้องเลือกหนึ่งในสองแบบเสมอ
+ */
+export type HireType = "replace" | "new_rate" | "unspecified";
 
 export const HIRE_TYPES = [
   { value: "replace", label: "แทนคนเดิม" },
   { value: "new_rate", label: "อัตราใหม่" },
 ] as const;
+
+/** ขอได้สูงสุดกี่อัตราต่อการกดหนึ่งครั้ง — กันการกดพลาดที่จะสร้างคำขอเป็นร้อยใบ */
+export const MAX_HEADCOUNT = 10;
 
 /**
  * สีชิปประเภทอัตรา — ใช้โทนกลาง (เทา · primary อ่อน) **ไม่ใช่ชุด `st-*`**
@@ -74,6 +81,7 @@ export const HIRE_TYPES = [
 export const HIRE_TYPE_TONE: Record<HireType, string> = {
   replace: "bg-base-200 text-ink",
   new_rate: "bg-primary/10 text-primary",
+  unspecified: "bg-base-200 text-mut",
 };
 
 /**
@@ -86,6 +94,10 @@ export const CANCEL_REASONS = [
   { value: "filled_elsewhere", label: "ได้คนจากทางอื่น" },
   { value: "postponed", label: "ชะลออัตรา" },
   { value: "duplicate", label: "แจ้งซ้ำ" },
+  /* ผู้สมัครที่รับอัตราไว้สละสิทธิ์/ไม่มาฝึก — ใบที่นำเข้าจากไฟล์ Onboarding (สถานะ พจส.
+     “ยกเลิกฝึกงาน · สละสิทธิ์ · ยกเลิกสรรหา”) · ใบในระบบปกติไม่ต้องใช้ เพราะผู้สมัครที่
+     ยกเลิกจะถูกปลดแล้วเปิดอัตรารับใหม่ให้เอง (`syncRequisitionForApplication()`) */
+  { value: "candidate_withdrew", label: "ผู้สมัครสละสิทธิ์ / ไม่มาฝึก" },
   { value: "other", label: "อื่นๆ" },
 ] as const;
 
@@ -230,6 +242,14 @@ export interface Requisition {
   /** 🔗 สะพานไปหน้าติดตามฝึกงาน — ว่าง = ยังไม่ขึ้นทะเบียน พจส. */
   drivercode: string;
 
+  /**
+   * ชื่อคนที่รับอัตรานี้ตามที่ฝ่ายสรรหากรอกในส่วน Onboarding — ใช้เมื่อไม่มีใบสมัครผูก
+   * (ใบที่นำเข้าจากไฟล์ Excel) · มีใบสมัครผูกเมื่อไหร่ `match.fullName` ขึ้นแทนเสมอ
+   */
+  hireName: string;
+  /** สถานะ พจส. (`onboarding.rc.outcome`) — ว่าง = ยังไม่ระบุ */
+  outcome: string;
+
   note: string;
   requester: { employeeId: string; name: string };
   history: RequisitionHistory[];
@@ -286,6 +306,7 @@ export function replaceReasonLabel(replace: RequisitionReplace): string {
 }
 
 export function hireTypeLabel(t: HireType): string {
+  if (t === "unspecified") return "ไม่ระบุ";
   return label(HIRE_TYPES, t, t);
 }
 
@@ -346,4 +367,9 @@ export function isStale(r: Requisition): boolean {
   if (isClosed(r)) return false;
   const days = waitingDays(r);
   return days !== null && days > STALE_DAYS;
+}
+
+/** ชื่อคนที่รับอัตรา — ใบสมัครที่ผูกก่อน ไม่มีค่อยใช้ชื่อที่ฝ่ายสรรหากรอกเอง */
+export function personName(r: Requisition): string {
+  return r.match?.fullName || r.hireName;
 }

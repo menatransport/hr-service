@@ -14,6 +14,7 @@ import {
   CANCEL_REASONS,
   CUSTOMERS,
   LINKABLE_STATUSES,
+  MAX_HEADCOUNT,
   OTHER,
   POSITIONS,
   isRequisitionStatus,
@@ -25,6 +26,8 @@ import {
   type RequisitionPosition,
   type RequisitionStatus,
 } from "./types";
+import type { Onboarding } from "./onboarding";
+import { isIssuedDriverCode, syncRegistryFromRequisition } from "./registry-sync";
 
 /**
  * ชั้นข้อมูลของ “ขอสรรหา” — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
@@ -42,11 +45,12 @@ import {
  * ปลดรถได้ แต่คำขอต้องอ่านได้เหมือนวันที่แจ้ง · **ห้ามเขียนลง `Boom_ETL`**
  */
 
-/** จำนวนที่ดึงมาแสดงบนหน้าจอ — ค้นหา/กรองทำฝั่ง client บนชุดนี้ */
-const LIST_LIMIT = 500;
+/**
+ * จำนวนที่ดึงมาแสดงบนหน้าจอ — ค้นหา/กรองทำฝั่ง client บนชุดนี้
+ * (ขยายจาก 500 ตอนนำเข้าไฟล์ Onboarding ปี 2026 ซึ่งมี 552 คนในไฟล์เดียว — 14 ต.ค. 2026)
+ */
+export const LIST_LIMIT = 2000;
 
-/** ขอได้สูงสุดกี่อัตราต่อการกดหนึ่งครั้ง — กันการกดพลาดที่จะสร้างคำขอเป็นร้อยใบ */
-export const MAX_HEADCOUNT = 10;
 
 const MAX_TEXT = 120;
 const MAX_NOTE = 500;
@@ -60,7 +64,7 @@ interface PersonDoc {
   name: string;
 }
 
-interface RequisitionDoc {
+export interface RequisitionDoc {
   code: string;
   requestedOn: string;
 
@@ -90,6 +94,16 @@ interface RequisitionDoc {
 
   drivercode: string;
 
+  /** ข้อมูล 5 ฝ่ายหลังได้คน (ดู `onboarding.ts`) — ไม่มี = ยังไม่มีใครกรอก */
+  onboarding?: Onboarding;
+  /**
+   * Onboarding ของคนก่อนหน้าที่หลุดจากอัตรานี้ (ปลดการผูก/ผู้สมัครยกเลิก) — ย้ายมาเก็บไว้
+   * ไม่ลบทิ้ง และไม่ปล่อยค้างให้คนใหม่ที่มารับอัตราเดียวกันได้ผล Day 1 ของคนเก่าไปด้วย
+   */
+  pastOnboarding?: (Onboarding & { applicationId?: string; fullName: string; archivedAt: string })[];
+  /** ร่องรอยการนำเข้าจากไฟล์ — `import_onboarding_xlsx.mjs` ใช้กันนำเข้าซ้ำ/ลบเฉพาะชุดที่นำเข้า */
+  import?: { source: string; key: string; row: number };
+
   note: string;
   requester: { employeeId: string; name: string };
   history: { at: string; by: string; from: RequisitionStatus | null; to: RequisitionStatus; note: string }[];
@@ -102,11 +116,11 @@ interface RequisitionDoc {
  * `lib/db/registry.mjs` และมีบนฐานจริงแล้ว — `match_unique` เป็นเรื่องความถูกต้องจริง
  * (กันใบสมัครใบเดียวถูกผูกกับสองอัตรา) แต่ `linkApplication()` ก็ยังตรวจซ้ำอีกชั้นอยู่ดี
  */
-function requisitions(): Promise<Collection<RequisitionDoc>> {
+export function requisitions(): Promise<Collection<RequisitionDoc>> {
   return hrCol<RequisitionDoc>("requisitions");
 }
 
-function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
+export function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
   return {
     id: doc._id.toHexString(),
     code: doc.code,
@@ -127,6 +141,8 @@ function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
        ที่ลิสต์ เพราะใบสมัครเดินหน้าต่อได้เองโดยไม่ผ่านหน้านี้ */
     match: doc.match ? { ...doc.match, status: null } : null,
     drivercode: doc.drivercode ?? "",
+    hireName: doc.onboarding?.rc?.values.fullName ?? "",
+    outcome: doc.onboarding?.rc?.values.outcome ?? "",
     note: doc.note ?? "",
     requester: doc.requester,
     history: doc.history ?? [],
@@ -203,7 +219,7 @@ function customer(value: unknown, other: unknown): { customer: string; customerO
 /* ------------------------------------------------- อ่านทะเบียน พจส. และรถ */
 
 /** ชื่อ พจส. จากรหัส — **ต้องมีอยู่จริงในทะเบียน** ไม่งั้นคำขอจะอ้างถึงคนที่ไม่มีตัวตน */
-async function person(drivercode: unknown, field: string): Promise<PersonDoc> {
+export async function person(drivercode: unknown, field: string): Promise<PersonDoc> {
   const code = text(drivercode, field);
   const doc = await readDriver<{ drivercode?: string; driverName?: string }>(code, [
     "drivercode",
@@ -219,7 +235,7 @@ async function person(drivercode: unknown, field: string): Promise<PersonDoc> {
  * เลขรถ/ทะเบียน/ยี่ห้อ ลงในคำขอ ผู้ใช้จึงเลือกครั้งเดียวได้ครบสามค่า
  * ไม่ต้องกรอกทีละช่องเหมือนฟอร์มเดิมของ `mena-next-lb`
  */
-async function vehicle(code: unknown): Promise<RequisitionDoc["vehicle"]> {
+export async function vehicle(code: unknown): Promise<RequisitionDoc["vehicle"]> {
   const v = typeof code === "string" ? code.trim() : "";
   if (!v) return null;
 
@@ -253,7 +269,7 @@ async function vehicle(code: unknown): Promise<RequisitionDoc["vehicle"]> {
  * อ่านไม่สำเร็จ = ปล่อยเป็น `null` แล้วจอขึ้นแค่ชื่อกับเลขที่ใบ — ไม่ทำให้
  * ทั้งตารางพังเพราะคอลัมน์เดียว
  */
-async function attachMatchStatus(rows: Requisition[]): Promise<void> {
+export async function attachMatchStatus(rows: Requisition[]): Promise<void> {
   const ids = rows
     .map((r) => r.match?.applicationId)
     .filter((id): id is string => typeof id === "string" && ObjectId.isValid(id));
@@ -316,12 +332,47 @@ export interface RequisitionInput {
   trainerDrivercode: unknown;
   note: unknown;
   headcount: unknown;
+  /**
+   * รถ + ครูฝึก **รายอัตรา** — ช่องที่ `i` ไปลงใบที่ `i` · ไม่ส่งมา = ใช้
+   * `vehicleCode`/`trainerDrivercode` ชุดเดียวทุกใบ (ผู้เรียกเดิม)
+   */
+  slots?: unknown;
+}
+
+interface SlotInput {
+  vehicleCode?: unknown;
+  trainerDrivercode?: unknown;
+}
+
+/** รถ + ครูฝึกของแต่ละใบ — รถคันเดียวกันลงสองอัตราไม่ได้ */
+async function readSlots(input: RequisitionInput, headcount: number) {
+  const raw: SlotInput[] = Array.isArray(input.slots)
+    ? (input.slots as SlotInput[])
+    : [{ vehicleCode: input.vehicleCode, trainerDrivercode: input.trainerDrivercode }];
+  if (raw.length > headcount)
+    throw new RequisitionError("รายการรถและครูฝึกเกินจำนวนอัตรา");
+
+  const slots = await Promise.all(
+    Array.from({ length: headcount }, async (_, i) => {
+      const s = raw[Array.isArray(input.slots) ? i : 0] ?? {};
+      return {
+        vehicle: await vehicle(s.vehicleCode),
+        trainer: s.trainerDrivercode ? await person(s.trainerDrivercode, "ครูฝึก") : null,
+      };
+    }),
+  );
+
+  const codes = slots.map((s) => s.vehicle?.code).filter(Boolean);
+  if (Array.isArray(input.slots) && new Set(codes).size !== codes.length)
+    throw new RequisitionError("เลือกรถคันเดียวกันซ้ำในหลายอัตรา");
+  return slots;
 }
 
 /**
  * สร้างคำขอ — **`headcount` มากกว่า 1 คือสร้างหลายใบ ใบละหนึ่งอัตรา**
  * (เจ้าของงานเลือกทางนี้ 21 ก.ย. 2026 ดู `.claude/docs/requisitions.md`)
- * ทุกใบมีเนื้อหาเหมือนกันแต่เดินอิสระต่อกันตั้งแต่วินาทีแรก
+ * ทุกใบมีเนื้อหาเหมือนกัน ยกเว้นรถ/ครูฝึกที่ระบุรายอัตราได้ (`slots`, 14 ต.ค. 2026)
+ * และเดินอิสระต่อกันตั้งแต่วินาทีแรก
  *
  * `requester` มาจาก session เท่านั้น — ห้ามรับจาก body (กฎเดียวกับทั้งระบบ)
  */
@@ -367,10 +418,6 @@ export async function createRequisitions(
     plant: text(input.plant, "แพล้นท์"),
     hireType,
     replace,
-    vehicle: await vehicle(input.vehicleCode),
-    trainer: input.trainerDrivercode
-      ? await person(input.trainerDrivercode, "ครูฝึก")
-      : null,
     status: "open" as const,
     cancelReason: "" as const,
     filledOn: "",
@@ -382,9 +429,11 @@ export async function createRequisitions(
     updatedAt: now,
   };
 
+  const slots = await readSlots(input, headcount);
   const codes = await reserveCodes(headcount);
-  const docs: RequisitionDoc[] = codes.map((code) => ({
+  const docs: RequisitionDoc[] = codes.map((code, i) => ({
     ...shared,
+    ...slots[i],
     code,
     history: [
       { at: now, by: requester.name, from: null, to: "open" as const, note: "แจ้งขอสรรหา" },
@@ -466,14 +515,20 @@ export async function updateRequisition(
 
   if (patch.drivercode !== undefined) {
     const code = text(patch.drivercode, "รหัส พจส.", MAX_TEXT, false);
-    if (code) await person(code, "รหัส พจส.");
-    return apply(
+    if (code && !(await isIssuedDriverCode(code)))
+      throw new RequisitionError(`ไม่พบรหัส พจส. ${code} ในทะเบียนประวัติหรือใน ATMS`);
+    const updated = await apply(
       col,
       current,
       { drivercode: code },
       by,
       code ? `ผูกรหัส พจส. ${code}` : "ถอดรหัส พจส. ออก",
     );
+    /* ผูกรหัส = รับเข้าทะเบียนประวัติ (`registry-sync.ts`) · ล้มแล้วไม่ทำให้การผูกรหัสล้ม */
+    await syncRegistryFromRequisition({ ...updated, onboarding: current.onboarding }, by).catch((err) =>
+      console.warn("[requisitions] ส่งเข้าทะเบียนประวัติไม่สำเร็จ —", err),
+    );
+    return updated;
   }
 
   if (patch.note !== undefined) {
@@ -575,10 +630,33 @@ async function unlinkApplication(
       /* ปลดแล้วกลับไปเปิดรับ ยกเว้นคำขอที่ถูกยกเลิกไปแล้วซึ่งต้องคาสถานะเดิมไว้ */
       status: current.status === "cancelled" ? "cancelled" : "open",
       filledOn: "",
+      ...archiveOnboarding(current),
     },
     by,
     `ปลดการผูก ${current.match.fullName}`,
   );
+}
+
+/**
+ * คนที่ผูกไว้หลุดจากอัตรา → ย้าย Onboarding ของเขาไปเก็บใน `pastOnboarding` แล้วล้างของปัจจุบัน
+ * · เก็บ `applicationId` ไว้ด้วย — แท็บ “จบ / ยกเลิก” ใช้ตามว่าผู้สมัครที่ยกเลิกเคยอยู่อัตราไหน
+ * · ไม่มีใบผูกและไม่มีอะไรกรอกไว้ = ไม่ต้องย้าย (คืนก้อนว่างให้ `...` กระจายแล้วไม่เปลี่ยนอะไร)
+ */
+function archiveOnboarding(current: WithId<RequisitionDoc>): Partial<RequisitionDoc> {
+  const onboarding = current.onboarding ?? {};
+  if (!current.match && !Object.keys(onboarding).length) return {};
+  return {
+    onboarding: {},
+    pastOnboarding: [
+      ...(current.pastOnboarding ?? []),
+      {
+        ...onboarding,
+        applicationId: current.match?.applicationId ?? "",
+        fullName: current.match?.fullName || onboarding.rc?.values.fullName || "",
+        archivedAt: new Date().toISOString(),
+      },
+    ],
+  };
 }
 
 /* -------------------------------------------------------------- เปลี่ยนสถานะ */
@@ -667,7 +745,7 @@ export async function syncRequisitionForApplication(
       await apply(
         col,
         current,
-        { match: null, status: "open", filledOn: "" },
+        { match: null, status: "open", filledOn: "", ...archiveOnboarding(current) },
         by,
         `${current.match?.fullName ?? "ผู้สมัคร"} ยกเลิก — เปิดรับอีกครั้ง`,
       );
@@ -675,13 +753,20 @@ export async function syncRequisitionForApplication(
     }
 
     if (isHiredStatus(status) && current.status !== "filled") {
+      const today = todayInBangkok();
       await apply(
         col,
         current,
-        { status: "filled", filledOn: todayInBangkok() },
+        { status: "filled", filledOn: today },
         by,
         `${current.match?.fullName ?? "ผู้สมัคร"} เริ่มฝึกงาน — อัตรานี้ปิดรับแล้ว`,
       );
+      /* วันเริ่มฝึกของส่วน RC ตามมาเอง ถ้ายังไม่มีใครกรอก — ไม่ต้องกรอกซ้ำสองที่ */
+      if (!current.onboarding?.rc?.values.trainingStartOn)
+        await col.updateOne(
+          { _id: current._id },
+          { $set: { "onboarding.rc.values.trainingStartOn": today } },
+        );
       return;
     }
 

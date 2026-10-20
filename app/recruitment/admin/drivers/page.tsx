@@ -11,8 +11,8 @@ import type { DriverRegistry } from "@/app/recruitment/_lib/drivers/types";
 /**
  * ทะเบียนประวัติ พจส. — รายชื่อพนักงานขับรถทั้งหมด
  *
- * อ่านสดจาก `Boom_ETL.main_driver` + ฟิลด์ของฝ่ายบุคคลใน `hr_service.master_driver`
- * (`_lib/drivers/master.ts`) · ถ้าต้นทางว่าง หน้านี้จะบอกตรง ๆ
+ * ทะเบียนของ hr-service เอง — `hr_service.master_driver` ที่นำเข้าจาก Excel ทะเบียน 2026 + คนใหม่
+ * จากหน้าติดตามพนักงานใหม่ (`_lib/drivers/master.ts`) · ถ้าทะเบียนว่าง หน้านี้จะบอกตรง ๆ
  * **ไม่ใช่ขึ้นตารางเปล่า** ซึ่งอ่านเป็น “บริษัทไม่มีคนขับสักคน”
  *
  * อ่านผ่าน `getDriverList()` — ไม่มีปฏิทินรายวัน/ของที่กรอกเอง/แฟ้มเอกสาร ตั้งแต่ใน query
@@ -62,12 +62,7 @@ export default async function DriversRegistryPage() {
   );
 }
 
-/**
- * แถบ “อ่านอย่างเดียว” — อยู่ถาวร ไม่ใช่ toast ที่หายไป
- *
- * ข้อมูลชุดนี้เป็นกระจกเงาของ ETL ผู้ใช้ต้องรู้ตั้งแต่วินาทีแรกว่าแก้ที่นี่ไม่ได้
- * ไม่ใช่รู้ตอนไล่หาปุ่มแก้ไขจนทั่วหน้าแล้วไม่เจอ
- */
+/** แถบเตือนถาวร (ไม่ใช่ toast ที่หายไป) — อ่านข้อมูลรถ/สถานะงานจาก ETL ไม่สำเร็จ */
 function ReadOnlyNotice({ enrichmentFailed }: { enrichmentFailed: boolean }) {
   /* ไม่มีอะไรจะเตือน = ไม่วาดกล่องเปล่า — กล่องเปล่ายังกิน `gap-4` ของหน้า แถบสรุปเลยไม่ติดขอบบนของแผ่น */
   if (!enrichmentFailed) return null;
@@ -95,8 +90,8 @@ function EmptyRegistry() {
       <BookUser size={24} strokeWidth={1.6} className="text-mut" aria-hidden />
       <p className="text-sm font-semibold">ยังไม่มีข้อมูลในทะเบียน</p>
       <p className="max-w-[54ch] text-12-5 leading-[1.7] text-mut text-pretty">
-        อ่าน <code className="font-mono">Boom_ETL.main_driver</code> ของระบบต้นทางแล้วไม่พบใครเลย —
-        ตรวจว่า ETL ยังส่งข้อมูลอยู่ แล้วโหลดหน้านี้ใหม่
+        ยังไม่มีใครใน <code className="font-mono">master_driver</code> ที่อยู่ในทะเบียน — นำเข้าทะเบียนจาก Excel
+        ด้วย <code className="font-mono">node import_driver_registry_xlsx.mjs --apply</code> แล้วโหลดหน้านี้ใหม่
       </p>
     </div>
   );

@@ -1,20 +1,21 @@
 import {
   BookUser,
   Bookmark,
-  BriefcaseBusiness,
   Building2,
+  ChartColumn,
   ClipboardList,
   Code2,
+  Container,
   Database,
   Inbox,
   LayoutGrid,
-  Route,
   ShieldCheck,
   Truck,
   UserPlus,
   UserRoundSearch,
   Users,
   Wallet,
+  Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -34,6 +35,13 @@ import type { LucideIcon } from "lucide-react";
 
 export type ModuleId = "driver" | "office" | "master";
 
+/**
+ * ค่าของ `soon` ทุกเมนูที่ปิดไว้ — ปิดเฉพาะ build จริง ตอน `next dev` เปิดให้ใช้ได้ตามปกติ
+ * (`NODE_ENV` ถูกฝังตอน build จึงใช้ได้ทั้ง server และ client) · หน้าใต้เมนูที่ปิดควรกันเองด้วย
+ * `if (SOON) notFound()` เพราะพิมพ์ URL ตรง ๆ ยังเข้าได้
+ */
+export const SOON = process.env.NODE_ENV !== "development";
+
 export interface ModuleItem {
   /** ใช้เป็นชื่อ view transition ด้วย — ห้ามซ้ำข้ามกลุ่ม */
   id: string;
@@ -41,12 +49,14 @@ export interface ModuleItem {
   desc: string;
   href: string;
   icon: LucideIcon;
-  /** ยังไม่มีหน้าจริง — แสดงเป็น “เร็ว ๆ นี้” และกดไม่ได้ */
+  /** ยังไม่เปิดใช้ — แสดงเป็น “เร็ว ๆ นี้” และกดไม่ได้ · ใส่ `soon: SOON` (เปิดเองใน dev) */
   soon?: boolean;
   /**
    * path ที่นับว่าเป็นเมนูนี้ เมื่อไม่ใช่ path ของ `href` เอง
    */
   match?: string;
+  /** path อื่นที่นับเป็นเมนูนี้ด้วย (หน้าเดียวกันคนละมุมมอง / เส้นทางเก่าที่ redirect มา) */
+  also?: string[];
   /**
    * เมนูย่อย (subgroup) — เมนูแม่กลายเป็นหัวข้อพับ/กาง ไม่ได้เป็นลิงก์เอง · ลูกใช้ `id`
    * เป็นชื่อ view transition เหมือนเมนูปกติ จึงห้ามซ้ำกับใครเช่นกัน · ซ้อนได้ชั้นเดียว
@@ -76,7 +86,7 @@ export const MODULES: ModuleGroup[] = [
   {
     id: "driver",
     label: "พนักงานจัดส่ง",
-    tagline: "พจส. · คำร้องเรียน · สรรหาและฝึกงานคนขับ",
+    tagline: "พจส. · คำร้องเรียน · สรรหาและฝึกงานคนขับ · สถานะรถ",
     caption: "งานบุคคลของพนักงานจัดส่ง ตั้งแต่สรรหาจนถึงคำร้องเรียน",
     icon: Truck,
     items: [
@@ -90,16 +100,19 @@ export const MODULES: ModuleGroup[] = [
       {
         id: "new-hire",
         label: "พนักงานใหม่",
-        desc: "ขออัตราสรรหา · ผู้สมัคร · ติดตามฝึกงาน",
-        href: "/recruitment/admin/requisitions",
+        desc: "อัตราว่าง · ผู้สมัคร · ฝึกงาน · รับรถ",
+        href: "/recruitment/admin/onboarding",
         icon: UserPlus,
         children: [
           {
-            id: "requisitions",
-            label: "ขออัตราสรรหาพนักงาน",
-            desc: "ใบขออัตรากำลังจากหน่วยงาน · ติดตามการสรรหา",
-            href: "/recruitment/admin/requisitions",
-            icon: BriefcaseBusiness,
+            /* หน้าเดียวแทน ขออัตราสรรหา + Onboarding + ติดตามฝึกงาน (14 ต.ค. 2026) —
+               ตารางรายวันเป็นมุมมองหนึ่งของหน้านี้ (`also`) */
+            id: "onboarding",
+            label: "ติดตามพนักงานใหม่",
+            desc: "อัตราว่างจนรับรถ ในตารางเดียว",
+            href: "/recruitment/admin/onboarding",
+            icon: Workflow,
+            also: ["/recruitment/admin/trainees", "/recruitment/admin/requisitions"],
           },
           {
             id: "candidates",
@@ -107,13 +120,6 @@ export const MODULES: ModuleGroup[] = [
             desc: "ใบสมัคร · ติดต่อ · นัดสัมภาษณ์",
             href: "/recruitment/admin/candidates",
             icon: UserRoundSearch,
-          },
-          {
-            id: "trainees",
-            label: "ติดตามฝึกงาน",
-            desc: "ตารางฝึก · รถฝึก · ผลการฝึกรายวัน",
-            href: "/recruitment/admin/trainees",
-            icon: Route,
           },
         ],
       },
@@ -123,6 +129,20 @@ export const MODULES: ModuleGroup[] = [
         desc: "ประวัติพนักงานขับรถทุกคน",
         href: "/recruitment/admin/drivers",
         icon: BookUser,
+      },
+      {
+        id: "trucks",
+        label: "สถานะรถ",
+        desc: "รถทุกคัน · คนขับวันนี้ · งานซ่อม ในภาพเดียว",
+        href: "/recruitment/admin/trucks",
+        icon: Container,
+      },
+      {
+        id: "dashboard",
+        label: "แดชบอร์ด",
+        desc: "กราฟกำลังคน พจส. รายลูกค้าและแพล้นท์",
+        href: "/recruitment/admin/dashboard",
+        icon: ChartColumn,
       },
     ],
   },
@@ -155,6 +175,7 @@ export const MODULES: ModuleGroup[] = [
         desc: "รอบเงินเดือน · นำเข้าข้อมูลค่าจ้าง",
         href: "/payroll",
         icon: Wallet,
+        soon: SOON,
         // เมนูของระบบค่าจ้างเอง — ตรงกับ `lib/payroll/nav.ts` (เพิ่มที่นั่นเมื่อไหร่ ต้องเพิ่มที่นี่ด้วย)
         children: [
           {
@@ -186,7 +207,7 @@ export const MODULES: ModuleGroup[] = [
         desc: "ใครเข้าเมนูไหนได้บ้าง",
         href: "/desk/permissions",
         icon: ShieldCheck,
-        soon: true,
+        soon: SOON,
       },
       {
         id: "api-docs",
@@ -220,7 +241,8 @@ export function findModule(pathname: string, search = ""): ModuleMatch | undefin
     if (item.href === full) return 10_000;
     if (!item.href.includes("?") && (pathname === base || pathname.startsWith(`${base}/`)))
       return base.length;
-    return -1;
+    const other = item.also?.find((p) => pathname === p || pathname.startsWith(`${p}/`));
+    return other ? other.length : -1;
   };
   let best: (ModuleMatch & { score: number }) | undefined;
 

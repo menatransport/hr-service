@@ -13,6 +13,7 @@ import {
   displayAnswer,
   emptyAnswer,
   findByRole,
+  formatPhone,
   isBlank,
   validateAnswer,
   validateDocumentField,
@@ -50,6 +51,8 @@ import {
   type ExitReason,
   type InterviewRecord,
   type Question,
+  type QuestionKind,
+  type SectionId,
   type QuestionSnapshot,
   type RatingRecord,
   type TimelineEntry,
@@ -1162,6 +1165,67 @@ export async function getApplication(id: string): Promise<Application | null> {
   if (!ObjectId.isValid(id)) return null;
   const doc = await (await applications()).findOne({ _id: new ObjectId(id) });
   return doc ? toApplication(doc) : null;
+}
+
+/* ------------------------------------------------------- ส่งออก Excel */
+
+export interface ApplicationFormExport {
+  /** ข้อในฟอร์ม เรียงตามหมวด → ลำดับในฟอร์มรุ่นล่าสุด · `id` = หมวด + ข้อความคำถาม */
+  columns: { id: string; label: string; section: SectionId; kind: QuestionKind }[];
+  /** คำตอบที่แปลงเป็นข้อความแล้ว (ตัวเลือก → ป้าย · เบอร์จัดรูป · วันที่ `YYYY-MM-DD`) — ข้อที่ไม่ได้ตอบไม่มีคีย์ */
+  rows: { id: string; values: Record<string, string> }[];
+}
+
+/**
+ * คำตอบในฟอร์มสมัครของใบที่ขอ — ชีต “ข้อมูลใบสมัคร” ในไฟล์ Excel หน้าผู้สมัคร
+ * (`POST /api/recruitment/applications/export`)
+ *
+ * คอลัมน์ผูกกับ **หมวด + ข้อความคำถาม ไม่ใช่ `key`** — คีย์ถูกสร้างใหม่ทุกครั้งที่ลบแล้วเพิ่มข้อกลับมา
+ * (ดู `ROLE_MATCHERS`) ใบจากฟอร์มต่างรุ่นจึงยังลงคอลัมน์เดียวกัน · เลขบัตรประชาชนออกเต็ม
+ * (ไฟล์นี้ใช้ทำสัญญา/ประกันสังคม) ต่างจากรายงานบนจอที่ปิดบางหลัก
+ */
+export async function exportApplicationForms(ids: readonly string[]): Promise<ApplicationFormExport> {
+  const objectIds = [...new Set(ids)].filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+  if (!objectIds.length) return { columns: [], rows: [] };
+
+  const docs = await readApplicationsWithSnapshot<{ answers?: AnswerMap; createdAt: string }>(
+    [{ $match: { _id: { $in: objectIds } } }, { $sort: { createdAt: -1 } }],
+    { answers: 1, createdAt: 1 },
+  );
+
+  const sectionOrder = (s: SectionId) => QUESTION_SECTIONS.findIndex((x) => x.id === s);
+  const columnId = (q: QuestionSnapshot) => `${q.section}|${q.label.trim()}`;
+  const columns = new Map<string, ApplicationFormExport["columns"][number]>();
+  /* ใบใหม่สุดก่อน — ลำดับข้อตามฟอร์มรุ่นล่าสุด ข้อที่มีเฉพาะรุ่นเก่าต่อท้ายหมวดของมัน */
+  for (const doc of docs) {
+    for (const q of doc.questionSnapshot) {
+      const id = columnId(q);
+      if (!columns.has(id)) columns.set(id, { id, label: q.label.trim(), section: q.section, kind: q.kind });
+    }
+  }
+
+  const rows = docs.map((doc) => {
+    const values: Record<string, string> = {};
+    for (const q of doc.questionSnapshot) {
+      const raw = doc.answers?.[q.key];
+      if (isBlank(raw)) continue;
+      values[columnId(q)] =
+        q.kind === "tel"
+          ? formatPhone(String(raw))
+          : q.kind === "nid" || q.kind === "date" || q.kind === "number"
+            ? String(raw).trim()
+            : displayAnswer(raw, q.options);
+    }
+    return { id: doc._id.toHexString(), values };
+  });
+
+  return {
+    columns: [...columns.values()]
+      .map((c, i) => ({ c, i }))
+      .sort((a, b) => sectionOrder(a.c.section) - sectionOrder(b.c.section) || a.i - b.i)
+      .map(({ c }) => c),
+    rows,
+  };
 }
 
 /* ------------------------------------------------------- ฝั่งผู้สมัครเปิดดูเอง */

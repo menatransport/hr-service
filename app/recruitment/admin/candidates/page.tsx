@@ -61,6 +61,7 @@ export default async function CandidatesPage({
           docSlots={docSlots}
           blacklist={blacklist}
           initialRef={ref}
+          initialRc={params.rc === "1"}
         />
       ) : (
         <div className="mx-auto max-w-xl py-6">

@@ -161,6 +161,7 @@ export function TextField({
   onChange,
   placeholder,
   type = "text",
+  list,
   ...frame
 }: FieldBase & {
   /** ไม่ส่ง value/onChange = ปล่อยให้เป็น uncontrolled (ช่องที่ยังไม่ต่อ state) */
@@ -169,6 +170,8 @@ export function TextField({
   placeholder?: string;
   /** ไม่มี `date` โดยตั้งใจ — ช่องวันที่ต้องใช้ `DateField` ท้ายไฟล์นี้ (ดูเหตุผลที่นั่น) */
   type?: "text" | "email" | "tel";
+  /** `id` ของ `<datalist>` — คำแนะนำจากค่าที่เคยกรอก แต่ยังพิมพ์ค่าใหม่ได้ (ฟอร์ม Onboarding) */
+  list?: string;
 }) {
   const { id, readOnly, optional, size = "md" } = frame;
   return (
@@ -176,6 +179,7 @@ export function TextField({
       <input
         id={id}
         type={type}
+        list={list}
         value={value}
         defaultValue={value === undefined ? "" : undefined}
         aria-required={optional ? undefined : true}

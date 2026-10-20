@@ -1,0 +1,73 @@
+/**
+ * โทนของหน้าแดชบอร์ด — **แยกจากธีมระบบ (daisyUI `hrs`) โดยตั้งใจ** (Bew 20 ต.ค. 2026)
+ *
+ * สีกราฟคือ reference palette ของ dataviz ที่ผ่านตัวตรวจ CVD แล้ว (`validate_palette.js` — 5 ช่องแรก
+ * ผ่านทั้งสว่าง/มืด · ช่อง 3–5 ต่ำกว่า 3:1 บนพื้นสว่าง → ทุกการ์ดกราฟมีมุมมองตาราง)
+ * · **ลำดับสีคือกลไกกันตาบอดสี** ห้ามสลับ · ซีรีส์ที่ 6+ ให้รวมเป็น “อื่น ๆ” ไม่ใช่เพิ่มสีเอง
+ * · ทุกคอมโพเนนต์ใน `components/dashboard/` อ่านสีจากตัวแปรชุดนี้ ไม่ใช้ `primary`/`base-*` ของระบบ
+ */
+.dash {
+  color-scheme: light;
+  --dash-page: #f4f4f1;
+  --dash-surface: #fcfcfb;
+  --dash-raise: #ffffff;
+  --dash-ink: #0b0b0b;
+  --dash-ink-2: #52514e;
+  --dash-mut: #898781;
+  --dash-grid: #e1e0d9;
+  --dash-axis: #c3c2b7;
+  --dash-ring: rgba(11, 11, 11, 0.1);
+  --dash-hover: rgba(11, 11, 11, 0.04);
+  --dash-up: #006300;
+  --dash-down: #d03b3b;
+  --dash-neg: #e34948;
+  /* จุดกลางของสเกลสองขั้ว (เทา ไม่มีสี = “ไม่เปลี่ยน”) */
+  --dash-mid: #ebeae6;
+
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --s5: #e87ba4;
+
+  background: var(--dash-page);
+  color: var(--dash-ink);
+}
+
+[data-theme="hrs-dark"] .dash {
+  color-scheme: dark;
+  --dash-page: #0d0d0d;
+  --dash-surface: #1a1a19;
+  --dash-raise: #222220;
+  --dash-ink: #ffffff;
+  --dash-ink-2: #c3c2b7;
+  --dash-mut: #898781;
+  --dash-grid: #2c2c2a;
+  --dash-axis: #383835;
+  --dash-ring: rgba(255, 255, 255, 0.1);
+  --dash-hover: rgba(255, 255, 255, 0.05);
+  --dash-up: #0ca30c;
+  --dash-down: #e66767;
+  --dash-neg: #e66767;
+  --dash-mid: #383835;
+
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+}
+
+/* แกน/ตัวหนังสือในกราฟ recharts — ตามโทนของหน้าแทนสีดำตั้งต้น */
+.dash .recharts-cartesian-axis-tick-value {
+  fill: var(--dash-mut);
+  font-size: 11.5px;
+}
+.dash .recharts-cartesian-grid line {
+  stroke: var(--dash-grid);
+}
+.dash .recharts-surface:focus,
+.dash .recharts-wrapper:focus,
+.dash .recharts-sector:focus {
+  outline: none;
+}

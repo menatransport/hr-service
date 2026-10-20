@@ -13,7 +13,7 @@ import type { DriverProfileRecord } from "./registry";
  * ไม่ให้การแก้รูปภายในของหน้าจอไปเปลี่ยนสัญญาของ API โดยไม่ตั้งใจ
  *
  * กติกา: camelCase · วันที่ `YYYY-MM-DD` · เวลา ISO 8601 · **ไม่มีค่าใช้ `null` เสมอ**
- * (ไม่ใช้ `""`) · ไม่ส่งค่าดิบของ ETL ที่ผู้ใช้ภายนอกไม่ต้องรู้ (`etlActive`, `vehicleRef` ฯลฯ)
+ * (ไม่ใช้ `""`) · ไม่ส่งค่าดิบของ ETL ที่ผู้ใช้ภายนอกไม่ต้องรู้ (`statusOverride`, `vehicleRef` ฯลฯ)
  * — เปลี่ยนรูปเมื่อไหร่ต้องแก้ `api-docs.ts` และขยับเวอร์ชันด้วย
  */
 
@@ -33,9 +33,18 @@ export interface DriverDto {
     startDate: string | null;
     tenureMonths: number | null;
   };
-  contact: { phone: string | null } | null;
-  license: { expiryDate: string | null; daysLeft: number | null } | null;
-  idCard: { expiryDate: string | null; daysLeft: number | null } | null;
+  contact: {
+    phone: string | null;
+    phoneAlt: string | null;
+    emergency: { name: string | null; relation: string | null; phone: string | null };
+  } | null;
+  license: {
+    number: string | null;
+    type: string | null;
+    expiryDate: string | null;
+    daysLeft: number | null;
+  } | null;
+  idCard: { number: string | null; expiryDate: string | null; daysLeft: number | null } | null;
   vehicle: {
     code: string | null;
     plateNo: string | null;
@@ -86,9 +95,28 @@ export function toDriverDto(d: DriverProfileRecord): DriverDto {
       startDate: orNull(d.startDateISO),
       tenureMonths: d.tenureMonths,
     },
-    contact: hidden ? null : { phone: orNull(d.phone) },
-    license: hidden ? null : { expiryDate: orNull(d.licenseExpiryISO), daysLeft: d.licenseDaysLeft },
-    idCard: hidden ? null : { expiryDate: orNull(d.idCardExpiryISO), daysLeft: d.idCardDaysLeft },
+    contact: hidden
+      ? null
+      : {
+          phone: orNull(d.phone),
+          phoneAlt: orNull(d.phoneAlt),
+          emergency: {
+            name: orNull(d.emergencyContactName),
+            relation: orNull(d.emergencyContactRelation),
+            phone: orNull(d.emergencyContactPhone),
+          },
+        },
+    license: hidden
+      ? null
+      : {
+          number: orNull(d.licenseNo),
+          type: orNull(d.licenseType),
+          expiryDate: orNull(d.licenseExpiryISO),
+          daysLeft: d.licenseDaysLeft,
+        },
+    idCard: hidden
+      ? null
+      : { number: orNull(d.nationalId), expiryDate: orNull(d.idCardExpiryISO), daysLeft: d.idCardDaysLeft },
     vehicle: d.vehicle
       ? {
           code: orNull(d.vehicle.code),
@@ -96,8 +124,8 @@ export function toDriverDto(d: DriverProfileRecord): DriverDto {
           type: orNull(d.vehicle.vehicleType),
           brand: orNull(d.vehicle.brand),
           model: orNull(d.vehicle.model),
-          customer: orNull(d.vehicle.fleet),
-          plant: orNull(d.vehicle.plant),
+          customer: orNull(d.customer),
+          plant: orNull(d.plant),
         }
       : null,
     resignation: d.resignation

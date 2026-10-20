@@ -1,7 +1,6 @@
-import Link from "next/link";
-import { ExternalLink } from "lucide-react";
 
 import { AdminNavList } from "@/app/recruitment/_components/admin/admin-nav";
+import { FormQuestionsAction } from "@/app/recruitment/_components/admin/form-questions-dialog";
 import { IdentityProvider } from "@/components/auth/identity-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { getDeskIdentity } from "@/lib/auth/session";
@@ -16,8 +15,7 @@ import { getDeskIdentity } from "@/lib/auth/session";
  * **ไม่มีกระดิ่งแจ้งเตือนโดยตั้งใจ** — กระดิ่งอ่านคำร้องของ พจส. จาก NCAC ซึ่งเป็นคนละสายงาน
  * เอามาแขวนที่นี่จะได้ตัวเลขที่คนใช้หน้านี้ไม่ต้องสนใจ และทุกหน้าต้องรอ NCAC ก่อนวาดแถบบน
  *
- * ปุ่ม “ดูหน้าสมัครงาน” พาไปหน้าที่ผู้สมัครเห็นจริง — ฝ่ายบุคคลที่เพิ่งแก้คำถามเสร็จต้องการ
- * เช็คของจริงบ่อยกว่าที่คิด
+ * ปุ่ม “ดูหน้าสมัครงาน” · “จัดการคำถามฟอร์มสมัคร” ขึ้นเฉพาะหน้าผู้สมัคร (`FormQuestionsAction`)
  *
  * `proxy.ts` ครอบ `/recruitment/admin/:path*` ไว้แล้ว ทุกหน้าใต้กรอบนี้จึงมี session แน่นอน
  */
@@ -38,15 +36,7 @@ export default async function RecruitmentAdminLayout({
         }}
         systemLabel="ศูนย์กลางสรรหา"
         fallback={<AdminNavList />}
-        actions={
-          <Link
-            href="/recruitment"
-            className="glass-btn hidden h-10 flex-none items-center gap-1.5 rounded-xl px-3.5 text-12-5 font-medium md:flex"
-          >
-            <ExternalLink size={15} strokeWidth={1.8} aria-hidden />
-            ดูหน้าสมัครงาน
-          </Link>
-        }
+        actions={<FormQuestionsAction />}
       >
         {children}
       </AppShell>

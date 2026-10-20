@@ -158,14 +158,10 @@ export function DriverDocumentSlots({
   }
 
   return (
-    /*
-      **ความสูงถูกกำหนดโดยคอลัมน์ซ้าย ไม่ใช่โดยจำนวนช่องในนี้**
-      ตัวห่อเป็น grid item ที่ยืดเต็มแถว ส่วนกล่องจริงถอดตัวเองออกจาก flow ด้วย
-      `lg:absolute lg:inset-0` — แถวจึงวัดความสูงจากคอลัมน์ซ้ายอย่างเดียว แล้วกล่องนี้
-      เติมให้เต็มพอดีและเลื่อนเฉพาะรายการข้างใน · `lg:` เท่านั้น จอเล็กวางซ้อนกันปกติ
-    */
-    <div className="relative">
-      <section className="flex flex-col gap-3 border-t border-line pt-6 lg:absolute lg:inset-0 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+    /* อยู่ในแท็บ “เอกสาร” ของหน้าประวัติ (19 ต.ค. 2569) — ไหลตามเนื้อหาปกติ ไม่เลื่อนในกล่อง
+       รายการเป็นสองคอลัมน์บนจอกว้าง ให้เห็นครบทุกประเภทในหน้าเดียว */
+    <div>
+      <section className="flex flex-col gap-3">
         <div className="flex flex-none flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-14 font-semibold">เอกสารแนบ</h2>
@@ -184,8 +180,7 @@ export function DriverDocumentSlots({
           </div>
         </div>
 
-        {/* `min-h-0` ขาดไม่ได้ — ไม่งั้น flex item ไม่ยอมหดต่ำกว่าเนื้อหาแล้วกล่องล้นกรอบ */}
-        <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
+        <ul className="grid gap-2 md:grid-cols-2">
           {groups.map((group) => (
             <Slot
               key={group.type.code}

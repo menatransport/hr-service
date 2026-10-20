@@ -11,11 +11,17 @@ import {
 } from "lucide-react";
 
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
+import { DriverExcelSyncDialog } from "@/app/recruitment/_components/admin/driver-excel-sync";
+import { DriverPasteDialog } from "@/app/recruitment/_components/admin/driver-paste-import";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
 import { ColumnMenu, type ColumnFilterOption } from "@/components/ui/column-menu";
 import { Pager } from "@/components/ui/pager";
 import { SearchField } from "@/components/ui/field";
+import { XlsxMenuButton } from "@/components/ui/xlsx-export-button";
+import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
+import { requestJson } from "@/lib/http";
+import type { DriverExportRow } from "@/app/recruitment/_lib/drivers/registry";
 import {
   SegmentedControl,
   SummaryBody,
@@ -69,17 +75,15 @@ import {
  * - **มีรูปประจำตัวหน้าชื่อ และกดอัปรูปได้จากในตารางเลย** (`DriverAvatar`)
  * - **ไทล์ตัวเลขกดได้** สี่ใบบนสุด กดแล้วไปติ๊กตัวกรองของคอลัมน์ที่เกี่ยวข้องให้
  * - **วันที่เป็น พ.ศ. พร้อมชื่อเดือนไทย** ไม่ใช่ `12/03/2019` ซึ่งอ่านสลับปีได้
- * - **ไม่มีสวิตช์เปิด/ปิดสถานะ ไม่มีแก้ข้อมูลทะเบียน** — ฟิลด์จาก ETL ถูก sync
- *   ทับเป็นรอบ เขียนกลับเท่ากับเขียนทิ้ง · รูปเป็นข้อยกเว้นเพราะเป็นฟิลด์ของ
- *   hr-service เอง ซึ่ง sync ไม่แตะ (ดู `lib/drivers/registry.ts`)
+ * - **ไม่มีช่องแก้ข้อมูลประวัติ** — ประวัติมาจากการนำเข้า Excel / หน้าติดตามพนักงานใหม่
+ *   แก้ได้แค่รูปและสถานะการจ้าง (ดู `lib/drivers/registry.ts`)
  *
  * ทั้งชุดถูกส่งมาจากเซิร์ฟเวอร์ครั้งเดียวแล้วกรองในเครื่อง ท่าเดียวกับ
  * `EmployeeDirectory` — ยิงกรองฝั่งเซิร์ฟเวอร์ทุกครั้งที่พิมพ์จะช้ากว่าและกระตุก
  */
 
 type SiteFilter = DriverSiteKey | "all" | "other";
-/** `nowork` = ETL ว่ายังทำงานแต่ไม่มีข้อมูลการทำงานเลย (`DriverRecord.noWorkRecord`) */
-type EmploymentTab = "current" | "nowork" | "resigned";
+type EmploymentTab = "current" | "resigned";
 
 type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "license" | "status" | "fleet";
 type Filters = Record<FilterKey, string[]>;
@@ -225,10 +229,105 @@ const COLUMNS: {
  */
 const RESIGNED_HIDDEN = new Set<string>(["vehicle", "fleet", "plant"]);
 
+/**
+ * ชีตเดียวของไฟล์ Excel — ทะเบียนเต็มรายคน (เลขบัตร · ใบขับขี่ · ผู้ติดต่อฉุกเฉิน · บัญชี · การพ้นสภาพ · ที่มา)
+ * ของแถวที่เห็นอยู่ ลำดับเดียวกับตาราง (รวมชีตตาราง + ทะเบียนเต็มเป็นชีตเดียว 20 ต.ค. 2026 · Bew)
+ *
+ * ตารางไม่ได้ถือข้อมูลส่วนบุคคล จึงดึงตอนกดส่งออก (`POST /api/drivers/export`) · คนที่พ้นสภาพแล้ว
+ * ข้อมูลส่วนบุคคลว่างตามกติกาหน้าประวัติ · แท็บพ้นสภาพตัดรถ/ลูกค้า/แพล้นท์ (`RESIGNED_HIDDEN`)
+ */
+async function driverSheet(
+  rows: DriverRecord[],
+  resigned: boolean,
+): Promise<Pick<XlsxSheet<DriverExportRow>, "columns" | "rows">> {
+  const full = await requestJson<DriverExportRow[]>(
+    "/api/drivers/export",
+    { method: "POST", body: { codes: rows.map((d) => d.drivercode) } },
+    "ดึงข้อมูลทะเบียนไม่สำเร็จ",
+  );
+  const date = (iso: string) => xlsxDate(iso);
+  const license = (d: DriverExportRow) => licenseState(d.licenseDaysLeft);
+  const vehicleColumns: XlsxColumn<DriverExportRow>[] = [
+    { header: "เลขรถ", width: 10, kind: "code", value: (d) => d.vehicle?.code || (d.siteKey === "latkrabang" ? d.vehicleRef : "") },
+    { header: "ทะเบียนรถ", width: 14, kind: "code", value: (d) => d.vehicle?.plateNo || (d.siteKey === "latkrabang" ? "" : d.vehicleRef) },
+    { header: "ประเภทรถ", width: 14, value: (d) => d.vehicle?.vehicleType },
+    { header: "ยี่ห้อ / รุ่น", width: 18, value: (d) => [d.vehicle?.brand, d.vehicle?.model].filter(Boolean).join(" ") },
+    { header: "ลูกค้า", width: 16, value: (d) => d.customer },
+    { header: "แพล้นท์", width: 18, value: (d) => d.plant },
+  ];
+  const resignColumns: XlsxColumn<DriverExportRow>[] = [
+    { header: "วันที่พ้นสภาพ", width: 13, kind: "date", value: (d) => date(d.resignation?.dateISO ?? "") },
+    { header: "หมวดเหตุผล", width: 18, value: (d) => d.resignation?.categoryLabel },
+    { header: "เหตุผลที่พ้นสภาพ", width: 28, value: (d) => d.resignation?.reasonLabel },
+    { header: "ประเภทการออก", width: 12, kind: "status", value: (d) => d.resignation?.exitType },
+    { header: "หมายเหตุการพ้นสภาพ", width: 30, value: (d) => d.resignation?.note },
+    { header: "บันทึกพ้นสภาพโดย", width: 14, kind: "code", value: (d) => d.resignation?.recordedBy },
+  ];
+
+  return {
+    rows: full,
+    columns: [
+      { header: "รหัสพนักงาน", width: 12, kind: "code", value: (d) => d.drivercode },
+      { header: "ชื่อ - นามสกุล", width: 28, value: (d) => d.name },
+      { header: "เลขบัตรประชาชน", width: 17, kind: "code", value: (d) => d.nationalId },
+      { header: "บัตรประชาชนหมดอายุ", width: 14, kind: "date", value: (d) => date(d.idCardExpiryISO) },
+      { header: "เบอร์โทร", width: 14, kind: "code", value: (d) => (d.phone ? primaryPhone(d.phone) : "") },
+      { header: "เบอร์อื่น", width: 16, value: (d) => d.phoneAlt },
+      { header: "สาขา", width: 14, value: (d) => d.siteLabel || d.branch },
+      { header: "ตำแหน่ง", width: 14, value: (d) => d.position },
+      { header: "ประเภท", width: 13, kind: "status", value: (d) => d.ownerTypeLabel },
+      { header: "รหัสประเภท", width: 10, kind: "code", value: (d) => d.ownerType },
+      ...(resigned ? [] : vehicleColumns),
+      { header: "วันเริ่มงาน", width: 13, kind: "date", value: (d) => date(d.startDateISO) },
+      {
+        header: "อายุงาน",
+        width: 16,
+        value: (d) => (d.tenureMonths === null ? "" : formatTenure(d.tenureMonths, d.tenureDays)),
+        tone: (d) => (isProbation(d.tenureMonths) ? "ok" : null),
+      },
+      { header: "อายุงาน (เดือน)", width: 12, kind: "int", value: (d) => d.tenureMonths },
+      { header: "เลขที่ใบขับขี่", width: 16, kind: "code", value: (d) => d.licenseNo },
+      { header: "ชนิดใบขับขี่", width: 10, kind: "code", value: (d) => d.licenseType },
+      {
+        header: "ใบขับขี่หมดอายุ",
+        width: 14,
+        kind: "date",
+        value: (d) => date(d.licenseExpiryISO),
+        tone: (d) => (license(d) === "expired" ? "alert" : null),
+      },
+      {
+        header: "ใบขับขี่เหลือ (วัน)",
+        width: 13,
+        kind: "int",
+        value: (d) => d.licenseDaysLeft,
+        tone: (d) => (license(d) === "expired" ? "alert" : license(d) === "soon" ? "warn" : null),
+      },
+      { header: "ผู้ติดต่อฉุกเฉิน", width: 22, value: (d) => d.emergencyContactName },
+      { header: "ความสัมพันธ์", width: 12, value: (d) => d.emergencyContactRelation },
+      { header: "เบอร์ผู้ติดต่อฉุกเฉิน", width: 15, kind: "code", value: (d) => d.emergencyContactPhone },
+      { header: "เลขบัญชี (กสิกรไทย)", width: 15, kind: "code", value: (d) => d.bankAccountNo },
+      { header: "สาขาบัญชี", width: 18, value: (d) => d.bankBranch },
+      { header: "สถานะงานล่าสุด", width: 12, kind: "status", value: (d) => d.work?.latestStatus },
+      { header: "ความหมายสถานะ", width: 26, value: (d) => workStatusFullLabel(d.work?.latestStatus ?? "") },
+      {
+        header: "สถานะการจ้าง",
+        width: 13,
+        kind: "status",
+        value: (d) => (d.active ? "ปฏิบัติงาน" : "พ้นสภาพ"),
+        tone: (d) => (d.active ? "ok" : "alert"),
+      },
+      ...(resigned ? resignColumns : []),
+      { header: "แก้ประวัติล่าสุด", width: 17, kind: "datetime", value: (d) => date(d.profileEditedAt) },
+      { header: "แก้โดย", width: 18, value: (d) => d.profileEditedBy },
+      { header: "ที่มาในทะเบียน", width: 30, value: (d) => d.source },
+      { header: "เข้าทะเบียนเมื่อ", width: 17, kind: "datetime", value: (d) => date(d.sourceAt) },
+    ],
+  };
+}
+
 /** แท็บที่คนนี้อยู่ — ทุกคนอยู่แท็บเดียวเสมอ */
 function employmentOf(driver: DriverRecord): EmploymentTab {
-  if (driver.active) return "current";
-  return driver.noWorkRecord ? "nowork" : "resigned";
+  return driver.active ? "current" : "resigned";
 }
 
 /** ข้อความในคอลัมน์รถ — ลาดกระบังนำด้วยเลขรถ สาขาอื่นนำด้วยทะเบียน */
@@ -248,6 +347,8 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
+  const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const deferred = useDeferredValue(query);
 
   /** กล่องตารางเลื่อนของมันเอง เปลี่ยนหน้าแล้วต้องดึงกลับขึ้นหัวตาราง ไม่ใช่ค้างกลางหน้าใหม่ */
@@ -279,15 +380,6 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
         return employmentOf(d) === employment;
       }),
     [drivers, site, employment],
-  );
-
-  /** จำนวนคน “ไม่มีข้อมูลการทำงาน” ในสาขาที่เลือก — ขึ้นบนแท็บ ให้รู้ว่ามีงานรอยืนยันอยู่เท่าไร */
-  const noWorkCount = useMemo(
-    () =>
-      drivers.filter(
-        (d) => d.noWorkRecord && (site === "all" || (d.siteKey ?? "other") === site),
-      ).length,
-    [drivers, site],
   );
 
   const counts = useMemo(() => {
@@ -324,8 +416,8 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
       const bump = (map: Map<string, number>, key: string) =>
         map.set(key, (map.get(key) ?? 0) + 1);
 
-      bump(plant, d.vehicle?.plant || NONE);
-      bump(fleet, d.vehicle?.fleet || NONE);
+      bump(plant, d.plant || NONE);
+      bump(fleet, d.customer || NONE);
       bump(owner, d.ownerTypeKey ?? NONE);
       bump(status, d.work?.latestStatus || NONE);
 
@@ -409,8 +501,8 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
 
     const rows = scope.filter((d) => {
       if (!on("vehicle", d.vehicleRef ? "has" : "none")) return false;
-      if (!on("plant", d.vehicle?.plant || NONE)) return false;
-      if (!on("fleet", d.vehicle?.fleet || NONE)) return false;
+      if (!on("plant", d.plant || NONE)) return false;
+      if (!on("fleet", d.customer || NONE)) return false;
       if (!on("owner", d.ownerTypeKey ?? NONE)) return false;
       if (!on("status", d.work?.latestStatus || NONE)) return false;
       if (!on("license", licenseState(d.licenseDaysLeft))) return false;
@@ -424,8 +516,8 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
         norm(d.vehicleRef).includes(q) ||
         norm(d.vehicle?.code ?? "").includes(q) ||
         norm(d.vehicle?.plateNo ?? "").includes(q) ||
-        norm(d.vehicle?.fleet ?? "").includes(q) ||
-        norm(d.vehicle?.plant ?? "").includes(q)
+        norm(d.customer ?? "").includes(q) ||
+        norm(d.plant ?? "").includes(q)
       );
     });
 
@@ -545,14 +637,12 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
             label={
               resignedTab
                 ? "พ้นสภาพแล้ว"
-                : employment === "nowork"
-                  ? "ไม่มีข้อมูลการทำงาน"
-                  : "ปฏิบัติงานอยู่"
+                : "ปฏิบัติงานอยู่"
             }
             value={counts.total}
             unit="คน"
             sub={site === "all" ? "ทุกสาขา" : `สาขา${siteFilterLabel(site)}`}
-            tone={resignedTab ? "alert" : employment === "nowork" ? "sla" : "ink"}
+            tone={resignedTab ? "alert" : "ink"}
           />
           <SummaryStat
             label={`อายุงานน้อยกว่า ${PROBATION_MONTHS} เดือน`}
@@ -601,6 +691,33 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
 
           <SiteTabs value={site} counts={siteCounts} onChange={(v) => setSite(v)} />
 
+          <div className="flex items-center gap-2 lg:ml-auto">
+            <XlsxMenuButton
+              onImport={() => setImporting(true)}
+              onSync={process.env.NODE_ENV === "development" ? () => setSyncing(true) : undefined}
+              name={`ทะเบียน-พจส-${resignedTab ? "พ้นสภาพ" : "ปัจจุบัน"}`}
+              count={results.length}
+              build={async () => ({
+                sheet: resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน",
+                title: `ทะเบียนประวัติ พจส. · ${resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน"}`,
+                filter: [
+                  site !== "all" ? `สาขา: ${siteFilterLabel(site)}` : "",
+                  deferred.trim() ? `คำค้น: “${deferred.trim()}”` : "",
+                  ...activeFilters.map(
+                    ({ key, values }) =>
+                      `${FILTER_LABELS[key]}: ${values.map((v) => options[key].find((o) => o.value === v)?.label ?? v).join(", ")}`,
+                  ),
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                total: scope.length,
+                ...(await driverSheet(results, resignedTab)),
+              })}
+            />
+            {importing ? <DriverPasteDialog onClose={() => setImporting(false)} /> : null}
+            {syncing ? <DriverExcelSyncDialog onClose={() => setSyncing(false)} /> : null}
+          </div>
+
           {/* จอแคบไม่มีหัวตารางให้กด — ยกเมนูของทุกคอลัมน์มาไว้บนแถบแทน
               ใช้คอมโพเนนต์และ state ตัวเดียวกัน ไม่ได้เขียนตรรกะซ้ำ */}
           <div className="flex flex-wrap items-center gap-2 lg:hidden">
@@ -627,18 +744,6 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
               onClick={() => changeEmployment("current")}
             >
               พนักงานปัจจุบัน
-            </EmploymentTabButton>
-            <EmploymentTabButton
-              active={employment === "nowork"}
-              tone="sla"
-              onClick={() => changeEmployment("nowork")}
-            >
-              ไม่มีข้อมูลการทำงาน
-              {noWorkCount ? (
-                <span className="ml-1.5 rounded-full bg-sla/12 px-1.5 py-px font-mono text-11 text-sla tabular-nums">
-                  {noWorkCount.toLocaleString("th-TH")}
-                </span>
-              ) : null}
             </EmploymentTabButton>
             <EmploymentTabButton
               active={resignedTab}
@@ -788,9 +893,9 @@ function compare(a: DriverRecord, b: DriverRecord, key: SortKey): number {
     case "vehicle":
       return byText(vehicleLead(a), vehicleLead(b));
     case "fleet":
-      return byText(a.vehicle?.fleet ?? "", b.vehicle?.fleet ?? "");
+      return byText(a.customer ?? "", b.customer ?? "");
     case "plant":
-      return byText(a.vehicle?.plant ?? "", b.vehicle?.plant ?? "");
+      return byText(a.plant ?? "", b.plant ?? "");
     case "owner":
       return byText(a.ownerTypeKey ?? "", b.ownerTypeKey ?? "");
     case "tenure":
@@ -826,9 +931,8 @@ function Row({
    * ดูจาก `driver.active` ไม่ใช่จากแท็บที่เปิดอยู่ — สีจึงติดไปกับภาพที่แคปส่งต่อ
    * และกับกระดาษที่พิมพ์ออกมา ซึ่งไม่มีแท็บติดไปด้วย · ถ้าวันหนึ่งแท็บ “ปัจจุบัน”
    * มีคนที่เพิ่งกดพ้นสภาพปนอยู่ แถวนั้นก็แดงทันทีโดยไม่ต้องรอสลับแท็บ
-   * · “ไม่มีข้อมูลการทำงาน” ยังไม่ใช่การพ้นสภาพ จึงไม่แดง
    */
-  const resigned = !driver.active && !driver.noWorkRecord;
+  const resigned = !driver.active;
 
   return (
     /*
@@ -882,12 +986,12 @@ function Row({
             <VehicleCell driver={driver} />
           </td>
 
-          <td className="max-w-[148px] truncate px-3 py-2" title={driver.vehicle?.fleet}>
-            {driver.vehicle?.fleet || <Dash />}
+          <td className="max-w-[148px] truncate px-3 py-2" title={driver.customer}>
+            {driver.customer || <Dash />}
           </td>
 
-          <td className="max-w-[136px] truncate px-3 py-2" title={driver.vehicle?.plant}>
-            {driver.vehicle?.plant || <Dash />}
+          <td className="max-w-[136px] truncate px-3 py-2" title={driver.plant}>
+            {driver.plant || <Dash />}
           </td>
         </>
       )}
@@ -941,7 +1045,7 @@ function DriverCard({
   hideVehicle: boolean;
 }) {
   /* กติกาเดียวกับ `Row` — คนที่พ้นสภาพแล้วอ่านออกจากสีได้ก่อนอ่านตัวหนังสือ */
-  const resigned = !driver.active && !driver.noWorkRecord;
+  const resigned = !driver.active;
 
   return (
     <Link
@@ -970,10 +1074,10 @@ function DriverCard({
               <VehicleCell driver={driver} />
             </CardField>
             <CardField label="ลูกค้า">
-              <span className="truncate text-ink">{driver.vehicle?.fleet || "—"}</span>
+              <span className="truncate text-ink">{driver.customer || "—"}</span>
             </CardField>
             <CardField label="แพล้นท์">
-              <span className="truncate text-ink">{driver.vehicle?.plant || "—"}</span>
+              <span className="truncate text-ink">{driver.plant || "—"}</span>
             </CardField>
           </>
         )}

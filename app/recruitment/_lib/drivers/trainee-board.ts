@@ -185,7 +185,11 @@ function daysOfMonth(raw: unknown, month: string): Record<string, string> {
   return days;
 }
 
-export async function getTraineeBoard(requestedMonth: string): Promise<TraineeBoard> {
+/**
+ * `onlyCodes` = ใช้รหัสชุดนี้เป็นคนในตารางเลย ไม่คัดจาก `ฝ` — หน้าติดตามพนักงานใหม่ส่งคนในแท็บ
+ * training มา (Bew 14 ต.ค. 2026: จำนวนคนในตารางรายวันต้องเท่ากับแท็บฝึกงาน)
+ */
+export async function getTraineeBoard(requestedMonth: string, onlyCodes?: string[]): Promise<TraineeBoard> {
   const todayISO = todayInBangkok();
   const months = monthList(todayISO);
   const month = resolveMonth(requestedMonth, months);
@@ -205,10 +209,9 @@ export async function getTraineeBoard(requestedMonth: string): Promise<TraineeBo
    * `master_driver` ถูกใช้แค่เติมชื่อ รูป สาขา และวันเริ่มงาน **ไม่ใช่ตัวคัดคน** ·
    * **อย่ากลับไปใช้อายุงานหรือ `active` ของ ETL เป็นเกณฑ์ถ้าไม่ได้สั่ง**
    */
-  const [atmsCodes, hrCodes] = await Promise.allSettled([
-    trainingCodesInMonth(month),
-    manualCodesInMonth(month, TRAINING_CODE),
-  ]);
+  const [atmsCodes, hrCodes] = onlyCodes
+    ? ([{ status: "fulfilled", value: onlyCodes }, { status: "fulfilled", value: [] }] as const)
+    : await Promise.allSettled([trainingCodesInMonth(month), manualCodesInMonth(month, TRAINING_CODE)]);
   const codes = [
     ...new Set([
       ...(atmsCodes.status === "fulfilled" ? atmsCodes.value : []),
@@ -257,7 +260,7 @@ export async function getTraineeBoard(requestedMonth: string): Promise<TraineeBo
 
     const trainedByAtms = Object.values(days).some(isTrainingCode);
     const trainedByHr = Object.values(manualDays).some((entry) => isTrainingCode(entry.code));
-    if (!trainedByAtms && !trainedByHr) continue;
+    if (!onlyCodes && !trainedByAtms && !trainedByHr) continue;
 
     const startDateISO = toIsoDate(doc.startDate);
     const tenureMonths = startDateISO ? monthsBetween(startDateISO, todayISO) : null;

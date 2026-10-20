@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { DriverProfile } from "@/app/recruitment/_components/admin/driver-profile";
+import {
+  DRIVER_PROFILE_TABS,
+  type DriverProfileTab,
+} from "@/app/recruitment/_lib/drivers/types";
 import { DataError } from "@/components/ui/data-error";
 import { getDriverProfile } from "@/app/recruitment/_lib/drivers/registry";
 
@@ -49,5 +53,8 @@ export default async function DriverProfilePage(
   // อ่านฐานข้อมูลผ่านแล้วแต่ไม่มีรหัสนี้ = 404 จริง ไม่ใช่ความผิดพลาดของระบบ
   if (!driver) notFound();
 
-  return <DriverProfile driver={driver} />;
+  const { tab } = await props.searchParams;
+  const initial = DRIVER_PROFILE_TABS.find((t) => t === tab) as DriverProfileTab | undefined;
+
+  return <DriverProfile driver={driver} tab={initial} />;
 }

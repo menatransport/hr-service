@@ -22,8 +22,6 @@ import {
   SummaryBody,
   SummaryFooter,
   SummaryPanel,
-  SummaryStat,
-  SummaryStats,
   SummaryStrip,
   SummaryToolbar,
 } from "@/components/ui/summary-panel";
@@ -80,8 +78,11 @@ const DEFAULT_PAGE_SIZE = 25;
 export function TraineeMatrix({
   board,
   vehicles,
+  onMonth,
 }: {
   board: TraineeBoard;
+  /** ฝังในหน้าอื่น = โหลดเดือนใหม่เอง แทนการเปลี่ยน `?m=` ของ URL */
+  onMonth?: (month: string) => Promise<void>;
   /** รายชื่อรถให้เลือกตอนผูกทะเบียนรถ — ว่าง = อ่านทะเบียนรถไม่สำเร็จตอนโหลดหน้า */
   vehicles: SelectOption[];
 }) {
@@ -150,18 +151,6 @@ export function TraineeMatrix({
   const sliceFrom = (current - 1) * pageSize;
   const pageRows = activeRows.slice(sliceFrom, sliceFrom + pageSize);
 
-  const totals = rows.reduce(
-    (acc, row) => ({
-      work: acc.work + row.work,
-      leave: acc.leave + row.leave,
-      exit: acc.exit + row.exit,
-      manual: acc.manual + row.manualCount,
-    }),
-    { work: 0, leave: 0, exit: 0, manual: 0 },
-  );
-  /** ช่องที่มีสถานะทั้งหมด — ฐานของสัดส่วนแต่ละสี */
-  const dayTotal = TONES.reduce((sum, t) => sum + totals[t], 0);
-
   function clearFilters() {
     setQuery("");
     setSite("all");
@@ -191,7 +180,8 @@ export function TraineeMatrix({
 
   function goToMonth(month: string) {
     setPage(1);
-    startTransition(() => router.push(`?m=${month}`, { scroll: false }));
+    if (onMonth) startTransition(() => onMonth(month));
+    else startTransition(() => router.push(`?m=${month}`, { scroll: false }));
   }
 
   const index = board.months.indexOf(board.month);
@@ -199,37 +189,8 @@ export function TraineeMatrix({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── สรุป + เครื่องมือ — การ์ดกลางตัวเดียวกับทะเบียน พจส. และคำขอสรรหา ──
-          ตัวเลขสีทั้งห้าช่องเป็น **คำอธิบายสีของสามเหลี่ยมในตาราง** ไปในตัว */}
+      {/* ── เครื่องมือ + ตาราง — ไม่มีการ์ดตัวเลขแล้ว (Bew: เข้ามาเห็นตารางเลย) · สีอธิบายที่ `Legend` */}
       <SummaryPanel label="สรุปติดตามฝึกงาน">
-        <SummaryStats className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          <SummaryStat
-            lead
-            label="คนที่ติดตามอยู่"
-            value={activeRows.length}
-            unit="คน"
-            sub={
-              [
-                exitedRows.length ? `พ้นสภาพ ${exitedRows.length} คน` : "",
-                totals.manual ? `กรอกเอง ${totals.manual.toLocaleString("th-TH")} วัน` : "",
-              ]
-                .filter(Boolean)
-                .join(" · ") || undefined
-            }
-          />
-          {TONES.map((tone) => (
-            <SummaryStat
-              key={tone}
-              label={TONE_LABEL[tone]}
-              value={totals[tone]}
-              unit="วัน"
-              dot={TONE_DOT[tone]}
-              share={totals[tone] / (dayTotal || 1)}
-              tone={tone === "exit" ? "alert" : "ink"}
-            />
-          ))}
-        </SummaryStats>
-
         <SummaryToolbar className="lg:flex-wrap">
           <div className="flex items-center gap-1">
             <Step
@@ -384,7 +345,7 @@ export function TraineeMatrix({
               <tbody>
                 {pageRows.map((row) => (
                   <MatrixRow
-                    key={row.driver.drivercode}
+                    key={row.driver.drivercode || `req-${row.driver.requisitionId}`}
                     row={row}
                     days={days}
                     year={year}
@@ -428,7 +389,7 @@ export function TraineeMatrix({
                   {exitedOpen
                     ? exitedRows.map((row) => (
                         <MatrixRow
-                          key={row.driver.drivercode}
+                          key={row.driver.drivercode || `req-${row.driver.requisitionId}`}
                           row={row}
                           days={days}
                           year={year}
@@ -508,7 +469,10 @@ const MatrixRow = memo(function MatrixRow({
   onEditVehicle: (driver: TraineeBoardDriver) => void;
 }) {
   const { driver } = row;
-  const href = `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`;
+  /* ยังไม่มีรหัส พจส. = ยังไม่มีสถานะรายวันให้ดู/กรอก — ลิงก์ไปหน้าเส้นทางของคำขอแทน */
+  const href = driver.drivercode
+    ? `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`
+    : `/recruitment/admin/onboarding/${driver.requisitionId}`;
 
   return (
     <tr className="group border-b border-line/70 last:border-0">
@@ -563,7 +527,7 @@ const MatrixRow = memo(function MatrixRow({
               </span>
             ) : (
               <span className="flex min-w-0 items-center gap-1.5 text-11 text-mut">
-                <span className="font-mono">{driver.drivercode}</span>
+                <span className="font-mono">{driver.drivercode || "ยังไม่มีรหัส"}</span>
                 <span aria-hidden>·</span>
                 <span>{formatTenure(driver.tenureMonths, driver.tenureDays)}</span>
               </span>
@@ -574,7 +538,7 @@ const MatrixRow = memo(function MatrixRow({
               ขึ้นเฉพาะคนที่มีคำขอสรรหาผูกอยู่ — ไม่งั้นไม่มีปลายทางให้ `PATCH` ไปแก้
               สีบอกว่ามีทะเบียนแล้วหรือยัง (ครูฝึกแก้ที่หน้าขอสรรหาแทน — ดู
               `.claude/docs/requisitions.md` หัวข้อ “ครูฝึกไหลไปหน้าฝึกงานยังไง”) */}
-          {driver.requisitionId ? (
+          {driver.requisitionId && driver.drivercode ? (
             <button
               type="button"
               onClick={() => onEditVehicle(driver)}
@@ -613,7 +577,7 @@ const MatrixRow = memo(function MatrixRow({
             note={cell?.note ?? ""}
             beforeStart={Boolean(driver.startDateISO) && iso < driver.startDateISO}
             isStart={iso === driver.startDateISO}
-            editable={Boolean(maxEntryISO) && iso <= maxEntryISO}
+            editable={Boolean(maxEntryISO && driver.drivercode) && iso <= maxEntryISO}
             onSaved={onSaved}
           />
         );

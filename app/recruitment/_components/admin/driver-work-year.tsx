@@ -163,17 +163,11 @@ export function DriverWorkYear({
   }
 
   return (
-    <section className="flex flex-col gap-4 border-t border-line pt-6">
+    <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <CalendarDays size={16} strokeWidth={1.8} aria-hidden className="text-primary" />
           <h2 className="text-14 font-semibold">ปฏิทินการทำงาน</h2>
-          <span
-            title="คอลเลกชันต้นทางของข้อมูลในกล่องนี้"
-            className="rounded-full border border-line px-2 py-0.5 font-mono text-10-5 text-mut"
-          >
-            employee_work_status
-          </span>
         </div>
 
         <div className="flex items-center gap-1">

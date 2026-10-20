@@ -468,6 +468,8 @@ export interface DriverRecord {
   drivercode: string;
   name: string;
   phone: string;
+  /** เบอร์อื่น ๆ (คั่นด้วย `, `) — ว่างได้ */
+  phoneAlt: string;
   /**
    * รูปประจำตัวที่ฝ่ายบุคคลอัปเองผ่านหน้านี้ — ว่าง = ยังไม่มีรูป
    *
@@ -482,43 +484,50 @@ export interface DriverRecord {
   branch: string;
   siteKey: DriverSiteKey | null;
   siteLabel: string;
-  /** ค่าดิบของ `main_driver.vehicle` — เป็นทะเบียนหรือเลขรถก็ได้แล้วแต่สาขา */
+  /** เบอร์รถตามทะเบียน (ลาดกระบังใช้เลขรถ เช่น `ME009`) — ใช้หา `vehicle` ใน `Boom_ETL.vehicles` */
   vehicleRef: string;
   vehicle: DriverVehicle | null;
+  /** ลูกค้า/แพล้นท์ตามทะเบียนของฝ่ายบุคคล — ว่างค่อยใช้ของรถใน ETL (`vehicle.fleet`/`vehicle.plant`) */
+  customer: string;
+  plant: string;
+  /** ตำแหน่งตามทะเบียน เช่น `Mixer L` `Mixer S` `Spare Driver` — ว่างได้ */
+  position: string;
   startDateISO: string;
   tenureMonths: number | null;
   tenureDays: number | null;
+  /** เลขที่ใบขับขี่ เช่น `กท.00015/60` — ข้อมูลส่วนบุคคล **มีเฉพาะหน้าประวัติรายคน** (ตารางรายชื่อไม่ได้ขอมา) */
+  licenseNo: string;
+  /** ชนิดใบขับขี่ เช่น `ท.2` — ว่างได้ */
+  licenseType: string;
   licenseExpiryISO: string;
   /** บวก = ยังไม่หมดอายุ · ลบ = หมดอายุมาแล้วกี่วัน · null = ไม่มีวันที่ให้คิด */
   licenseDaysLeft: number | null;
+  /** เลขบัตรประชาชน 13 หลัก (ตัวเลขล้วน) — กติกาเดียวกับ `licenseNo` */
+  nationalId: string;
   /**
    * วันหมดอายุบัตรประชาชน — **ฟิลด์ของ hr-service ไม่ใช่ของ ETL** เหมือน `photoUrl`
    *
-   * `Boom_ETL.main_driver` มีแต่ `driver_expiry_date` (ใบขับขี่) ไม่มีวันหมดอายุ
-   * บัตรประชาชนอยู่ที่ไหนเลย ค่านี้จึงมาจากการที่ฝ่ายบุคคลกรอกเองในหน้าประวัติ
-   * (`setDriverIdCardExpiry()`) · ว่างเป็นปกติ — ทะเบียนทั้งชุดเข้ามาทาง ETL
-   * ตั้งแต่ก่อนมีช่องนี้ ศูนย์เอกสารจึงต้องบอกได้ว่า “ยังไม่ได้กรอก” ไม่ใช่ “ไม่หมดอายุ”
+   * มาจากทะเบียน Excel ของฝ่ายบุคคล (ตัวนำเข้า) · ใบสมัครตอนรับเข้าทะเบียน · หรือกรอกเองในหน้าประวัติ
+   * (`setDriverIdCardExpiry()`) · ว่างได้ — ศูนย์เอกสารจึงต้องบอกได้ว่า “ยังไม่ได้กรอก” ไม่ใช่ “ไม่หมดอายุ”
    */
   idCardExpiryISO: string;
   /** กติกาเดียวกับ `licenseDaysLeft` */
   idCardDaysLeft: number | null;
-  /**
-   * สถานะที่ใช้จริงบนหน้าจอ — `statusOverride` ถ้ามี ไม่งั้นตกไปใช้ `etlActive`
-   * (ยกเว้น `noWorkRecord` ที่นับเป็นไม่ได้ปฏิบัติงาน)
-   * **อ่านตัวนี้เสมอ** อย่าไปอ่าน `etlActive` ตรง ๆ นอกจากจะอยากรู้ว่า ETL ว่าอย่างไร
-   */
+  /** ผู้ติดต่อฉุกเฉิน — ข้อมูลส่วนบุคคล กติกาเดียวกับ `licenseNo` */
+  emergencyContactName: string;
+  emergencyContactRelation: string;
+  emergencyContactPhone: string;
+  /** เลขบัญชีกสิกรไทย 10 หลัก (ตัวเลขล้วน) · สาขาที่เปิดบัญชี — กติกาเดียวกับ `licenseNo` */
+  bankAccountNo: string;
+  bankBranch: string;
+  /** แก้ประวัติบนหน้าทะเบียนล่าสุดเมื่อไหร่ (ISO) · โดยใคร — ว่าง = ยังไม่เคยแก้ */
+  profileEditedAt: string;
+  profileEditedBy: string;
+  /** สถานะที่ใช้จริง — `true` = ปฏิบัติงาน · `false` = พ้นสภาพ (`statusOverride` ชนะเสมอ) */
   active: boolean;
-  /** ค่าดิบจาก ETL ก่อนถูกทับ */
-  etlActive: boolean;
-  /**
-   * ETL ว่ายังทำงาน แต่ **ไม่มีแถวใน `employee_work_status` เลย** (ไม่นับคนที่วันเริ่มงานคือวันนี้
-   * หรือยังมาไม่ถึง และคนที่ฝ่ายบุคคลกดสถานะไว้แล้ว) — น่าจะออกไปแล้วโดยไม่มีใครบันทึก · `active` เป็น `false`
-   * แต่ **ยังไม่ใช่การพ้นสภาพ** ไม่มีวันที่/เหตุผล ต้องให้ฝ่ายบุคคลยืนยันทางใดทางหนึ่ง
-   */
-  noWorkRecord: boolean;
-  /** `null` = ไม่ได้ทับ ใช้ตาม ETL */
+  /** `null` = ไม่มีบันทึกสถานะ ใช้ `active` ในทะเบียนตรง ๆ */
   statusOverride: DriverStatus | null;
-  /** มีค่าเมื่อฝ่ายบุคคลบันทึกการพ้นสภาพไว้ — ไม่ผูกกับ `active` ของ ETL */
+  /** มีค่าเมื่อบันทึกการพ้นสภาพไว้ (หน้าทะเบียน · นำเข้าจาก Excel · หน้าติดตามพนักงานใหม่) */
   resignation: DriverResignation | null;
   /**
    * เวลาที่รูปประจำตัวและเอกสารในแฟ้มถูกลบตามนโยบายเก็บ 1 เดือนหลังพ้นสภาพ (ISO) ·
@@ -544,7 +553,7 @@ export interface DriverRecord {
 
 export interface DriverRegistry {
   drivers: DriverRecord[];
-  /** เวลาที่ ETL mirror `Boom_ETL.main_driver` ล่าสุด — ISO หรือ null ถ้าไม่รู้ */
+  /** เวลาที่ทะเบียนถูกนำเข้า/รับคนเข้าล่าสุด — ISO หรือ null ถ้าไม่รู้ */
   syncedAt: string | null;
   /** ต่อ `Boom_ETL` เพื่อดึงรถ/สถานะงานไม่ติด — รายชื่อยังใช้ได้ แค่ข้อมูลเสริมหาย */
   enrichmentFailed: boolean;
@@ -553,6 +562,231 @@ export interface DriverRegistry {
    * เพราะหน้าจอจะขึ้นว่ายังไม่มีใครกรอก ทั้งที่จริงแค่อ่านไม่ได้
    */
   manualFailed: boolean;
+}
+
+/* ------------------------------------------------- แก้ประวัติบนหน้าทะเบียน */
+
+/** ทะเบียนใช้บัญชีกสิกรไทยอย่างเดียว (หัวคอลัมน์ในไฟล์ฝ่ายบุคคล “เลขที่บัญชี กสิกรไทยเท่านั้น”) */
+export const DRIVER_BANK_NAME = "กสิกรไทย";
+
+export type DriverEditKind = "text" | "phone" | "date" | "nid" | "bank" | "ownerType" | "branch";
+
+export interface DriverEditField {
+  /** ชื่อฟิลด์ใน `master_driver` */
+  key: string;
+  /** ค่าปัจจุบันอ่านจากช่องไหนของ `DriverRecord` */
+  from: keyof DriverRecord;
+  label: string;
+  kind: DriverEditKind;
+  /** หัวข้อในกล่องแก้ไข — แต่ละหัวข้ออยู่แท็บไหนดู `DRIVER_EDIT_GROUPS` */
+  group: "employment" | "contact" | "idcard" | "license" | "bank";
+  /** ข้อมูลส่วนบุคคล — คนพ้นสภาพแล้วไม่แสดงและแก้ไม่ได้ (กติกาเดียวกับ `getDriverProfile()`) */
+  personal?: boolean;
+  required?: boolean;
+  hint?: string;
+}
+
+/**
+ * ทุกช่องที่แก้ได้บนหน้าประวัติ — **นิยามที่เดียว** ทั้งฟอร์ม (`driver-profile-edit.tsx`) และตัวบันทึก
+ * (`updateDriverProfile()`) เดินจากรายการนี้ · ช่องที่แก้แล้วตัวนำเข้า Excel จะไม่ทับอีก (`editedFields`)
+ *
+ * ไม่มีในนี้โดยตั้งใจ: รหัส พจส. (เป็นกุญแจของทุกระบบ) · สถานะ/รูป/แฟ้มเอกสาร
+ * (มีตัวแก้ของตัวเองบนหน้าเดียวกัน)
+ */
+export const DRIVER_EDIT_FIELDS: DriverEditField[] = [
+  { key: "driverName", from: "name", label: "ชื่อ – สกุล", kind: "text", group: "employment", required: true },
+  { key: "phone", from: "phone", label: "เบอร์โทรศัพท์", kind: "phone", group: "contact", personal: true },
+  {
+    key: "phoneAlt",
+    from: "phoneAlt",
+    label: "เบอร์อื่น ๆ",
+    kind: "text",
+    group: "contact",
+    personal: true,
+    hint: "หลายเบอร์คั่นด้วยจุลภาค",
+  },
+  {
+    key: "ownerType",
+    from: "ownerType",
+    label: "ประเภทพนักงาน",
+    kind: "ownerType",
+    group: "employment",
+    required: true,
+  },
+  { key: "branch", from: "branch", label: "สาขา", kind: "branch", group: "employment", required: true },
+  { key: "customer", from: "customer", label: "ลูกค้า", kind: "text", group: "employment" },
+  { key: "plant", from: "plant", label: "แพล้นท์", kind: "text", group: "employment" },
+  { key: "position", from: "position", label: "ตำแหน่ง", kind: "text", group: "employment" },
+  {
+    key: "vehicleCode",
+    from: "vehicleRef",
+    label: "เบอร์รถ",
+    kind: "text",
+    group: "employment",
+    hint: "เช่น ME009",
+  },
+  { key: "startDate", from: "startDateISO", label: "วันเริ่มงาน", kind: "date", group: "employment" },
+
+  {
+    key: "licenseNo",
+    from: "licenseNo",
+    label: "เลขที่ใบขับขี่",
+    kind: "text",
+    group: "license",
+    personal: true,
+  },
+  {
+    key: "licenseType",
+    from: "licenseType",
+    label: "ชนิดใบขับขี่",
+    kind: "text",
+    group: "license",
+    personal: true,
+  },
+  {
+    key: "licenseExpiryDate",
+    from: "licenseExpiryISO",
+    label: "ใบขับขี่หมดอายุ",
+    kind: "date",
+    group: "license",
+    personal: true,
+  },
+  {
+    key: "nationalId",
+    from: "nationalId",
+    label: "เลขบัตรประชาชน",
+    kind: "nid",
+    group: "idcard",
+    personal: true,
+  },
+  {
+    key: "idCardExpiryDate",
+    from: "idCardExpiryISO",
+    label: "บัตรประชาชนหมดอายุ",
+    kind: "date",
+    group: "idcard",
+    personal: true,
+  },
+
+  {
+    key: "emergencyContactName",
+    from: "emergencyContactName",
+    label: "ชื่อผู้ติดต่อฉุกเฉิน",
+    kind: "text",
+    group: "contact",
+    personal: true,
+  },
+  {
+    key: "emergencyContactRelation",
+    from: "emergencyContactRelation",
+    label: "ความสัมพันธ์",
+    kind: "text",
+    group: "contact",
+    personal: true,
+    hint: "เช่น ภรรยา · มารดา",
+  },
+  {
+    key: "emergencyContactPhone",
+    from: "emergencyContactPhone",
+    label: "เบอร์ผู้ติดต่อฉุกเฉิน",
+    kind: "phone",
+    group: "contact",
+    personal: true,
+  },
+
+  {
+    key: "bankAccountNo",
+    from: "bankAccountNo",
+    label: `เลขที่บัญชี (${DRIVER_BANK_NAME})`,
+    kind: "bank",
+    group: "bank",
+    personal: true,
+  },
+  {
+    key: "bankBranch",
+    from: "bankBranch",
+    label: "สาขาธนาคาร",
+    kind: "text",
+    group: "bank",
+    personal: true,
+  },
+];
+
+/**
+ * หัวข้อในกล่องแก้ไข ตามแท็บของหน้าประวัติ (19 ต.ค. 2569) — ปุ่มแก้ไขในแท็บไหน
+ * เปิดเฉพาะหัวข้อของแท็บนั้น (`DriverProfileEdit scope`)
+ */
+export const DRIVER_EDIT_GROUPS: {
+  id: DriverEditField["group"];
+  title: string;
+  tab: Exclude<DriverProfileTab, "work">;
+}[] = [
+  { id: "employment", title: "ข้อมูลการจ้าง", tab: "info" },
+  { id: "contact", title: "ช่องทางติดต่อ", tab: "info" },
+  { id: "idcard", title: "บัตรประชาชน", tab: "docs" },
+  { id: "license", title: "ใบขับขี่", tab: "docs" },
+  { id: "bank", title: "บัญชีรับเงิน", tab: "docs" },
+];
+
+/** รหัสสาขาที่เลือกได้ — ตัวแรกของแต่ละสาขาใน `DRIVER_SITES` */
+export const DRIVER_BRANCH_OPTIONS = DRIVER_SITES.map((s) => ({ value: s.branches[0], label: s.label }));
+
+const onlyDigits = (v: string) => v.replace(/\D/g, "");
+
+/** หลักสุดท้ายของเลขบัตรเป็นหลักตรวจสอบ (สูตรเดียวกับ `isValidThaiNationalId()` ใน `form.ts`) */
+function nationalIdChecks(id: string): boolean {
+  if (!/^\d{13}$/.test(id)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i += 1) sum += Number(id[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10 === Number(id[12]);
+}
+
+/**
+ * ทำค่าที่กรอกให้อยู่ในรูปที่เก็บ — `{ error }` เมื่อใช้ไม่ได้ · ใช้ทั้งฟอร์ม (ขึ้นข้อความใต้ช่องก่อนยิง)
+ * และเซิร์ฟเวอร์ (ตัวตัดสินจริง) จึงได้กติกาเดียวกันเสมอ
+ */
+export function normalizeDriverEdit(
+  field: DriverEditField,
+  raw: string,
+): { value: string } | { error: string } {
+  const text = raw.replace(/\s+/g, " ").trim();
+  if (!text) return field.required ? { error: `ต้องกรอก${field.label}` } : { value: "" };
+  if (text.length > 200) return { error: "ยาวเกิน 200 ตัวอักษร" };
+
+  switch (field.kind) {
+    case "phone": {
+      const d = onlyDigits(text);
+      return d.length === 9 || d.length === 10 ? { value: d } : { error: "เบอร์โทรต้องมี 9–10 หลัก" };
+    }
+    case "nid": {
+      const d = onlyDigits(text);
+      if (d.length !== 13) return { error: "เลขบัตรประชาชนต้องมี 13 หลัก" };
+      return nationalIdChecks(d)
+        ? { value: d }
+        : { error: "เลขบัตรไม่ถูกต้อง — หลักสุดท้ายไม่ตรงกับสูตรตรวจสอบ" };
+    }
+    case "bank": {
+      const d = onlyDigits(text);
+      return d.length === 10 ? { value: d } : { error: `เลขบัญชี${DRIVER_BANK_NAME}ต้องมี 10 หลัก` };
+    }
+    case "date":
+      return /^\d{4}-\d{2}-\d{2}$/.test(text) ? { value: text } : { error: "วันที่ไม่ถูกต้อง" };
+    case "ownerType":
+      return OWNER_TYPE_KEYS.includes(text as OwnerTypeKey)
+        ? { value: text }
+        : { error: "ประเภทพนักงานไม่ถูกต้อง" };
+    case "branch":
+      return siteOfBranch(text) ? { value: text } : { error: "สาขาไม่ถูกต้อง" };
+    default:
+      return { value: text };
+  }
+}
+
+/** เลขบัญชีกสิกรไทยแบบที่สมุดบัญชีพิมพ์ `xxx-x-xxxxx-x` — ไม่ครบ 10 หลักคืนค่าเดิม */
+export function formatBankAccount(raw: string): string {
+  const d = onlyDigits(raw);
+  if (d.length !== 10) return raw;
+  return `${d.slice(0, 3)}-${d.slice(3, 4)}-${d.slice(4, 9)}-${d.slice(9)}`;
 }
 
 /* ------------------------------------------------------------ อายุงาน */
@@ -872,4 +1106,45 @@ export function formatThaiDateTime(iso: string): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   const day = formatThaiDate(`${get("year")}-${get("month")}-${get("day")}`);
   return `${day} ${get("hour")}:${get("minute")} น.`;
+}
+
+/**
+ * แท็บของหน้าประวัติคนขับ (`?tab=`) — อยู่ที่นี่ไม่ใช่ใน `driver-profile-tabs.tsx`
+ * เพราะหน้า server ต้องอ่านค่าจริง ของที่ export จากไฟล์ `"use client"` ฝั่ง server ได้แค่ตัวอ้างอิง
+ */
+export type DriverProfileTab = "info" | "docs" | "work";
+
+export const DRIVER_PROFILE_TABS: readonly DriverProfileTab[] = ["info", "docs", "work"];
+
+/* -------------------------------------------- วางแถวจาก Excel ทะเบียน 2026 (`paste-import.ts`) */
+
+/** ผลของแต่ละแถวที่วาง — `insert` เพิ่มคนใหม่ · `update` แก้ช่องที่ต่าง · `same` ตรงกับทะเบียนแล้ว · `skip` ไม่นำเข้า */
+export type PasteRowAction = "insert" | "update" | "same" | "skip";
+
+export interface PasteRowResult {
+  /** บรรทัดในข้อความที่วาง (นับจาก 1) */
+  line: number;
+  code: string;
+  name: string;
+  /** สถานะตามไฟล์ (`ปกติ/วิ่งงาน` · `ออก` …) — ว่าง = ไม่ได้คัดลอกคอลัมน์สถานะมา */
+  status: string;
+  action: PasteRowAction;
+  /** เหตุผลที่ข้าม */
+  reason?: string;
+  /** ชื่อช่องที่จะเปลี่ยน (ภาษาไทย) */
+  changes: string[];
+  /** ช่องที่ฝ่ายบุคคลแก้บนเว็บไว้แล้ว — ไม่ทับ */
+  kept: string[];
+  /** ค่าที่ไฟล์พิมพ์ผิด/ถูกปรับ — ให้คนตรวจอีกที */
+  notes: string[];
+}
+
+export interface PasteImportReport {
+  /** `header` = วางพร้อมแถวหัวตาราง · `position` = เทียบตามตำแหน่งคอลัมน์ของชีต */
+  mode: "header" | "position";
+  /** ช่องที่อ่านได้จากข้อความที่วาง (ภาษาไทย) */
+  columns: string[];
+  rows: PasteRowResult[];
+  counts: Record<PasteRowAction, number>;
+  committed: boolean;
 }

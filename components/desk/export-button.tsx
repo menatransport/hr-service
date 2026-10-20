@@ -89,7 +89,7 @@ export function ExportExcelButton({
  * เป็นแผ่นเอกสารมุมพับ + ตัว X แบบเดียวกับที่คนเห็นแล้วรู้ว่าเป็นสเปรดชีต ·
  * ใช้ `currentColor` และเส้นหนา 1.8 เท่าไอคอน lucide ตัวอื่นในระบบ จึงกลืนกันหมด
  */
-function ExcelIcon() {
+export function ExcelIcon({ className = "text-excel" }: { className?: string }) {
   return (
     <svg
       width={15}
@@ -97,7 +97,7 @@ function ExcelIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      className="flex-none text-excel"
+      className={`flex-none ${className}`}
       strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"

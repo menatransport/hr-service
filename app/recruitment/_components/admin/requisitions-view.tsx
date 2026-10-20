@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import Link from "next/link";
 import {
   ArrowUpRight,
   Building2,
@@ -24,6 +25,7 @@ import {
 import { requestJson } from "@/lib/http";
 import { alertError } from "@/lib/swal";
 import { thaiDate } from "@/app/recruitment/_lib/form";
+import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import {
   HIRE_TYPE_TONE,
@@ -35,6 +37,7 @@ import {
   hireTypeLabel,
   isClosed,
   isStale,
+  personName,
   positionLabel,
   replaceSummary,
   waitingDays,
@@ -44,6 +47,7 @@ import {
 } from "@/app/recruitment/_lib/requisitions/types";
 import { RequisitionForm } from "@/app/recruitment/_components/admin/requisition-form";
 import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requisition-cancel";
+import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
 
 /**
  * แท็บ “คำขอสรรหา” — **ตารางเดียวจบ** ไม่มีหน้ารายละเอียดแยก
@@ -206,7 +210,8 @@ const COLUMNS = [
     width: "min-w-[190px]",
     asc: "ก → ฮ",
     desc: "ฮ → ก",
-    text: (r: Requisition) => r.match?.fullName || NO_MATCH,
+    /* ใบนำเข้าจากไฟล์ Onboarding ไม่มีใบสมัคร — ขึ้นชื่อที่ฝ่ายสรรหากรอกไว้แทน */
+    text: (r: Requisition) => personName(r) || NO_MATCH,
   },
   {
     id: "status",
@@ -612,7 +617,14 @@ export function RequisitionsView({
                       ใบไหนอยู่ ท่าเดียวกับชื่อผู้สมัครในอีกแท็บ · พื้นต้องทึบ
                       ไม่ใช่ `/50` ของแถว ไม่งั้นตัวหนังสือที่เลื่อนผ่านจะทะลุขึ้นมา */}
                   <td className="sticky left-0 z-[5] bg-base-100 px-3 py-2 font-mono text-11 tracking-wider whitespace-nowrap text-primary after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line group-hover:bg-base-200">
-                    {row.code}
+                    {/* เลขที่คำขอ → เส้นทาง Onboarding ของคนที่รับอัตรานี้ (ข้อมูล 5 ฝ่าย + ใบสมัคร + ATMS) */}
+                    <Link
+                      href={`${ADMIN_ROOT}/onboarding/${row.id}`}
+                      title={`ดูเส้นทาง Onboarding ของ ${row.code}`}
+                      className="underline decoration-primary/30 decoration-dotted underline-offset-4 hover:decoration-primary"
+                    >
+                      {row.code}
+                    </Link>
                   </td>
 
                   <td
@@ -648,7 +660,13 @@ export function RequisitionsView({
                     </span>
                   </td>
 
-                  <td className="px-3 py-2 whitespace-nowrap">{vehiclePlateText(row)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {vehiclePlateText(row)}
+                    {/* สถานะซ่อม **ณ ตอนนี้** จากบอร์ดซ่อม ไม่ใช่ตอนแจ้ง — คันปกติไม่ขึ้นอะไร */}
+                    {row.vehicle?.plateNo && options.repairs[row.vehicle.plateNo] ? (
+                      <RepairBadge repair={options.repairs[row.vehicle.plateNo]} compact />
+                    ) : null}
+                  </td>
 
                   <td className="px-3 py-2 font-mono text-12 whitespace-nowrap">
                     {row.vehicle?.code || <span className="font-sans text-mut">{DASH}</span>}
@@ -685,6 +703,8 @@ export function RequisitionsView({
                           className="flex-none text-mut opacity-0 transition-opacity group-hover/link:text-primary group-hover/link:opacity-100"
                         />
                       </button>
+                    ) : row.hireName ? (
+                      <span title="ไม่มีใบสมัครผูก — ชื่อจากข้อมูล Onboarding ที่ฝ่ายสรรหากรอก">{row.hireName}</span>
                     ) : (
                       <span className="text-mut">{NO_MATCH}</span>
                     )}
