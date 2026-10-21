@@ -41,7 +41,7 @@ import type { LucideIcon } from "lucide-react";
 
 export type FieldSize = "md" | "lg";
 
-const box = "w-full border bg-base-100 outline-none transition-colors";
+export const box = "w-full border bg-base-100 outline-none transition-colors";
 const boxSize: Record<FieldSize, string> = {
   md: "rounded-field px-3.5 py-2.5 text-13-5",
   lg: "rounded-box px-3.5 py-3 text-13-5",
@@ -52,7 +52,7 @@ const enabled =
 const disabledBox =
   "border-line bg-base-200 text-ink cursor-not-allowed placeholder:text-mut";
 
-interface FieldBase {
+export interface FieldBase {
   id: string;
   label: string;
   /** ซ่อน label ไว้ให้ screen reader อย่างเดียว (ช่องที่บริบทชัดอยู่แล้ว) */
@@ -123,8 +123,11 @@ function Hint({ children }: { children?: string }) {
   return <p className="text-11-5 text-mut text-pretty">{children}</p>;
 }
 
-/** โครงเดียวกันทุกฟิลด์: label → hint → ตัวคอนโทรล */
-function Frame({
+/**
+ * โครงเดียวกันทุกฟิลด์: label → hint → ตัวคอนโทรล
+ * export ไว้ให้ช่องเฉพาะทางนอกไฟล์นี้ (เช่น `InvolvedField`) ได้ป้ายชื่อหน้าตาเดียวกัน
+ */
+export function Frame({
   id,
   label,
   srLabel,
@@ -232,7 +235,7 @@ export function TextareaField({
 /**
  * ช่องใส่ “ชื่อหลายชื่อ” เป็นชิป — พิมพ์แล้วกด Enter หรือจุลภาคเพื่อเพิ่มทีละชื่อ
  *
- * ใช้กับรายการสั้น ๆ ที่**ไม่มีชุดตัวเลือกตายตัว** (เช่นผู้เกี่ยวข้องกับเคส ซึ่งอาจเป็น
+ * ใช้กับรายการสั้น ๆ ที่**ไม่มีชุดตัวเลือกตายตัว** (ผู้เกี่ยวข้องกับเคสย้ายไปใช้ `InvolvedField` ที่เลือกจากทะเบียน พจส. แล้ว — เดิมใช้ตัวนี้เพราะอาจเป็น
  * คนนอกบริษัท) — ถ้าเลือกจากรายการที่รู้ล่วงหน้าได้ ให้ใช้ `SelectField` แทน
  *
  * ที่ต้องระวัง:

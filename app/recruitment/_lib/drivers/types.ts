@@ -1148,3 +1148,15 @@ export interface PasteImportReport {
   counts: Record<PasteRowAction, number>;
   committed: boolean;
 }
+
+/** พจส. หนึ่งคนในช่องเลือกผู้เกี่ยวข้อง — ดู `getDriverPicks()` */
+export interface DriverPick {
+  code: string;
+  name: string;
+  photoUrl: string;
+  plant: string;
+  customer: string;
+  position: string;
+  /** ยังปฏิบัติงาน (นับ `statusOverride` แล้ว) */
+  active: boolean;
+}

@@ -38,6 +38,7 @@ import {
   RECORD_CATEGORY_ICON,
   RECORD_STATUSES,
   formatOccurredOn,
+  involvedLabel,
   recordCategoryLabel,
   recordStatusMeta,
   type RecordCase,
@@ -105,7 +106,7 @@ const deptOptions: SelectOption[] = [
 /** สีของชิปกรองแต่ละสถานะ = สีของป้ายสถานะนั้น (`recordStatusMeta[].chip`) */
 const STATUS_TONE: Record<RecordStatus, FilterChipTone> = {
   pending: "wait",
-  completed: "done",
+  completed: "ok",
   rejected: "alert",
 };
 
@@ -526,7 +527,7 @@ export function RecordCaseView({
                               {r.involved.length ? (
                                 <span
                                   className="flex flex-none items-center gap-1 tabular-nums"
-                                  title={`ผู้เกี่ยวข้อง: ${r.involved.join(" · ")}`}
+                                  title={`ผู้เกี่ยวข้อง: ${r.involved.map(involvedLabel).join(" · ")}`}
                                 >
                                   <Users size={12} strokeWidth={1.8} aria-hidden />
                                   {r.involved.length}

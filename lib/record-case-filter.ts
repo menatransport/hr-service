@@ -1,5 +1,6 @@
 import {
   RECORD_STATUSES,
+  involvedLabel,
   recordCategoryLabel,
   warningLabel,
   type RecordCase,
@@ -54,7 +55,7 @@ export function matchesRecordFilters(
     r.recorder.name,
     recordCategoryLabel(categories, r.category),
     ...r.warnings.map(warningLabel),
-    ...r.involved,
+    ...r.involved.map(involvedLabel),
   ].some((v) => v.toLowerCase().includes(q));
 }
 

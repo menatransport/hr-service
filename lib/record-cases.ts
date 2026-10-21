@@ -11,9 +11,12 @@ import {
   MAX_REMARK,
   WARNING_NONE,
   isRecordStatus,
+  involvedKey,
   isWarningLevel,
   sortWarnings,
+  toInvolved,
   todayInBangkok,
+  type InvolvedPerson,
   type RecordActor,
   type RecordAttachment,
   type RecordCase,
@@ -50,7 +53,8 @@ interface RecordDoc {
   departmentId: string;
   /** เอกสารที่บันทึกก่อน 21 ส.ค. 2026 ไม่มีสี่ฟิลด์นี้ — อ่านออกมาเป็น `""` / `[]` */
   category?: string;
-  involved?: string[];
+  /** สตริงล้วน = เคสก่อน 21 ต.ค. 2026 · ดู `toInvolved()` */
+  involved?: (string | InvolvedPerson)[];
   remark?: string;
   warnings?: string[];
   attachments: RecordAttachment[];
@@ -75,7 +79,7 @@ function toRecordCase(doc: WithId<RecordDoc>): RecordCase {
     status: doc.status,
     departmentId: doc.departmentId,
     category: doc.category ?? "",
-    involved: doc.involved ?? [],
+    involved: readInvolved(doc.involved),
     remark: doc.remark ?? "",
     warnings: doc.warnings ?? [],
     attachments: doc.attachments ?? [],
@@ -151,24 +155,32 @@ async function category(value: unknown): Promise<string> {
   return id;
 }
 
-/**
- * ชื่อผู้เกี่ยวข้อง — ตัดช่องว่าง ทิ้งค่าว่าง และ **ตัดชื่อซ้ำออก** (เทียบแบบไม่สนตัวพิมพ์)
- * ไม่ได้เช็คกับสมุดรายชื่อพนักงานโดยตั้งใจ: คนนอกบริษัท/คู่กรณีก็ถูกบันทึกได้
- */
-function involved(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+/** รหัส พจส. ยาวไม่เกินนี้ (จริงคือ 6 หลัก) — กันค่าขยะจาก client */
+const MAX_INVOLVED_CODE = 20;
 
-  const out: string[] = [];
+/** ค่าที่เก็บในฐานข้อมูล → `InvolvedPerson[]` (รองรับรูปเก่าที่เป็นสตริงล้วน) */
+function readInvolved(value: unknown): InvolvedPerson[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(toInvolved).filter((p): p is InvolvedPerson => p !== null);
+}
+
+/**
+ * ผู้เกี่ยวข้อง — รับทั้ง `{ code, name }` (เลือกจากทะเบียน พจส.) และชื่อที่พิมพ์เอง
+ * ตัดช่องว่าง ทิ้งค่าว่าง และ **ตัดซ้ำออก** (รหัสเดียวกัน หรือชื่อคนนอกซ้ำแบบไม่สนตัวพิมพ์)
+ * คนนอกบริษัท/คู่กรณีจึงยังบันทึกได้ — ไม่บังคับว่าต้องมีในทะเบียน
+ */
+function involved(value: unknown): InvolvedPerson[] {
+  const out: InvolvedPerson[] = [];
   const seen = new Set<string>();
-  for (const raw of value) {
-    const name = typeof raw === "string" ? raw.trim() : "";
-    if (!name) continue;
-    if (name.length > MAX_INVOLVED_NAME)
+  for (const person of readInvolved(value)) {
+    if (person.name.length > MAX_INVOLVED_NAME)
       throw new RecordCaseError(`ชื่อผู้เกี่ยวข้องยาวเกิน ${MAX_INVOLVED_NAME} ตัวอักษร`);
-    const key = name.toLowerCase();
+    if (person.code.length > MAX_INVOLVED_CODE)
+      throw new RecordCaseError("รหัส พจส. ไม่ถูกต้อง");
+    const key = involvedKey(person);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(name);
+    out.push(person);
   }
 
   if (out.length > MAX_INVOLVED)
@@ -353,8 +365,10 @@ export async function updateRecordCase(
     attachments: await attachments(input.attachments),
   };
 
+  /* ผู้เกี่ยวข้องรูปเก่าเป็นสตริง — แปลงก่อนเทียบ ไม่งั้นเปิดแก้แล้วกดบันทึกเฉย ๆ ก็นับว่า “แก้” */
+  const before = { ...current, involved: readInvolved(current.involved) };
   const changed = EDITABLE_FIELDS.filter(
-    ([key]) => !same(current[key] ?? (Array.isArray(next[key]) ? [] : ""), next[key]),
+    ([key]) => !same(before[key] ?? (Array.isArray(next[key]) ? [] : ""), next[key]),
   ).map(([, label]) => label);
 
   if (!changed.length) throw new RecordCaseError("ไม่มีข้อมูลที่เปลี่ยนแปลง");

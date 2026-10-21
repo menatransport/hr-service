@@ -7,7 +7,7 @@
  * สีไม่ใช่ตัวบอกเดียว — ชิปที่เลือกอยู่ตัวหนาขึ้นและมี `aria-pressed`
  */
 
-export type FilterChipTone = "ink" | "new" | "wait" | "live" | "on" | "done" | "alert" | "sla";
+export type FilterChipTone = "ink" | "new" | "wait" | "live" | "on" | "done" | "ok" | "alert" | "sla";
 
 const DOT: Record<FilterChipTone, string | null> = {
   ink: null,
@@ -16,6 +16,7 @@ const DOT: Record<FilterChipTone, string | null> = {
   live: "bg-st-live-ink",
   on: "bg-primary",
   done: "bg-st-done-ink",
+  ok: "bg-st-ok-ink",
   alert: "bg-alert",
   sla: "bg-sla",
 };
@@ -28,6 +29,7 @@ const ON: Record<FilterChipTone, string> = {
   live: "chip-live",
   on: "chip-on",
   done: "chip-done",
+  ok: "chip-ok",
   alert: "chip-alert",
   sla: "chip-sla",
 };

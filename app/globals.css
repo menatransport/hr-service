@@ -207,6 +207,9 @@
   --color-st-live-ink: #0b5f58;
   --color-st-done: #e2e9e6;
   --color-st-done-ink: #53635e;
+  /* จบสำเร็จ — เขียวจริง (ไม่ใช่ teal ของระบบ) ใช้กับ “เสร็จสิ้น” ของบันทึกเคส */
+  --color-st-ok: #dcf2e3;
+  --color-st-ok-ink: #17703a;
 
   /**
    * เส้นขอบของป้าย — เข้มกว่าพื้นป้ายหนึ่งขั้น ใช้ผ่าน `@utility chip-*` ท้ายไฟล์
@@ -219,6 +222,7 @@
   --color-st-wait-line: #eecd92;
   --color-st-live-line: color-mix(in oklab, #0f766e 34%, #fff);
   --color-st-done-line: #cbd5d1;
+  --color-st-ok-line: #a9dbb9;
 
   /**
    * ชั้นความสูงของพื้นผิว — สามระดับ ไม่ใช่สเกลเต็มของ Tailwind
@@ -372,11 +376,14 @@
   --color-st-live-ink: #3fdcc9;
   --color-st-done: #262e2d;
   --color-st-done-ink: #9daca7;
+  --color-st-ok: #15301f;
+  --color-st-ok-ink: #6fdc95;
 
   --color-st-new-line: #2f4664;
   --color-st-wait-line: #5c4518;
   --color-st-live-line: color-mix(in oklab, #14b8a6 34%, #161c1b);
   --color-st-done-line: #3a4442;
+  --color-st-ok-line: #255c39;
 
   /**
    * เงาบนพื้นมืดเป็น **ดำล้วน ไม่ใช่สีหมึกของธีม** — หมึกธีมมืดเป็นสีอ่อน
@@ -1496,6 +1503,13 @@
   --chip-line: var(--color-st-done-line);
 }
 
+/* จบสำเร็จ — เขียว (“เสร็จสิ้น” ของบันทึกเคส) */
+@utility chip-ok {
+  --chip-bg: var(--color-st-ok);
+  --chip-ink: var(--color-st-ok-ink);
+  --chip-line: var(--color-st-ok-line);
+}
+
 /**
  * ยกเลิก / พ้นสภาพ — ต้องเห็นว่าเสียไปเท่าไหร่ ไม่ใช่ปล่อยให้จมไปกับ `done`
  *
@@ -2356,10 +2370,13 @@ a.home-row:hover .home-row-arrow {
     --color-st-live-ink: #0b5f58;
     --color-st-done: #e2e9e6;
     --color-st-done-ink: #53635e;
+    --color-st-ok: #dcf2e3;
+    --color-st-ok-ink: #17703a;
     --color-st-new-line: #b7cef2;
     --color-st-wait-line: #eecd92;
     --color-st-live-line: #9dc8c4;
     --color-st-done-line: #cbd5d1;
+    --color-st-ok-line: #a9dbb9;
   }
 
   @page {

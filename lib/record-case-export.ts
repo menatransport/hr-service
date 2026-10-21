@@ -4,6 +4,7 @@ import { departmentLabel } from "./case-flow";
 import { hasRecordFilters, type RecordCaseFilters } from "./record-case-filter";
 import {
   RECORD_STATUSES,
+  involvedLabel,
   recordCategoryLabel,
   recordStatusMeta,
   warningLabel,
@@ -92,7 +93,7 @@ function columnsOf(categories: RecordCategory[]): Column[] {
     },
     { header: "หัวเรื่อง", width: 34, value: (r) => r.title },
     { header: "รายละเอียด", width: 50, value: (r) => r.detail },
-    { header: "ผู้เกี่ยวข้อง", width: 28, value: (r) => r.involved.join(" · ") },
+    { header: "ผู้เกี่ยวข้อง", width: 28, value: (r) => r.involved.map(involvedLabel).join(" · ") },
     {
       header: "หนังสือเตือน / โทษทางวินัย",
       width: 30,

@@ -66,6 +66,37 @@ export const MAX_INVOLVED = 12;
 export const MAX_INVOLVED_NAME = 80;
 
 /**
+ * ผู้เกี่ยวข้องหนึ่งคน — `code` = รหัส พจส. จากทะเบียนประวัติ (`master_driver`)
+ * · `""` = ชื่อที่พิมพ์เอง (คนนอกบริษัท/คู่กรณี ที่ไม่มีในทะเบียน)
+ *
+ * เคสที่บันทึกก่อน 21 ต.ค. 2026 เก็บเป็นสตริงชื่อล้วน — `toInvolved()` แปลงให้ตอนอ่าน
+ */
+export interface InvolvedPerson {
+  code: string;
+  name: string;
+}
+
+/** อ่านค่าที่เก็บไว้ได้ทั้งรูปเก่า (สตริง) และรูปใหม่ (`{ code, name }`) · ใช้ไม่ได้ = `null` */
+export function toInvolved(raw: unknown): InvolvedPerson | null {
+  if (typeof raw === "string") {
+    const name = raw.trim();
+    return name ? { code: "", name } : null;
+  }
+  if (!raw || typeof raw !== "object") return null;
+  const { code, name } = raw as Record<string, unknown>;
+  const c = typeof code === "string" ? code.trim() : "";
+  const n = typeof name === "string" ? name.trim() : "";
+  return n || c ? { code: c, name: n || c } : null;
+}
+
+/** คีย์กันซ้ำ — คนในทะเบียนเทียบด้วยรหัส · คนนอกเทียบชื่อแบบไม่สนตัวพิมพ์ */
+export const involvedKey = (p: InvolvedPerson) =>
+  p.code ? `#${p.code}` : p.name.toLowerCase();
+
+/** ข้อความบรรทัดเดียว เช่น `072025 สมชาย ใจดี` — ใช้ใน Excel/tooltip/ค้นหา */
+export const involvedLabel = (p: InvolvedPerson) => (p.code ? `${p.code} ${p.name}` : p.name);
+
+/**
  * โทษทางวินัยที่ออกให้กับเคสนี้ — **เลือกได้หลายข้อ** (checkbox ตามใบ requirement)
  * เพราะเรื่องเดียวอาจไล่ระดับหลายขั้นกว่าจะจบ (ตักเตือนวาจา → หนังสือเตือน → พักงาน)
  *
@@ -188,8 +219,8 @@ export interface RecordCase {
    * 21 ส.ค. 2026 ไม่มีฟิลด์นี้ — เคสใหม่บังคับเลือกเสมอ
    */
   category: string;
-  /** ชื่อผู้เกี่ยวข้องกับเรื่องนี้ (พิมพ์เอง ไม่ได้ผูกกับสมุดรายชื่อ) · ว่างได้ */
-  involved: string[];
+  /** ผู้เกี่ยวข้องกับเรื่องนี้ — เลือกจากทะเบียน พจส. หรือพิมพ์ชื่อคนนอกเอง · ว่างได้ */
+  involved: InvolvedPerson[];
   /**
    * หมายเหตุของ**ตัวเคส** — คนละอันกับหมายเหตุตอนเปลี่ยนสถานะที่อยู่ใน `history`
    * (อันนั้นผูกกับการกระทำครั้งนั้น อันนี้เป็นข้อมูลประกอบของเรื่องที่แก้ไขทีหลังได้)
@@ -222,8 +253,8 @@ export const recordStatusMeta: Record<
   },
   completed: {
     label: "เสร็จสิ้น",
-    chip: "bg-st-done text-st-done-ink ring-st-done-ink/20",
-    dot: "bg-st-done-ink",
+    chip: "bg-st-ok text-st-ok-ink ring-st-ok-ink/25",
+    dot: "bg-st-ok-ink",
     hint: "ดำเนินการจนจบเรื่องแล้ว",
     action: "อนุมัติเสร็จสิ้น",
   },

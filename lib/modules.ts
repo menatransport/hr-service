@@ -4,6 +4,7 @@ import {
   Building2,
   ChartColumn,
   ClipboardList,
+  ClipboardPenLine,
   Code2,
   Container,
   Database,
@@ -200,6 +201,13 @@ export const MODULES: ModuleGroup[] = [
         desc: "เรื่องที่ HR รับแจ้งเอง แยกตามประเภท",
         href: "/desk/record-cases",
         icon: Bookmark,
+      },
+      {
+        id: "survey",
+        label: "แบบสอบถาม",
+        desc: "ผลแบบสำรวจความเห็น พจส.",
+        href: "/desk/survey",
+        icon: ClipboardPenLine,
       },
       {
         id: "permissions",

@@ -20,6 +20,7 @@ import {
   vehicleMixLabel,
   type DocExpiry,
   type DriverDocument,
+  type DriverPick,
   type DriverRecord,
   type DriverRegistry,
   type DriverResignation,
@@ -785,6 +786,44 @@ export async function getDriverList(): Promise<DriverRegistry> {
     enrichmentFailed,
     manualFailed: false,
   };
+}
+
+/** ฟิลด์ที่ `getDriverPicks()` ใช้ — ไม่มีเบอร์โทร/เลขบัตร เพราะรายชื่อทั้งก้อนส่งลง browser */
+const PICK_FIELDS: DriverField[] = [
+  "drivercode",
+  "driverName",
+  "photoUrl",
+  "plant",
+  "customer",
+  "position",
+  "active",
+  "statusOverride",
+];
+
+/**
+ * รายชื่อ พจส. สำหรับช่อง “ผู้เกี่ยวข้อง” ของบันทึกเคส (`GET /api/drivers/picker`)
+ *
+ * อ่านแค่ชื่อ/รหัส/แพล้นท์ ไม่แตะ ETL เลย (~1,000 แถว เบามาก) · **คนพ้นสภาพยังอยู่ในรายการ**
+ * — เคสวินัยมักเกิดกับคนที่ออกไปแล้ว · เรียงคนที่ยังปฏิบัติงานขึ้นก่อน แล้วตามรหัส
+ */
+export async function getDriverPicks(): Promise<DriverPick[]> {
+  const docs = await readMasterDrivers(PICK_FIELDS);
+
+  return docs
+    .map((doc) => {
+      const override = toStatusOverride(doc.statusOverride);
+      return {
+        code: str(doc.drivercode),
+        name: str(doc.driverName),
+        photoUrl: str(doc.photoUrl),
+        plant: str(doc.plant),
+        customer: str(doc.customer),
+        position: str(doc.position),
+        active: override ? override === "active" : Boolean(doc.active),
+      };
+    })
+    .filter((p) => p.code && p.name)
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.code.localeCompare(b.code));
 }
 
 /** ฟิลด์ที่ `collectDocExpiries()` ใช้ (ผ่าน `toRecord()`) */

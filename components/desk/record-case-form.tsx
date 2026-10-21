@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 
 import { useDeskIdentity } from "@/components/auth/identity-provider";
+import { InvolvedField } from "@/components/desk/involved-field";
 import { AttachmentField } from "@/components/ui/attachment-field";
 import {
   CheckboxGroupField,
   DateField,
   SelectField,
-  TagsField,
   TextField,
   TextareaField,
   type SelectOption,
@@ -25,6 +25,7 @@ import {
   WARNING_LEVELS,
   toggleWarning,
   todayInBangkok,
+  type InvolvedPerson,
   type RecordAttachment,
   type RecordCase,
   type RecordCategory,
@@ -71,7 +72,7 @@ export function RecordCaseForm({
   const [occurredOn, setOccurredOn] = useState(record?.occurredOn ?? todayInBangkok());
   const [departmentId, setDepartmentId] = useState(record?.departmentId ?? "");
   const [category, setCategory] = useState(record?.category ?? "");
-  const [involved, setInvolved] = useState<string[]>(record?.involved ?? []);
+  const [involved, setInvolved] = useState<InvolvedPerson[]>(record?.involved ?? []);
   const [warnings, setWarnings] = useState<string[]>(record?.warnings ?? []);
   const [remark, setRemark] = useState(record?.remark ?? "");
   const [detail, setDetail] = useState(record?.detail ?? "");
@@ -200,11 +201,11 @@ export function RecordCaseForm({
       </Section>
 
       <Section title="รายละเอียดเหตุการณ์">
-        <TagsField
+        {/* เลือกจากทะเบียน พจส. ได้หลายคน · คนนอกทะเบียนพิมพ์ชื่อเพิ่มเองได้ */}
+        <InvolvedField
           id="rc-involved"
-          label="ชื่อพจส."
+          label="ผู้เกี่ยวข้อง"
           optional
-          placeholder="พิมพ์ชื่อแล้วกด Enter"
           max={MAX_INVOLVED}
           value={involved}
           onChange={setInvolved}

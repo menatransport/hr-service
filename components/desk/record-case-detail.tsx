@@ -8,6 +8,7 @@ import {
   statusActionTone,
   useRecordStatusChange,
 } from "@/components/desk/record-status-actions";
+import { InvolvedList } from "@/components/desk/involved-field";
 import { AttachmentGallery } from "@/components/ui/attachment-gallery";
 import {
   attachmentKind,
@@ -121,7 +122,7 @@ export function RecordCaseDetail({
 
             <Row label="ผู้เกี่ยวข้อง">
               {record.involved.length ? (
-                <span className="leading-[1.8]">{record.involved.join(" · ")}</span>
+                <InvolvedList people={record.involved} />
               ) : null}
             </Row>
 
