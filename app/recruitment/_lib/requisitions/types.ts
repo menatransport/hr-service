@@ -249,6 +249,8 @@ export interface Requisition {
   hireName: string;
   /** สถานะ พจส. (`onboarding.rc.outcome`) — ว่าง = ยังไม่ระบุ */
   outcome: string;
+  /** วันเริ่มฝึกที่ RC กรอก (`onboarding.rc.trainingStartOn`) — หน้าผู้สมัครแท็บฝึกงานใช้ · ว่าง = ยังไม่กรอก */
+  trainingStartOn: string;
 
   note: string;
   requester: { employeeId: string; name: string };

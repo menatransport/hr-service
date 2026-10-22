@@ -339,10 +339,11 @@ export function stageOf(r: OnboardingRecord): Stage {
     Boolean(r.atms?.firstWork);
   if (worked) return "working";
   if (r.atms?.exited) return "ended";
-  /* วันเริ่มฝึกที่ยังไม่ถึง = ยังรอเริ่ม (อยู่ขั้นสรรหา) */
+  /* วันเริ่มฝึกที่ยังไม่ถึง = ยังรอเริ่ม (อยู่ขั้นสรรหา) — ใบสมัคร “ฝึกงาน” ที่วันยังไม่ถึงก็ยังรอ
+     (หน้าผู้สมัครขึ้น “รอฝึกงาน” · Bew 22 ต.ค. 2569) · ไม่มีวันเลยถึงเชื่อสถานะใบสมัคร */
   const start = trainingStart(r);
-  if ((start && start <= todayInBangkok()) || r.match?.status === "training") return "training";
-  return "recruiting";
+  if (start) return start <= todayInBangkok() ? "training" : "recruiting";
+  return r.match?.status === "training" ? "training" : "recruiting";
 }
 
 /** ป้ายผลของคนที่จบ — ยกเลิกใบสมัคร → ผลที่กรอก → ATMS → ยกเลิกคำขอ */

@@ -143,6 +143,7 @@ export function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
     drivercode: doc.drivercode ?? "",
     hireName: doc.onboarding?.rc?.values.fullName ?? "",
     outcome: doc.onboarding?.rc?.values.outcome ?? "",
+    trainingStartOn: doc.onboarding?.rc?.values.trainingStartOn ?? "",
     note: doc.note ?? "",
     requester: doc.requester,
     history: doc.history ?? [],

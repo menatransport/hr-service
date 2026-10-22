@@ -179,12 +179,25 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
 
 /* ─────────────────────────────────────────────────────── สถานะการสมัคร */
 
-export function StatusCell({ candidate, onPatch, locked }: CellProps) {
+export function StatusCell({
+  candidate,
+  onPatch,
+  locked,
+  onTraining,
+}: CellProps & {
+  /** มี = เลือก “ฝึกงาน” แล้วเปิดฟอร์มข้อมูล RC (+ RQ) ของหน้าแม่แทนการบันทึกตรง */
+  onTraining?: () => void;
+}) {
   const [saving, setSaving] = useState(false);
   const [asking, setAsking] = useState(false);
 
   async function apply(status: ApplicationStatus, close: () => void) {
     close();
+
+    if (status === "training" && onTraining && candidate.status !== "training") {
+      onTraining();
+      return;
+    }
 
     /* เลือก “ยกเลิก” = ถามเหตุผลกับ Blacklist ต่อทันทีในกล่องเล็ก แทนที่จะบันทึก
        เงียบ ๆ แล้วปล่อยให้ไปตามเก็บทีหลัง — จังหวะที่คนรู้เรื่องชัดที่สุดคือวินาทีที่

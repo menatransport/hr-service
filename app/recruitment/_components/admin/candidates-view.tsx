@@ -32,7 +32,11 @@ import {
   type TableSort,
 } from "@/app/recruitment/_components/admin/candidate-insights";
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
-import { CandidateRcForm } from "@/app/recruitment/_components/admin/candidate-rc-form";
+import {
+  CandidateRcForm,
+  TRAINING_STATE_LABEL,
+  trainingState,
+} from "@/app/recruitment/_components/admin/candidate-rc-form";
 import { outcomeGroup, outcomeLabel } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
@@ -115,7 +119,17 @@ const stamp = new Intl.DateTimeFormat("th-TH", {
  * · คิดบนจอไม่ใช่ที่เซิร์ฟเวอร์ เพื่อให้กดติด Blacklist ในมุมมองยกเลิกแล้วใบที่รอ
  *   การติดต่อของคนเดียวกันขึ้นเตือนทันทีโดยไม่ต้องโหลดหน้าใหม่
  */
-type Row = ApplicationSummary & { blacklistHit: BlacklistHit | null };
+type Row = ApplicationSummary & {
+  blacklistHit: BlacklistHit | null;
+  /** วันเริ่มฝึกจาก RQ ที่ผูก (`Requisition.trainingStartOn`) — ว่าง = ไม่ผูก/ยังไม่กรอก */
+  trainingStartOn: string;
+};
+
+/** ฝึกงาน / รอฝึกงาน ของแถว — คอลัมน์วันที่ฝึกงาน (แท็บฝึกงาน) */
+function trainingLabel(a: Row): string {
+  const state = trainingState(a.trainingStartOn);
+  return state ? TRAINING_STATE_LABEL[state] : "ยังไม่กำหนด";
+}
 
 /**
  * นิยามคอลัมน์ที่เดียวของทั้งตาราง
@@ -195,6 +209,17 @@ const COLUMNS = [
     text: (a: Row) => STATUS_LABEL[a.status],
   },
   {
+    /* โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว (Bew 22 ต.ค. 2569) · ติ๊กกรองเป็น ฝึกงาน/รอฝึกงาน */
+    id: "trainingStart",
+    label: "วันที่ฝึกงาน",
+    width: "min-w-[180px]",
+    asc: "เก่า → ใหม่",
+    desc: "ใหม่ → เก่า",
+    text: (a: Row) => (a.trainingStartOn ? `${thaiDate(a.trainingStartOn)} · ${trainingLabel(a)}` : "ยังไม่กำหนด"),
+    facet: trainingLabel,
+    key: (a: Row) => a.trainingStartOn || "9999-12-31",
+  },
+  {
     id: "exitReason",
     label: "เหตุผลที่ยกเลิก",
     width: "min-w-[170px]",
@@ -258,6 +283,9 @@ const REASON_COLUMN: ColumnId = "exitReason";
 const BLACKLIST_COLUMN: ColumnId = "blacklist";
 const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
 
+/** คอลัมน์วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว */
+const TRAINING_COLUMN: ColumnId = "trainingStart";
+
 /**
  * ลำดับตั้งต้นของตาราง — **ใบล่าสุดอยู่บนสุดเสมอ** เรียงตามประทับเวลา
  *
@@ -271,7 +299,7 @@ const DEFAULT_SORT: TableSort = { column: "createdAt", dir: "desc" };
  * คอลัมน์ Excel — ตามคอลัมน์บนจอ (เหตุผล/Blacklist โผล่ตามมุมมองเดียวกัน) + ของที่จอซ่อนไว้ใน
  * tooltip/ปุ่ม: เลขที่ใบสมัคร · เวลานัด · ผลสัมภาษณ์ · Driver Rating
  */
-function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean): XlsxColumn<Row>[] {
+function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showTraining: boolean): XlsxColumn<Row>[] {
   const text = (id: ColumnId) => COLUMNS.find((c) => c.id === id)!.text;
   return [
     { header: "เลขที่ใบสมัคร", width: 14, kind: "code", value: (a) => a.ref },
@@ -295,6 +323,18 @@ function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean): Xlsx
       value: (a) => STATUS_LABEL[a.status],
       tone: (a) => (a.status === "cancelled" ? "alert" : a.status === "working" || a.status === "training" ? "ok" : null),
     },
+    ...(showTraining
+      ? [
+          { header: "วันที่ฝึกงาน", width: 13, kind: "date", value: (a) => xlsxDate(a.trainingStartOn) } satisfies XlsxColumn<Row>,
+          {
+            header: "สถานะฝึกงาน",
+            width: 13,
+            kind: "status",
+            value: trainingLabel,
+            tone: (a) => (trainingState(a.trainingStartOn) === "training" ? "ok" : "mut"),
+          } satisfies XlsxColumn<Row>,
+        ]
+      : []),
     ...(showReason
       ? [{ header: "เหตุผลที่ยกเลิก", width: 26, value: text("exitReason") } satisfies XlsxColumn<Row>]
       : []),
@@ -343,6 +383,7 @@ async function candidateSheet(
   visible: Row[],
   showReason: boolean,
   showBlacklist: boolean,
+  showTraining: boolean,
 ): Promise<Pick<XlsxSheet<FormRow>, "columns" | "rows">> {
   const form = await requestJson<ApplicationFormExport>(
     "/api/recruitment/applications/export",
@@ -354,7 +395,7 @@ async function candidateSheet(
   return {
     rows: visible.map((a) => ({ ...a, form: byId.get(a.id) ?? {} })),
     columns: [
-      ...candidateXlsxColumns(showReason, showBlacklist),
+      ...candidateXlsxColumns(showReason, showBlacklist, showTraining),
       ...form.columns.map(
         (q): XlsxColumn<FormRow> => ({
           header: q.label,
@@ -457,16 +498,20 @@ export function CandidatesView({
         ...a,
         blacklistHit:
           a.status === "pending_contact" ? findBlacklistHit(a, blacklistIndex) : null,
+        trainingStartOn: rqByApplication.get(a.id)?.trainingStartOn ?? "",
       })),
-    [rows, blacklistIndex],
+    [rows, blacklistIndex, rqByApplication],
   );
 
-  /** กล่องข้อมูล RC — ใบสมัครที่ผูกคำขอแล้วเท่านั้น */
-  const [rcFor, setRcFor] = useState<{ application: ApplicationSummary; requisition: Requisition } | null>(() => {
+  /**
+   * กล่องข้อมูล RC — ปุ่ม RC (ใบที่ผูกแล้ว) · คอลัมน์วันที่ฝึกงาน · เลือกสถานะ “ฝึกงาน” (`toTraining`
+   * ต้องกรอกฟอร์มนี้ + เลือก RQ ก่อน บันทึกแล้วค่อยเลื่อนสถานะ · Bew 22 ต.ค. 2569)
+   */
+  const [rcFor, setRcFor] = useState<{ application: ApplicationSummary; toTraining: boolean } | null>(() => {
     if (!initialRc || !initialTerm) return null;
     const application = rows.find((a) => a.ref.toUpperCase() === initialTerm.trim().toUpperCase());
     const requisition = application && requisitions.find((r) => r.match?.applicationId === application.id);
-    return application && requisition ? { application, requisition } : null;
+    return application && requisition ? { application, toTraining: false } : null;
   });
 
   const [opening, setOpening] = useState<string | null>(null);
@@ -505,14 +550,17 @@ export function CandidatesView({
 
   const showBlacklist = BLACKLIST_VIEWS.some(onlyStatus);
 
+  const showTraining = onlyStatus(STATUS_LABEL.training);
+
   const columns = useMemo(
     () =>
       COLUMNS.filter(
         (c) =>
           (c.id !== REASON_COLUMN || showReason) &&
-          (c.id !== BLACKLIST_COLUMN || showBlacklist),
+          (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
+          (c.id !== TRAINING_COLUMN || showTraining),
       ),
-    [showReason, showBlacklist],
+    [showReason, showBlacklist, showTraining],
   );
 
   const visible = useMemo(() => {
@@ -740,7 +788,7 @@ export function CandidatesView({
                       .map((c) => `${c.label}: ${filters[c.id]!.join(", ")}`)
                       .join(" · "),
                     total: rows.length,
-                    ...(await candidateSheet(visible, showReason, showBlacklist)),
+                    ...(await candidateSheet(visible, showReason, showBlacklist, showTraining)),
                   })}
                 />
                 {syncMode ? (
@@ -809,8 +857,22 @@ export function CandidatesView({
                   </td>
 
                   <td className="px-2 py-1.5">
-                    <StatusCell {...cell} />
+                    <StatusCell
+                      {...cell}
+                      /* เป็นฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
+                      onTraining={() => setRcFor({ application: a, toTraining: true })}
+                    />
                   </td>
+
+                  {showTraining ? (
+                    <td className="px-2 py-1.5">
+                      <TrainingDateCell
+                        start={a.trainingStartOn}
+                        locked={locked}
+                        onEdit={() => setRcFor({ application: a, toTraining: false })}
+                      />
+                    </td>
+                  ) : null}
 
                   {showReason ? (
                     <td className="px-2 py-1.5">
@@ -839,7 +901,7 @@ export function CandidatesView({
                         <RcButton
                           requisition={rqByApplication.get(a.id)!}
                           name={a.fullName}
-                          onOpen={() => setRcFor({ application: a, requisition: rqByApplication.get(a.id)! })}
+                          onOpen={() => setRcFor({ application: a, toTraining: false })}
                         />
                       ) : null}
 
@@ -914,17 +976,26 @@ export function CandidatesView({
 
       {rcFor ? (
         <CandidateRcForm
-          requisitionId={rcFor.requisition.id}
-          code={rcFor.requisition.code}
+          applicationId={rcFor.application.id}
+          linked={rqByApplication.get(rcFor.application.id) ?? null}
+          requisitions={requisitions}
           name={rcFor.application.fullName}
           status={rcFor.application.status}
           contactOwner={rcFor.application.contactOwner}
+          toTraining={rcFor.toTraining}
           onClose={() => setRcFor(null)}
-          onSaved={(next) =>
+          onLinked={(rows) => setRequisitions?.((prev) => prev.map((r) => rows.find((w) => w.id === r.id) ?? r))}
+          onSaved={(next) => {
             setRequisitions?.((prev) =>
-              prev.map((r) => (r.id === next.id ? { ...r, drivercode: next.drivercode, outcome: next.outcome } : r)),
-            )
-          }
+              prev.map((r) =>
+                r.id === next.id
+                  ? { ...r, drivercode: next.drivercode, outcome: next.outcome, trainingStartOn: next.trainingStartOn }
+                  : r,
+              ),
+            );
+            if (rcFor.toTraining && rcFor.application.status !== "training")
+              void patchCandidate(rcFor.application.id, { status: "training" });
+          }}
         />
       ) : null}
 
@@ -1024,6 +1095,40 @@ function roleAnswer(
   if (!question) return "";
   const value = displayAnswer(application.answers[question.key], question.options);
   return value === "—" ? "" : value;
+}
+
+/* ──────────────────────────────────────────────────── วันที่ฝึกงาน */
+
+/** วันเริ่มฝึก + ป้าย ฝึกงาน/รอฝึกงาน (วันยังไม่ถึง) · กดแก้วันได้ */
+function TrainingDateCell({ start, locked, onEdit }: { start: string; locked: boolean; onEdit: () => void }) {
+  const state = trainingState(start);
+  const body = (
+    <>
+      <span className="whitespace-nowrap tabular-nums">{start ? thaiDate(start) : "ยังไม่กำหนด"}</span>
+      {state ? (
+        <span
+          className={`rounded-full px-2 py-0.5 text-11 font-medium whitespace-nowrap ${
+            state === "training" ? "bg-st-live text-st-live-ink" : "bg-st-wait text-st-wait-ink"
+          }`}
+        >
+          {TRAINING_STATE_LABEL[state]}
+        </span>
+      ) : null}
+    </>
+  );
+  if (locked) return <span className="flex items-center gap-2 px-1.5 text-12-5 opacity-60">{body}</span>;
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      title="แก้วันเริ่มฝึก"
+      className={`flex w-full items-center gap-2 rounded-selector px-1.5 py-1 text-left text-12-5 transition-colors hover:bg-base-200 ${
+        start ? "" : "text-alert"
+      }`}
+    >
+      {body}
+    </button>
+  );
 }
 
 /* ──────────────────────────────────────────────────── ไอคอนคนหน้าชื่อ */

@@ -174,6 +174,7 @@ function cancelledRows(apps: ApplicationSummary[], docs: WithId<RequisitionDoc>[
             drivercode: "",
             hireName: "",
             outcome: "",
+            trainingStartOn: "",
             note: "",
             requester: { employeeId: "", name: "" },
             history: [],
