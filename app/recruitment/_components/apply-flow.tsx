@@ -15,7 +15,9 @@ import { ConsentGate } from "@/app/recruitment/_components/consent-gate";
 import {
   DocUpload,
   EMPTY_ID_CARD,
+  EMPTY_LICENSE,
   type IdCardDraft,
+  type LicenseDraft,
 } from "@/app/recruitment/_components/doc-upload";
 import { QuestionField } from "@/app/recruitment/_components/question-field";
 import { StageMascot } from "@/app/recruitment/_components/mascot";
@@ -68,6 +70,7 @@ interface Draft {
   answers: AnswerMap;
   files: Record<string, string | null>;
   idCard: IdCardDraft;
+  license: LicenseDraft;
   stage: number;
 }
 
@@ -77,6 +80,7 @@ const emptyDraft = (): Draft => ({
   answers: {},
   files: {},
   idCard: EMPTY_ID_CARD,
+  license: EMPTY_LICENSE,
   stage: 0,
 });
 
@@ -103,6 +107,7 @@ function readDraft(): Draft {
       answers: draft.answers ?? {},
       files: draft.files ?? {},
       idCard: { ...EMPTY_ID_CARD, ...draft.idCard },
+      license: { ...EMPTY_LICENSE, ...draft.license },
       stage: Math.min(Math.max(draft.stage ?? 0, 0), TOTAL_STAGES - 1),
     };
   } catch {
@@ -191,6 +196,7 @@ function Flow({
   const [docErrors, setDocErrors] = useState<string[]>([]);
   const [idCard, setIdCard] = useState<IdCardDraft>(draft.idCard);
   const [idCardError, setIdCardError] = useState<string | null>(null);
+  const [license, setLicense] = useState<LicenseDraft>(draft.license);
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [ref, setRef] = useState<string | null>(null);
@@ -200,6 +206,7 @@ function Flow({
   const shownSlots = formDocSlots(docSlots);
   /* ช่องบัตรประชาชนถูกซ่อน = ไม่มีรูปให้อ่านเลขบัตร ไม่ต้องตรวจและไม่ต้องส่ง */
   const readsIdCard = shownSlots.some((s) => s.id === "id_card");
+  const readsLicense = shownSlots.some((s) => s.id === "license_front");
 
   /* เขียนร่างลงที่เก็บของเบราว์เซอร์ — เป็นการอัปเดตระบบภายนอกด้วยค่าล่าสุดของ
      React ซึ่งเป็นสิ่งที่ effect มีไว้ทำ (ไม่มี setState อยู่ในนี้โดยตั้งใจ) */
@@ -208,12 +215,12 @@ function Flow({
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ draftId, granted, answers, files, idCard, stage } satisfies Draft),
+        JSON.stringify({ draftId, granted, answers, files, idCard, license, stage } satisfies Draft),
       );
     } catch {
       /* โควตาเต็มหรือโหมดส่วนตัว — ฟอร์มยังกรอกต่อได้ แค่ไม่มีร่างให้กลับมาต่อ */
     }
-  }, [draftId, granted, answers, files, idCard, stage, ref]);
+  }, [draftId, granted, answers, files, idCard, license, stage, ref]);
 
   function setAnswer(key: string, value: AnswerValue) {
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -278,10 +285,17 @@ function Flow({
               slot: slot.id,
               url: files[slot.id],
             })),
-            documents: readsIdCard
-              ? { nationalId: idCard.nationalId, idCardExpiry: idCard.idCardExpiry }
-              : {},
-            documentSource: idCard.source,
+            documents: {
+              ...(readsIdCard ? { nationalId: idCard.nationalId, idCardExpiry: idCard.idCardExpiry } : {}),
+              ...(readsLicense
+                ? {
+                    licenseType: license.licenseType,
+                    licenseNo: license.licenseNo,
+                    licenseExpiry: license.licenseExpiry,
+                  }
+                : {}),
+            },
+            documentSource: idCard.source || license.source,
           },
         },
         "ส่งใบสมัครไม่สำเร็จ",
@@ -393,6 +407,8 @@ function Flow({
               }}
               idCardError={idCardError}
               typedNationalId={String(answers.national_id ?? "")}
+              license={license}
+              onLicense={setLicense}
             />
           ) : null}
 

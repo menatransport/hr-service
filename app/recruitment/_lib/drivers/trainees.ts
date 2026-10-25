@@ -74,6 +74,39 @@ export function cellTone(code: string): CellTone {
   return "leave";
 }
 
+/* ------------------------------------------- หัวข้อรายงานประจำวัน (RC Alert) */
+
+/**
+ * หัวข้อ “Issue” ของรายงานสถานะฝึกงานประจำวันที่ RC ส่งไลน์ — เรียงตาม template ของฝ่ายบุคคล
+ * (Bew 25 ต.ค. 2569) · รหัสที่ไม่อยู่ในนี้ (ลส · จ · กด · กม · X · ลพ · ลซ) ไม่ขึ้นรายงาน
+ *
+ * `reason` = ช่องเหตุผลตอนกรอกรหัสนั้นในตาราง — `required` ต้องกรอก · `optional` กรอกหรือไม่ก็ได้
+ * · “ฝึกงาน 1-2 วัน” ไม่มีรหัสของตัวเอง เป็น `ลอ`/`ปอ` ที่ติ๊ก `trial` ไว้
+ */
+export const REPORT_ISSUES = [
+  { key: "personal", label: "ลากิจ", codes: ["ก", "ล"], reason: "required" },
+  { key: "sick", label: "ลาป่วย", codes: ["ป"], reason: "optional" },
+  { key: "absent", label: "ขาดงาน", codes: ["ลข", "ย"], reason: "required" },
+  { key: "trial", label: "ฝึกงาน 1-2 วัน", codes: [], reason: "required" },
+  { key: "dismissed", label: "ปลด", codes: ["ปอ"], reason: "required" },
+  { key: "resigned", label: "ลาออก", codes: ["ลอ"], reason: "required" },
+] as const satisfies readonly { key: string; label: string; codes: readonly string[]; reason: "required" | "optional" }[];
+
+export type ReportIssue = (typeof REPORT_ISSUES)[number]["key"];
+
+/** หัวข้อรายงานของบันทึกหนึ่งวัน — `null` = ไม่ขึ้นรายงาน */
+export function issueOf(code: string, trial = false): ReportIssue | null {
+  const value = code.trim();
+  if (trial && isExitStatus(value)) return "trial";
+  return REPORT_ISSUES.find((i) => (i.codes as readonly string[]).includes(value))?.key ?? null;
+}
+
+/** ช่องเหตุผลของรหัสนี้ — `null` = รหัสนี้ไม่ต้องมีเหตุผล (บันทึกทันทีเหมือนเดิม) */
+export function reasonRuleOf(code: string): "required" | "optional" | null {
+  const key = issueOf(code);
+  return key ? REPORT_ISSUES.find((i) => i.key === key)!.reason : null;
+}
+
 /* ------------------------------------------------------------ ช่องหนึ่งช่อง */
 
 /**
@@ -86,6 +119,8 @@ export interface DayCell {
   atms: string;
   manual: string;
   note: string;
+  /** `ลอ`/`ปอ` หลังฝึกแค่ 1–2 วัน (ดู `REPORT_ISSUES`) */
+  trial: boolean;
 }
 
 /** รหัสที่ใช้นับยอดรวมของแถว — ของระบบมาก่อนเสมอ เพราะตัวนั้นคือชุดที่ผูกกับค่าแรง */
@@ -157,7 +192,7 @@ export function buildTraineeRows(
         const day = Number(iso.slice(8, 10));
         let cell = byDay.get(day);
         if (!cell) {
-          cell = { atms: "", manual: "", note: "" };
+          cell = { atms: "", manual: "", note: "", trial: false };
           byDay.set(day, cell);
         }
         return cell;
@@ -175,6 +210,7 @@ export function buildTraineeRows(
         const cell = cellOf(iso);
         cell.manual = entry.code;
         cell.note = entry.note;
+        cell.trial = entry.trial === true;
       }
 
       const row: TraineeRow = {

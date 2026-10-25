@@ -21,7 +21,7 @@ import {
   prepareImageForUpload,
 } from "@/lib/image-resize";
 import { digitsOnly, formatNationalId, type DocSlot } from "@/app/recruitment/_lib/form";
-import { readThaiDocument, type ScanStep } from "@/app/recruitment/_lib/id-card-ocr";
+import { readDriverLicense, readThaiDocument, type ScanStep } from "@/app/recruitment/_lib/id-card-ocr";
 import { SCAN_STEP_LABEL, ScanOverlay } from "@/app/recruitment/_components/scan-overlay";
 
 /**
@@ -58,6 +58,19 @@ export interface IdCardDraft {
 
 export const EMPTY_ID_CARD: IdCardDraft = { nationalId: "", idCardExpiry: "", source: "" };
 
+/** ช่องใบขับขี่ที่อ่านข้อมูลจากรูปให้เอง */
+const LICENSE_SLOT = "license_front";
+
+/** ชนิด · เลขที่ · วันหมดอายุ ที่อ่านจากรูปใบขับขี่ — ลง `Application.documents` เหมือนบัตร */
+export interface LicenseDraft {
+  licenseType: string;
+  licenseNo: string;
+  licenseExpiry: string;
+  source: "" | "ocr" | "manual";
+}
+
+export const EMPTY_LICENSE: LicenseDraft = { licenseType: "", licenseNo: "", licenseExpiry: "", source: "" };
+
 type ReadState = "idle" | "reading" | "done" | "failed";
 
 export function DocUpload({
@@ -70,6 +83,8 @@ export function DocUpload({
   onIdCard,
   idCardError,
   typedNationalId = "",
+  license = EMPTY_LICENSE,
+  onLicense,
 }: {
   /** โฟลเดอร์ไฟล์ร่างบน S3 ของฟอร์มนี้ — ดู `Draft.draftId` ใน `apply-flow.tsx` · พรีวิวส่ง `""` */
   draftId: string;
@@ -87,9 +102,26 @@ export function DocUpload({
   idCardError?: string | null;
   /** เลขบัตรที่ผู้สมัครพิมพ์ไว้ในขั้นก่อน — เอาไว้เตือนเมื่อไม่ตรงกับที่อ่านจากบัตร */
   typedNationalId?: string;
+  license?: LicenseDraft;
+  onLicense?: (next: LicenseDraft) => void;
 }) {
   const [readState, setReadState] = useState<ReadState>("idle");
   const [step, setStep] = useState<ScanStep | null>(null);
+  const [licenseState, setLicenseState] = useState<ReadState>("idle");
+  const [licenseStep, setLicenseStep] = useState<ScanStep | null>(null);
+
+  async function readLicense(file: File) {
+    if (!onLicense) return;
+    setLicenseState("reading");
+    setLicenseStep(null);
+    try {
+      const r = await readDriverLicense(file, setLicenseStep);
+      onLicense({ licenseType: r.licenseType, licenseNo: r.licenseNo, licenseExpiry: r.expiry, source: "ocr" });
+      setLicenseState("done");
+    } catch {
+      setLicenseState("failed");
+    }
+  }
 
   /* อ่านขนานไปกับการอัปโหลด ไม่รอกัน — อ่านพังก็ไม่กระทบไฟล์แนบ ช่องยังกรอกเองได้ */
   async function readIdCard(file: File) {
@@ -173,8 +205,11 @@ export function DocUpload({
             slot={slot}
             url={files[slot.id] ?? null}
             onChange={(url) => onChange(slot.id, url)}
-            onFile={slot.id === ID_CARD_SLOT ? readIdCard : undefined}
-            scanning={slot.id === ID_CARD_SLOT && readState === "reading"}
+            onFile={slot.id === ID_CARD_SLOT ? readIdCard : slot.id === LICENSE_SLOT ? readLicense : undefined}
+            scanning={
+              (slot.id === ID_CARD_SLOT && readState === "reading") ||
+              (slot.id === LICENSE_SLOT && licenseState === "reading")
+            }
             flagged={missing.includes(slot.id)}
           >
             {onIdCard && slot.id === ID_CARD_SLOT && (files[slot.id] || readState === "reading") ? (
@@ -186,6 +221,9 @@ export function DocUpload({
                 error={idCardError ?? null}
                 typedNationalId={typedNationalId}
               />
+            ) : null}
+            {onLicense && slot.id === LICENSE_SLOT && (files[slot.id] || licenseState === "reading") ? (
+              <LicenseFields value={license} onChange={onLicense} readState={licenseState} step={licenseStep} />
             ) : null}
           </DocRow>
         ))}
@@ -332,11 +370,16 @@ function DocRow({
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-1.5 text-13-5 font-medium text-ink">
               {slot.label}
-              {slot.required ? null : (
-                <span className="rounded-selector bg-base-200 px-1.5 py-px font-mono text-10 text-mut">
-                  ส่งทีหลังได้
+              {/* ป้ายเฉพาะช่องที่บังคับ ช่องอื่นไม่มีอะไรกำกับ (Bew 25 ต.ค. 2569) · แนบแล้วป้ายจางลง */}
+              {slot.required ? (
+                <span
+                  className={`rounded-selector px-1.5 py-px text-10-5 font-semibold ${
+                    done ? "bg-primary/10 text-primary" : "bg-alert/12 text-alert"
+                  }`}
+                >
+                  จำเป็น
                 </span>
-              )}
+              ) : null}
             </span>
             <span className="text-11-5 leading-relaxed text-mut">
               {state === "resizing"
@@ -498,23 +541,7 @@ function IdCardFields({
   error: string | null;
   typedNationalId: string;
 }) {
-  if (readState === "reading") {
-    return (
-      <div
-        role="status"
-        className="relative flex items-center gap-2.5 overflow-hidden rounded-box border border-primary/25 bg-soft px-3 py-2.5 text-12 text-ink"
-      >
-        <ScanText size={14} strokeWidth={1.9} aria-hidden className="flex-none text-primary" />
-        <span key={step ?? "load"} className="animate-fade-in">
-          {SCAN_STEP_LABEL[step ?? "load"]}
-        </span>
-        {/* แถบแสงวิ่งที่ขอบล่าง — ท่าเดียวกับแถบ progress หน้า login (`animate-sweep`) */}
-        <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-primary/10">
-          <span className="motion-keep block h-full w-1/3 animate-sweep bg-gradient-to-r from-transparent via-primary to-transparent" />
-        </span>
-      </div>
-    );
-  }
+  if (readState === "reading") return <ReadingStrip step={step} />;
 
   const edit = (patch: Partial<IdCardDraft>) => onChange({ ...value, ...patch, source: "manual" });
   const nid = digitsOnly(value.nationalId);
@@ -554,6 +581,84 @@ function IdCardFields({
         label="บัตรหมดอายุ"
         value={value.idCardExpiry}
         onChange={(v) => edit({ idCardExpiry: v })}
+        optional
+      />
+    </div>
+  );
+}
+
+/** แถบ “กำลังอ่านจากรูป” ใต้ช่องแนบ — บอกขั้นที่ตัวอ่านทำอยู่จริง */
+function ReadingStrip({ step }: { step: ScanStep | null }) {
+  return (
+    <div
+      role="status"
+      className="relative flex items-center gap-2.5 overflow-hidden rounded-box border border-primary/25 bg-soft px-3 py-2.5 text-12 text-ink"
+    >
+      <ScanText size={14} strokeWidth={1.9} aria-hidden className="flex-none text-primary" />
+      <span key={step ?? "load"} className="animate-fade-in">
+        {SCAN_STEP_LABEL[step ?? "load"]}
+      </span>
+      {/* แถบแสงวิ่งที่ขอบล่าง — ท่าเดียวกับแถบ progress หน้า login (`animate-sweep`) */}
+      <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-primary/10">
+        <span className="motion-keep block h-full w-1/3 animate-sweep bg-gradient-to-r from-transparent via-primary to-transparent" />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * ชนิด · เลขที่ · วันหมดอายุ ใบขับขี่ที่อ่านจากรูป — แก้ได้ทุกช่องและไม่บังคับ
+ * (ใบขับขี่มีโฮโลแกรมทับ อ่านพลาดบ่อยกว่าบัตร) · ฝ่ายบุคคลแก้ต่อได้ที่ `candidate-documents.tsx`
+ */
+function LicenseFields({
+  value,
+  onChange,
+  readState,
+  step,
+}: {
+  value: LicenseDraft;
+  onChange: (next: LicenseDraft) => void;
+  readState: ReadState;
+  step: ScanStep | null;
+}) {
+  if (readState === "reading") return <ReadingStrip step={step} />;
+
+  const edit = (patch: Partial<LicenseDraft>) => onChange({ ...value, ...patch, source: "manual" });
+  const found = Boolean(value.licenseType || value.licenseNo || value.licenseExpiry);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-box border border-line bg-base-100 p-3.5">
+      <p className="flex items-start gap-1.5 text-11-5 leading-relaxed text-mut">
+        <ScanText size={13} strokeWidth={1.9} aria-hidden className="mt-0.5 flex-none text-primary" />
+        {readState === "failed"
+          ? "อ่านจากรูปไม่สำเร็จ — กรอกเองได้ หรือเว้นว่างไว้ให้เจ้าหน้าที่กรอก"
+          : value.source === "ocr" && found
+            ? "ระบบอ่านจากรูปให้แล้ว ตรวจให้ตรงกับใบขับขี่จริงอีกครั้ง แก้ได้ทุกช่อง"
+            : value.source === "ocr"
+              ? "อ่านจากรูปไม่ออก — ถ่ายใหม่ให้ชัดขึ้น หรือกรอกเองก็ได้"
+              : "ตรวจให้ตรงกับใบขับขี่จริง"}
+      </p>
+      <TextField
+        id="doc-license-type"
+        label="ประเภทใบขับขี่"
+        value={value.licenseType}
+        onChange={(licenseType) => edit({ licenseType })}
+        placeholder="เช่น ท.2 · บ.2 · ส่วนบุคคล"
+        optional
+      />
+      <TextField
+        id="doc-license-no"
+        label="เลขที่ใบขับขี่"
+        value={value.licenseNo}
+        onChange={(v) => edit({ licenseNo: digitsOnly(v).slice(0, 12) })}
+        type="tel"
+        optional
+      />
+      <DateField
+        id="doc-license-expiry"
+        label="ใบขับขี่หมดอายุ"
+        value={value.licenseExpiry}
+        onChange={(licenseExpiry) => edit({ licenseExpiry })}
         optional
       />
     </div>

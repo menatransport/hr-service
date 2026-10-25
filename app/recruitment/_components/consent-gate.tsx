@@ -132,7 +132,9 @@ export function ConsentGate({
         type="button"
         onClick={onAccept}
         disabled={!ready}
-        className="btn-pri py-3.5 text-14 font-semibold disabled:bg-base-300 disabled:text-mut"
+        /* `btn-pri` ไล่สีด้วย background-image — ตอนปิดต้องถอดออกด้วย (`bg-none`) ไม่งั้นตัวหนังสือเทา
+           ทับพื้นเขียว อ่านไม่ออก (บั๊กสีที่ Bew เจอ 25 ต.ค. 2569) */
+        className="btn-pri py-3.5 text-14 font-semibold disabled:bg-base-300 disabled:bg-none disabled:text-mut"
       >
         {ready ? "ยินยอมและเริ่มกรอกใบสมัคร" : "ติ๊กข้อที่จำเป็นให้ครบเพื่อไปต่อ"}
       </button>

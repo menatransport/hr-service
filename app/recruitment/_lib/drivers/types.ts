@@ -240,6 +240,8 @@ export interface TraineeDailyEntry {
   /** ตัวย่อสถานะที่เลือกจาก {@link WORK_STATUS_GROUPS} */
   code: string;
   note: string;
+  /** พ้นสภาพหลังฝึกแค่ 1–2 วัน (เฉพาะ `ลอ`/`ปอ`) — รายงานประจำวันแยกหัวข้อ “ฝึกงาน 1-2 วัน” */
+  trial?: boolean;
   /** ISO timestamp */
   recordedAt: string;
   recordedBy: string;

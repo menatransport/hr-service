@@ -169,7 +169,6 @@ export function isRequisitionStatus(v: unknown): v is RequisitionStatus {
 export const LINKABLE_STATUSES: ApplicationStatus[] = [
   "pending_contact",
   "interview_scheduled",
-  "interview_waiting",
   "interview_passed",
   "training",
   "working",

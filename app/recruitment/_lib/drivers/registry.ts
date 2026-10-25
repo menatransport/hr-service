@@ -11,6 +11,7 @@ import {
   collectDocExpiries,
   DRIVER_EDIT_FIELDS,
   isDriverDocType,
+  isExitStatus,
   normalizeDriverEdit,
   isWorkStatusCode,
   ownerTypeLabel,
@@ -428,6 +429,7 @@ interface TraineeDailyDoc {
   dateISO: string;
   code: string;
   note: string;
+  trial?: boolean;
   recordedAt: Date;
   recordedBy: string;
 }
@@ -473,6 +475,21 @@ export async function manualCodesInMonth(monthPrefix: string, code: string): Pro
   return codes.map((c) => str(c)).filter(Boolean);
 }
 
+/** ทุกบันทึกที่กรอกเองของวันเดียว (ทุกคน) — รายงานสถานะฝึกงานประจำวัน (`trainee-report.ts`) */
+export async function loadManualDay(dateISO: string): Promise<(TraineeDailyEntry & { drivercode: string })[]> {
+  const docs = await (await traineeDaily()).find({ dateISO }).toArray();
+  return docs
+    .filter((doc) => str(doc.drivercode) && str(doc.code))
+    .map((doc) => ({
+      drivercode: str(doc.drivercode),
+      code: str(doc.code),
+      note: str(doc.note),
+      ...(doc.trial === true ? { trial: true } : {}),
+      recordedAt: doc.recordedAt instanceof Date ? doc.recordedAt.toISOString() : str(doc.recordedAt),
+      recordedBy: str(doc.recordedBy),
+    }));
+}
+
 export async function loadManualDays(
   driverCodes: string[],
   /** จำกัดเฉพาะเดือนที่กำลังดู (`YYYY-MM`) — ไม่ส่ง = ทุกวันที่มี */
@@ -501,6 +518,7 @@ export async function loadManualDays(
     days[dateISO] = {
       code,
       note: str(doc.note),
+      ...(doc.trial === true ? { trial: true } : {}),
       recordedAt:
         doc.recordedAt instanceof Date ? doc.recordedAt.toISOString() : str(doc.recordedAt),
       recordedBy: str(doc.recordedBy),
@@ -1254,6 +1272,8 @@ export interface TraineeDailyInput {
   /** ตัวย่อสถานะ · ค่าว่าง = ลบบันทึกของวันนั้นทิ้ง (กรอกผิดคน/ผิดวัน) */
   code: string;
   note?: string;
+  /** พ้นสภาพ (`ลอ`/`ปอ`) หลังฝึกแค่ 1–2 วัน — รายงานประจำวันแยกหัวข้อ “ฝึกงาน 1-2 วัน” */
+  trial?: boolean;
 }
 
 /**
@@ -1287,6 +1307,7 @@ export async function setTraineeDaily(
   }
 
   const note = (input.note ?? "").trim();
+  const trial = input.trial === true && isExitStatus(status);
 
   try {
     // ต้องมีรหัสนี้ในทะเบียนจริง — ไม่งั้นพิมพ์รหัสอะไรมาก็สร้างแถวผีได้
@@ -1306,6 +1327,7 @@ export async function setTraineeDaily(
       dateISO,
       code: status,
       note,
+      ...(trial ? { trial } : {}),
       recordedAt: new Date(),
       recordedBy: actor,
     };
@@ -1315,6 +1337,7 @@ export async function setTraineeDaily(
     return {
       code: entry.code,
       note: entry.note,
+      ...(trial ? { trial } : {}),
       recordedAt: entry.recordedAt.toISOString(),
       recordedBy: entry.recordedBy,
     };

@@ -372,7 +372,7 @@ function Sheet({
               type="button"
               onClick={onAccept}
               disabled={!ready || going}
-              className="btn-pri flex h-13 items-center justify-center gap-2 text-15 font-semibold transition-all active:scale-[0.985] disabled:bg-base-300 disabled:text-mut"
+              className="btn-pri flex h-13 items-center justify-center gap-2 text-15 font-semibold transition-all active:scale-[0.985] disabled:bg-base-300 disabled:bg-none disabled:text-mut"
             >
               {going ? (
                 <Loader2

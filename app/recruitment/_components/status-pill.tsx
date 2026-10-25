@@ -24,7 +24,6 @@ import { STATUS_LABEL, type ApplicationStatus } from "@/app/recruitment/_lib/typ
 const TONE: Record<ApplicationStatus, string> = {
   pending_contact: "chip-new",
   interview_scheduled: "chip-wait",
-  interview_waiting: "chip-wait",
   interview_passed: "chip-live",
   cancelled: "chip-alert",
   /* กำลังฝึก = ป้ายพื้นทึบตัวเดียวของชุด — เป็นสถานะที่ต้องหาเจอก่อนเพื่อนในตาราง */

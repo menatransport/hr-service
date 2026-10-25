@@ -53,7 +53,6 @@ import {
   type Requisition,
 } from "@/app/recruitment/_lib/requisitions/types";
 import { StProgress, StepDots } from "@/app/recruitment/_components/admin/onboarding-bits";
-import { TraineeDailySection } from "@/app/recruitment/_components/admin/trainee-daily-section";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
 import { RequisitionForm } from "@/app/recruitment/_components/admin/requisition-form";
 import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requisition-cancel";
@@ -63,8 +62,8 @@ import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requ
  *
  * 1 แถว = 1 คำขอ = 1 คน ตลอดเส้นทาง · การ์ดบนสุดคือแท็บตามขั้น (`stageOf()` คิดจาก
  * คำขอ + ใบสมัคร + ข้อมูลฝ่าย + ATMS) แต่ละแท็บโชว์เฉพาะคอลัมน์ที่ขั้นนั้นใช้ ·
- * กดชื่อ/เลขที่ → หน้าเส้นทางรายคน (ที่เดียวที่แก้ข้อมูลได้) · ตารางรายวัน ATMS อยู่ใต้รายการ
- * แท็บ training (ซ่อนจนกดเปิด) · ผู้สมัครยังเป็นหน้าแยก เพราะหลายใบต่อหนึ่งอัตรา
+ * กดชื่อ/เลขที่ → หน้าเส้นทางรายคน (ที่เดียวที่แก้ข้อมูลได้) · ตารางรายวันย้ายไปหน้าผู้สมัคร
+ * (กรองฝึกงาน · 25 ต.ค. 2569) · ผู้สมัครยังเป็นหน้าแยก เพราะหลายใบต่อหนึ่งอัตรา
  */
 
 type Row = OnboardingRecord & {
@@ -314,8 +313,6 @@ function endOn(r: OnboardingRecord): string {
   return r.applicant?.cancelledOn || val(r.onboarding, "rc", "exitOn") || (r.atms?.exited ? r.atms.latestDate : "");
 }
 
-const toPerson = (r: Row) => ({ id: r.id, code: r.code, name: r.name, drivercode: r.drivercode, vehicle: r.vehicle });
-
 const monthLabel = (ym: string) =>
   `${THAI_MONTHS_FULL[Number(ym.slice(5, 7)) - 1] ?? ym} ${Number(ym.slice(0, 4)) + 543}`;
 
@@ -365,8 +362,6 @@ export function OnboardingView({
     () => (month ? rows.filter((r) => r.requestedOn.startsWith(month)) : rows),
     [rows, month],
   );
-
-  const trainingPool = useMemo(() => rows.filter((r) => r.stage === "training").map(toPerson), [rows]);
 
   const counts = useMemo(() => {
     const c = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>;
@@ -678,9 +673,7 @@ export function OnboardingView({
         </div>
       </SummaryPanel>
 
-      {stage === "training" ? (
-        <TraineeDailySection pool={trainingPool} people={inStage.map(toPerson)} />
-      ) : null}
+      {/* ตารางฝึกงานรายวันย้ายไปอยู่ใต้ตารางผู้สมัคร (กรองฝึกงาน) ของ RC แล้ว — Bew 25 ต.ค. 2569 */}
 
       {creating ? (
         <RequisitionForm
@@ -702,7 +695,6 @@ export function OnboardingView({
 const APPLICANT_TONE: Record<ApplicationStatus, string> = {
   pending_contact: "bg-st-wait text-st-wait-ink",
   interview_scheduled: "bg-st-wait text-st-wait-ink",
-  interview_waiting: "bg-st-wait text-st-wait-ink",
   interview_passed: "bg-st-live text-st-live-ink",
   training: "bg-st-live text-st-live-ink",
   working: "bg-st-live text-st-live-ink",

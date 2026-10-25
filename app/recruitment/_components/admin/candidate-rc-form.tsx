@@ -7,49 +7,48 @@ import { DateField, SelectField, TextField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
 import { confirm, toastSuccess } from "@/lib/swal";
-import { todayInBangkok } from "@/lib/record-case-flow";
 import { daysUntil } from "@/app/recruitment/_lib/form";
-import { isHiredStatus, type ApplicationStatus } from "@/app/recruitment/_lib/types";
+import type { ApplicationStatus } from "@/app/recruitment/_lib/types";
 import type { RcForm } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { customerLabel, type Requisition } from "@/app/recruitment/_lib/requisitions/types";
-import {
-  END_OUTCOMES,
-  OUTCOMES,
-  type OnboardingPatch,
-  type OnboardingRecord,
-} from "@/app/recruitment/_lib/requisitions/onboarding";
+import type { OnboardingPatch, OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
 
-/** ฝึกงาน / รอฝึกงาน ตามวันเริ่มฝึก — วันยังไม่ถึง = รอ · ไม่มีวัน = `null` */
-export function trainingState(start: string): "training" | "waiting" | null {
+/** วันเริ่มฝึกถึงแล้วหรือยัง — วันยังไม่ถึง = `waiting` · ไม่มีวัน = `null` */
+function trainingState(start: string): "training" | "waiting" | null {
   const days = daysUntil(start);
   if (days === null) return null;
   return days > 0 ? "waiting" : "training";
 }
 
-export const TRAINING_STATE_LABEL = { training: "ฝึกงาน", waiting: "รอฝึกงาน" } as const;
-
 function requisitionOption(r: Requisition): string {
   return [r.code, [customerLabel(r), r.plant].filter(Boolean).join(" ") || "ยังไม่ระบุลูกค้า"].join(" · ");
 }
 
+/** สถานะที่กล่องนี้พาไปหลังบันทึก — รอฝึกงาน (`interview_passed`) / ฝึกงาน */
+export type RcTarget = "interview_passed" | "training";
+
+const TARGET_LABEL: Record<RcTarget, string> = { interview_passed: "รอฝึกงาน", training: "ฝึกงาน" };
+
 /**
  * กล่อง “ข้อมูล RC” บนหน้าผู้สมัคร — **ที่เดียวที่ RC กรอกส่วนของตัวเอง**
- * บันทึกลง `onboarding.rc` ของคำขอ หน้าติดตามพนักงานใหม่เห็นทันที ·
- * ผลสิ้นสุด (ปลด/ลาออก …) ทำได้ที่นี่เท่านั้น
+ * บันทึกลง `onboarding.rc` ของคำขอ หน้าติดตามพนักงานใหม่เห็นทันที
  *
  * ด้านบนคือ “ตำแหน่งที่สมัคร (คำขอสรรหา)” — เลือก/เปลี่ยน RQ ที่เปิดรับได้เสมอ (ผูกตอนกดบันทึก ·
  * เปลี่ยน = ปลดคำขอเดิมให้กลับไปเปิดรับ แล้วผูกคำขอใหม่ ข้อมูล RC ในฟอร์มบันทึกลงคำขอใหม่)
- * · `toTraining` = เปิดจากการเลือกสถานะ “ฝึกงาน” (Bew 22 ต.ค. 2569): ต้องมี RQ + วันเริ่มฝึก
+ * · `target` = เปิดจากการเลือกสถานะ “รอฝึกงาน”/“ฝึกงาน” (Bew 22/25 ต.ค. 2569): ต้องมี RQ + วันเริ่มฝึก
  * บันทึกแล้วหน้าแม่เลื่อนสถานะต่อ
+ *
+ * **ไม่มีช่อง RC ผู้แจ้ง / ผลสิ้นสุด / วันที่สิ้นสุดแล้ว** (Bew 25 ต.ค. 2569) — RC ผู้แจ้งตั้งจาก
+ * ผู้ติดต่อกลับให้เองเงียบ ๆ ถ้ายังว่าง · ปลด/ลาออก/ฝึกงาน 1-2 วัน ลงที่ตารางรายวันแทน
+ * (เลือก `ลอ`/`ปอ` → `exitFromDaily()` เขียนผลสิ้นสุดให้)
  */
 export function CandidateRcForm({
   applicationId,
   linked,
   requisitions,
   name,
-  status,
   contactOwner,
-  toTraining = false,
+  target = null,
   onClose,
   onLinked,
   onSaved,
@@ -62,7 +61,7 @@ export function CandidateRcForm({
   status: ApplicationStatus;
   /** ผู้รับเรื่องของใบสมัคร — ตั้งเป็น RC ผู้แจ้งให้ก่อนถ้ายังว่าง */
   contactOwner: string;
-  toTraining?: boolean;
+  target?: RcTarget | null;
   onClose: () => void;
   /** คำขอที่ผูก/ปลดไปแล้ว (ก่อนบันทึกข้อมูล RC) — หน้าแม่อัปเดตแถวคำขอ */
   onLinked: (rows: Requisition[]) => void;
@@ -102,28 +101,17 @@ export function CandidateRcForm({
     .map((r) => ({ value: r.id, label: requisitionOption(r) }));
 
   const set = (key: string) => (v: string) => setValues((prev) => ({ ...prev, [key]: v }));
-  const outcome = values.outcome ?? "";
   const start = values.trainingStartOn ?? "";
   const startState = trainingState(start);
-  /* ผลสิ้นสุดเปิดให้เฉพาะคนที่เริ่มฝึกแล้ว หรือมีค่าเดิมอยู่ */
-  const showExit = !toTraining && (isHiredStatus(status) || Boolean(form?.record.onboarding.rc?.values.outcome));
-  const outcomeOptions = [
-    ...END_OUTCOMES,
-    ...OUTCOMES.filter((o) => o.value === outcome && !END_OUTCOMES.some((e) => e.value === o.value)),
-  ].map((o) => ({ value: o.value, label: o.label }));
-  const ready = Boolean(rqId) && (!toTraining || Boolean(startState)) && !loading;
+  const ready = Boolean(rqId) && (!target || Boolean(startState)) && !loading;
 
   async function submit() {
-    if (END_OUTCOMES.some((o) => o.value === outcome) && !values.exitOn) {
-      setFailure("ระบุวันที่สิ้นสุด");
-      return;
-    }
-    const target = requisitions.find((r) => r.id === rqId);
+    const picked = requisitions.find((r) => r.id === rqId);
     if (
       linked &&
       linked.id !== rqId &&
       !(await confirm({
-        title: `ย้ายไป ${target?.code ?? "คำขอใหม่"}?`,
+        title: `ย้ายไป ${picked?.code ?? "คำขอใหม่"}?`,
         text: `${linked.code} จะกลับไปเปิดรับ · ข้อมูลฝ่ายอื่นของคำขอเดิม (KA/ST/…) ไม่ย้ายตาม`,
         confirmText: "ย้ายและบันทึก",
         tone: "warn",
@@ -147,12 +135,7 @@ export function CandidateRcForm({
           if (written.length) onLinked(written);
         }
       }
-      const body: OnboardingPatch = {
-        section: "rc",
-        values,
-        drivercode,
-        ...(showExit ? { exit: { outcome, exitOn: values.exitOn ?? "" } } : {}),
-      };
+      const body: OnboardingPatch = { section: "rc", values, drivercode };
       const next = await requestJson<OnboardingRecord>(
         `/api/recruitment/requisitions/${rqId}/onboarding`,
         { method: "PATCH", body: body as unknown as Record<string, unknown> },
@@ -169,7 +152,7 @@ export function CandidateRcForm({
 
   return (
     <ModalShell
-      title={toTraining ? "เริ่มฝึกงาน · ข้อมูล RC" : "ข้อมูล RC"}
+      title={target ? `${TARGET_LABEL[target]} · ข้อมูล RC` : "ข้อมูล RC"}
       subtitle={
         <span className="text-12 text-mut">
           {name}
@@ -198,7 +181,7 @@ export function CandidateRcForm({
             className="btn-pri flex items-center gap-1.5 px-4 py-2 text-13 font-medium disabled:opacity-60"
           >
             {saving ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null}
-            {toTraining ? "บันทึก · ฝึกงาน" : "บันทึก"}
+            {target ? `บันทึก · ${TARGET_LABEL[target]}` : "บันทึก"}
           </button>
         </>
       }
@@ -235,59 +218,15 @@ export function CandidateRcForm({
                 </button>
               ) : null}
             </div>
-            <div>
-              <TextField
-                id="rc-rcName"
-                label="RC ผู้แจ้ง"
-                value={values.rcName ?? ""}
-                onChange={set("rcName")}
-                list="rc-rcName-list"
-                optional
-              />
-              <datalist id="rc-rcName-list">
-                {(form?.rcNames ?? []).map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </div>
             <DateField
               id="rc-trainingStartOn"
               label="วันเริ่มฝึก"
               value={start}
               onChange={set("trainingStartOn")}
-              optional={!toTraining}
-              hint={startState ? `${TRAINING_STATE_LABEL[startState]}${startState === "waiting" ? ` · อีก ${daysUntil(start)} วัน` : ""}` : undefined}
+              optional={!target}
+              hint={startState === "waiting" ? `อีก ${daysUntil(start)} วัน` : undefined}
             />
           </div>
-
-          {showExit ? (
-            <fieldset className="grid gap-x-4 gap-y-3.5 border-t border-line pt-3.5 sm:grid-cols-2">
-              <legend className="sr-only">ผลสิ้นสุด</legend>
-              <SelectField
-                id="rc-outcome"
-                label="ผลสิ้นสุด (ปลด/ลาออก)"
-                value={outcome}
-                onChange={(v) =>
-                  setValues((prev) => ({
-                    ...prev,
-                    outcome: v,
-                    exitOn: v ? prev.exitOn || todayInBangkok() : "",
-                  }))
-                }
-                options={outcomeOptions}
-                placeholder="—"
-                clearable
-                optional
-              />
-              <DateField
-                id="rc-exitOn"
-                label="วันที่สิ้นสุด"
-                value={values.exitOn ?? ""}
-                onChange={set("exitOn")}
-                optional={!outcome}
-              />
-            </fieldset>
-          ) : null}
         </div>
       )}
 

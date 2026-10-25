@@ -575,6 +575,7 @@ const MatrixRow = memo(function MatrixRow({
             atms={cell?.atms ?? ""}
             manual={cell?.manual ?? ""}
             note={cell?.note ?? ""}
+            trial={cell?.trial ?? false}
             beforeStart={Boolean(driver.startDateISO) && iso < driver.startDateISO}
             isStart={iso === driver.startDateISO}
             editable={Boolean(maxEntryISO && driver.drivercode) && iso <= maxEntryISO}

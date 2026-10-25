@@ -227,15 +227,18 @@ function toApplication(doc: WithId<ApplicationDoc>): Application {
 
 /* ------------------------------------------------------------------- เลขอ้างอิง */
 
-/** ปี พ.ศ. สองหลักตามเวลาไทย — ใบสมัครปี 2569 ได้เลขขึ้นต้น `DRV-69-` */
-function currentThaiYy(): string {
-  const year = Number(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Bangkok",
-      year: "numeric",
-    }).format(new Date()),
-  );
-  return String((year + 543) % 100).padStart(2, "0");
+/**
+ * เลขใบสมัคร `DRV2610-0001` = ปี ค.ศ. 2 หลัก + เดือน (แบบเดียวกับ RQ) · **เลขรันนับใหม่ทุกปี
+ * ไม่ใช่ทุกเดือน** (Bew 25 ต.ค. 2569) เดือนเป็นแค่ป้ายบอกช่วงเวลา · ใบก่อนหน้านี้ยังถือเลขเดิม
+ * `DRV-69-0001` (ผู้สมัครใช้เลขนั้นติดตามสถานะอยู่ ห้ามเปลี่ยน) · ตัวนับคนละตัวกับของเดิม
+ * (`recruitment:2026` ไม่ใช่ `recruitment:69`) ปีแรกจึงเริ่มที่ 0001
+ */
+export function applicationRef(year: number, month: number, seq: number): string {
+  return `DRV${String(year % 100).padStart(2, "0")}${String(month).padStart(2, "0")}-${String(seq).padStart(4, "0")}`;
+}
+
+export function applicationRefCounter(year: number): string {
+  return `recruitment:${year}`;
 }
 
 /**
@@ -244,9 +247,16 @@ function currentThaiYy(): string {
  * และมีดัชนี unique บน `ref` เป็นตาข่ายชั้นสุดท้ายอีกที
  */
 async function nextRef(): Promise<string> {
-  const yy = currentThaiYy();
-  const seq = await nextSeq("recruitmentCounters", `recruitment:${yy}`);
-  return `DRV-${yy}-${String(seq).padStart(4, "0")}`;
+  const [year, month] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+  })
+    .format(new Date())
+    .split("-")
+    .map(Number);
+  const seq = await nextSeq("recruitmentCounters", applicationRefCounter(year));
+  return applicationRef(year, month, seq);
 }
 
 /* --------------------------------------------------------------- ตรวจข้อมูลเข้า */
@@ -506,7 +516,8 @@ export async function createApplication(
 /**
  * เลขบัตร + วันหมดอายุที่ฟอร์มสมัครอ่านจากรูปบัตร (`id-card-ocr.ts`) แล้วผู้สมัครตรวจแล้ว
  *
- * รับจากคนนอกแค่สองช่องของบัตรประชาชน **ไม่เปิดให้ส่งช่องอื่น** เช่นเลขบัญชี —
+ * รับจากคนนอกแค่สองช่องของบัตรประชาชน + สามช่องของใบขับขี่ (ชนิด/เลขที่/หมดอายุ — Bew 25 ต.ค. 2569)
+ * **ไม่เปิดให้ส่งช่องอื่น** เช่นเลขบัญชี —
  * ช่องพวกนั้นฝ่ายบุคคลเป็นคนกรอกจากรูปเท่านั้น · `verifiedAt` ว่างไว้เสมอ
  * เพราะผู้สมัครรับรองข้อมูลตัวเองไม่ได้ ฝ่ายบุคคลยังต้องกดยืนยันเองที่หน้าเอกสาร
  */
@@ -517,7 +528,13 @@ function buildApplicantDocuments(body: Record<string, unknown>): {
   const raw = (body.documents ?? {}) as Record<string, unknown>;
   const picked =
     raw && typeof raw === "object" && !Array.isArray(raw)
-      ? { nationalId: raw.nationalId ?? "", idCardExpiry: raw.idCardExpiry ?? "" }
+      ? {
+          nationalId: raw.nationalId ?? "",
+          idCardExpiry: raw.idCardExpiry ?? "",
+          licenseType: raw.licenseType ?? "",
+          licenseNo: raw.licenseNo ?? "",
+          licenseExpiry: raw.licenseExpiry ?? "",
+        }
       : {};
   const { documents } = editDocuments(EMPTY_DOCUMENT_DATA, picked);
   return {
@@ -826,7 +843,7 @@ export async function updateApplication(
   if (interview.result !== "" && statusFromResult(interview.result) !== status) {
     interview.result = "";
   }
-  if (!interview.result && status === "interview_waiting") interview.result = "waiting";
+  if (interview.result === "waiting") interview.result = ""; // ไม่มีขั้นรอผลแล้ว (25 ต.ค. 2569)
   if (!interview.result && status === "interview_passed") interview.result = "passed";
   if (!interview.result && status === "cancelled") interview.result = "failed";
 

@@ -76,7 +76,6 @@ export interface CellProps {
 const SELECTABLE: ApplicationStatus[] = [
   "pending_contact",
   "interview_scheduled",
-  "interview_waiting",
   "interview_passed",
   "training",
   "working",
@@ -183,10 +182,10 @@ export function StatusCell({
   candidate,
   onPatch,
   locked,
-  onTraining,
+  onStage,
 }: CellProps & {
-  /** มี = เลือก “ฝึกงาน” แล้วเปิดฟอร์มข้อมูล RC (+ RQ) ของหน้าแม่แทนการบันทึกตรง */
-  onTraining?: () => void;
+  /** มี = เลือก “รอฝึกงาน”/“ฝึกงาน” แล้วให้หน้าแม่จัดการ (เปิดฟอร์มข้อมูล RC + RQ) แทนการบันทึกตรง */
+  onStage?: (to: "interview_passed" | "training") => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -194,8 +193,8 @@ export function StatusCell({
   async function apply(status: ApplicationStatus, close: () => void) {
     close();
 
-    if (status === "training" && onTraining && candidate.status !== "training") {
-      onTraining();
+    if ((status === "interview_passed" || status === "training") && onStage && candidate.status !== status) {
+      onStage(status);
       return;
     }
 

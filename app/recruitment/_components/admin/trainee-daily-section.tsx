@@ -1,18 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, ClipboardCopy, Loader2 } from "lucide-react";
 
 import { DataError } from "@/components/ui/data-error";
 import type { SelectOption } from "@/components/ui/field";
 import { requestJson } from "@/lib/http";
 import { TraineeMatrix } from "@/app/recruitment/_components/admin/trainee-matrix";
+import { TraineeReportDialog } from "@/app/recruitment/_components/admin/trainee-report-dialog";
 import type { TraineeBoard, TraineeBoardDriver } from "@/app/recruitment/_lib/drivers/trainee-board";
 import type { RequisitionVehicle } from "@/app/recruitment/_lib/requisitions/types";
 
 type Data = { board: TraineeBoard; vehicles: SelectOption[] };
 
-/** คนในแท็บ training — ตัวตั้งของตาราง (จำนวนแถว = จำนวนคนในแท็บ) */
+/** คนที่สถานะฝึกงาน (หน้าผู้สมัคร) — ตัวตั้งของตาราง (จำนวนแถว = จำนวนคนในตาราง) */
 export type TraineePerson = {
   id: string;
   code: string;
@@ -50,6 +51,7 @@ const placeholder = (p: TraineePerson): TraineeBoardDriver => ({
  */
 export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; people: TraineePerson[] }) {
   const [open, setOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,15 +92,28 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
 
   return (
     <section className="flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        className="btn-sec flex w-fit cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium hover:text-primary"
-      >
-        <ChevronDown size={16} strokeWidth={2} aria-hidden className={`transition-transform ${open ? "rotate-180" : ""}`} />
-        {open ? "ซ่อนตารางรายวัน" : "แสดงตารางรายวัน"}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="btn-sec flex w-fit cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium hover:text-primary"
+        >
+          <ChevronDown size={16} strokeWidth={2} aria-hidden className={`transition-transform ${open ? "rotate-180" : ""}`} />
+          {open ? "ซ่อนตารางรายวัน" : "แสดงตารางรายวัน"}
+        </button>
+        {/* คัดลอกสรุปฝึกงานส่งไลน์ (RC Alert · Bew 25 ต.ค. 2569) */}
+        <button
+          type="button"
+          onClick={() => setReporting(true)}
+          title="คัดลอกสรุปฝึกงาน (ส่งไลน์)"
+          className="btn-sec flex size-9 cursor-pointer items-center justify-center hover:text-primary"
+        >
+          <ClipboardCopy size={16} strokeWidth={1.9} aria-hidden />
+          <span className="sr-only">คัดลอกสรุปฝึกงาน</span>
+        </button>
+      </div>
+      {reporting ? <TraineeReportDialog onClose={() => setReporting(false)} /> : null}
 
       {open ? (
         error ? (

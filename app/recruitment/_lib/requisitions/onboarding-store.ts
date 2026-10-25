@@ -5,6 +5,8 @@ import { findIssuedCodeByName, readDriver } from "@/app/recruitment/_lib/drivers
 import { isExitStatus, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
 import { listApplications, updateApplication } from "@/app/recruitment/_lib/applications";
 import {
+  EXIT_REASON_NOTE_MAX,
+  OTHER_EXIT_REASON,
   exitReasonText,
   normalizeStatus,
   type ApplicationStatus,
@@ -514,4 +516,56 @@ export async function updateOnboardingSection(
     }
   }
   return row;
+}
+
+/**
+ * RC เลือก `ลอ`/`ปอ` ในตารางฝึกงานรายวัน → ปิดผลสิ้นสุดให้ (Bew 25 ต.ค. 2569 — กล่องข้อมูล RC
+ * ไม่มีช่องผลสิ้นสุดแล้ว)
+ *
+ * 1. ผลสิ้นสุดของ RQ ที่ถือรหัสนี้ = ลาออก / ปลด / ฝึกงาน 1-2 วัน + วันที่สิ้นสุด = วันที่ของช่อง
+ *    (ผ่าน `updateOnboardingSection` จึงบันทึกพ้นสภาพในทะเบียนให้ด้วย)
+ * 2. ใบสมัครที่ผูกไว้ → “ยกเลิก” เหตุผลอื่น ๆ = `<หัวข้อ>: <เหตุผล>` แล้ว RQ ปลดคนออก เก็บประวัติไว้
+ *    (`archiveOnboarding`) และกลับไปเปิดรับ — ทางเดียวกับการกดยกเลิกในหน้าผู้สมัคร
+ *
+ * ไม่เจอ RQ ที่ถือรหัสนี้ = ไม่ทำอะไร (คนที่ไม่ได้มาจากคำขอสรรหา) · ล้มเหลวไม่ทำให้การบันทึกรายวันล้ม
+ */
+export async function exitFromDaily(
+  drivercode: string,
+  input: { dateISO: string; code: string; trial: boolean; reason: string },
+  by: string,
+): Promise<boolean> {
+  if (!isExitStatus(input.code) || !ISO.test(input.dateISO)) return false;
+  const current = await (await requisitions())
+    .find({ drivercode, status: { $ne: "cancelled" }, match: { $ne: null } })
+    .sort({ updatedAt: -1 })
+    .limit(1)
+    .next();
+  if (!current) return false;
+
+  const outcome = input.trial ? "trial_exit" : input.code === "ลอ" ? "resigned" : "dismissed";
+  await updateOnboardingSection(
+    current._id.toHexString(),
+    {
+      section: "rc",
+      values: current.onboarding?.rc?.values ?? {},
+      exit: { outcome, exitOn: input.dateISO },
+    },
+    by,
+  );
+
+  const applicationId = current.match?.applicationId;
+  if (applicationId) {
+    const topic = input.trial ? "ฝึกงาน 1-2 วัน" : input.code === "ลอ" ? "ลาออก" : "ปลด";
+    await updateApplication(
+      applicationId,
+      {
+        status: "cancelled",
+        exitReason: OTHER_EXIT_REASON,
+        exitReasonNote: [topic, input.reason].filter(Boolean).join(": ").slice(0, EXIT_REASON_NOTE_MAX),
+      },
+      by,
+    );
+    await syncRequisitionForApplication(applicationId, "cancelled", by);
+  }
+  return true;
 }

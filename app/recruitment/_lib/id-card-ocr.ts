@@ -178,6 +178,68 @@ export function parseThaiIdCardText(text: string): IdCardReading {
   };
 }
 
+/* ---------------------------------------------------------- ใบขับขี่ */
+
+export interface DriverLicenseReading {
+  /** เลขที่ใบขับขี่ (“ฉบับที่ / No.”) ตัวเลขล้วน · `""` = หาไม่เจอ */
+  licenseNo: string;
+  /** ชนิดตามหัวใบ เช่น `ท.2` · `ส่วนบุคคล` · `""` = หาไม่เจอ */
+  licenseType: string;
+  /** `YYYY-MM-DD` (ค.ศ.) · `""` = หาไม่เจอหรือตลอดชีพ */
+  expiry: string;
+  lifelong: boolean;
+}
+
+/**
+ * เลขที่ใบขับขี่ — พิมพ์คู่กันสองที่บนแถบม่วง `ฉบับที่ 64013956  No. 64013956`
+ * · ตัวเลขติดกัน 6–9 หลักหลังป้าย (เลขบัตรประชาชน `ID No. 1 1037 …` เว้นวรรคเป็นก้อน
+ * จึงไม่ติด) · ไม่เจอป้ายเลยใช้ก้อนเลขยาว 8 หลักก้อนแรกที่ไม่ใช่ส่วนของเลขบัตร
+ */
+function findLicenseNo(text: string): string {
+  const fix = (s: string) => [...s].map((c) => DIGIT_LOOKALIKE[c] ?? c).join("");
+  /* เว้นวรรคแทรกได้ทีละหนึ่ง (โฮโลแกรมทับทำให้ OCR ตัดเลขเป็นสองก้อน) แต่ต้องจบด้วยตัวที่ไม่ใช่เลข
+     — เลขบัตรประชาชน `1 1037 03036 18 1` ยาวเกิน 9 หลักจึงไม่ติด */
+  /* เลขที่พิมพ์สองครั้งบนบรรทัดเดียว และตัวอ่านอ่านกรอบนี้สองภาพ (`readLicenseRegions`) — **โหวต**
+     ค่าที่เจอบ่อยสุดชนะ เพราะโฮโลแกรมทับทีไรหลักแรกเพี้ยนไปหนึ่งสำเนา (ใบจริง: `64013956` ↔ `34013956`)
+     · ป้ายมักอ่านเพี้ยน (`No.` → `«`) จึงนับก้อนเลข 7–9 หลักที่ไม่มีป้ายด้วย · เสมอกัน = ตัวที่เจอก่อน */
+  const tally = new Map<string, number>();
+  const add = (digits: string) => {
+    if (/^\d{6,9}$/.test(digits)) tally.set(digits, (tally.get(digits) ?? 0) + 1);
+  };
+  for (const m of text.matchAll(/(?:ฉบับที่|\b[Nn][oO0]\.?)\s*[:.]?\s*([0-9OIlSB](?: ?[0-9OIlSB]){5,8})(?! ?[0-9])/g))
+    add(fix(m[1].replace(/ /g, "")));
+  for (const m of text.matchAll(/(?<![\d ]\d|\d)\d{7,9}(?!\d| \d)/g)) add(m[0]);
+  let best = "";
+  for (const [digits, count] of tally) if (count > (tally.get(best) ?? 0)) best = digits;
+  return best;
+}
+
+/**
+ * ชนิดใบขับขี่จากหัวใบ — ใบรถบรรทุกพิมพ์ `ชนิดที่ 2` / `Type 2` (+ `ท.` ทั่วไป / `บ.` บุคคล)
+ * ส่วนใบรถยนต์พิมพ์เป็นคำ (`ส่วนบุคคล` / `สาธารณะ` / `ชั่วคราว`)
+ */
+function findLicenseType(text: string): string {
+  const coded = text.match(/([ทบ])\s*\.\s*([1-4])(?!\d)/);
+  if (coded) return `${coded[1]}.${coded[2]}`;
+  const typed = text.match(/ชนิดที่\s*([1-4])|\btype\s*([1-4])\b/i);
+  if (typed) return `ชนิดที่ ${typed[1] ?? typed[2]}`;
+
+  const motorcycle = /จักรยานยนต์|motor\s*cycle/i.test(text);
+  const base = /สาธารณะ|public/i.test(text)
+    ? "สาธารณะ"
+    : /บุคคล|private/i.test(text) /* หัวใบอยู่บนแถบน้ำเงินเข้ม OCR มักได้แค่ท่อน `…บุคคล` */
+      ? "ส่วนบุคคล"
+      : "";
+  if (!base) return "";
+  const temporary = /ชั่วคราว|temporary/i.test(text);
+  return `${motorcycle ? "จักรยานยนต์" : "รถยนต์"}${base}${temporary ? "ชั่วคราว" : ""}`;
+}
+
+/** แกะเลขที่ + ชนิดจากข้อความที่ OCR อ่านได้ (วันหมดอายุใช้ตัวอ่านชุดเดียวกับบัตร) */
+export function parseDriverLicenseText(text: string): Pick<DriverLicenseReading, "licenseNo" | "licenseType"> {
+  return { licenseNo: findLicenseNo(text), licenseType: findLicenseType(text) };
+}
+
 /* ------------------------------------------------- หากรอบวันหมดอายุบนบัตร */
 
 export interface Box {
@@ -264,15 +326,33 @@ const REGION_RATIO: Record<ScanDocKind, { x0: number; x1: number; y0: number; y1
   "driver-license": { x0: -0.6, x1: 1.55, y0: -1.5, y1: -1.0 },
 };
 
+/**
+ * กรอบเลขที่ใบขับขี่ (`ฉบับที่ … No. …` บรรทัดบนสุดของแถบม่วง เหนือวันหมดอายุ) และหัวใบ
+ * (ชื่อชนิด บนแถบน้ำเงิน) — หน่วยเดียวกับ `REGION_RATIO` วัดจากใบจริง
+ * `Downloads\S__76611600.jpg` · สองแถบนี้อ่านทั้งใบไม่ออกเลย ต้องตัดอ่านเฉพาะกรอบ
+ */
+export const LICENSE_REGION_RATIO = {
+  number: { x0: -1.35, x1: 1.2, y0: -1.62, y1: -1.33 },
+  header: { x0: -0.6, x1: 1.15, y0: -1.98, y1: -1.64 },
+};
+
 export function expiryRegion(
   id: Box,
   imageW: number,
   imageH: number,
   kind: ScanDocKind = "id-card",
 ): Box | null {
+  return ratioRegion(id, imageW, imageH, REGION_RATIO[kind]);
+}
+
+export function ratioRegion(
+  id: Box,
+  imageW: number,
+  imageH: number,
+  r: { x0: number; x1: number; y0: number; y1: number },
+): Box | null {
   const w = id.x1 - id.x0;
   if (w < 40) return null; // เลขบัตรเล็กจนตัวหนังสือวันที่อ่านไม่ออกแน่ ๆ
-  const r = REGION_RATIO[kind];
   const box = {
     x0: Math.max(0, Math.round(id.x0 + r.x0 * w)),
     y0: Math.max(0, Math.round(id.y0 + r.y0 * w)),
@@ -469,6 +549,54 @@ export async function readThaiDocument(
   kind: ScanDocKind,
   onStep?: (step: ScanStep) => void,
 ): Promise<IdCardReading> {
+  return (await readDocument(image, kind, onStep)).reading;
+}
+
+/**
+ * ใบขับขี่ในฟอร์มสมัคร — วันหมดอายุจากตัวอ่านเดิม + เลขที่/ชนิดจากข้อความทุกรอบที่อ่าน
+ * · ไม่เจอชนิดจากรอบอังกฤษ (หัวใบเป็นตัวหนังสือบนแถบสีเข้ม) อ่านทั้งใบด้วยไทยอีกรอบ
+ */
+export async function readDriverLicense(
+  image: Blob,
+  onStep?: (step: ScanStep) => void,
+): Promise<DriverLicenseReading> {
+  const { reading, texts } = await readDocument(image, "driver-license", onStep, true);
+  return { ...parseDriverLicenseText(texts.join("\n")), expiry: reading.expiry, lifelong: reading.lifelong };
+}
+
+/**
+ * อ่านกรอบเลขที่ (อังกฤษ — ตัวเลข) กับหัวใบ (อังกฤษ + ไทย) ของใบขับขี่ — ภาพแต่งคมก่อน
+ * ไม่เจอค่อยภาพดิบ เหมือนกรอบวันหมดอายุ · คืนข้อความทั้งหมดให้ `parseDriverLicenseText`
+ */
+async function readLicenseRegions(canvas: HTMLCanvasElement, idBox: Box, eng: OcrWorker): Promise<string[]> {
+  const out: string[] = [];
+  const number = ratioRegion(idBox, canvas.width, canvas.height, LICENSE_REGION_RATIO.number);
+  const header = ratioRegion(idBox, canvas.width, canvas.height, LICENSE_REGION_RATIO.header);
+  /* กรอบเลขที่อ่านครบทั้งสองภาพเสมอ — ใช้โหวตใน `findLicenseNo` · หัวใบหยุดเมื่อได้ชนิดแล้ว */
+  /* แยกสำเนาซ้าย (`ฉบับที่`) กับขวา (`No.`) อ่านทีละครึ่ง — ขยายได้มากกว่าอ่านทั้งบรรทัดเท่าตัว
+     และได้สี่เสียงโหวตแทนสอง */
+  const mid = number ? Math.round((number.x0 + number.x1) / 2) : 0;
+  const halves = number ? [{ ...number, x1: mid }, { ...number, x0: mid }] : [];
+  let typed = false;
+  for (const enhance of [true, false]) {
+    for (const half of halves) out.push((await eng.recognize(cropCanvas(canvas, half, enhance))).data.text);
+    if (header && !typed) {
+      const crop = cropCanvas(canvas, header, enhance);
+      out.push((await eng.recognize(crop)).data.text, (await (await getWorker("tha")).recognize(crop)).data.text);
+      typed = Boolean(parseDriverLicenseText(out.join("\n")).licenseType);
+    }
+  }
+  return out;
+}
+
+async function readDocument(
+  image: Blob,
+  kind: ScanDocKind,
+  onStep?: (step: ScanStep) => void,
+  /** อ่านเลขที่ + ชนิดใบขับขี่ด้วย (ฟอร์มสมัคร) — หน้าประวัติ พจส. ต้องการแค่วันหมดอายุ */
+  licenseDetails = false,
+): Promise<{ reading: IdCardReading; texts: string[] }> {
+  const texts: string[] = [];
   onStep?.("load");
   const eng = await getWorker("eng");
   const bitmap = await createImageBitmap(image, { imageOrientation: "from-image" });
@@ -482,9 +610,11 @@ export async function readThaiDocument(
       const canvas = await toCanvas(bitmap, turns);
       const { data } = await eng.recognize(canvas, {}, { text: true, blocks: true });
       const english = data.text;
+      texts.push(english);
       let reading = parseThaiIdCardText(english);
 
       const idBox = findIdNumberBox(linesOf(data));
+      if (idBox && licenseDetails) texts.push(...(await readLicenseRegions(canvas, idBox, eng)));
       const region = idBox ? expiryRegion(idBox, canvas.width, canvas.height, kind) : null;
       if (region) {
         onStep?.("expiry");
@@ -509,6 +639,7 @@ export async function readThaiDocument(
       if (worthThai && !reading.expiry && !reading.lifelong) {
         onStep?.("thai");
         const thai = (await (await getWorker("tha")).recognize(canvas)).data.text;
+        texts.push(thai);
         const merged = parseThaiIdCardText(`${english}\n${thai}`);
         reading = reading.nationalId
           ? { ...merged, nationalId: reading.nationalId, nationalIdValid: reading.nationalIdValid }
@@ -521,7 +652,7 @@ export async function readThaiDocument(
   } finally {
     bitmap.close();
   }
-  return best;
+  return { reading: best, texts };
 }
 
 export function readThaiIdCard(image: Blob): Promise<IdCardReading> {

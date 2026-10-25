@@ -32,11 +32,8 @@ import {
   type TableSort,
 } from "@/app/recruitment/_components/admin/candidate-insights";
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
-import {
-  CandidateRcForm,
-  TRAINING_STATE_LABEL,
-  trainingState,
-} from "@/app/recruitment/_components/admin/candidate-rc-form";
+import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
+import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
 import { outcomeGroup, outcomeLabel } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
@@ -48,6 +45,7 @@ import { alertError } from "@/lib/swal";
 import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
 import type { ApplicationFormExport } from "@/app/recruitment/_lib/applications";
 import {
+  daysUntil,
   displayAnswer,
   findByRole,
   formatPhone,
@@ -124,12 +122,6 @@ type Row = ApplicationSummary & {
   /** วันเริ่มฝึกจาก RQ ที่ผูก (`Requisition.trainingStartOn`) — ว่าง = ไม่ผูก/ยังไม่กรอก */
   trainingStartOn: string;
 };
-
-/** ฝึกงาน / รอฝึกงาน ของแถว — คอลัมน์วันที่ฝึกงาน (แท็บฝึกงาน) */
-function trainingLabel(a: Row): string {
-  const state = trainingState(a.trainingStartOn);
-  return state ? TRAINING_STATE_LABEL[state] : "ยังไม่กำหนด";
-}
 
 /**
  * นิยามคอลัมน์ที่เดียวของทั้งตาราง
@@ -209,14 +201,14 @@ const COLUMNS = [
     text: (a: Row) => STATUS_LABEL[a.status],
   },
   {
-    /* โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว (Bew 22 ต.ค. 2569) · ติ๊กกรองเป็น ฝึกงาน/รอฝึกงาน */
+    /* โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว · รอฝึกงานเป็นสถานะจริงแล้ว
+       (25 ต.ค. 2569) ป้ายฝึกงาน/รอฝึกงานตามวันที่เดิมจึงถอดออก */
     id: "trainingStart",
     label: "วันที่ฝึกงาน",
-    width: "min-w-[180px]",
+    width: "min-w-[150px]",
     asc: "เก่า → ใหม่",
     desc: "ใหม่ → เก่า",
-    text: (a: Row) => (a.trainingStartOn ? `${thaiDate(a.trainingStartOn)} · ${trainingLabel(a)}` : "ยังไม่กำหนด"),
-    facet: trainingLabel,
+    text: (a: Row) => (a.trainingStartOn ? thaiDate(a.trainingStartOn) : "ยังไม่กำหนด"),
     key: (a: Row) => a.trainingStartOn || "9999-12-31",
   },
   {
@@ -283,7 +275,7 @@ const REASON_COLUMN: ColumnId = "exitReason";
 const BLACKLIST_COLUMN: ColumnId = "blacklist";
 const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
 
-/** คอลัมน์วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว */
+/** คอลัมน์วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว */
 const TRAINING_COLUMN: ColumnId = "trainingStart";
 
 /**
@@ -326,13 +318,6 @@ function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showT
     ...(showTraining
       ? [
           { header: "วันที่ฝึกงาน", width: 13, kind: "date", value: (a) => xlsxDate(a.trainingStartOn) } satisfies XlsxColumn<Row>,
-          {
-            header: "สถานะฝึกงาน",
-            width: 13,
-            kind: "status",
-            value: trainingLabel,
-            tone: (a) => (trainingState(a.trainingStartOn) === "training" ? "ok" : "mut"),
-          } satisfies XlsxColumn<Row>,
         ]
       : []),
     ...(showReason
@@ -504,15 +489,28 @@ export function CandidatesView({
   );
 
   /**
-   * กล่องข้อมูล RC — ปุ่ม RC (ใบที่ผูกแล้ว) · คอลัมน์วันที่ฝึกงาน · เลือกสถานะ “ฝึกงาน” (`toTraining`
-   * ต้องกรอกฟอร์มนี้ + เลือก RQ ก่อน บันทึกแล้วค่อยเลื่อนสถานะ · Bew 22 ต.ค. 2569)
+   * กล่องข้อมูล RC — ปุ่ม RC (ใบที่ผูกแล้ว) · คอลัมน์วันที่ฝึกงาน · เลือกสถานะ “รอฝึกงาน”/“ฝึกงาน”
+   * (`target` — ต้องกรอกฟอร์มนี้ + เลือก RQ + วันเริ่มฝึกก่อน บันทึกแล้วค่อยเลื่อนสถานะ · Bew 22/25 ต.ค. 2569)
    */
-  const [rcFor, setRcFor] = useState<{ application: ApplicationSummary; toTraining: boolean } | null>(() => {
+  const [rcFor, setRcFor] = useState<{ application: ApplicationSummary; target: RcTarget | null } | null>(() => {
     if (!initialRc || !initialTerm) return null;
     const application = rows.find((a) => a.ref.toUpperCase() === initialTerm.trim().toUpperCase());
     const requisition = application && requisitions.find((r) => r.match?.applicationId === application.id);
-    return application && requisition ? { application, toTraining: false } : null;
+    return application && requisition ? { application, target: null } : null;
   });
+
+  /**
+   * เลือก “รอฝึกงาน” / “ฝึกงาน” จากช่องสถานะ — รอฝึกงานแล้ว (มี RQ + วันเริ่มฝึก) เลื่อนเป็นฝึกงานได้ทันที
+   * ไม่ต้องกรอกกล่องซ้ำ · นอกนั้นเปิดกล่องข้อมูล RC ก่อนเสมอ
+   */
+  function toStage(a: Row, to: RcTarget) {
+    const rq = rqByApplication.get(a.id);
+    if (to === "training" && a.status === "interview_passed" && rq?.trainingStartOn) {
+      void patchCandidate(a.id, { status: "training" });
+      return;
+    }
+    setRcFor({ application: a, target: to });
+  }
 
   const [opening, setOpening] = useState<string | null>(null);
   /* Sync ใบสมัครจาก Google Form — วางแถว (ทุกโหมด) / ชี้ path ไฟล์ (เฉพาะ dev) */
@@ -550,7 +548,10 @@ export function CandidatesView({
 
   const showBlacklist = BLACKLIST_VIEWS.some(onlyStatus);
 
-  const showTraining = onlyStatus(STATUS_LABEL.training);
+  const showTraining = onlyStatus(STATUS_LABEL.training) || onlyStatus(STATUS_LABEL.interview_passed);
+
+  /** กรองฝึกงานอย่างเดียว = ตารางฝึกงานรายวัน + ปุ่มคัดลอกสรุปใต้ตาราง (ย้ายมาจากหน้าติดตามพนักงานใหม่ 25 ต.ค. 2569) */
+  const showDaily = onlyStatus(STATUS_LABEL.training);
 
   const columns = useMemo(
     () =>
@@ -583,6 +584,14 @@ export function CandidatesView({
       return sort.dir === "asc" ? order : -order;
     });
   }, [enriched, columns, filters, sort]);
+
+  /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
+  const toPerson = (a: ApplicationSummary): TraineePerson => {
+    const rq = rqByApplication.get(a.id);
+    return { id: rq?.id ?? a.id, code: rq?.code ?? "", name: a.fullName, drivercode: rq?.drivercode ?? "", vehicle: rq?.vehicle ?? null };
+  };
+  const dailyPool = showDaily ? rows.filter((a) => a.status === "training").map(toPerson) : [];
+  const dailyPeople = showDaily ? visible.map(toPerson) : [];
 
   /**
    * บันทึกการแก้จากช่องในตาราง — เปลี่ยนหน้าจอก่อน แล้วค่อยรอเซิร์ฟเวอร์
@@ -701,7 +710,8 @@ export function CandidatesView({
   const filtering = isFiltering(filters as InsightFilters);
 
   return (
-    <div className="flex flex-col lg:h-[calc(100dvh-4rem)]">
+    /* มุมมองฝึกงานมีตารางรายวันต่อท้าย — หน้าเลื่อนยาวตามปกติแทนการล็อกสูงเท่าจอ */
+    <div className={showDaily ? "flex flex-col gap-4" : "flex flex-col lg:h-[calc(100dvh-4rem)]"}>
       {/* หัวเรื่องซ่อนไว้ให้โปรแกรมอ่านจอเท่านั้น — ถอดหัวที่มองเห็นออกตามคำขอ 23 ก.ย. 2026
           (`sr-only` เป็น absolute จึงไม่กิน `gap` ของกล่องนอก) */}
       <h1 className="sr-only">{title}</h1>
@@ -720,7 +730,11 @@ export function CandidatesView({
           (เช่น `.sr-only` ในปุ่มแต่ละแถว) — ไม่งั้นสแปนที่มองไม่เห็นพวกนั้นจะไปอิง
           ตำแหน่งกับเอกสารทั้งหน้าแทนกล่องนี้ ดันความสูงจริงของหน้าให้ยาวเกินของจริง
           (เห็นผลเป็นแถบข้างที่ดูเหมือนเลื่อนตามเพราะ container คำนวณความสูงผิด) */}
-      <div className="sheet-bleed relative max-h-[calc(100dvh-10.5rem)] overflow-auto border-y border-line lg:max-h-none lg:min-h-0 lg:flex-1">
+      <div
+        className={`sheet-bleed relative overflow-auto border-y border-line ${
+          showDaily ? "max-h-[60dvh]" : "max-h-[calc(100dvh-10.5rem)] lg:max-h-none lg:min-h-0 lg:flex-1"
+        }`}
+      >
         <table className="sheet-table w-full border-collapse text-13">
           <thead>
             <tr>
@@ -859,8 +873,8 @@ export function CandidatesView({
                   <td className="px-2 py-1.5">
                     <StatusCell
                       {...cell}
-                      /* เป็นฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
-                      onTraining={() => setRcFor({ application: a, toTraining: true })}
+                      /* เป็นรอฝึกงาน/ฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
+                      onStage={(to) => toStage(a, to)}
                     />
                   </td>
 
@@ -868,8 +882,9 @@ export function CandidatesView({
                     <td className="px-2 py-1.5">
                       <TrainingDateCell
                         start={a.trainingStartOn}
+                        due={a.status === "interview_passed"}
                         locked={locked}
-                        onEdit={() => setRcFor({ application: a, toTraining: false })}
+                        onEdit={() => setRcFor({ application: a, target: null })}
                       />
                     </td>
                   ) : null}
@@ -901,7 +916,7 @@ export function CandidatesView({
                         <RcButton
                           requisition={rqByApplication.get(a.id)!}
                           name={a.fullName}
-                          onOpen={() => setRcFor({ application: a, toTraining: false })}
+                          onOpen={() => setRcFor({ application: a, target: null })}
                         />
                       ) : null}
 
@@ -974,6 +989,8 @@ export function CandidatesView({
         ) : null}
       </div>
 
+      {showDaily ? <TraineeDailySection pool={dailyPool} people={dailyPeople} /> : null}
+
       {rcFor ? (
         <CandidateRcForm
           applicationId={rcFor.application.id}
@@ -982,7 +999,7 @@ export function CandidatesView({
           name={rcFor.application.fullName}
           status={rcFor.application.status}
           contactOwner={rcFor.application.contactOwner}
-          toTraining={rcFor.toTraining}
+          target={rcFor.target}
           onClose={() => setRcFor(null)}
           onLinked={(rows) => setRequisitions?.((prev) => prev.map((r) => rows.find((w) => w.id === r.id) ?? r))}
           onSaved={(next) => {
@@ -993,8 +1010,8 @@ export function CandidatesView({
                   : r,
               ),
             );
-            if (rcFor.toTraining && rcFor.application.status !== "training")
-              void patchCandidate(rcFor.application.id, { status: "training" });
+            if (rcFor.target && rcFor.application.status !== rcFor.target)
+              void patchCandidate(rcFor.application.id, { status: rcFor.target });
           }}
         />
       ) : null}
@@ -1099,19 +1116,32 @@ function roleAnswer(
 
 /* ──────────────────────────────────────────────────── วันที่ฝึกงาน */
 
-/** วันเริ่มฝึก + ป้าย ฝึกงาน/รอฝึกงาน (วันยังไม่ถึง) · กดแก้วันได้ */
-function TrainingDateCell({ start, locked, onEdit }: { start: string; locked: boolean; onEdit: () => void }) {
-  const state = trainingState(start);
+/**
+ * วันเริ่มฝึก · กดแก้วันได้ — ใบ “รอฝึกงาน” (`due`) ที่ถึงวันแล้วมีป้ายเตือนให้เลื่อนเป็นฝึกงาน
+ * (RC กดเปลี่ยนสถานะเอง ระบบไม่เลื่อนให้ · Bew 25 ต.ค. 2569)
+ */
+function TrainingDateCell({
+  start,
+  due,
+  locked,
+  onEdit,
+}: {
+  start: string;
+  due: boolean;
+  locked: boolean;
+  onEdit: () => void;
+}) {
+  const days = daysUntil(start);
   const body = (
     <>
       <span className="whitespace-nowrap tabular-nums">{start ? thaiDate(start) : "ยังไม่กำหนด"}</span>
-      {state ? (
+      {due && days !== null ? (
         <span
           className={`rounded-full px-2 py-0.5 text-11 font-medium whitespace-nowrap ${
-            state === "training" ? "bg-st-live text-st-live-ink" : "bg-st-wait text-st-wait-ink"
+            days <= 0 ? "bg-st-live text-st-live-ink" : "bg-st-wait text-st-wait-ink"
           }`}
         >
-          {TRAINING_STATE_LABEL[state]}
+          {days <= 0 ? "ถึงวันเริ่มฝึก" : `อีก ${days} วัน`}
         </span>
       ) : null}
     </>
@@ -1146,7 +1176,6 @@ function TrainingDateCell({ start, locked, onEdit }: { start: string; locked: bo
 const PERSON_TONE: Record<ApplicationStatus, string> = {
   pending_contact: "bg-st-wait text-st-wait-ink",
   interview_scheduled: "bg-st-wait text-st-wait-ink",
-  interview_waiting: "bg-st-wait text-st-wait-ink",
   interview_passed: "bg-st-live text-st-live-ink",
   training: "bg-st-live text-st-live-ink",
   working: "bg-st-live text-st-live-ink",

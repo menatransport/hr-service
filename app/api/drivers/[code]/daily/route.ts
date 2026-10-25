@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { badRequest, fail, ok } from "@/app/api/_lib/respond";
 import { getActorEmployeeId } from "@/lib/auth/session";
 import { DriverRegistryError, setTraineeDaily } from "@/app/recruitment/_lib/drivers/registry";
+import { isExitStatus } from "@/app/recruitment/_lib/drivers/types";
+import { exitFromDaily } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 
 /**
  * `PUT /api/drivers/{drivercode}/daily` — บันทึกสถานะรายวันที่ฝ่ายบุคคลกรอกเอง
@@ -11,7 +13,10 @@ import { DriverRegistryError, setTraineeDaily } from "@/app/recruitment/_lib/dri
  * ```
  * { "dateISO": "2026-09-21", "code": "ฝ", "note": "" }
  * { "dateISO": "2026-09-21", "code": "" }      ← ลบบันทึกของวันนั้นทิ้ง
+ * { "dateISO": "2026-09-21", "code": "ลอ", "note": "เหตุผล", "trial": true } ← พ้นสภาพหลังฝึก 1–2 วัน
  * ```
+ *
+ * `ลอ`/`ปอ` = ปิดผลสิ้นสุดของคำขอที่ถือรหัสนี้ + ยกเลิกใบสมัคร ให้ด้วย (`exitFromDaily` · 25 ต.ค. 2569)
  *
  * เขียนลง `hr_service.trainee_daily` เท่านั้น — **ไม่แตะ `Boom_ETL`** ที่เป็นต้นทาง
  * ของ ATMS · ของที่กรอกที่นี่คือบันทึกของฝ่ายบุคคล ไม่ใช่การแก้ข้อมูลค่าแรง
@@ -36,6 +41,7 @@ export async function PUT(request: NextRequest, ctx: RouteContext<"/api/drivers/
       dateISO?: unknown;
       code?: unknown;
       note?: unknown;
+      trial?: unknown;
     } | null;
 
     if (!body) return badRequest("อ่านข้อมูลที่ส่งมาไม่ได้");
@@ -45,10 +51,11 @@ export async function PUT(request: NextRequest, ctx: RouteContext<"/api/drivers/
     const note = typeof body.note === "string" ? body.note.trim() : "";
     if (note.length > MAX_NOTE) return badRequest(`หมายเหตุยาวเกิน ${MAX_NOTE} ตัวอักษร`);
 
+    const actor = await getActorEmployeeId();
     const entry = await setTraineeDaily(
       drivercode,
-      { dateISO: body.dateISO, code: body.code, note },
-      await getActorEmployeeId(),
+      { dateISO: body.dateISO, code: body.code, note, trial: body.trial === true },
+      actor,
     );
 
     // ลบสำเร็จก็คืน `entry: null` — ต่างจาก 404 ที่แปลว่าไม่มีรหัสนี้ในทะเบียน
@@ -59,7 +66,23 @@ export async function PUT(request: NextRequest, ctx: RouteContext<"/api/drivers/
       );
     }
 
-    return ok({ dateISO: body.dateISO, entry });
+    /* ลอ/ปอ = ปิดผลสิ้นสุดของ RQ + ยกเลิกใบสมัคร (`exitFromDaily`) — พลาดไม่ทำให้บันทึกรายวันล้ม
+       แต่บอกหน้าจอให้รู้ (`exitError`) จะได้ไปปิดเองที่หน้าติดตามพนักงานใหม่ */
+    let exited = false;
+    let exitError = "";
+    if (entry && isExitStatus(entry.code)) {
+      try {
+        exited = await exitFromDaily(
+          drivercode,
+          { dateISO: body.dateISO, code: entry.code, trial: entry.trial === true, reason: note },
+          actor,
+        );
+      } catch (err) {
+        exitError = err instanceof Error ? err.message : "ปิดผลสิ้นสุดไม่สำเร็จ";
+      }
+    }
+
+    return ok({ dateISO: body.dateISO, entry, exited, exitError });
   } catch (err) {
     if (err instanceof DriverRegistryError) return badRequest(err.message);
     return fail(err);

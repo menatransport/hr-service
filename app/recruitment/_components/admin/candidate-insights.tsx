@@ -51,7 +51,6 @@ export const stampDay = new Intl.DateTimeFormat("th-TH", {
 const PIPELINE: ApplicationStatus[] = [
   "pending_contact",
   "interview_scheduled",
-  "interview_waiting",
   "interview_passed",
   "training",
   "cancelled",
@@ -61,7 +60,6 @@ const PIPELINE: ApplicationStatus[] = [
 const DOT: Record<ApplicationStatus, string> = {
   pending_contact: "bg-st-new-ink",
   interview_scheduled: "bg-st-wait-ink",
-  interview_waiting: "bg-st-wait-ink",
   interview_passed: "bg-st-live-ink",
   training: "bg-st-live-ink",
   working: "bg-st-done-ink",
@@ -137,7 +135,7 @@ export function CandidateInsights({
 
   return (
     <SummaryPanel label="สรุปใบสมัครตามสถานะ" className="flex-none">
-      <SummaryStats className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
+      <SummaryStats className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         {/* ยอดรวมไม่ใช่ตัวกรอง (29 ก.ย. 2026) — ไม่มีมุมมอง “ทั้งหมด” ดู `DEFAULT_FILTERS`
             · **ตอนกรองอยู่ช่องนี้กลายเป็นปุ่ม “ล้างตัวกรอง”** (14 ต.ค. 2026) แทนแถวปุ่มเหนือตาราง
             ไม่ได้กรองอยู่ = ไม่ส่ง `onClick` = กล่องเฉย ๆ */}

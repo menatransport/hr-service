@@ -4,7 +4,7 @@ import ExcelJS from "exceljs";
 import { etlCol, hrCol } from "@/lib/db";
 import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { nextSeq } from "@/lib/db/counters";
-import { listBlacklist, snapshotOf } from "./applications";
+import { applicationRef, applicationRefCounter, listBlacklist, snapshotOf } from "./applications";
 import { EXIT_STATUS_CODES, workStatusFullLabel } from "./drivers/types";
 import {
   composeName,
@@ -768,7 +768,9 @@ interface ParsedRow {
   sheetStatus: string;
   submittedAtISO: string;
   submittedBkkKey: string;
-  bkkYy: string;
+  /** ปี/เดือน ค.ศ. ตามเวลาไทยของวันที่ส่ง — ประกอบเลขใบ `DRV2610-0001` (`applicationRef`) */
+  bkkYear: number;
+  bkkMonth: number;
   fullNameRaw: string;
   lastNameRaw: string;
   matchFullName: string;
@@ -1086,7 +1088,6 @@ function parseRow(
   const submittedAtISO = instant.toISOString();
   const bkkWallClock = tsValue as Date;
   const bkkYear = bkkWallClock.getUTCFullYear();
-  const bkkYy = String((bkkYear + 543) % 100).padStart(2, "0");
   const submittedBkkKey = `${bkkYear}-${String(bkkWallClock.getUTCMonth() + 1).padStart(2, "0")}-${String(bkkWallClock.getUTCDate()).padStart(2, "0")}`;
 
   const lastNameRaw = cols.lastNameCol ? cellText(row.getCell(cols.lastNameCol).value) : "";
@@ -1263,7 +1264,8 @@ function parseRow(
     sheetStatus: cols.sheetStatusCol ? cellText(row.getCell(cols.sheetStatusCol).value) : "",
     submittedAtISO,
     submittedBkkKey,
-    bkkYy,
+    bkkYear,
+    bkkMonth: bkkWallClock.getUTCMonth() + 1,
     fullNameRaw,
     lastNameRaw,
     matchFullName,
@@ -1639,11 +1641,11 @@ function computeImportKey(parsed: ParsedRow): string {
 
 /* --------------------------------------------------------------- ล็อกเลข ref */
 
-/** จองเลข ref เป็นก้อนเดียวต่อปี พ.ศ. — `$inc` หนึ่งครั้งได้เลขท้ายบล็อกกลับมา
+/** จองเลข ref เป็นก้อนเดียวต่อปี — `$inc` หนึ่งครั้งได้เลขท้ายบล็อกกลับมา
  *  เลขต้นบล็อก = เลขท้าย − จำนวนที่จอง + 1 (รูปแบบเดียวกับ `nextRef()` ใน
  *  `applications.ts` แต่จองเป็นก้อนแทนทีละ 1 เพราะนำเข้าครั้งเดียวหลายพันแถว) */
-function reserveRefBlock(yy: string, count: number): Promise<number> {
-  return nextSeq("recruitmentCounters", `recruitment:${yy}`, count);
+function reserveRefBlock(year: number, count: number): Promise<number> {
+  return nextSeq("recruitmentCounters", applicationRefCounter(year), count);
 }
 
 /* ------------------------------------------------------------------ ทางเข้า */
@@ -1680,21 +1682,21 @@ export async function commitImport(
   const questions = await listActiveQuestions();
   const snapshot = snapshotOf(questions);
 
-  // จองเลข ref เป็นก้อนต่อปี พ.ศ. เรียงจากวันที่ส่งจริงในปีนั้น
-  const byYy = new Map<string, typeof toInsert>();
+  // จองเลข ref เป็นก้อนต่อปี เรียงจากวันที่ส่งจริงในปีนั้น (เลขรันนับใหม่ทุกปี เดือนในเลขตามวันที่ส่ง)
+  const byYear = new Map<number, typeof toInsert>();
   for (const item of toInsert) {
-    const arr = byYy.get(item.parsed.bkkYy) ?? [];
+    const arr = byYear.get(item.parsed.bkkYear) ?? [];
     arr.push(item);
-    byYy.set(item.parsed.bkkYy, arr);
+    byYear.set(item.parsed.bkkYear, arr);
   }
 
   const refByRow = new Map<number, string>();
-  for (const [yy, items] of byYy) {
+  for (const [year, items] of byYear) {
     items.sort((a, b) => a.parsed.submittedAtISO.localeCompare(b.parsed.submittedAtISO));
-    const seqEnd = await reserveRefBlock(yy, items.length);
+    const seqEnd = await reserveRefBlock(year, items.length);
     const seqStart = seqEnd - items.length + 1;
     items.forEach((item, i) => {
-      refByRow.set(item.parsed.row, `DRV-${yy}-${String(seqStart + i).padStart(4, "0")}`);
+      refByRow.set(item.parsed.row, applicationRef(year, item.parsed.bkkMonth, seqStart + i));
     });
   }
 

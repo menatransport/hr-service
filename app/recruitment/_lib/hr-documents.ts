@@ -303,7 +303,8 @@ export function readApplicantFacts(application: Application): ApplicantFacts {
     lastName: text(findByRole(snapshot, "last_name")),
     nickname: byWords(FACT_RULES.nickname),
     phone: application.phone ? formatPhone(application.phone) : "",
-    regAddress: documents.address || byWords(FACT_RULES.regAddress),
+    /* ฟอร์มเลิกถามที่อยู่ตามทะเบียนบ้าน (ซ้ำกับที่อยู่ปัจจุบัน · Bew 25 ต.ค. 2569) — ใบใหม่ใช้ที่อยู่ปัจจุบันแทน */
+    regAddress: documents.address || byWords(FACT_RULES.regAddress) || byWords(FACT_RULES.curAddress),
     curAddress: byWords(FACT_RULES.curAddress),
     birthDate: birth,
     age: ageOn(birth, todayIso()) ?? byWords(FACT_RULES.age),

@@ -87,7 +87,6 @@ export type AnswerMap = Record<string, AnswerValue>;
 export const APPLICATION_STATUSES = [
   "pending_contact",
   "interview_scheduled",
-  "interview_waiting",
   "interview_passed",
   "cancelled",
   "training",
@@ -106,7 +105,9 @@ const LEGACY_STATUS: Record<string, ApplicationStatus> = {
   submitted: "pending_contact",
   screening: "pending_contact",
   interview: "interview_scheduled",
-  road_test: "interview_waiting",
+  road_test: "interview_scheduled",
+  /* “รอผลการสัมภาษณ์” ถูกถอดออก (Bew 25 ต.ค. 2569) — ใบที่ค้างอยู่กลับไปเป็นนัดสัมภาษณ์ */
+  interview_waiting: "interview_scheduled",
   offer: "interview_passed",
   hired: "training",
   rejected: "cancelled",
@@ -135,8 +136,9 @@ export function normalizeStatus(v: unknown): ApplicationStatus {
 export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   pending_contact: "รอการติดต่อ",
   interview_scheduled: "นัดสัมภาษณ์",
-  interview_waiting: "รอผลการสัมภาษณ์",
-  interview_passed: "ผ่านการสัมภาษณ์",
+  /* ค่าในฐานยังชื่อ `interview_passed` — ผ่านสัมภาษณ์แล้วรอวันเริ่มฝึก (เปลี่ยนป้าย Bew 25 ต.ค. 2569)
+     · เข้าสถานะนี้ต้องผ่านกล่องข้อมูล RC (เลือก RQ + วันเริ่มฝึก) เสมอ */
+  interview_passed: "รอฝึกงาน",
   cancelled: "ยกเลิก",
   training: "ฝึกงาน",
   working: "ปฏิบัติงาน",
@@ -146,8 +148,7 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
 export const STATUS_NEXT_STEP: Record<ApplicationStatus, string> = {
   pending_contact: "โทรกลับหาผู้สมัคร แล้วนัดวันสัมภาษณ์",
   interview_scheduled: "นัดแล้ว รอถึงวันสัมภาษณ์",
-  interview_waiting: "สัมภาษณ์แล้ว รอสรุปผล",
-  interview_passed: "ผ่านแล้ว นัดวันเริ่มฝึกงาน",
+  interview_passed: "ผ่านสัมภาษณ์แล้ว รอวันเริ่มฝึกงาน",
   cancelled: "ยกเลิกแล้ว — ระบุเหตุผลในคอลัมน์เหตุผลที่ยกเลิก",
   training: "เริ่มฝึกงานแล้ว",
   working: "ปฏิบัติงานแล้ว — ดูสถานะรายวันที่ทะเบียนประวัติ พจส.",
@@ -169,7 +170,6 @@ export function isHiredStatus(status: ApplicationStatus): boolean {
 export const OPEN_STATUSES: ApplicationStatus[] = [
   "pending_contact",
   "interview_scheduled",
-  "interview_waiting",
   "interview_passed",
 ];
 
@@ -180,7 +180,6 @@ export const OPEN_STATUSES: ApplicationStatus[] = [
 export const PROGRESS_FLOW: ApplicationStatus[] = [
   "pending_contact",
   "interview_scheduled",
-  "interview_waiting",
   "interview_passed",
   "training",
   "working",
@@ -221,7 +220,8 @@ export function isInterviewResult(v: unknown): v is InterviewResult {
 export function statusFromResult(
   result: InterviewResult,
 ): ApplicationStatus | null {
-  if (result === "waiting") return "interview_waiting";
+  /* ผล “รอผล” ของใบเก่ายังอ่านได้ แต่ไม่มีสถานะของตัวเองแล้ว — อยู่ที่นัดสัมภาษณ์ */
+  if (result === "waiting") return "interview_scheduled";
   if (result === "passed") return "interview_passed";
   if (result === "failed") return "cancelled";
   return null;
