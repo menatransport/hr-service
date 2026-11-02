@@ -461,6 +461,11 @@ export interface DocumentField {
   /** จำนวนหลักที่ต้องได้พอดีสำหรับช่องตัวเลขล้วน */
   digits?: number;
   hint?: string;
+  /**
+   * ไม่ให้กรอกในกล่องเอกสารแล้ว เพราะซ้ำกับคำตอบในใบสมัคร (Bew 2 พ.ย. 2569)
+   * ค่าเดิมยังเก็บไว้และยังพิมพ์ลงรายงาน · เซิร์ฟเวอร์ยังรับค่านี้อยู่
+   */
+  legacy?: true;
 }
 
 /**
@@ -478,9 +483,9 @@ export const DOCUMENT_FIELDS: DocumentField[] = [
     kind: "nid",
     hint: "13 หลัก ระบบตรวจหลักสุดท้ายให้เอง",
   },
-  { key: "legalName", label: "ชื่อ–นามสกุลตามบัตร", slot: "id_card", kind: "text" },
-  { key: "birthDate", label: "วันเกิด", slot: "id_card", kind: "date" },
   { key: "idCardExpiry", label: "บัตรหมดอายุ", slot: "id_card", kind: "date" },
+  { key: "legalName", label: "ชื่อ–นามสกุลตามบัตร", slot: "id_card", kind: "text", legacy: true },
+  { key: "birthDate", label: "วันเกิด", slot: "id_card", kind: "date", legacy: true },
 
   {
     key: "houseRegNo",
@@ -705,6 +710,8 @@ export type ImportSkipReason =
   | "not_found_old"
   /** คนเดียวกันส่งหลายใบ — เก็บใบล่าสุดใบเดียว */
   | "duplicate"
+  /** Sync จาก Google Sheet รับเฉพาะคนที่ยังรอการติดต่อ — ชีตมีความคืบหน้าแล้ว/ฝึกงาน/ทำงานอยู่/Blacklist */
+  | "not_pending"
   /** อ่านชื่อหรือเวลาที่ส่งไม่ได้ */
   | "invalid";
 

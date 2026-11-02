@@ -1,8 +1,12 @@
 import { cookies } from "next/headers";
 
+import { MenuAccessProvider } from "@/components/auth/menu-access-provider";
+
 import { ShellHeader } from "@/components/shell/shell-header";
 import { SIDEBAR_COOKIE, ShellSidebar } from "@/components/shell/shell-sidebar";
 import type { ShellUser } from "@/components/shell/user-menu";
+import { UatDock } from "@/components/uat/uat-dock";
+import { getHiddenMenuIds } from "@/lib/menu-permissions";
 
 /**
  * เชลล์ของหน้าในทั้งระบบ (`/desk/*` · `/recruitment/admin/*` · `/payroll/*`) — สไตล์ menaIT V.2
@@ -33,9 +37,12 @@ export async function AppShell({
   systemLabel?: string;
   children: React.ReactNode;
 }) {
-  const rail = (await cookies()).get(SIDEBAR_COOKIE)?.value === "rail";
+  const [jar, hidden] = await Promise.all([cookies(), getHiddenMenuIds()]);
+  const rail = jar.get(SIDEBAR_COOKIE)?.value === "rail";
 
   return (
+    // เมนูที่หน้า “กำหนดสิทธิ์” ซ่อนจากผู้ใช้คนนี้ — แถบข้างทั้งเดสก์ท็อปและลิ้นชักมือถืออ่านจากตัวนี้
+    <MenuAccessProvider hidden={hidden}>
     <div className="app-shell relative flex min-h-dvh flex-col">
       <ShellHeader
         user={user}
@@ -61,6 +68,9 @@ export async function AppShell({
           {children}
         </main>
       </div>
+      {/* UAT ชั่วคราว — ขึ้นเฉพาะผู้ทดสอบตอนเปิด UAT */}
+      <UatDock />
     </div>
+    </MenuAccessProvider>
   );
 }

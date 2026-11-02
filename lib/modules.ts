@@ -8,6 +8,7 @@ import {
   Code2,
   Container,
   Database,
+  FlaskConical,
   Inbox,
   LayoutGrid,
   ShieldCheck,
@@ -81,6 +82,11 @@ export interface ModuleGroup {
   caption: string;
   icon: LucideIcon;
   items: ModuleItem[];
+  /**
+   * ซ่อนจากหน้า Home และ “กลุ่มงานอื่น” ในแถบข้าง — หน้าในยังเปิดตรงด้วย URL ได้ และ
+   * `findModule` ยังหาเจอ (แถบข้างของหน้านั้นไม่หาย)
+   */
+  hidden?: boolean;
 }
 
 export const MODULES: ModuleGroup[] = [
@@ -153,6 +159,8 @@ export const MODULES: ModuleGroup[] = [
     tagline: "ข้อมูลพนักงาน",
     caption: "งานบุคคลของพนักงานสำนักงานและฝ่ายสนับสนุน",
     icon: Building2,
+    // ซ่อนไว้ก่อน (2 พ.ย. 2026) — ยังไม่พร้อมให้ใช้
+    hidden: true,
     items: [
       {
         id: "employee",
@@ -218,6 +226,14 @@ export const MODULES: ModuleGroup[] = [
         soon: SOON,
       },
       {
+        /* ระบบชั่วคราว (2 พ.ย. 2569) — ผู้ทดสอบรายฝ่าย + ผล UAT ทะเบียนประวัติ พจส. ลาดกระบัง */
+        id: "uat",
+        label: "จัดการ UAT",
+        desc: "ผู้ทดสอบรายฝ่าย · ผลทดสอบทะเบียนประวัติ",
+        href: "/desk/uat",
+        icon: FlaskConical,
+      },
+      {
         id: "api-docs",
         label: "Docs API",
         desc: "เอกสาร API และคอนโซลทดสอบ",
@@ -228,8 +244,11 @@ export const MODULES: ModuleGroup[] = [
   },
 ];
 
+/** กลุ่มที่แสดงบนหน้า Home และในลิงก์ “กลุ่มงานอื่น” (ไม่รวม `hidden`) */
+export const VISIBLE_MODULES = MODULES.filter((m) => !m.hidden);
+
 export const moduleById = (id: string | null | undefined): ModuleGroup | undefined =>
-  MODULES.find((m) => m.id === id);
+  VISIBLE_MODULES.find((m) => m.id === id);
 
 const pathOf = (href: string) => href.split("?")[0];
 

@@ -77,6 +77,16 @@ const MAX_PASTE_ROWS = 2_000;
 /** ที่มาของแถว — ไฟล์ .xlsx (อัป/ชี้ path) หรือข้อความที่คัดลอกแถวจากชีตมาวาง */
 export type ImportSource = { buffer: Buffer | ArrayBuffer } | { text: string };
 
+/**
+ * `onlyPending` — Sync จาก Google Sheet (Bew 2 พ.ย. 2569): รับเฉพาะใบที่ได้ **รอการติดต่อ** และชีตยังไม่ได้
+ * กรอกความคืบหน้า (สถานะสัมภาษณ์ · ผลสัมภาษณ์รอบสุดท้าย · สถานะพจส.ใหม่ ว่างทั้งหมด) · กันซ้ำกับใบในระบบ
+ * ด้วยเบอร์/เลขบัตรประชาชน **ทุกช่วงเวลา** (ใบที่ปิดไปแล้วไม่นับ) แทนกรอบ 30 วัน
+ */
+export type ImportOptions = { recentDays: number; now?: Date; onlyPending?: boolean };
+
+/** หัวคอลัมน์ความคืบหน้าที่ฝ่ายบุคคลกรอกในชีต — มีค่าช่องใดช่องหนึ่ง = ติดต่อแล้ว ไม่ใช่ “รอการติดต่อ” */
+const PROGRESS_HEADERS = ["สถานะสัมภาษณ์", "ผลสัมภาษณ์รอบสุดท้าย", "สถานะพจส.ใหม่"];
+
 /* ------------------------------------------------------------------ ข้อความ/ตัวเลข */
 
 /** NFC + ตัด zero-width + รวมช่องว่าง + ขีดกลางทุกแบบ → `-` — ก่อนเทียบข้อความใด ๆ */
@@ -766,6 +776,8 @@ interface ParsedRow {
   row: number;
   /** คอลัมน์ “สถานะสัมภาษณ์” ที่ฝ่ายบุคคลเขียนไว้ในชีต */
   sheetStatus: string;
+  /** ชีตกรอกความคืบหน้าแล้วสักช่อง (`PROGRESS_HEADERS`) */
+  sheetProgressed: boolean;
   submittedAtISO: string;
   submittedBkkKey: string;
   /** ปี/เดือน ค.ศ. ตามเวลาไทยของวันที่ส่ง — ประกอบเลขใบ `DRV2610-0001` (`applicationRef`) */
@@ -822,11 +834,24 @@ async function loadWorksheet(buffer: Buffer | ArrayBuffer): Promise<ExcelJS.Work
     return found;
   };
 
+  /* Google Sheet ส่งออกทุกเซลล์ที่ดึงมาจากชีตอื่นเป็นสูตร `IFERROR(__xludf.DUMMYFUNCTION(…))` — ใช้ผลของสูตรแทน
+     ตัวอ่านข้างล่างทั้งหมดจะได้ `Date`/ข้อความตรง ๆ เหมือนไฟล์ Excel ปกติ */
+  const unwrapFormulas = (ws: ExcelJS.Worksheet) => {
+    ws.eachRow((row) =>
+      row.eachCell((cell) => {
+        const v = cell.value as { formula?: unknown; sharedFormula?: unknown; result?: unknown } | null;
+        if (v && typeof v === "object" && ("formula" in v || "sharedFormula" in v))
+          cell.value = (v.result ?? null) as ExcelJS.CellValue;
+      }),
+    );
+    return ws;
+  };
+
   const preferred = wb.getWorksheet("การตอบแบบฟอร์ม 1");
-  if (preferred && hasTimestamp(preferred)) return preferred;
+  if (preferred && hasTimestamp(preferred)) return unwrapFormulas(preferred);
 
   const found = wb.worksheets.find(hasTimestamp);
-  if (found) return found;
+  if (found) return unwrapFormulas(found);
 
   throw new Error(
     'หาชีตคำตอบไม่เจอ — ไม่มีชีตไหนที่หัวตารางแถวแรกมีคอลัมน์ "ประทับเวลา"',
@@ -975,6 +1000,7 @@ interface ColumnMap {
   readyDateCol: number | null;
   hrContactCol: number | null;
   sheetStatusCol: number | null;
+  progressCols: number[];
 }
 
 function buildColumnMap(headers: ExcelHeader[], questions: Question[], counters: Counters): ColumnMap {
@@ -1032,6 +1058,7 @@ function buildColumnMap(headers: ExcelHeader[], questions: Question[], counters:
     readyDateCol: findCol(headers, ["เริ่มงานได้วันที่"]),
     hrContactCol: findCol(headers, ["ติดต่อเจ้าหน้าที่ฝ่ายบุคคล"]),
     sheetStatusCol: findColExact(headers, "สถานะสัมภาษณ์"),
+    progressCols: PROGRESS_HEADERS.map((h) => findColExact(headers, h)).filter((c): c is number => c != null),
   };
 }
 
@@ -1262,6 +1289,7 @@ function parseRow(
   return {
     row: rowNumber,
     sheetStatus: cols.sheetStatusCol ? cellText(row.getCell(cols.sheetStatusCol).value) : "",
+    sheetProgressed: cols.progressCols.some((c) => cellText(row.getCell(c).value) !== ""),
     submittedAtISO,
     submittedBkkKey,
     bkkYear,
@@ -1320,10 +1348,7 @@ function describeHit(hit: BlacklistHit): string {
   return `${hit.ref} ${hit.fullName} (${hit.by.map((b) => (b === "phone" ? "เบอร์" : "ชื่อ")).join("+")})`;
 }
 
-async function buildImport(
-  source: ImportSource,
-  opts: { recentDays: number; now?: Date },
-): Promise<BuildResult> {
+async function buildImport(source: ImportSource, opts: ImportOptions): Promise<BuildResult> {
   const recentDays = Math.min(60, Math.max(1, Math.round(opts.recentDays)));
   const now = opts.now ?? new Date();
   const nowKey = bangkokDateKey(now);
@@ -1480,6 +1505,8 @@ async function buildImport(
    *  (กันแถวที่วางมาซึ่งเวลาไม่มีมิลลิวินาที และใบที่ฝ่ายบุคคลสร้างเองด้วยมือ) */
   const existingByPhone = new Map<string, string[]>();
   let existingPhoneHits = new Set<string>();
+  /** `onlyPending` — เลขบัตรของใบที่ยังไม่ปิดในระบบ (ทุกช่วงเวลา) */
+  let existingNidHits = new Set<string>();
 
   const candidates = classified.filter((c) => c.outcome);
   if (candidates.length) {
@@ -1490,8 +1517,12 @@ async function buildImport(
 
     const phones = [...new Set(candidates.map((c) => digitsOnly(c.parsed.phoneRaw)).filter(Boolean))];
     const windowStart = new Date(now.getTime() - DUPLICATE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString();
+    const nids = [...new Set(candidates.map((c) => digitsOnly(c.parsed.documents.nationalId)).filter(Boolean))];
     const existing = await col
-      .find({ phone: { $in: phones } }, { projection: { phone: 1, status: 1, createdAt: 1 } })
+      .find(
+        opts.onlyPending ? { $or: [{ phone: { $in: phones } }, { "documents.nationalId": { $in: nids } }] } : { phone: { $in: phones } },
+        { projection: { phone: 1, status: 1, createdAt: 1, "documents.nationalId": 1 } },
+      )
       .toArray();
     for (const d of existing) {
       const list = existingByPhone.get(String(d.phone)) ?? [];
@@ -1499,11 +1530,11 @@ async function buildImport(
       existingByPhone.set(String(d.phone), list);
     }
     // เอาเฉพาะสถานะที่ยัง "กำลังพิจารณาอยู่" ตามกติกาเดียวกับ guardDuplicate()
-    existingPhoneHits = new Set(
-      existing
-        .filter((d) => String(d.createdAt ?? "") >= windowStart && !DUPLICATE_BLOCKING_STATUSES.has(String(d.status)))
-        .map((d) => String(d.phone)),
+    const open = existing.filter(
+      (d) => (opts.onlyPending || String(d.createdAt ?? "") >= windowStart) && !DUPLICATE_BLOCKING_STATUSES.has(String(d.status)),
     );
+    existingPhoneHits = new Set(open.map((d) => String(d.phone)));
+    existingNidHits = new Set(open.map((d) => digitsOnly(String(d.documents?.nationalId ?? ""))).filter(Boolean));
   }
 
   for (const c of classified) {
@@ -1518,7 +1549,8 @@ async function buildImport(
       c.skip = "already_imported";
       continue;
     }
-    if (c.outcome === "pending_contact" && existingPhoneHits.has(phone)) {
+    const nid = digitsOnly(c.parsed.documents.nationalId);
+    if (c.outcome === "pending_contact" && (existingPhoneHits.has(phone) || (nid && existingNidHits.has(nid)))) {
       c.outcome = null;
       c.skip = "duplicate";
     }
@@ -1537,6 +1569,15 @@ async function buildImport(
     if (hit) c.hit = { ...hit, row: blacklistPool.find((e) => e.ref === hit.ref)?.row };
   }
 
+  // ---------- Sync จาก Google Sheet: เหลือเฉพาะรอการติดต่อ (หลังหา Blacklist hit แล้ว แถว Blacklist ยังใช้เทียบได้) ----------
+  if (opts.onlyPending) {
+    for (const c of classified) {
+      if (c.outcome === null || (c.outcome === "pending_contact" && !c.parsed.sheetProgressed)) continue;
+      c.outcome = null;
+      c.skip = "not_pending";
+    }
+  }
+
   // ---------- นับผล ----------
   const counts: Record<ImportOutcome, number> = { training: 0, working: 0, pending_contact: 0, blacklist: 0 };
   const skipped: Record<ImportSkipReason, number> = {
@@ -1544,6 +1585,7 @@ async function buildImport(
     resigned: 0,
     not_found_old: 0,
     duplicate: 0,
+    not_pending: 0,
     invalid: invalidCount,
   };
 
@@ -1651,10 +1693,7 @@ function reserveRefBlock(year: number, count: number): Promise<number> {
 /* ------------------------------------------------------------------ ทางเข้า */
 
 /** ตรวจไฟล์อย่างเดียว ไม่เขียนอะไรลงฐานข้อมูลทั้งสิ้น */
-export async function previewImport(
-  source: ImportSource,
-  opts: { recentDays: number; now?: Date },
-): Promise<ImportReport> {
+export async function previewImport(source: ImportSource, opts: ImportOptions): Promise<ImportReport> {
   const { report } = await buildImport(source, opts);
   return report;
 }
@@ -1663,11 +1702,7 @@ export async function previewImport(
  * นำเข้าจริง — ตรวจซ้ำเหมือน `previewImport()` ทุกขั้น แล้วค่อยเขียนเป็นก้อนสุดท้าย
  * `by` คือชื่อผู้กดนำเข้า (จาก `editor()`) ใช้ลงไทม์ไลน์ของใบที่ได้ผลลัพธ์ training/working
  */
-export async function commitImport(
-  source: ImportSource,
-  opts: { recentDays: number; now?: Date },
-  by: string,
-): Promise<ImportReport> {
+export async function commitImport(source: ImportSource, opts: ImportOptions, by: string): Promise<ImportReport> {
   const { report, toInsert } = await buildImport(source, opts);
   const now = opts.now ?? new Date();
   const importedAt = now.toISOString();

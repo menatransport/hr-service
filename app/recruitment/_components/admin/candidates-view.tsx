@@ -790,7 +790,7 @@ export function CandidatesView({
                   importLabel="นำเข้า · วางแถวใบสมัคร"
                   importHint="คัดลอกแถวจากชีต “การตอบแบบฟอร์ม 1”"
                   onSync={process.env.NODE_ENV === "development" ? () => setSyncMode("path") : undefined}
-                  syncHint="ชี้ path ไฟล์ใบสมัคร พจส. บนเครื่องนี้"
+                  syncHint="ดึงแท็บ “ผู้สมัคร” · เฉพาะรอการติดต่อ"
                   name="ผู้สมัคร"
                   count={visible.length}
                   className="ml-auto py-1 pr-1.5 pl-2.5 text-12"

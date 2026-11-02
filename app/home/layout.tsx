@@ -1,8 +1,11 @@
 import { Suspense } from "react";
 
 import { IdentityProvider } from "@/components/auth/identity-provider";
+import { MenuAccessProvider } from "@/components/auth/menu-access-provider";
 import { WelcomeToast } from "@/components/auth/welcome-toast";
 import { getDeskIdentity } from "@/lib/auth/session";
+import { getHiddenMenuIds } from "@/lib/menu-permissions";
+import { UatDock } from "@/components/uat/uat-dock";
 
 /**
  * ชั้นนอกของหน้าหลัก (`/home`) — ตัวตนผู้ใช้กับ toast ต้อนรับเท่านั้น ไม่มีเชลล์
@@ -15,15 +18,20 @@ import { getDeskIdentity } from "@/lib/auth/session";
  * ได้ เพราะเป็นของ `/home` เท่านั้น ไม่กระทบการ “บิน” ของเมนูไปเป็นแถบข้างใต้ `/desk`
  */
 export default async function HomeLayout({ children }: LayoutProps<"/home">) {
-  const identity = await getDeskIdentity();
+  const [identity, hidden] = await Promise.all([getDeskIdentity(), getHiddenMenuIds()]);
 
   return (
     <IdentityProvider identity={identity}>
+      {/* เมนูที่หน้า “กำหนดสิทธิ์” ซ่อนจากผู้ใช้คนนี้ — การ์ดกลุ่ม ไอคอนมือถือ และช่องค้นหาเมนูอ่านจากตัวนี้ */}
+      <MenuAccessProvider hidden={hidden}>
       {/* `useSearchParams` ต้องอยู่ใต้ Suspense เสมอ — ตัวนี้ไม่วาดอะไรอยู่แล้ว */}
       <Suspense fallback={null}>
         <WelcomeToast name={identity.firstName} />
       </Suspense>
       {children}
+      {/* UAT ชั่วคราว — ขึ้นเฉพาะผู้ทดสอบตอนเปิด UAT */}
+      <UatDock />
+      </MenuAccessProvider>
     </IdentityProvider>
   );
 }

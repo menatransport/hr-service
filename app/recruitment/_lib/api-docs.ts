@@ -165,7 +165,7 @@ export const API_GROUPS: ApiGroup[] = [
     id: "auth",
     title: "การยืนยันตัวตน",
     description:
-      "ล็อกอินด้วย Google (โดเมน menatransport.co.th) แล้วส่งต่อให้ NCAC ออกสิทธิ์ ระบบเก็บ session เป็นคุกกี้ `hrs.session` ที่ลงลายเซ็น HMAC-SHA256 อายุ 8 ชั่วโมง",
+      "ล็อกอินด้วย Google (โดเมน menatransport.co.th) แล้วส่งต่อให้ NCAC ออกสิทธิ์ ระบบเก็บ session เป็นคุกกี้ `hrs.session` ที่ลงลายเซ็น HMAC-SHA256 อายุ 3 เดือน",
     endpoints: [
       {
         method: "GET",

@@ -3,8 +3,8 @@ import { CONSENT_ITEMS } from "@/app/recruitment/_lib/consent";
 import {
   displayAnswer,
   findByRole,
+  formatNationalId,
   formatPhone,
-  maskNationalId,
   slotsForApplication,
   type DocSlot,
 } from "@/app/recruitment/_lib/form";
@@ -38,8 +38,7 @@ import {
  * มาจริง ไม่ใช่สิ่งที่ฝ่ายบุคคลแก้ในกล่อง · ค่าที่ระบบเติมเป็นหมึกน้ำเงินเหมือน
  * เอกสารฉบับอื่น ส่วนผลพิจารณากับลายเซ็นเว้นไว้เขียนมือ
  *
- * เลขบัตรประชาชนกับเลขบัญชีถูกปิดบางส่วนเหมือนรายงานเดิม — กระดาษที่พิมพ์ออกมา
- * วางทิ้งไว้บนโต๊ะได้ง่ายกว่าหน้าจอ คนที่ต้องเห็นเลขเต็มเปิดดูในระบบได้อยู่แล้ว
+ * เลขบัตรประชาชนพิมพ์เต็ม (Bew 2 พ.ย. 2569 — ใช้ตรวจตัวผู้สมัคร) ส่วนเลขบัญชียังปิดบางส่วน
  */
 
 const SECTION_NO = ["๑", "๒", "๓", "๔", "๕", "๖", "๗", "๘"];
@@ -65,6 +64,13 @@ export function ApplicantProfile({
     return q ? answerText(application, q) : "";
   };
   const ready = answerOf("ready_date");
+  /* เลขบัตร: ค่าที่ถอดจากรูปบัตรก่อน (ฝ่ายบุคคลตรวจแล้ว) แล้วค่อยคำตอบในฟอร์ม · ใบขับขี่มีแค่จากเอกสาร */
+  const nidQuestion = snapshot.find((q) => q.kind === "nid" || q.key === "national_id");
+  const nationalId = application.documents.nationalId
+    ? docValue(application.documents, "nationalId")
+    : nidQuestion
+      ? answerText(application, nidQuestion)
+      : "";
 
   const status =
     application.status === "cancelled"
@@ -106,6 +112,8 @@ export function ApplicantProfile({
               <Kv label="วันที่สมัคร" value={thaiDateTime(application.createdAt)} />
               <Kv label="ชื่อ–นามสกุล" value={application.fullName} strong />
               <Kv label="เบอร์โทรศัพท์" value={formatPhone(application.phone)} />
+              <Kv label="เลขบัตรประชาชน" value={nationalId} />
+              <Kv label="เลขที่ใบขับขี่" value={docValue(application.documents, "licenseNo")} />
               <Kv
                 label="ตำแหน่งที่สมัคร"
                 value={requisition ? `${requisitionPosition(requisition)} (${requisition.code})` : ""}
@@ -320,21 +328,21 @@ function Kv({ label, value, strong = false }: { label: string; value: string; st
   );
 }
 
-/** คำตอบหนึ่งข้อบนกระดาษ — เลขบัตรปิดบางส่วน · เบอร์มีขีด · วันที่เป็น พ.ศ. เต็ม */
+/** คำตอบหนึ่งข้อบนกระดาษ — เลขบัตรมีขีดตามบัตร · เบอร์มีขีด · วันที่เป็น พ.ศ. เต็ม */
 function answerText(application: Application, q: QuestionSnapshot): string {
   const raw = application.answers[q.key];
-  if (q.kind === "nid") return maskNationalId(String(raw ?? ""));
+  if (q.kind === "nid") return formatNationalId(String(raw ?? ""));
   if (q.kind === "tel") return formatPhone(String(raw ?? ""));
   if (q.kind === "date") return thaiLongDate(String(raw ?? ""));
   const text = displayAnswer(raw, q.options);
   return text === "—" ? "" : text;
 }
 
-/** ค่าจากเอกสาร — เลขบัตร/เลขบัญชีปิดบางส่วน · วันที่เป็น พ.ศ. */
+/** ค่าจากเอกสาร — เลขบัตรเต็ม · เลขบัญชีปิดบางส่วน · วันที่เป็น พ.ศ. */
 function docValue(documents: DocumentData, key: keyof DocumentData): string {
   const raw = documents[key];
   if (!raw) return "";
-  if (key === "nationalId") return maskNationalId(raw);
+  if (key === "nationalId") return formatNationalId(raw);
   if (key === "bankAccountNo") {
     return raw.length > 4 ? `${"x".repeat(raw.length - 4)}${raw.slice(-4)}` : raw;
   }

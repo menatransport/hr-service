@@ -5,6 +5,7 @@ import type { NextRequest } from "next/server";
 import { badRequest, ok } from "@/app/api/_lib/respond";
 import { editor, failRecruitment, unauthorized } from "@/app/api/recruitment/_lib";
 import { commitImport, previewImport, type ImportSource } from "@/app/recruitment/_lib/form-import";
+import { fetchGoogleSheetXlsx, googleSheetId } from "@/lib/google-sheet";
 
 /**
  * `POST /api/recruitment/import` — Sync ใบสมัครจาก Google Form (ชีต “การตอบแบบฟอร์ม 1”) เข้าหน้าผู้สมัคร
@@ -14,6 +15,8 @@ import { commitImport, previewImport, type ImportSource } from "@/app/recruitmen
  * - `multipart/form-data` — `file` ไฟล์ `.xlsx` ไม่เกิน 10 MB · `commit`
  * - JSON `{ "path": "C:\…\ใบสมัครงาน พจส.xlsx", "commit": false }` — **เฉพาะ `next dev`** อ่านไฟล์บนเครื่องที่รันเซิร์ฟเวอร์
  * - JSON `{ "text": "<แถวที่คัดลอกจากชีต>", "commit": false }` — วางแถวจาก Excel/Google Sheets (มีหรือไม่มีแถวหัวตารางก็ได้)
+ * - JSON `{ "path": "https://docs.google.com/spreadsheets/d/…", "commit": false }` — **เฉพาะ `next dev`** ดึง Google Sheet
+ *   (แท็บที่หัวตารางมี “ประทับเวลา” เช่น “ผู้สมัคร”) · รับเฉพาะใบที่ได้ **รอการติดต่อ** (`onlyPending`)
  *
  * `recentDays` (1–60 ค่าเริ่มต้น 5) ใช้เฉพาะตอนที่ยังไม่เคยนำเข้าเลย — ปกติใบใหม่ = ส่งหลังใบล่าสุดที่เคยนำเข้า
  * · `commit` = `true` เขียนจริง อย่างอื่น = ตรวจอย่างเดียว · ทั้งสองคืน `ImportReport` รูปเดียวกัน
@@ -31,7 +34,7 @@ function parseRecentDays(raw: unknown): number {
   return Math.min(60, Math.max(1, n));
 }
 
-type Parsed = { source: ImportSource; commit: boolean; recentDays: number } | { error: string };
+type Parsed = { source: ImportSource; commit: boolean; recentDays: number; onlyPending?: boolean } | { error: string };
 
 async function readJson(request: NextRequest): Promise<Parsed> {
   const body = (await request.json().catch(() => null)) as
@@ -49,7 +52,8 @@ async function readJson(request: NextRequest): Promise<Parsed> {
   if (process.env.NODE_ENV !== "development") return { error: "Sync จาก path ใช้ได้เฉพาะโหมด dev" };
   // วาง path จาก “Copy as path” ของ Windows มาจะติดเครื่องหมายคำพูด
   const file = typeof body?.path === "string" ? body.path.trim().replace(/^["']|["']$/g, "") : "";
-  if (!file.toLowerCase().endsWith(".xlsx")) return { error: "ต้องเป็นไฟล์ .xlsx" };
+  if (googleSheetId(file)) return { source: { buffer: await fetchGoogleSheetXlsx(file) }, commit, recentDays, onlyPending: true };
+  if (!file.toLowerCase().endsWith(".xlsx")) return { error: "ต้องเป็นไฟล์ .xlsx หรือลิงก์ Google Sheet" };
   if (!path.isAbsolute(file)) return { error: "ใส่ path เต็ม เช่น C:\Users\…\ไฟล์.xlsx" };
   const buffer = await fs.readFile(file).catch(() => null);
   if (!buffer) return { error: "ไม่พบไฟล์ — ตรวจ path อีกครั้ง" };
@@ -78,10 +82,10 @@ export async function POST(request: NextRequest) {
     const parsed = isJson ? await readJson(request) : await readForm(request);
     if ("error" in parsed) return badRequest(parsed.error);
 
-    const { source, commit, recentDays } = parsed;
+    const { source, commit, recentDays, onlyPending } = parsed;
     const report = commit
-      ? await commitImport(source, { recentDays }, who)
-      : await previewImport(source, { recentDays });
+      ? await commitImport(source, { recentDays, onlyPending }, who)
+      : await previewImport(source, { recentDays, onlyPending });
 
     return ok(report);
   } catch (err) {

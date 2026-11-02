@@ -85,6 +85,8 @@ export interface FieldSpec {
   day?: number;
   /** ช่องที่ทำให้ขั้นนี้ “เสร็จ” (ตรงกับ `stepStates`) — ฟอร์มขึ้น * แดง แต่ยังบันทึกได้แม้ว่าง */
   required?: boolean;
+  /** วันที่ของเหตุการณ์ที่เกิดแล้ว — เซิร์ฟเวอร์ไม่รับวันในอนาคต (วันรับรถจริงทำให้ใบสมัครเป็น “ปฏิบัติงาน” ทันที) */
+  past?: boolean;
 }
 
 /** ช่องนี้ใช้กับค่าชุดนี้ไหม (เงื่อนไข `when` / `after`) */
@@ -190,7 +192,7 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
     id: "handover",
     fields: [
       { key: "dueOn", label: "ครบกำหนดฝึก", kind: "date" },
-      { key: "handoverOn", label: "วันรับรถจริง", kind: "date", required: true },
+      { key: "handoverOn", label: "วันรับรถจริง", kind: "date", required: true, past: true },
       { key: "result", label: "ผลรับรถ", kind: "select", options: HANDOVER_RESULTS },
       { key: "note", label: "หมายเหตุ", kind: "textarea", wide: true },
     ],

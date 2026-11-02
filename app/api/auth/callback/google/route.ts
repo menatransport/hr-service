@@ -9,10 +9,9 @@ import {
   STATE_COOKIE,
   safeNextPath,
   signSession,
-  type SessionUser,
 } from "@/lib/auth/token";
+import { toSessionUser } from "@/lib/auth/user";
 import { NcacError, loginWithGoogle } from "@/lib/ncac/client";
-import type { AuthUserDto } from "@/lib/ncac/types";
 
 /**
  * `GET /api/auth/callback/google` — ขากลับจาก Google
@@ -43,26 +42,6 @@ function backToLogin(
   response.cookies.delete(STATE_COOKIE);
   response.cookies.delete(NEXT_COOKIE);
   return response;
-}
-
-const text = (value: string | null | undefined): string => value?.trim() ?? "";
-
-function toSessionUser(user: AuthUserDto): SessionUser {
-  const employeeId = text(user.employee_id) || text(user.username);
-  const name = `${text(user.firstname)} ${text(user.lastname)}`.trim();
-
-  return {
-    employeeId,
-    username: text(user.username),
-    name: name || employeeId,
-    firstName: text(user.firstname) || name || employeeId,
-    position: text(user.position) || "—",
-    department: text(user.department) || "—",
-    departmentId: typeof user.department_id === "number" ? user.department_id : null,
-    positionLevel: text(user.position_level) || null,
-    site: text(user.site) || "—",
-    imageUrl: text(user.image_url) || null,
-  };
 }
 
 export async function GET(request: NextRequest) {

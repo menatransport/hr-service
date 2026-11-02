@@ -158,6 +158,26 @@ export interface UserDto {
   image_url?: string | null;
 }
 
+/** แถวของ `GET /departments/` — แผนก พร้อมฝ่ายที่สังกัด (join มาให้แล้ว) */
+export interface DepartmentDto {
+  department_id: number;
+  department_name_th: string | null;
+  department_name_en: string | null;
+  division_id: number | null;
+  division_th?: string | null;
+  division_eng?: string | null;
+  division_code?: string | null;
+}
+
+/** แถวของ `GET /divisions/` — ฝ่าย (`path_id` = สายงาน) */
+export interface DivisionDto {
+  division_id: number;
+  division_th: string | null;
+  division_eng: string | null;
+  division_code: string | null;
+  path_id?: number | null;
+}
+
 /**
  * ผู้ใช้ที่ `POST /auth/login/google` ตอบกลับมา — **ไม่ใช่สคีมาเดียวกับ `UserResponse`**
  *

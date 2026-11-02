@@ -24,8 +24,13 @@ export function safeNextPath(value: string | null | undefined): string | null {
   return value;
 }
 
-/** อายุ session — 1 วันทำงาน หมดแล้วเด้งกลับหน้าล็อกอิน */
-export const SESSION_MAX_AGE_SEC = 8 * 60 * 60;
+/**
+ * อายุ session — 3 เดือน (90 วัน) หมดแล้วเด้งกลับหน้าล็อกอิน
+ *
+ * ยาวได้เพราะทุกครั้งที่เปิดหน้า `proxy.ts` อ่านผู้ใช้ใหม่จาก NCAC — ลาออก (Inactive)
+ * หรือรหัสหายไปจากระบบเมื่อไหร่ session ถูกตัดทันที ไม่ต้องรอครบอายุ
+ */
+export const SESSION_MAX_AGE_SEC = 90 * 24 * 60 * 60;
 
 /** ผู้ใช้ที่ล็อกอินอยู่ — ชุดย่อของ `user` ที่ `POST /auth/login/google` ตอบกลับมา */
 export interface SessionUser {

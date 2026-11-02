@@ -1,12 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Camera,
+  Check,
+  ExternalLink,
   Loader2,
-  ScanLine,
+  RotateCw,
   Trash2,
   TriangleAlert,
+  Upload,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 import { DateField, TextField } from "@/components/ui/field";
@@ -41,14 +46,16 @@ import {
  * สิ่งที่ผู้สมัครพิมพ์มา ส่วนนี่คือสิ่งที่เอกสารราชการเขียนไว้ · ไม่ตรงกันได้บ่อย
  * และเวลาไม่ตรง ฝ่ายบุคคลต้องเห็นทั้งสองค่า ไม่ใช่ให้ค่าหนึ่งทับอีกค่าเงียบ ๆ
  *
- * ปุ่ม **“อ่านข้อมูลจากเอกสาร”** ยังกดไม่ได้ — ระบบอ่านเอกสารอัตโนมัติยังไม่ได้
- * ต่อเข้ามา · เหลือปุ่มไว้พร้อมข้อความบอกตรง ๆ ว่ายังไม่ทำงาน ดีกว่าซ่อนทิ้งแล้ว
- * ไม่มีใครรู้ว่าช่องพวกนี้ออกแบบมาให้เครื่องเติมให้ · ตอนนี้กรอกมือได้ทุกช่อง
- * และทุกช่องถูกตรวจรูปแบบตามเอกสารไทยจริง (เลขบัตร 13 หลักตรวจหลักสุดท้าย ·
- * เลขประจำบ้าน 11 หลัก · เลขที่บัญชี 10–15 หลัก)
+ * ทรง (Bew 2 พ.ย. 2569): ซ้ายเป็นรายการเอกสาร · ขวาเป็นรูปใหญ่ของเอกสารที่เลือก
+ * ข้างช่องกรอกของมัน ให้อ่านจากรูปแล้วพิมพ์ได้โดยไม่ต้องเลื่อนหา · รูปซูม/หมุนได้
+ * เพราะรูปจากมือถือมักตะแคงและตัวเลขบนบัตรเล็ก · ช่องที่ซ้ำกับคำตอบในใบสมัคร
+ * (`legacy`) ไม่ขึ้นให้กรอกแล้ว
  */
 
 const MAX_MB = 10;
+const ZOOM = 2.5;
+
+const FORM_FIELDS = DOCUMENT_FIELDS.filter((f) => !f.legacy);
 
 export function CandidateDocumentsModal({
   application,
@@ -86,6 +93,13 @@ export function CandidateDocumentsModal({
   const [documents, setDocuments] = useState<DocumentData>(() => ({
     ...application.documents,
   }));
+  /* เริ่มที่เอกสารแรกที่มีรูปและมีช่องให้กรอก — คืองานที่ต้องทำก่อน */
+  const [active, setActive] = useState(
+    () =>
+      slots.find((s) => files[s.id] && FORM_FIELDS.some((f) => f.slot === s.id))?.id ??
+      slots[0]?.id ??
+      "",
+  );
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState("");
@@ -102,13 +116,15 @@ export function CandidateDocumentsModal({
 
   async function save() {
     const found: Record<string, string> = {};
-    for (const field of DOCUMENT_FIELDS) {
+    for (const field of FORM_FIELDS) {
       const message = validateDocumentField(field, documents[field.key]);
       if (message) found[field.key] = message;
     }
     if (Object.keys(found).length) {
       setErrors(found);
-      setFailure("ยังมีช่องที่กรอกไม่ถูกต้อง — ดูข้อความใต้ช่องที่ขอบแดง");
+      const first = FORM_FIELDS.find((f) => found[f.key]);
+      if (first) setActive(first.slot);
+      setFailure("ยังมีช่องที่กรอกไม่ถูกต้อง");
       return;
     }
 
@@ -130,6 +146,8 @@ export function CandidateDocumentsModal({
     slots.filter((s) => files[s.id]).map((s) => ({ slot: s.id, label: s.label })),
   ).length;
 
+  const current = slots.find((s) => s.id === active);
+
   return (
     <ModalShell
       title="เอกสารและข้อมูลจากเอกสาร"
@@ -145,7 +163,7 @@ export function CandidateDocumentsModal({
         </span>
       }
       onClose={onClose}
-      width="820px"
+      width="1080px"
       tone="plain"
       footer={
         <>
@@ -179,55 +197,89 @@ export function CandidateDocumentsModal({
           role="alert"
           className="flex items-start gap-2 rounded-field bg-alert/10 px-3 py-2.5 text-12-5 text-alert"
         >
-          <TriangleAlert
-            size={14}
-            strokeWidth={2}
-            aria-hidden
-            className="mt-0.5 flex-none"
-          />
+          <TriangleAlert size={14} strokeWidth={2} aria-hidden className="mt-0.5 flex-none" />
           {failure}
         </p>
       ) : null}
 
-      {/* ปุ่มอ่านอัตโนมัติยังไม่ทำงาน — บอกตรง ๆ ตรงนี้ดีกว่าให้กดแล้วเงียบ */}
-      <div className="flex flex-wrap items-center gap-3 rounded-box border border-dashed border-line px-3.5 py-3">
-        <button
-          type="button"
-          disabled
-          title="ยังไม่ได้เชื่อมระบบอ่านเอกสาร"
-          className="flex flex-none items-center gap-2 rounded-field border border-line px-3 py-2 text-12-5 text-mut opacity-60"
+      <fieldset
+        disabled={saving}
+        className="grid min-w-0 gap-4 md:grid-cols-[208px_minmax(0,1fr)]"
+      >
+        {/* รายการเอกสาร — มือถือเป็นแถบเลื่อนข้าง จอใหญ่เป็นคอลัมน์ซ้าย */}
+        <nav
+          aria-label="เอกสาร"
+          className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0"
         >
-          <ScanLine size={14} strokeWidth={2} aria-hidden />
-          อ่านข้อมูลจากเอกสาร
-        </button>
-        <p className="min-w-0 flex-1 text-12 leading-relaxed text-mut text-pretty">
-          ระบบอ่านเอกสารอัตโนมัติยังไม่ได้เชื่อมต่อ — ตอนนี้กรอกข้อมูลเองได้ทุกช่อง
-          ระบบตรวจรูปแบบตามเอกสารไทยให้แล้ว
-        </p>
-      </div>
+          {slots.map((slot) => {
+            const fields = FORM_FIELDS.filter((f) => f.slot === slot.id);
+            const filled = fields.filter((f) => documents[f.key]).length;
+            const hasError = fields.some((f) => errors[f.key]);
+            const url = files[slot.id];
+            const on = slot.id === active;
+            return (
+              <button
+                key={slot.id}
+                type="button"
+                onClick={() => setActive(slot.id)}
+                aria-current={on ? "true" : undefined}
+                className={`flex min-w-[176px] flex-none items-center gap-2.5 rounded-field border px-2 py-1.5 text-left transition-colors md:min-w-0 ${
+                  on
+                    ? "border-primary/50 bg-primary/8"
+                    : "border-transparent hover:bg-base-200"
+                }`}
+              >
+                <span className="flex h-9 w-12 flex-none items-center justify-center overflow-hidden rounded-selector border border-line bg-base-200">
+                  {url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt="" loading="lazy" className="size-full object-cover" />
+                  ) : (
+                    <Camera size={13} strokeWidth={1.8} aria-hidden className="text-mut" />
+                  )}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-12-5 font-medium">{slot.label}</span>
+                  <span
+                    className={`truncate text-11 ${hasError ? "text-alert" : "text-mut"}`}
+                  >
+                    {!url
+                      ? slot.required && slot.visible
+                        ? "ยังไม่แนบ · จำเป็น"
+                        : "ยังไม่แนบ"
+                      : fields.length
+                        ? `กรอก ${filled}/${fields.length}`
+                        : "แนบแล้ว"}
+                  </span>
+                </span>
+                {url && (!fields.length || filled === fields.length) && !hasError ? (
+                  <Check size={13} strokeWidth={2.4} aria-hidden className="flex-none text-st-ok-ink" />
+                ) : null}
+              </button>
+            );
+          })}
+        </nav>
 
-      <fieldset disabled={saving} className="flex flex-col gap-5">
-        {slots.map((slot) => (
-          <SlotBlock
-            key={slot.id}
+        {current ? (
+          <SlotPanel
+            key={current.id}
             applicationId={application.id}
-            slot={slot}
-            url={files[slot.id] ?? null}
-            onUrl={(url) => setFiles((prev) => ({ ...prev, [slot.id]: url }))}
-            fields={DOCUMENT_FIELDS.filter((f) => f.slot === slot.id)}
+            slot={current}
+            url={files[current.id] ?? null}
+            onUrl={(url) => setFiles((prev) => ({ ...prev, [current.id]: url }))}
+            fields={FORM_FIELDS.filter((f) => f.slot === current.id)}
             documents={documents}
             errors={errors}
             onField={setField}
           />
-        ))}
+        ) : null}
       </fieldset>
     </ModalShell>
   );
 }
 
-/* ─────────────────────────────────────────── หนึ่งเอกสาร = หนึ่งบล็อก */
+/* ─────────────────────────────────────────── เอกสารที่เลือก: รูป + ช่องกรอก */
 
-function SlotBlock({
+function SlotPanel({
   applicationId,
   slot,
   url,
@@ -285,11 +337,9 @@ function SlotBlock({
   const hasData = fields.length > 0;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2.5">
-        <span className="text-12-5 font-semibold tracking-[0.04em]">
-          {slot.label}
-        </span>
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-14 font-semibold">{slot.label}</span>
         {!slot.visible ? (
           <span className="rounded-full bg-base-200 px-1.5 py-0.5 text-10-5 text-mut">
             ไม่อยู่ในฟอร์มผู้สมัคร
@@ -299,84 +349,72 @@ function SlotBlock({
             ไม่บังคับ
           </span>
         )}
-        <span aria-hidden className="h-px flex-1 bg-line" />
-      </div>
-
-      <div className={`grid gap-3 ${hasData ? "sm:grid-cols-[168px_1fr]" : ""}`}>
-        {/* รูปจริง ไม่ใช่ไอคอนติ๊กถูก — คนตรวจต้องเห็นว่าใบไหนเบลอก่อนจะเชื่อ
-            ตัวเลขที่กรอกอยู่ข้าง ๆ · `<img>` ตรง ๆ เพราะ `/api/media/…` เด้งต่อไป
-            ลิงก์ presigned ของ S3 ซึ่ง `next/image` ตามไม่ได้ */}
-        <div className="flex flex-col gap-1.5">
+        <span className="ml-auto flex items-center gap-1">
           <button
             type="button"
             onClick={() => input.current?.click()}
             disabled={busy}
-            className={`relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded-box border transition-colors disabled:opacity-70 ${
-              url
-                ? "border-line hover:border-primary/45"
-                : "border-dashed border-line bg-base-200 hover:border-primary/40"
-            }`}
+            className="btn-sec flex items-center gap-1.5 px-2.5 py-1.5 text-12 disabled:opacity-50"
           >
-            {url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={url}
-                alt={slot.label}
-                loading="lazy"
-                decoding="async"
-                className="size-full object-cover"
-              />
-            ) : (
-              <span className="flex flex-col items-center gap-1 text-mut">
-                <Camera size={18} strokeWidth={1.8} aria-hidden />
-                <span className="text-11-5">แนบเอกสาร</span>
-              </span>
-            )}
-
-            {busy ? (
-              <span className="absolute inset-0 flex items-center justify-center bg-base-100/75 text-primary">
-                <Loader2 size={18} strokeWidth={2} aria-hidden className="animate-spin" />
-              </span>
-            ) : null}
+            <Upload size={12} strokeWidth={2} aria-hidden />
+            {url ? "เปลี่ยนรูป" : "แนบรูป"}
           </button>
-
-          <input
-            ref={input}
-            type="file"
-            accept={ACCEPT_ATTR}
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) void upload(file);
-            }}
-          />
-
-          <div className="flex items-center gap-2 text-11-5">
-            <span className="min-w-0 flex-1 truncate text-mut">
-              {url ? "แนบแล้ว" : "ยังไม่ได้แนบ"}
-            </span>
-            {url ? (
+          {url ? (
+            <>
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                title="เปิดรูปเต็มในแท็บใหม่"
+                className="flex items-center rounded-selector p-1.5 text-mut transition-colors hover:text-primary"
+              >
+                <ExternalLink size={14} strokeWidth={2} aria-hidden />
+                <span className="sr-only">เปิดรูปเต็มในแท็บใหม่</span>
+              </a>
               <button
                 type="button"
                 onClick={() => onUrl(null)}
-                className="flex items-center gap-1 rounded-selector px-1 py-0.5 text-mut transition-colors hover:text-alert"
+                title="เอารูปออก"
+                className="flex items-center rounded-selector p-1.5 text-mut transition-colors hover:text-alert"
               >
-                <Trash2 size={11} strokeWidth={2} aria-hidden />
-                เอาออก
+                <Trash2 size={14} strokeWidth={2} aria-hidden />
+                <span className="sr-only">เอารูปออก</span>
               </button>
-            ) : null}
-          </div>
-
-          {error ? (
-            <p role="alert" className="text-11-5 text-alert">
-              {error}
-            </p>
+            </>
           ) : null}
-        </div>
+        </span>
+        <input
+          ref={input}
+          type="file"
+          accept={ACCEPT_ATTR}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void upload(file);
+          }}
+        />
+      </div>
+
+      {error ? (
+        <p role="alert" className="text-12 text-alert">
+          {error}
+        </p>
+      ) : null}
+
+      <div className={`grid min-w-0 gap-4 ${hasData ? "lg:grid-cols-[minmax(0,1fr)_260px]" : ""}`}>
+        {/* `key` = รูปใหม่เริ่มมุมตรง ไม่ซูม */}
+        <Preview
+          key={url ?? ""}
+          url={url}
+          label={slot.label}
+          busy={busy}
+          onPick={() => input.current?.click()}
+          onDrop={(file) => void upload(file)}
+        />
 
         {hasData ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
             {fields.map((field) => (
               <DocField
                 key={field.key}
@@ -389,6 +427,158 @@ function SlotBlock({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * รูปเอกสารขนาดใหญ่ — คลิกซูมตรงจุดที่ชี้ (ขยับเมาส์เพื่อเลื่อนดู) · หมุนทีละ 90°
+ * · ยังไม่มีรูป = กดหรือลากไฟล์มาวางเพื่อแนบ
+ *
+ * ซูมที่กล่องนอก หมุนที่รูปข้างใน — จุดซูมจึงคิดจากพิกัดบนจอตรง ๆ ไม่ต้องแปลงตามมุมหมุน
+ * · `<img>` ตรง ๆ เพราะ `/api/media/…` เด้งต่อไปลิงก์ presigned ของ S3 ซึ่ง
+ * `next/image` ตามไม่ได้
+ */
+function Preview({
+  url,
+  label,
+  busy,
+  onPick,
+  onDrop,
+}: {
+  url: string | null;
+  label: string;
+  busy: boolean;
+  onPick: () => void;
+  onDrop: (file: File) => void;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(false);
+  const [origin, setOrigin] = useState("50% 50%");
+  const [turn, setTurn] = useState(0);
+  const [over, setOver] = useState(false);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) =>
+      setSize({ w: entry.contentRect.width, h: entry.contentRect.height }),
+    );
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  function aim(e: React.MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    setOrigin(
+      `${(((e.clientX - r.left) / r.width) * 100).toFixed(1)}% ${(((e.clientY - r.top) / r.height) * 100).toFixed(1)}%`,
+    );
+  }
+
+  const sideways = turn % 2 === 1;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div
+        ref={box}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) onDrop(file);
+        }}
+        className={`relative h-[min(56vh,460px)] min-h-[260px] overflow-hidden rounded-box border ${
+          over
+            ? "border-primary bg-primary/8"
+            : url
+              ? "border-line bg-base-200"
+              : "border-dashed border-line bg-base-200"
+        }`}
+      >
+        {url ? (
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={zoom ? "ย่อรูป" : "ซูมรูป"}
+            onClick={(e) => {
+              aim(e);
+              setZoom((z) => !z);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setZoom((z) => !z);
+              }
+            }}
+            onMouseMove={zoom ? aim : undefined}
+            className={`flex size-full items-center justify-center transition-transform duration-150 ${
+              zoom ? "cursor-zoom-out" : "cursor-zoom-in"
+            }`}
+            style={{ transform: `scale(${zoom ? ZOOM : 1})`, transformOrigin: origin }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={label}
+              decoding="async"
+              draggable={false}
+              className="flex-none object-contain"
+              style={{
+                width: sideways ? size.h : size.w,
+                height: sideways ? size.w : size.h,
+                transform: `rotate(${turn * 90}deg)`,
+              }}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onPick}
+            className="flex size-full flex-col items-center justify-center gap-2 text-mut transition-colors hover:text-primary"
+          >
+            <Camera size={22} strokeWidth={1.6} aria-hidden />
+            <span className="text-12-5">กดเพื่อแนบรูป หรือลากไฟล์มาวาง</span>
+          </button>
+        )}
+
+        {busy ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-base-100/75 text-primary">
+            <Loader2 size={20} strokeWidth={2} aria-hidden className="animate-spin" />
+          </span>
+        ) : null}
+      </div>
+
+      {url ? (
+        <div className="flex items-center gap-1 text-11-5 text-mut">
+          <span className="mr-auto">คลิกที่รูปเพื่อซูม</span>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => !z)}
+            className="flex items-center gap-1 rounded-selector px-1.5 py-1 transition-colors hover:text-primary"
+          >
+            {zoom ? (
+              <ZoomOut size={13} strokeWidth={2} aria-hidden />
+            ) : (
+              <ZoomIn size={13} strokeWidth={2} aria-hidden />
+            )}
+            {zoom ? "ย่อ" : "ซูม"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTurn((t) => (t + 1) % 4)}
+            className="flex items-center gap-1 rounded-selector px-1.5 py-1 transition-colors hover:text-primary"
+          >
+            <RotateCw size={13} strokeWidth={2} aria-hidden />
+            หมุน
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

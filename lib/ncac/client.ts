@@ -7,6 +7,8 @@ import type {
   ComplaintMasterDto,
   ComplaintMasterPatch,
   ComplaintPatch,
+  DepartmentDto,
+  DivisionDto,
   GoogleLoginResponse,
   ReviewAction,
   UserDto,
@@ -65,7 +67,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...init?.headers },
       // เคสเปลี่ยนสถานะตลอด — ห้าม cache ไม่งั้นกดอนุมัติแล้วหน้ายังเป็นค่าเดิม
       cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      // ผู้เรียกส่ง `signal` ของตัวเองมาได้ — เส้นที่ขวางการเปิดหน้า (เช่น `proxy.ts`) รอนานไม่ได้
+      signal: init?.signal ?? AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -304,8 +307,8 @@ export function listUsers(): Promise<UserDto[]> {
 }
 
 /** พนักงานคนเดียว — ต่างจาก `/users` ตรงที่ไม่ต้องดึงทั้งบริษัทมาค้นเอง */
-export function getUser(employeeId: string): Promise<UserDto> {
-  return call<UserDto>(`/users/${encodeURIComponent(employeeId)}`);
+export function getUser(employeeId: string, init?: RequestInit): Promise<UserDto> {
+  return call<UserDto>(`/users/${encodeURIComponent(employeeId)}`, init);
 }
 
 /**
@@ -320,4 +323,16 @@ export function updateUser(
     method: "PUT",
     body: JSON.stringify(patch),
   });
+}
+
+/* ---------------------------------------------------------------- โครงสร้างองค์กร */
+
+/** แผนกทั้งหมด — แต่ละแถวมี `division_id` ของฝ่ายที่สังกัดมาด้วย */
+export function listDepartments(): Promise<DepartmentDto[]> {
+  return call<DepartmentDto[]>("/departments/");
+}
+
+/** ฝ่ายทั้งหมด — รวมฝ่ายที่ยังไม่มีแผนกด้วย (`/departments/` ไม่มีแถวของฝ่ายพวกนั้น) */
+export function listDivisions(): Promise<DivisionDto[]> {
+  return call<DivisionDto[]>("/divisions/");
 }

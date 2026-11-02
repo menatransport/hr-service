@@ -1,5 +1,6 @@
 /**
- * นำเข้าทะเบียนประวัติ พจส. จากไฟล์ฝ่ายบุคคล (`HR_ทะเบียนประวัติพจส.ลาดกระบัง Mixer.xlsx` ชีต “ทะเบียน 2026”)
+ * นำเข้าทะเบียนประวัติ พจส. จากไฟล์ฝ่ายบุคคล (`HR_ทะเบียนประวัติพจส.ลาดกระบัง Mixer.xlsx` ชีต “ทะเบียน 2026”
+ * หรือ Google Sheet ที่ส่งออกเป็น .xlsx แท็บ “ทะเบียนประวัติ” — `/api/drivers/excel-sync`)
  * ลง `hr_service.master_driver` — ทะเบียนตัวจริงของหน้า `/recruitment/admin/drivers` (ดู `app/recruitment/_lib/drivers/master.ts`)
  *
  *   node import_driver_registry_xlsx.mjs [ไฟล์]            → ลองอ่านเฉย ๆ (dry run) พิมพ์สรุป ไม่เขียนอะไร
@@ -15,6 +16,9 @@
  * รันซ้ำได้ — ไฟล์ชนะเรื่องประวัติ **ยกเว้นของที่ฝ่ายบุคคลแก้เองบนหน้าทะเบียน**: สถานะ (ดูจาก
  * `resignation.recordedBy`) · ช่องประวัติที่แก้ผ่าน “แก้ไขข้อมูล” (`editedFields`) · รูป/แฟ้มเอกสาร/
  * วันหมดอายุบัตรที่กรอกไว้แล้ว — ไม่ถูกแตะ
+ *
+ * กันซ้ำ (Bew 2 พ.ย. 2569): รหัสพนักงานซ้ำในไฟล์ = ข้ามทุกแถวของรหัสนั้น · คนใหม่ (รหัสยังไม่อยู่ในระบบ)
+ * ที่เลขบัตรประชาชนตรงกับ พจส. ที่ยังปฏิบัติงานอยู่ในระบบคนละรหัส = ข้าม (ฝ่ายบุคคลเช็กก่อน)
  */
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -67,9 +71,11 @@ const { default: ExcelJS } = await import("exceljs");
 
 const SOURCE = "excel-2026";
 const BY = "นำเข้าจาก Excel ทะเบียน 2026";
-const SHEET = "ทะเบียน 2026";
-/** แถวหัวตาราง (แถว 1–2 เป็นชื่อไฟล์กับหมายเหตุ) */
-const HEADER_ROW = 3;
+/** ชีตที่อ่าน — ไฟล์ Excel ของฝ่ายบุคคล · แท็บของ Google Sheet */
+const SHEETS = ["ทะเบียน 2026", "ทะเบียนประวัติ"];
+/** แถวหัวตาราง = แถวแรกที่มีคอลัมน์ “รหัสพนักงาน” (Excel: แถว 3 · Google Sheet: แถว 1) */
+const HEADER_SCAN_ROWS = 5;
+let SHEET = SHEETS[0];
 /** หน้าทะเบียนแบ่งสาขาด้วยรหัส ATMS — ไฟล์นี้เป็นของลาดกระบังทั้งไฟล์ (`DRIVER_SITES`) */
 const BRANCH = "2";
 
@@ -130,6 +136,8 @@ const THAI_MONTHS = ["มค", "กพ", "มีค", "เมย", "พค", "�
 function dateOf(v, range = [1950, 2100]) {
   let out = "";
   if (v instanceof Date) out = iso(v);
+  /* Google Sheet ส่งผลของสูตรวันที่ออกมาเป็นเลข serial ของ Excel (46297 = 2026-10-02) · ปี พ.ศ. ให้ `iso()` จัดการ */
+  else if (typeof v === "number" && v > 10_000 && v < 300_000) out = iso(new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86_400_000));
   else {
     const s = str(v);
     const slash = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(s);
@@ -260,13 +268,17 @@ async function readSheet() {
   });
 
   for await (const ws of reader) {
-    if (ws.name !== SHEET) continue;
+    if (!SHEETS.includes(ws.name)) continue;
+    SHEET = ws.name;
     let index = null;
     const rows = [];
     for await (const row of ws) {
-      if (row.number < HEADER_ROW) continue;
       const cells = row.values; // 1-based
-      if (row.number === HEADER_ROW) {
+      if (!index) {
+        if (!cells.some((v) => headerKey(raw(v)) === COLUMNS.code)) {
+          if (row.number >= HEADER_SCAN_ROWS) throw new Error(`ไม่พบแถวหัวตาราง (คอลัมน์ “${COLUMNS.code}”) ในชีต “${SHEET}”`);
+          continue;
+        }
         /* `row.values` เป็น array เว้นช่อง (คอลัมน์ว่าง) — `forEach` ข้ามช่องว่างให้ */
         const at = new Map();
         cells.forEach((v, i) => at.set(headerKey(raw(v)), i));
@@ -287,7 +299,7 @@ async function readSheet() {
     }
     return rows;
   }
-  throw new Error(`ไม่พบชีต “${SHEET}” ในไฟล์`);
+  throw new Error(`ไม่พบชีต ${SHEETS.map((n) => `“${n}”`).join(" / ")} ในไฟล์`);
 }
 
 /* ---------------------------------------------------------------- แปลงเป็นเอกสาร */
@@ -361,7 +373,7 @@ function toEntry({ row, get }) {
     typeof get("bankAccountNo") === "number" && profile.bankAccountNo !== String(get("bankAccountNo")) && "เติม 0 หน้าเลขบัญชี",
     profile.bankAccountNo && profile.bankAccountNo.length !== 10 && "เลขบัญชีไม่ใช่ 10 หลัก (เก็บตามไฟล์)",
     str(get("emergencyName")) && !profile.emergencyContactName && "ล้างคำกันช่องว่างในผู้ติดต่อฉุกเฉิน",
-    get("licenseExpiry") !== null && !(get("licenseExpiry") instanceof Date) && profile.licenseExpiryDate && "แปลงวันหมดอายุใบขับขี่จากข้อความ",
+    typeof get("licenseExpiry") === "string" && profile.licenseExpiryDate && "แปลงวันหมดอายุใบขับขี่จากข้อความ",
     get("licenseExpiry") !== null && !profile.licenseExpiryDate && "ทิ้งวันหมดอายุใบขับขี่ที่อ่านไม่ได้",
     get("idCardExpiry") !== null && !idCardExpiry && "ทิ้งวันหมดอายุบัตรที่ผิดช่วงปี",
     [get("licenseExpiry"), get("idCardExpiry")].some((v) => v instanceof Date && v.getUTCFullYear() > 2400) && "แปลงปี พ.ศ. ในช่องวันที่",
@@ -410,8 +422,14 @@ async function main() {
   const entries = (await readSheet()).map(toEntry);
   console.log(`อ่านชีต “${SHEET}” ${entries.length} แถว (${((Date.now() - started) / 1000).toFixed(1)} วินาที)`);
 
+  /* รหัสซ้ำในไฟล์ — ไม่รู้ว่าแถวไหนถูก ข้ามทุกแถวของรหัสนั้น (ไม่หยุดทั้งรอบ) */
+  const codeCount = tally(entries.filter((e) => !e.skip).map((e) => e.code));
+  for (const e of entries) if (!e.skip && codeCount[e.code] > 1) e.skip = "รหัสพนักงานซ้ำในไฟล์";
+  for (const e of entries.filter((x) => x.skip === "รหัสพนักงานซ้ำในไฟล์"))
+    console.log(`  ⚠ แถว ${e.row} ${e.code} ${e.name} — รหัสซ้ำในไฟล์ ไม่นำเข้า`);
+
   const skipped = entries.filter((e) => e.skip);
-  const rows = entries.filter((e) => !e.skip);
+  let rows = entries.filter((e) => !e.skip);
 
   for (const field of ["customer", "plant"]) {
     const fixed = canonicalize(rows, field);
@@ -423,8 +441,6 @@ async function main() {
   const garbled = rows.filter((e) => JSON.stringify([e.profile, e.resignation]).includes("�"));
   if (garbled.length) throw new Error(`อ่านตัวอักษรเพี้ยน (�) ${garbled.length} แถว: ${garbled.map((e) => e.row).join(", ")} — ไม่เขียนอะไร`);
 
-  const dup = Object.entries(tally(rows.map((e) => e.code))).filter(([, n]) => n > 1);
-  if (dup.length) throw new Error(`รหัสพนักงานซ้ำในไฟล์: ${dup.map(([c, n]) => `${c}×${n}`).join(", ")}`);
   for (const e of rows.filter((x) => x.fixes.some((f) => /เลขบัตร/.test(f))))
     console.log(`  ⚠ แถว ${e.row} ${e.code} ${e.name} (${e.status}) — ${e.fixes.filter((f) => /เลขบัตร/.test(f)).join(" · ")}`);
   /* คนเดียวกันหลายรหัสเป็นเรื่องปกติของไฟล์ (รหัสฝึกงาน MTM… แล้วได้รหัสจริง · กลับมาทำงานใหม่) —
@@ -440,6 +456,21 @@ async function main() {
     const existing = new Map(
       (await col.find({}, { projection: { _id: 0, documents: 0 } }).toArray()).map((d) => [String(d.drivercode).trim(), d]),
     );
+
+    /* คนใหม่ที่เลขบัตรตรงกับ พจส. ที่ยังปฏิบัติงานอยู่ในระบบคนละรหัส — ไม่สร้างระเบียนซ้ำ */
+    const activeByNid = new Map(
+      [...existing.values()]
+        .filter((d) => d.active !== false && d.statusOverride !== "resigned" && d.nationalId)
+        .map((d) => [String(d.nationalId), String(d.drivercode).trim()]),
+    );
+    for (const e of rows) {
+      const other = !existing.has(e.code) && e.profile.nationalId && activeByNid.get(e.profile.nationalId);
+      if (!other) continue;
+      e.skip = `เลขบัตรซ้ำกับ ${other} ที่ปฏิบัติงานอยู่ในระบบ`;
+      skipped.push(e);
+      console.log(`  ⚠ แถว ${e.row} ${e.code} ${e.name} — ${e.skip} · ไม่นำเข้า`);
+    }
+    rows = rows.filter((e) => !e.skip);
 
     const now = new Date();
     const ops = [];
@@ -510,11 +541,15 @@ async function main() {
     console.log(`ปฏิบัติงาน ${activeCount} คน`, tally(rows.filter((e) => e.active).map((e) => e.status)));
     console.log(`พ้นสภาพ ${rows.length - activeCount} คน`, tally(rows.filter((e) => !e.active).map((e) => e.status)));
     console.log(`ไม่นำเข้า ${skipped.length} แถว`, tally(skipped.map((e) => e.skip)));
-    for (const e of skipped.filter((x) => /^ไม่รู้จัก|ไม่มีวันที่/.test(x.skip)))
+    for (const e of skipped.filter((x) => /ไม่รู้จัก|ไม่มีวันที่/.test(x.skip)))
       console.log(`  ⚠ แถว ${e.row} ${e.code} ${e.name} — ${e.skip}`);
     console.log(`เอกสาร: เพิ่มใหม่ ${stats.insert} · เขียนทับแถวเดิม ${stats.update} · คงสถานะที่ฝ่ายบุคคลกดเอง ${stats.keptHrStatus} · คงช่องที่แก้บนเว็บ ${stats.keptEdits} คน · เติมวันหมดอายุบัตร ${stats.idCardFilled}`);
     console.log(`แถวเก่าใน master_driver ที่ไม่อยู่ในทะเบียน (ไม่ลบ · ไม่นับ): ${[...existing.keys()].filter((c) => !fileCodes.has(c) && !existing.get(c)?.registry).length}`);
-    if (orphaned.length) console.log(`⚠ เคยนำเข้าจากไฟล์นี้แต่ไม่อยู่ในไฟล์แล้ว ${orphaned.length} คน (ไม่แตะ):`, orphaned.map((d) => d.drivercode).join(", "));
+    /* Google Sheet มีแค่แถวล่าสุด — คนที่เหลือในระบบเป็นเรื่องปกติ พิมพ์แค่จำนวน */
+    if (orphaned.length)
+      console.log(
+        `⚠ เคยนำเข้าแต่ไม่อยู่ในไฟล์นี้ ${orphaned.length} คน (ไม่แตะ)${orphaned.length > 20 ? "" : ": " + orphaned.map((d) => d.drivercode).join(", ")}`,
+      );
     console.log(`คำขอสรรหาที่ผูกรหัสแล้วแต่ยังไม่อยู่ในทะเบียน ${waiting.length} รหัส — เข้าทะเบียนเองเมื่อบันทึก RC/รับรถครั้งถัดไป`);
 
     if (!APPLY) {

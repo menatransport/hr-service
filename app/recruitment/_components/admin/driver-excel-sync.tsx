@@ -6,21 +6,24 @@ import { Loader2, TriangleAlert } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TextField } from "@/components/ui/field";
+import { HR_GOOGLE_SHEET_URL } from "@/lib/google-sheet";
 import { requestJson } from "@/lib/http";
 import { runAction } from "@/lib/swal";
 
 /**
- * กล่อง “Sync จากไฟล์” (เฉพาะ `next dev`) บนหน้าทะเบียน พจส. — ชี้ path ไฟล์ทะเบียนฝ่ายบุคคลบนเครื่องนี้
- * → **ตรวจ** (dry run) อ่านสรุปของ `import_driver_registry_xlsx.mjs` → ค่อยกด **อัปเดต** (`/api/drivers/excel-sync`)
+ * กล่อง “Sync จาก Google Sheet” (เฉพาะ `next dev`) บนหน้าทะเบียน พจส. — ลิงก์ Google Sheet (ค่าตั้งต้น
+ * `HR_GOOGLE_SHEET_URL`) หรือ path ไฟล์ทะเบียนบนเครื่องนี้ → **ตรวจ** (dry run) อ่านสรุปของ
+ * `import_driver_registry_xlsx.mjs` → ค่อยกด **อัปเดต** (`/api/drivers/excel-sync`)
+ * · ไม่นำเข้า รอสรรหา/รอฝึกงาน/สำรอง/รอรับรถ · รหัสซ้ำ/เลขบัตรซ้ำกับคนในระบบ = ข้าม
  */
 
 const PATH_KEY = "hr.driver-excel-sync.path";
 
 function readSaved() {
   try {
-    return localStorage.getItem(PATH_KEY) ?? "";
+    return localStorage.getItem(PATH_KEY) || HR_GOOGLE_SHEET_URL;
   } catch {
-    return "";
+    return HR_GOOGLE_SHEET_URL;
   }
 }
 
@@ -70,8 +73,8 @@ export function DriverExcelSyncDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
-      title="Sync จากไฟล์ Excel"
-      subtitle="โหมด dev · ชีต “ทะเบียน 2026”"
+      title="Sync ทะเบียนจาก Google Sheet"
+      subtitle="โหมด dev · แท็บ “ทะเบียนประวัติ” · ไม่นำเข้ารอสรรหา/รอฝึกงาน"
       onClose={onClose}
       width="880px"
       tone="plain"
@@ -100,7 +103,7 @@ export function DriverExcelSyncDialog({ onClose }: { onClose: () => void }) {
     >
       <TextField
         id="driver-excel-path"
-        label="path ไฟล์ .xlsx"
+        label="ลิงก์ Google Sheet หรือ path ไฟล์ .xlsx"
         value={file}
         onChange={(v) => {
           setFile(v);
@@ -108,7 +111,7 @@ export function DriverExcelSyncDialog({ onClose }: { onClose: () => void }) {
           setError(null);
           setApplied(false);
         }}
-        placeholder="C:\Users\…\Downloads\[HR] ทะเบียนประวัติพจส.ลาดกระบัง Mixer.xlsx"
+        placeholder={HR_GOOGLE_SHEET_URL}
       />
 
       {error ? (

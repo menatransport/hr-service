@@ -1,66 +1,35 @@
 "use client";
 
-import { Suspense, ViewTransition, createContext, use, useEffect, useMemo, useRef, useState } from "react";
+import { ViewTransition, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronDown, Search, Sparkles, X } from "lucide-react";
 
+import { useVisibleModules } from "@/components/auth/menu-access-provider";
 import { Mascot } from "@/components/ui/mascot";
 import { UserMenu, type ShellUser } from "@/components/shell/user-menu";
-import { MODULES, type ModuleGroup, type ModuleId, type ModuleItem } from "@/lib/modules";
-
-export interface HomeBadge {
-  label: string;
-  tone: "new" | "wait" | "live" | "alert";
-}
-
-const BADGE_CHIP: Record<HomeBadge["tone"], string> = {
-  new: "chip-new",
-  wait: "chip-wait",
-  live: "chip-live",
-  alert: "chip-alert",
-};
-
-type Badges = Record<string, HomeBadge>;
-
-/**
- * ป้ายตัวเลขบนเมนูมาจากคำร้องของ NCAC (~250–350ms) — **ไม่ให้หน้าหลักรอมัน**
- * หน้าเซิร์ฟเวอร์ส่ง promise มา (ไม่ `await`) แล้วป้ายแต่ละอันรอเองใน `<Suspense>` ของตัวเอง
- * หน้าจึงขึ้นทันที ป้ายค่อยโผล่ตามมา · ไม่ได้สลับทั้งหน้าแบบ fallback → ของจริง
- * สถานะที่ผู้ใช้เริ่มทำไปแล้ว (พิมพ์ค้นหา · กางเมนูย่อย) จึงไม่หาย
- */
-const BadgeContext = createContext<Promise<Badges>>(Promise.resolve({}));
-
-function Badge({ id, children }: { id: string; children: (badge: HomeBadge) => React.ReactNode }) {
-  return (
-    <Suspense fallback={null}>
-      <BadgeValue id={id}>{children}</BadgeValue>
-    </Suspense>
-  );
-}
-
-function BadgeValue({ id, children }: { id: string; children: (badge: HomeBadge) => React.ReactNode }) {
-  const badge = use(use(BadgeContext))[id];
-  return badge ? children(badge) : null;
-}
-
-/** จอแคบเหลือแค่ตัวเลข — ไม่มีตัวเลขในป้ายก็เป็นจุด */
-function badgeCount(badge: HomeBadge): string {
-  return badge.label.replace(/\D+/g, "") || "•";
-}
+import { type ModuleGroup, type ModuleId, type ModuleItem } from "@/lib/modules";
 
 /** ทางลัดใต้ช่องค้นหา (ชิปกระจก) — เมนูที่ใช้บ่อยที่สุด อ้างด้วย id ใน `lib/modules.ts` */
-const QUICK_IDS = ["cases", "requisitions", "trainees", "registry", "employee"];
+const QUICK_IDS = ["cases", "requisitions", "trainees", "registry"];
 
 /** ทุกเมนูที่เปิดได้จริง — เมนูที่มี subgroup แตกเป็นลูกแต่ละตัว (`parent` = หัวข้อ) */
 type Entry = { group: ModuleGroup; item: ModuleItem; parent?: ModuleItem };
-const ALL: Entry[] = MODULES.flatMap((group) =>
-  group.items.flatMap((item): Entry[] =>
-    item.children ? item.children.map((child) => ({ group, item: child, parent: item })) : [{ group, item }],
-  ),
-);
+const entriesOf = (modules: ModuleGroup[]): Entry[] =>
+  modules.flatMap((group) =>
+    group.items.flatMap((item): Entry[] =>
+      item.children ? item.children.map((child) => ({ group, item: child, parent: item })) : [{ group, item }],
+    ),
+  );
+
+/** กลุ่มงานกับเมนูที่ผู้ใช้คนนี้เห็น — หักเมนูที่หน้า “กำหนดสิทธิ์” ซ่อนไว้แล้ว */
+function useEntries() {
+  const modules = useVisibleModules();
+  const all = useMemo(() => entriesOf(modules), [modules]);
+  return { modules, all };
+}
 
 /**
  * หน้าหลัก — โครงเดียวกับหน้า Home ของ menaIT V.2 ในโทน teal ของ HR
@@ -77,13 +46,10 @@ export function HomeView({
   user,
   firstName,
   initialGroup,
-  badges,
 }: {
   user: ShellUser;
   firstName: string;
   initialGroup: ModuleId;
-  /** ป้ายตัวเลขบนเมนู — เป็น promise โดยตั้งใจ (ดู `BadgeContext`) */
-  badges: Promise<Badges>;
 }) {
   const desktopSearch = useRef<HTMLInputElement>(null);
   const mobileSearch = useRef<HTMLInputElement>(null);
@@ -102,12 +68,10 @@ export function HomeView({
   }, []);
 
   return (
-    <BadgeContext value={badges}>
-      <div className="h-dvh overflow-hidden">
-        <DesktopHome user={user} firstName={firstName} searchRef={desktopSearch} />
-        <MobileHome user={user} firstName={firstName} initialGroup={initialGroup} searchRef={mobileSearch} />
-      </div>
-    </BadgeContext>
+    <div className="h-dvh overflow-hidden">
+      <DesktopHome user={user} firstName={firstName} searchRef={desktopSearch} />
+      <MobileHome user={user} firstName={firstName} initialGroup={initialGroup} searchRef={mobileSearch} />
+    </div>
   );
 }
 
@@ -125,7 +89,8 @@ interface LayoutProps {
  * · จอเตี้ยมาก (`max-height`) ซ่อนบรรทัดรองทีละชั้น: คำอธิบายใต้หัว → คำอธิบายเมนู
  */
 function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
-  const quick = QUICK_IDS.map((id) => ALL.find((e) => e.item.id === id)).filter((e): e is Entry =>
+  const { modules, all } = useEntries();
+  const quick = QUICK_IDS.map((id) => all.find((e) => e.item.id === id)).filter((e): e is Entry =>
     Boolean(e),
   );
 
@@ -160,7 +125,7 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
           inputRef={searchRef}
           className="mx-auto mt-[clamp(10px,2.2vh,24px)] w-[820px] max-w-[calc(100%-3rem)]"
           inputClassName="h-[clamp(44px,6.4vh,62px)] bg-white/95 shadow-[0_24px_48px_-20px_rgba(4,30,27,0.6)]"
-          placeholder="พิมพ์สิ่งที่ต้องการ เช่น “ข้อร้องเรียน” “ฝึกงาน” “ข้อมูลพนักงาน”"
+          placeholder="พิมพ์สิ่งที่ต้องการ เช่น “ข้อร้องเรียน” “ฝึกงาน” “ทะเบียนประวัติ”"
         />
 
         <div className="relative mt-[clamp(8px,1.8vh,18px)] flex flex-wrap justify-center gap-2.5 px-6">
@@ -180,8 +145,12 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
         </div>
       </section>
 
-      <main className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-full flex-1 grid-cols-3 items-start gap-[clamp(14px,1.8vw,28px)] px-[clamp(24px,5vw,72px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2">
-        {MODULES.map((group, i) => (
+      {/* การ์ดกลุ่มจัดกลางจอ — คอลัมน์ละไม่เกิน 560px ตามจำนวนกลุ่มที่แสดง (กลุ่ม `hidden` ไม่นับ) */}
+      <main
+        className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-full flex-1 items-start justify-center gap-[clamp(14px,1.8vw,28px)] px-[clamp(24px,5vw,72px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2"
+        style={{ gridTemplateColumns: `repeat(${modules.length}, minmax(0, 560px))` }}
+      >
+        {modules.map((group, i) => (
           <GroupColumn key={group.id} group={group} index={i} />
         ))}
       </main>
@@ -208,9 +177,6 @@ function GroupColumn({ group, index }: { group: ModuleGroup; index: number }) {
             {group.tagline}
           </p>
         </div>
-        <span className="tone-soft hidden shrink-0 rounded-full px-3 py-1 text-12 font-semibold 2xl:inline-block">
-          {group.items.length} เมนู
-        </span>
       </div>
 
       {/* หน้าไม่เลื่อน — กลุ่มที่ยาวเกินจอเลื่อนในการ์ดของตัวเอง */}
@@ -262,22 +228,6 @@ function MenuTile({ item }: { item: ModuleItem }) {
       className="home-row group flex items-center gap-3.5 rounded-[18px] p-[clamp(6px,1vh,16px)]"
     >
       {body}
-      <Badge id={item.id}>
-        {(badge) => (
-          <>
-            {/* จอแคบเหลือแค่ตัวเลขในวงกลม — ป้ายเต็มบีบชื่อเมนูจนถูกตัด */}
-            <span className={`chip ${BADGE_CHIP[badge.tone]} hidden shrink-0 xl:inline-flex`}>
-              {badge.label}
-            </span>
-            <span
-              title={badge.label}
-              className={`chip ${BADGE_CHIP[badge.tone]} shrink-0 px-2 tabular-nums xl:hidden`}
-            >
-              {badgeCount(badge)}
-            </span>
-          </>
-        )}
-      </Badge>
       <ArrowRight size={19} strokeWidth={1.8} aria-hidden className="home-row-arrow shrink-0 text-mut/60" />
     </Link>
   );
@@ -315,9 +265,6 @@ function SubGroupTile({ item }: { item: ModuleItem }) {
               {item.desc}
             </span>
           </span>
-          <span className="tone-soft shrink-0 rounded-full px-2.5 py-0.5 text-11-5 font-semibold tabular-nums">
-            {children.length} เมนู
-          </span>
           <ChevronDown
             size={18}
             strokeWidth={1.8}
@@ -352,16 +299,6 @@ function SubGroupTile({ item }: { item: ModuleItem }) {
                         {child.desc}
                       </span>
                     </span>
-                    <Badge id={child.id}>
-                      {(badge) => (
-                        <span
-                          title={badge.label}
-                          className={`chip ${BADGE_CHIP[badge.tone]} shrink-0 px-2 tabular-nums`}
-                        >
-                          {badgeCount(badge)}
-                        </span>
-                      )}
-                    </Badge>
                     <ArrowRight
                       size={17}
                       strokeWidth={1.8}
@@ -388,7 +325,8 @@ function MobileHome({
   searchRef,
 }: LayoutProps & { initialGroup: ModuleId }) {
   const [activeId, setActiveId] = useState<ModuleId>(initialGroup);
-  const current = MODULES.find((g) => g.id === activeId) ?? MODULES[0];
+  const { modules } = useEntries();
+  const current = modules.find((g) => g.id === activeId) ?? modules[0];
 
   return (
     <div className="app-shell relative flex h-full flex-col overflow-hidden text-white lg:hidden">
@@ -417,9 +355,10 @@ function MobileHome({
         <div
           role="tablist"
           aria-label="กลุ่มงาน"
-          className="grid shrink-0 grid-cols-3 gap-1 rounded-full border border-line bg-base-100 p-1 elev-card"
+          className="grid shrink-0 gap-1 rounded-full border border-line bg-base-100 p-1 elev-card"
+          style={{ gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))` }}
         >
-          {MODULES.map((g) => {
+          {modules.map((g) => {
             const active = g.id === current.id;
             return (
               <button
@@ -438,6 +377,8 @@ function MobileHome({
           })}
         </div>
 
+        {/* ทุกเมนูถูกซ่อนหมด (สิทธิ์ของแผนกนี้ยังไม่ได้ตั้ง) — ไม่มีแผงให้วาด */}
+        {current ? (
         <section
           key={current.id}
           role="tabpanel"
@@ -459,6 +400,7 @@ function MobileHome({
             )}
           </div>
         </section>
+        ) : null}
       </main>
     </div>
   );
@@ -478,15 +420,7 @@ function AppTile({ item }: { item: ModuleItem }) {
         <span className="absolute -top-1.5 -right-2 rounded-full bg-[#53635e] px-1.5 py-px text-9-5 font-semibold whitespace-nowrap text-white">
           เร็ว ๆ นี้
         </span>
-      ) : (
-        <Badge id={item.id}>
-          {(badge) => (
-            <span className="absolute -top-1.5 -right-1.5 min-w-5 rounded-full bg-alert px-1.5 py-px text-center text-10 font-bold text-ink-content ring-2 ring-base-100">
-              {badgeCount(badge)}
-            </span>
-          )}
-        </Badge>
-      )}
+      ) : null}
     </span>
   );
 
@@ -510,7 +444,7 @@ function AppTile({ item }: { item: ModuleItem }) {
 }
 
 /**
- * เมนูที่มี subgroup บนมือถือ — ไอคอนแอปแบบโฟลเดอร์ (มุมขวาบอกจำนวนเมนูย่อย)
+ * เมนูที่มี subgroup บนมือถือ — ไอคอนแอปแบบโฟลเดอร์
  * แตะแล้วกางแผ่นล่าง (bottom sheet) ให้เลือกเมนูย่อย · portal ไป `body` เพราะแผงแท็บเลื่อนได้
  * (ห่อด้วย `tone-*` ของแผงแม่ไม่ถึง จึงรับ `tone` มาตั้งเองบนแผ่นล่าง)
  */
@@ -545,9 +479,6 @@ function SubGroupApp({
         <span className="relative">
           <span className="tone-tile grid size-[62px] place-items-center rounded-[22px]">
             <item.icon size={26} strokeWidth={1.8} aria-hidden />
-          </span>
-          <span className="tone-soft absolute -top-1.5 -right-1.5 min-w-5 rounded-full px-1.5 py-px text-center text-10 font-bold ring-2 ring-base-100">
-            {children.length}
           </span>
         </span>
         <span className="text-12-5 leading-tight font-medium">{item.label}</span>
@@ -604,9 +535,6 @@ function SubGroupApp({
                             <span className="block truncate text-14 font-semibold">{child.label}</span>
                             <span className="block truncate text-12 text-mut">{child.desc}</span>
                           </span>
-                          <Badge id={child.id}>
-                            {(badge) => <span className={`chip ${BADGE_CHIP[badge.tone]} shrink-0`}>{badge.label}</span>}
-                          </Badge>
                           <ArrowRight
                             size={17}
                             strokeWidth={1.8}
@@ -676,17 +604,18 @@ function MenuSearch({
   placeholder: string;
 }) {
   const router = useRouter();
+  const { all } = useEntries();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return ALL.filter((e) => !e.item.soon).slice(0, 6);
-    return ALL.filter(({ group, item, parent }) =>
+    if (!q) return all.filter((e) => !e.item.soon).slice(0, 6);
+    return all.filter(({ group, item, parent }) =>
       `${item.label} ${item.desc} ${parent?.label ?? ""} ${group.label}`.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [all, query]);
 
   useEffect(() => {
     if (!open) return;

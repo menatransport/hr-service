@@ -1,6 +1,7 @@
 import { ObjectId, type WithId } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
+import { todayInBangkok } from "@/lib/record-case-flow";
 import { findIssuedCodeByName, readDriver } from "@/app/recruitment/_lib/drivers/master";
 import { isExitStatus, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
 import { listApplications, updateApplication } from "@/app/recruitment/_lib/applications";
@@ -393,6 +394,8 @@ function cleanValues(patch: OnboardingPatch, before: Record<string, string>): Re
     const max = field.kind === "textarea" ? MAX_LONG : MAX_SHORT;
     if (v.length > max) throw new RequisitionError(`${field.label}ยาวเกิน ${max} ตัวอักษร`);
     if (field.kind === "date" && !ISO.test(v)) throw new RequisitionError(`${field.label}ไม่ถูกต้อง`);
+    if (field.past && v.slice(0, 10) > todayInBangkok())
+      throw new RequisitionError(`${field.label}ต้องไม่เกินวันนี้ — ลงวันที่เมื่อรับรถแล้วจริง`);
     if (field.kind === "number" && !(Number(v) >= 0 && Number(v) <= 1000))
       throw new RequisitionError(`${field.label}ต้องเป็นตัวเลข`);
     if (field.key === "outcome" ? !isOutcome(v) : field.kind === "select" && !field.options?.some((o) => o.value === v))

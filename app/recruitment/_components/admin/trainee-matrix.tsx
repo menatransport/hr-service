@@ -527,7 +527,14 @@ const MatrixRow = memo(function MatrixRow({
               </span>
             ) : (
               <span className="flex min-w-0 items-center gap-1.5 text-11 text-mut">
-                <span className="font-mono">{driver.drivercode || "ยังไม่มีรหัส"}</span>
+                {driver.drivercode ? (
+                  <span className="font-mono">{driver.drivercode}</span>
+                ) : (
+                  /* ช่องรายวันผูกกับรหัส พจส. — ไม่มีรหัสจึงกดไม่ได้ บอกเหตุผลไว้ตรงนี้ (เจอตอน UAT 2 พ.ย. 2569) */
+                  <span className="text-st-wait-ink" title="ผูกรหัส พจส. ในข้อมูล RC ก่อน จึงลงตารางรายวันได้">
+                    ยังไม่มีรหัส · ลงตารางไม่ได้
+                  </span>
+                )}
                 <span aria-hidden>·</span>
                 <span>{formatTenure(driver.tenureMonths, driver.tenureDays)}</span>
               </span>

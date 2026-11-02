@@ -86,14 +86,14 @@ export function XlsxMenuButton<T>({
   importLabel = "นำเข้า · วางจาก Excel",
   importHint = "วางแถวที่คัดลอกมา · ตรวจก่อนบันทึก",
   onSync,
-  syncHint = "ชี้ path ไฟล์ทะเบียนบนเครื่องนี้",
+  syncHint = "ดึงแท็บ “ทะเบียนประวัติ” · ตรวจก่อนอัปเดต",
   className = "py-1.5 pr-2 pl-3 text-13",
   ...props
 }: ExportProps<T> & {
   onImport: () => void;
   importLabel?: string;
   importHint?: string;
-  /** เมนู “Sync จากไฟล์” — ส่งมาเฉพาะโหมด dev */
+  /** เมนู “Sync จาก Google Sheet” — ส่งมาเฉพาะโหมด dev */
   onSync?: () => void;
   syncHint?: string;
   className?: string;
@@ -144,7 +144,7 @@ export function XlsxMenuButton<T>({
           {onSync ? (
             <MenuItem
               icon={<FolderSync size={16} strokeWidth={2} aria-hidden />}
-              label="Sync จากไฟล์ (dev)"
+              label="Sync จาก Google Sheet (dev)"
               hint={syncHint}
               onSelect={onSync}
             />

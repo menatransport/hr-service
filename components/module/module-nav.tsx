@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 
-import { MODULES, findModule, type ModuleGroup, type ModuleItem } from "@/lib/modules";
+import { useFilterGroup, useVisibleModules } from "@/components/auth/menu-access-provider";
+import { findModule, type ModuleGroup, type ModuleItem } from "@/lib/modules";
 
 /**
  * แถบข้างของโมดูล — menulist ของกลุ่มงานที่หน้าปัจจุบันสังกัด (ดู `lib/modules.ts`)
@@ -62,8 +63,11 @@ function Resolved({
   rail,
   headAction,
 }: ResolvedProps & { match: ReturnType<typeof findModule> }) {
+  const filterGroup = useFilterGroup();
   if (!match) return <>{fallback}</>;
-  const { group, item: current, child: currentChild } = match;
+  // เมนูที่ “กำหนดสิทธิ์” ซ่อนไว้ไม่ขึ้นในแถบ — หน้าที่เปิดอยู่เองยังวาดแถบของกลุ่มนี้ตามปกติ
+  const { item: current, child: currentChild } = match;
+  const group = filterGroup(match.group);
 
   return (
     <nav
@@ -268,7 +272,7 @@ function SubGroup({
  * แยกกันชัด · ในลิ้นชักมือถือที่สูงตามเนื้อหา `mt-auto` ไม่มีผลอะไร
  */
 function OtherGroups({ current, rail }: { current: ModuleGroup; rail: boolean }) {
-  const others = MODULES.filter((m) => m.id !== current.id);
+  const others = useVisibleModules().filter((m) => m.id !== current.id);
 
   return (
     <div className={`mt-auto flex flex-col gap-0.5 pt-4 ${rail ? "w-full items-center" : ""}`}>

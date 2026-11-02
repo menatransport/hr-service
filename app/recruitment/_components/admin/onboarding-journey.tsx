@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, Check, CircleDashed, Info, Link2, Minus, Pencil, Phone, TriangleAlert } from "lucide-react";
 
 import { requestJson } from "@/lib/http";
 import { alertError, toastSuccess } from "@/lib/swal";
 import { todayInBangkok } from "@/lib/record-case-flow";
-import { thaiDate } from "@/app/recruitment/_lib/form";
+import { formatPhone, thaiDate } from "@/app/recruitment/_lib/form";
 import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
 import { formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
 import { STATUS_LABEL } from "@/app/recruitment/_lib/types";
@@ -47,7 +48,13 @@ import { OnboardingSectionForm } from "@/app/recruitment/_components/admin/onboa
  * · ขั้นยานยนต์อ่านจากบอร์ดซ่อม · ด้านขวาคือคำขอ/ใบสมัคร/ทะเบียน/ATMS (อ่านอย่างเดียว) + ประวัติ
  */
 export function OnboardingJourney({ journey }: { journey: Journey }) {
+  const router = useRouter();
   const [record, setRecord] = useState<OnboardingRecord>(journey.record);
+  /* บันทึกบางส่วนขยับใบสมัครด้วย (รับรถ “ผ่าน” → ปฏิบัติงาน) — ดึงข้อมูลฝั่งขวาใหม่ให้ตรงกัน */
+  const saved = (next: OnboardingRecord) => {
+    setRecord(next);
+    router.refresh();
+  };
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
   const [codeMatch, setCodeMatch] = useState(journey.codeMatch);
@@ -75,7 +82,7 @@ export function OnboardingJourney({ journey }: { journey: Journey }) {
         { method: "PATCH", body: patch as unknown as Record<string, unknown> },
         "บันทึกไม่สำเร็จ",
       );
-      setRecord(next);
+      saved(next);
       toastSuccess(done);
       return true;
     } catch (err) {
@@ -117,7 +124,7 @@ export function OnboardingJourney({ journey }: { journey: Journey }) {
               <Sep />
               <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-1 hover:text-primary">
                 <Phone size={12} strokeWidth={2} aria-hidden />
-                {phone}
+                {formatPhone(phone)}
               </a>
             </>
           ) : null}
@@ -300,7 +307,7 @@ export function OnboardingJourney({ journey }: { journey: Journey }) {
           title={editing.title}
           journey={journey}
           onClose={() => setEditing(null)}
-          onSaved={setRecord}
+          onSaved={saved}
         />
       ) : null}
     </div>

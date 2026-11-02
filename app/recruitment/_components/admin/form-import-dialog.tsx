@@ -6,6 +6,7 @@ import { Ban, ClipboardPaste, Loader2, TriangleAlert } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TextareaField, TextField } from "@/components/ui/field";
+import { googleSheetId, HR_GOOGLE_SHEET_URL } from "@/lib/google-sheet";
 import { requestJson } from "@/lib/http";
 import { runAction } from "@/lib/swal";
 import { StatusPill } from "@/app/recruitment/_components/status-pill";
@@ -20,7 +21,8 @@ import type {
 
 /**
  * กล่อง Sync ใบสมัครจาก Google Form (ชีต “การตอบแบบฟอร์ม 1”) — เปิดจากเมนูปุ่ม Excel บนหน้าผู้สมัคร
- * - `path` (เฉพาะ `next dev`) — ชี้ path ไฟล์ .xlsx บนเครื่องนี้ · ใบใหม่ = ส่งหลังใบล่าสุดที่เคยนำเข้า
+ * - `path` (เฉพาะ `next dev`) — ลิงก์ Google Sheet (ค่าตั้งต้น `HR_GOOGLE_SHEET_URL` · รับเฉพาะรอการติดต่อ)
+ *   หรือ path ไฟล์ .xlsx บนเครื่องนี้ · ใบใหม่ = ส่งหลังใบล่าสุดที่เคยนำเข้า
  * - `paste` — คัดลอกแถวจากชีตมาวาง (ทุกแถวที่วาง = ใบใหม่)
  *
  * สองจังหวะเสมอ: **ตรวจ** (ไม่เขียน) → **นำเข้า** ส่งข้อมูลเดิมขึ้นไปให้เซิร์ฟเวอร์คิดใหม่ (`form-import.ts`)
@@ -35,7 +37,8 @@ const SKIP_LABEL: Record<ImportSkipReason, string> = {
   already_imported: "มีในระบบแล้ว",
   resigned: "พ้นสภาพแล้ว (ใบเก่า)",
   not_found_old: "ใบเก่าก่อน Sync ครั้งก่อน",
-  duplicate: "ส่งซ้ำ — เก็บใบล่าสุด",
+  duplicate: "ซ้ำ — มีใบในระบบแล้ว/ส่งหลายใบ",
+  not_pending: "ไม่ใช่รอการติดต่อ",
   invalid: "อ่านชื่อหรือเวลาส่งไม่ได้",
 };
 
@@ -45,9 +48,9 @@ const TILES: ImportOutcome[] = ["pending_contact", "training", "working", "black
 
 function readSaved() {
   try {
-    return localStorage.getItem(PATH_KEY) ?? "";
+    return localStorage.getItem(PATH_KEY) || HR_GOOGLE_SHEET_URL;
   } catch {
-    return "";
+    return HR_GOOGLE_SHEET_URL;
   }
 }
 
@@ -163,10 +166,10 @@ export function FormSyncDialog({
 
   return (
     <ModalShell
-      title={mode === "path" ? "Sync ใบสมัครจากไฟล์" : "วางใบสมัครจาก Excel"}
+      title={mode === "path" ? "Sync ใบสมัครจาก Google Sheet" : "วางใบสมัครจาก Excel"}
       subtitle={
         mode === "path"
-          ? "โหมด dev · ชีต “การตอบแบบฟอร์ม 1”"
+          ? "โหมด dev · แท็บ “ผู้สมัคร” · เฉพาะรอการติดต่อ"
           : "คัดลอกแถวจากชีต “การตอบแบบฟอร์ม 1” — แถวเดียวหรือหลายแถว"
       }
       onClose={onClose}
@@ -206,26 +209,37 @@ export function FormSyncDialog({
             คลิกเลขแถวในชีต → <b className="text-ink">Ctrl+C</b> → วางด้านล่าง · ต้องเริ่มคอลัมน์ A หรือติดแถวหัวตารางมาด้วย
           </li>
         ) : null}
-        <li>
-          ใบใหม่ → <b className="text-ink">รอการติดต่อ</b> · เวลาตามคอลัมน์ “ประทับเวลา” · ฝึกงาน/ทำงานอยู่ในทะเบียน พจส. ={" "}
-          <b className="text-ink">ฝึกงาน</b>/<b className="text-ink">ปฏิบัติงาน</b>
-        </li>
-        <li>
-          “สถานะสัมภาษณ์” เป็นแบล็คลิส/Black List → <b className="text-ink">ยกเลิก + Blacklist</b> · ใบใหม่ที่ชื่อ/เบอร์ตรงกันมีป้ายเตือน
-        </li>
+        {mode === "path" && googleSheetId(value) ? (
+          <>
+            <li>
+              รับเฉพาะใบใหม่ที่ <b className="text-ink">รอการติดต่อ</b> — ชีตยังไม่กรอกสถานะสัมภาษณ์/ผลสัมภาษณ์/สถานะพจส.ใหม่
+            </li>
+            <li>เบอร์หรือเลขบัตรตรงกับใบที่ยังเปิดอยู่ในระบบ = ข้าม · ใบที่ชื่อ/เบอร์ตรงกับ Blacklist มีป้ายเตือน</li>
+          </>
+        ) : (
+          <>
+            <li>
+              ใบใหม่ → <b className="text-ink">รอการติดต่อ</b> · เวลาตามคอลัมน์ “ประทับเวลา” · ฝึกงาน/ทำงานอยู่ในทะเบียน พจส. ={" "}
+              <b className="text-ink">ฝึกงาน</b>/<b className="text-ink">ปฏิบัติงาน</b>
+            </li>
+            <li>
+              “สถานะสัมภาษณ์” เป็นแบล็คลิส/Black List → <b className="text-ink">ยกเลิก + Blacklist</b> · ใบใหม่ที่ชื่อ/เบอร์ตรงกันมีป้ายเตือน
+            </li>
+          </>
+        )}
       </ul>
 
       {mode === "path" ? (
         <TextField
           id="candidate-sync-path"
-          label="path ไฟล์ .xlsx"
+          label="ลิงก์ Google Sheet หรือ path ไฟล์ .xlsx"
           value={value}
           onChange={(v) => {
             setValue(v);
             setReport(null);
             setError(null);
           }}
-          placeholder="C:\Users\…\Desktop\HR0221-04 ใบสมัครงาน พจส.xlsx"
+          placeholder={HR_GOOGLE_SHEET_URL}
         />
       ) : (
         <div className="flex flex-col gap-2">

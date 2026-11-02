@@ -1,6 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
+import {
+  SESSION_COOKIE,
+  safeNextPath,
+  signSession,
+  verifySession,
+  type SessionPayload,
+} from "@/lib/auth/token";
+import { isInactive, toSessionUser } from "@/lib/auth/user";
+import { NcacError, getUser } from "@/lib/ncac/client";
 
 /**
  * ด่านล็อกอิน — ไม่มี session ที่ลายเซ็นถูกต้องและยังไม่หมดอายุ = เข้าไม่ได้
@@ -15,17 +23,102 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
  *    เพราะทุกคำสั่งเหล่านี้ลงชื่อผู้ทำใน `complaint_logs` ของ NCAC · `GET` ยังปล่อยผ่าน
  *    (หน้าที่เรียกมันอยู่ใต้ `/desk/**` ซึ่งถูกกั้นไปแล้วตั้งแต่ชั้นบน)
  *
- * รันบน Edge จึงใช้ได้เฉพาะของใน `lib/auth/token.ts` (Web Crypto ล้วน) —
- * `lib/auth/session.ts` ใช้ `cookies()` ของ Node เอามาที่นี่ไม่ได้
+ * 3. **หน้าล็อกอิน `/`** → ล็อกอินอยู่แล้วไม่ต้องเห็นหน้านี้อีก ส่งต่อไป `/home` (หรือ `next`)
+ *
+ * และทุกครั้งที่ **เปิดหน้าเต็ม ๆ** (เข้าระบบ / รีเฟรช — ไม่ใช่ client navigation หรือ
+ * prefetch) จะอ่านข้อมูลผู้ใช้ใหม่จาก NCAC ด้วยรหัสพนักงาน แล้วเซ็นคุกกี้ทับ — ย้ายแผนก
+ * เปลี่ยนตำแหน่ง/รูป มีผลทันทีโดยไม่ต้องล็อกอินใหม่ (ดู `refreshSession`)
+ *
+ * ใช้ได้เฉพาะของที่ไม่ผูกกับ `next/headers` — `lib/auth/session.ts` ใช้ `cookies()`
+ * เอามาที่นี่ไม่ได้ จึงอ่านจาก `request.cookies` แล้วเรียก `verifySession()` ตรง ๆ
  */
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+/** รอ NCAC ได้ไม่เกินนี้ — เกินแล้วใช้ข้อมูลเดิมในคุกกี้ไปก่อน (Render ตื่นช้าตอน cold start) */
+const REFRESH_TIMEOUT_MS = 4_000;
+
+/**
+ * เปิดหน้าเต็ม ๆ จากเบราว์เซอร์ — ไม่นับ RSC payload ของ `<Link>` และ prefetch
+ * ซึ่งยิงถี่มาก ถ้าอ่าน NCAC ทุกครั้งตรงนั้นเปลี่ยนหน้าในระบบจะช้าลงทุกคลิก
+ *
+ * ดูจาก `Sec-Fetch-Dest` ที่เบราว์เซอร์ใส่ให้เอง (`document` = เปิด/รีเฟรชหน้า,
+ * `empty` = fetch) — header `RSC` ของ Next ใช้ไม่ได้ เพราะ Next ตัดทิ้งก่อนถึง proxy
+ */
+function isDocumentLoad(request: NextRequest): boolean {
+  return request.method === "GET" && request.headers.get("sec-fetch-dest") === "document";
+}
+
+/** กลับหน้าล็อกอินพร้อมเหตุผล และทิ้งคุกกี้ session */
+function endSession(request: NextRequest, reason: string) {
+  const login = new URL("/", request.url);
+  login.searchParams.set("state", "error-domain");
+  login.searchParams.set("reason", reason);
+  const response = NextResponse.redirect(login);
+  response.cookies.delete(SESSION_COOKIE);
+  return response;
+}
+
+/**
+ * อ่านผู้ใช้ใหม่ด้วยรหัสพนักงาน แล้วเซ็นคุกกี้ทับ — ทั้งในคำตอบ (เบราว์เซอร์เก็บไว้)
+ * และใน request ที่กำลังส่งต่อ (หน้าที่ render รอบนี้อ่าน `cookies()` ได้ค่าใหม่ทันที)
+ *
+ * - ไม่พบรหัสนี้แล้ว / สถานะ Inactive → ออกจากระบบ
+ * - NCAC ล่มหรือช้า → **ปล่อยผ่านด้วยข้อมูลเดิม** ไม่ล็อกทุกคนออกเพราะ API สะดุด
+ * - `exp` เดิมไม่ขยับ — อ่านข้อมูลใหม่ไม่ได้แปลว่าต่ออายุ session
+ */
+async function refreshSession(request: NextRequest, session: SessionPayload) {
+  let fresh;
+  try {
+    fresh = await getUser(session.user.employeeId, {
+      signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof NcacError && err.status === 404) {
+      return endSession(request, "ไม่พบรหัสพนักงานนี้ในระบบ NCAC แล้ว — กรุณาติดต่อฝ่าย IT");
+    }
+    return NextResponse.next();
+  }
+
+  if (isInactive(fresh)) {
+    return endSession(request, "บัญชีพนักงานนี้ไม่อยู่ในสถานะใช้งาน — กรุณาติดต่อฝ่ายบุคคล");
+  }
+
+  const user = toSessionUser(fresh);
+  if (!user.employeeId) return NextResponse.next();
+
+  let cookie: string;
+  try {
+    cookie = await signSession({ ...session, user });
+  } catch {
+    return NextResponse.next();
+  }
+
+  request.cookies.set(SESSION_COOKIE, cookie);
+  const response = NextResponse.next({ request: { headers: request.headers } });
+  response.cookies.set(SESSION_COOKIE, cookie, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: Math.max(1, Math.floor((session.exp - Date.now()) / 1000)),
+  });
+  return response;
+}
+
 export default async function proxy(request: NextRequest) {
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
-  if (session) return NextResponse.next();
-
   const { pathname, search } = request.nextUrl;
+
+  if (pathname === "/") {
+    if (!session) return NextResponse.next();
+    const next = safeNextPath(request.nextUrl.searchParams.get("next")) ?? "/home";
+    return NextResponse.redirect(new URL(next, request.url));
+  }
+
+  if (session) {
+    return isDocumentLoad(request) ? refreshSession(request, session) : NextResponse.next();
+  }
 
   if (pathname.startsWith("/api/")) {
     if (!WRITE_METHODS.has(request.method)) return NextResponse.next();
@@ -56,6 +149,7 @@ export const config = {
   /* `/payroll/**` เห็นเงินเดือนของพนักงานทุกคน — ข้อมูลที่อ่อนไหวที่สุดในระบบ
      ทุกหน้าใต้เส้นนี้ต้องล็อกอินเสมอ ไม่มีหน้าสาธารณะเลยสักหน้า */
   matcher: [
+    "/",
     "/home/:path*",
     "/desk/:path*",
     "/recruitment/admin/:path*",
