@@ -223,7 +223,6 @@ export const MODULES: ModuleGroup[] = [
         desc: "ใครเข้าเมนูไหนได้บ้าง",
         href: "/desk/permissions",
         icon: ShieldCheck,
-        soon: SOON,
       },
       {
         /* ระบบชั่วคราว (2 พ.ย. 2569) — ผู้ทดสอบรายฝ่าย + ผล UAT ทะเบียนประวัติ พจส. ลาดกระบัง */

@@ -1,9 +1,6 @@
-import { notFound } from "next/navigation";
-
 import { DataError } from "@/components/ui/data-error";
 import { getDeskIdentity } from "@/lib/auth/session";
 import { getMenuScopes, getOrgTree } from "@/lib/menu-permissions";
-import { SOON } from "@/lib/modules";
 
 import { PermissionsView } from "./_components/permissions-view";
 
@@ -17,9 +14,6 @@ export const dynamic = "force-dynamic";
  * ฝ่าย/แผนกมาจาก NCAC · สิทธิ์เก็บใน MongoDB `menu_permissions` (ดู `lib/menu-permissions.ts`)
  */
 export default async function PermissionsPage() {
-  // เมนูนี้ยังเป็น `soon` บน build จริง — พิมพ์ URL ตรง ๆ ก็ต้องไม่เข้า (ดู `SOON` ใน lib/modules.ts)
-  if (SOON) notFound();
-
   const identity = await getDeskIdentity();
   let data: Awaited<ReturnType<typeof load>>;
   try {
