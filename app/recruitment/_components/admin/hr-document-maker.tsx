@@ -428,9 +428,9 @@ export function HrDocumentMaker({
               id="doc-applied"
               label="ตำแหน่งที่สมัคร (คำขอสรรหา)"
               optional
-              placeholder={rqOptions.length ? "เลือก RQ ที่เปิดรับ" : "ไม่มีคำขอที่เปิดรับอยู่"}
+              placeholder={rqOptions.length ? "เลือก JR ที่เปิดรับ" : "ไม่มีคำขอที่เปิดรับอยู่"}
               searchable
-              searchPlaceholder="ค้นเลข RQ ลูกค้า แพล้น ครูฝึก ทะเบียน"
+              searchPlaceholder="ค้นเลข JR ลูกค้า แพล้น ครูฝึก ทะเบียน"
               clearable={Boolean(chosen)}
               readOnly={linking || application.erased}
               options={rqOptions}

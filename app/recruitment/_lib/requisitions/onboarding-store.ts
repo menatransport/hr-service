@@ -160,6 +160,8 @@ export interface Hub {
   records: OnboardingRecord[];
   /** ทะเบียน → สถานะซ่อม (เฉพาะคันที่ไม่ปกติ) */
   repairs: Record<string, RepairStatus>;
+  /** ใบสมัครชุดเดียวกับที่ใช้คิดแถว — หน้าผู้สมัครใช้ต่อได้เลย ไม่ต้องอ่านซ้ำ */
+  applications: ApplicationSummary[];
 }
 
 /** วันที่ไทยของเวลา ISO (UTC) */
@@ -245,7 +247,7 @@ export async function getHub(): Promise<Hub> {
     getRepairStatuses(),
     listApplications(),
   ]);
-  return { records: [...(await toRecords(docs)), ...cancelledRows(apps, docs)], repairs };
+  return { records: [...(await toRecords(docs)), ...cancelledRows(apps, docs)], repairs, applications: apps };
 }
 
 /** คำขอที่ไม่ได้ยกเลิก + ATMS — ตัวเลขกำลังคนของแดชบอร์ด (ไม่ต้องใช้บอร์ดซ่อม/ใบสมัครที่ยกเลิก) */

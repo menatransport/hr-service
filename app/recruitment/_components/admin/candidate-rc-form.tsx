@@ -193,9 +193,9 @@ export function CandidateRcForm({
       <SelectField
         id="rc-requisition"
         label="ตำแหน่งที่สมัคร (คำขอสรรหา)"
-        placeholder={rqOptions.length ? "เลือก RQ ที่เปิดรับ" : "ไม่มีคำขอที่เปิดรับอยู่"}
+        placeholder={rqOptions.length ? "เลือก JR ที่เปิดรับ" : "ไม่มีคำขอที่เปิดรับอยู่"}
         searchable
-        searchPlaceholder="ค้นเลข RQ ลูกค้า แพล้น"
+        searchPlaceholder="ค้นเลข JR ลูกค้า แพล้น"
         readOnly={saving}
         options={rqOptions}
         value={rqId}

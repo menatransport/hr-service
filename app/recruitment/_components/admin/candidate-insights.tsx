@@ -9,6 +9,8 @@ import {
   type ApplicationStatus,
   type ApplicationSummary,
 } from "@/app/recruitment/_lib/types";
+import { STAGE_DOT } from "@/app/recruitment/_lib/requisitions/onboarding";
+import type { HubView } from "@/app/recruitment/_components/admin/candidates-view";
 
 /**
  * แถบสรุปเหนือตารางผู้สมัคร — **การ์ดตัวเลขแถวเดียว แล้วหลีกทางให้ตาราง**
@@ -48,13 +50,26 @@ export const stampDay = new Intl.DateTimeFormat("th-TH", {
  * ลำดับการ์ด — **ตามทางเดินจริงของใบสมัครหนึ่งใบ** ไม่ใช่ตามตัวอักษรหรือตามจำนวน
  * · ไม่มี “ปฏิบัติงาน” (ดูหัวไฟล์)
  */
-const PIPELINE: ApplicationStatus[] = [
+const PIPELINE: (ApplicationStatus | HubView)[] = [
+  "open",
   "pending_contact",
   "interview_scheduled",
   "interview_passed",
   "training",
+  "working",
   "cancelled",
 ];
+
+/**
+ * การ์ดที่แถวมาจากหน้าติดตามพนักงานใหม่ (3 พ.ย. 2569 · Bew) — รอสรรหา = แท็บอัตราว่าง ·
+ * รับรถแล้ว = แท็บรับรถแล้ว · ตัวเลขนับด้วย `hubRows()` ชุดเดียวกับหน้านั้น
+ * · `working` ตรงนี้ไม่ใช่สถานะใบสมัคร “ปฏิบัติงาน” (การ์ดนั้นถอดไปแล้ว ดูหัวไฟล์)
+ */
+const HUB_CARD: Record<HubView, { label: string; unit: string; dot: string }> = {
+  open: { label: "รอสรรหา", unit: "อัตรา", dot: STAGE_DOT.open },
+  working: { label: "รับรถแล้ว", unit: "คน", dot: STAGE_DOT.working },
+};
+const isHubView = (v: string): v is HubView => v === "open" || v === "working";
 
 /** จุดสีหน้าชื่อสถานะ — ชุดเดียวกับไอคอนคนหน้าชื่อในตาราง (`PersonMark`) */
 const DOT: Record<ApplicationStatus, string> = {
@@ -103,6 +118,9 @@ export function CandidateInsights({
   filters,
   onFilter,
   onClearAll,
+  hubCounts = null,
+  view = null,
+  onView,
 }: {
   rows: ApplicationSummary[];
   /** อ่านสถานะ “กำลังกรองอยู่” จากตัวกรองจริงของตาราง ไม่เก็บ state ซ้อน */
@@ -111,8 +129,13 @@ export function CandidateInsights({
   onFilter: (patch: InsightFilters) => void;
   /** ถอยตัวกรองของ **ทุกคอลัมน์** กลับเป็น `DEFAULT_FILTERS` */
   onClearAll: () => void;
+  /** จำนวนของการ์ดรอสรรหา/รับรถแล้ว · `null` = ไม่มีข้อมูลหน้าติดตาม (ไม่โชว์การ์ด) */
+  hubCounts?: Record<HubView, number> | null;
+  /** การ์ดฝั่งติดตามพนักงานใหม่ที่เปิดอยู่ — เปิดอยู่ = การ์ดสถานะไม่ active */
+  view?: HubView | null;
+  onView?: (view: HubView) => void;
 }) {
-  const filtering = isFiltering(filters);
+  const filtering = isFiltering(filters) || Boolean(view);
   const count = useMemo(() => {
     const map = new Map<ApplicationStatus, number>();
     for (const row of rows) map.set(row.status, (map.get(row.status) ?? 0) + 1);
@@ -135,7 +158,7 @@ export function CandidateInsights({
 
   return (
     <SummaryPanel label="สรุปใบสมัครตามสถานะ" className="flex-none">
-      <SummaryStats className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+      <SummaryStats className={hubCounts ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-8" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"}>
         {/* ยอดรวมไม่ใช่ตัวกรอง (29 ก.ย. 2026) — ไม่มีมุมมอง “ทั้งหมด” ดู `DEFAULT_FILTERS`
             · **ตอนกรองอยู่ช่องนี้กลายเป็นปุ่ม “ล้างตัวกรอง”** (14 ต.ค. 2026) แทนแถวปุ่มเหนือตาราง
             ไม่ได้กรองอยู่ = ไม่ส่ง `onClick` = กล่องเฉย ๆ */}
@@ -147,9 +170,25 @@ export function CandidateInsights({
           sub={filtering ? "↺ ล้างตัวกรอง" : undefined}
           onClick={filtering ? onClearAll : undefined}
           title={filtering ? "ล้างตัวกรองทั้งหมด กลับไปดูเฉพาะรอการติดต่อ" : undefined}
-          className={`col-span-2 sm:col-span-3 lg:col-span-1 ${filtering ? "hover:brightness-[0.97]" : ""}`}
+          className={`col-span-2 ${hubCounts ? "sm:col-span-1" : "sm:col-span-3"} lg:col-span-1 ${filtering ? "hover:brightness-[0.97]" : ""}`}
         />
-        {PIPELINE.map((status) => (
+        {PIPELINE.map((status) =>
+          isHubView(status) ? (
+            hubCounts ? (
+              <SummaryStat
+                key={status}
+                compact
+                label={HUB_CARD[status].label}
+                value={hubCounts[status]}
+                unit={HUB_CARD[status].unit}
+                dot={HUB_CARD[status].dot}
+                tone="primary"
+                active={view === status}
+                onClick={() => onView?.(status)}
+                title={`ดู${HUB_CARD[status].label} — ชุดเดียวกับหน้าติดตามพนักงานใหม่`}
+              />
+            ) : null
+          ) : (
           <SummaryStat
             key={status}
             compact
@@ -158,11 +197,14 @@ export function CandidateInsights({
             share={(count.get(status) ?? 0) / (rows.length || 1)}
             dot={DOT[status]}
             tone={status === "cancelled" ? "alert" : "primary"}
-            active={sameSet(pickedStatus, [STATUS_LABEL[status]])}
+            active={!view && sameSet(pickedStatus, [STATUS_LABEL[status]])}
             onClick={() => pickStatus([STATUS_LABEL[status]])}
             title={`ดูเฉพาะ${STATUS_LABEL[status]}`}
+            /* 8 ช่อง: จอแคบ 2 คอลัมน์ ช่องท้ายเต็มแถว ไม่เหลือช่องว่าง */
+            className={hubCounts && status === "cancelled" ? "col-span-2 sm:col-span-1" : ""}
           />
-        ))}
+          ),
+        )}
       </SummaryStats>
     </SummaryPanel>
   );

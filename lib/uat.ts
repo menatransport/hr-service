@@ -88,10 +88,10 @@ export const UAT_TEAMS: UatTeam[] = [
       },
       {
         id: "mass-rc",
-        title: "เริ่มฝึกงาน · ผูก RQ",
+        title: "เริ่มฝึกงาน · ผูก JR",
         phase: 2,
-        how: "สถานะ “ฝึกงาน” → ฟอร์ม RC เลือก RQ ของ KA (หมายเหตุ UAT) · วันเริ่มฝึก = วันนี้ · รหัส พจส. = UAT + เลข DRV (เช่น UAT26110022)",
-        check: "ใบสมัครมีลิงก์ RQ ↗ · ชื่อขึ้นในแท็บฝึกงาน",
+        how: "สถานะ “ฝึกงาน” → ฟอร์ม RC เลือก JR ของ KA (หมายเหตุ UAT) · วันเริ่มฝึก = วันนี้ · รหัส พจส. = UAT + เลข DRV (เช่น UAT26110022)",
+        check: "ใบสมัครมีลิงก์ JR ↗ · ชื่อขึ้นในแท็บฝึกงาน",
         needs: ["ka-rq", "mass-interview"],
         href: CANDIDATES,
       },
@@ -114,10 +114,10 @@ export const UAT_TEAMS: UatTeam[] = [
     cases: [
       {
         id: "ka-rq",
-        title: "ขออัตรา (RQ)",
+        title: "ขออัตรา (JR)",
         phase: 1,
         how: "ติดตามพนักงานใหม่ → แท็บอัตราว่าง → “ขออัตรา” · หมายเหตุขึ้นต้น UAT",
-        check: "ได้เลข RQ ใหม่ สถานะ “เปิดรับ”",
+        check: "ได้เลข JR ใหม่ สถานะ “เปิดรับ”",
         href: `${ONBOARDING}?tab=open`,
       },
       {

@@ -2,22 +2,19 @@ import type { Metadata } from "next";
 
 import { DataError } from "@/components/ui/data-error";
 import { CandidatesScreen } from "@/app/recruitment/_components/admin/recruitment-screens";
-import { listRequisitions } from "@/app/recruitment/_lib/requisitions/store";
-import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
-import {
-  listApplications,
-  listBlacklist,
-  listContactOwners,
-} from "@/app/recruitment/_lib/applications";
+import { getHub, type Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
+import { listBlacklist, listContactOwners } from "@/app/recruitment/_lib/applications";
 import { listDocSlots } from "@/app/recruitment/_lib/doc-slots";
 import type { DocSlot } from "@/app/recruitment/_lib/form";
-import type { ApplicationSummary, BlacklistEntry } from "@/app/recruitment/_lib/types";
+import type { BlacklistEntry } from "@/app/recruitment/_lib/types";
 
 /**
  * ผู้สมัคร — แยกออกจากหน้าขอสรรหามาเป็นหน้าของตัวเองอีกครั้ง (14 ต.ค. 2026)
  *
  * `?ref=` คือเลขที่ใบสมัครที่คิวงานหรือตารางคำขอส่งมา เพื่อเปิดตรงแถวนั้นเลย ·
  * คำขอสรรหายังต้องโหลดมาด้วย เพราะกล่องทำเอกสารผูก/ปลด RQ ได้จากหน้านี้
+ * · โหลดผ่าน `getHub()` ตัวเดียวกับหน้าติดตามพนักงานใหม่ — การ์ดรอสรรหา/รับรถแล้ว (`?view=open|working`)
+ *   จึงเป็นแถวชุดเดียวกับแท็บอัตราว่าง/รับรถแล้วของหน้านั้น (3 พ.ย. 2569)
  */
 
 export const metadata: Metadata = {
@@ -31,18 +28,17 @@ export default async function CandidatesPage({
 }: PageProps<"/recruitment/admin/candidates">) {
   const params = await searchParams;
   const ref = typeof params.ref === "string" ? params.ref : "";
+  const view = params.view === "open" || params.view === "working" ? params.view : null;
 
-  let requisitions: Requisition[] | null = null;
-  let applications: ApplicationSummary[] | null = null;
+  let hub: Hub | null = null;
   let contactOptions: string[] = [];
   let docSlots: DocSlot[] = [];
   let blacklist: BlacklistEntry[] = [];
   let error: string | null = null;
 
   try {
-    [requisitions, applications, contactOptions, docSlots, blacklist] = await Promise.all([
-      listRequisitions(),
-      listApplications(),
+    [hub, contactOptions, docSlots, blacklist] = await Promise.all([
+      getHub(),
       listContactOwners(),
       listDocSlots(),
       listBlacklist(),
@@ -53,10 +49,10 @@ export default async function CandidatesPage({
 
   return (
     <div className="animate-rise">
-      {requisitions && applications ? (
+      {hub ? (
         <CandidatesScreen
-          initialRequisitions={requisitions}
-          initialApplications={applications}
+          hub={hub}
+          initialView={view}
           contactOptions={contactOptions}
           docSlots={docSlots}
           blacklist={blacklist}

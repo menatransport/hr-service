@@ -8,8 +8,9 @@ import { RequisitionsView } from "@/app/recruitment/_components/admin/requisitio
 import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
+import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import type { DocSlot } from "@/app/recruitment/_lib/form";
-import type { ApplicationSummary, BlacklistEntry } from "@/app/recruitment/_lib/types";
+import type { BlacklistEntry } from "@/app/recruitment/_lib/types";
 
 /**
  * ขอสรรหา กับ ผู้สมัคร — **สองหน้าแยกกัน** (14 ต.ค. 2026) เป็นเมนูย่อยใต้ “พนักงานใหม่”
@@ -44,16 +45,18 @@ export function RequisitionsScreen({
 }
 
 export function CandidatesScreen({
-  initialRequisitions,
-  initialApplications,
+  hub,
+  initialView = null,
   contactOptions,
   docSlots,
   blacklist,
   initialRef = "",
   initialRc = false,
 }: {
-  initialRequisitions: Requisition[];
-  initialApplications: ApplicationSummary[];
+  /** คำขอ + ใบสมัคร + ATMS ชุดเดียวกับหน้าติดตามพนักงานใหม่ (`getHub()`) */
+  hub: Hub;
+  /** `?view=` — เปิดมาที่การ์ดรอสรรหา/รับรถแล้ว */
+  initialView?: "open" | "working" | null;
   contactOptions: string[];
   /** ช่องเอกสารพร้อมค่าแสดง/บังคับจาก Section 4 ของคลังคำถาม */
   docSlots: DocSlot[];
@@ -64,11 +67,14 @@ export function CandidatesScreen({
   /** `?rc=1` — เปิดกล่องข้อมูล RC ของใบ `initialRef` ทันที */
   initialRc?: boolean;
 }) {
-  const [requisitions, setRequisitions] = useState(initialRequisitions);
-  const [applications, setApplications] = useState(initialApplications);
+  /* แถวผู้สมัครที่ยกเลิก (`applicant`) ไม่ใช่คำขอ — เหลือแต่คำขอจริงให้กล่อง RC/ทำเอกสาร */
+  const [requisitions, setRequisitions] = useState<Requisition[]>(() => hub.records.filter((r) => !r.applicant));
+  const [applications, setApplications] = useState(hub.applications);
 
   return (
     <CandidatesView
+      hub={hub}
+      initialView={initialView}
       title="ผู้สมัคร"
       rows={applications}
       setRows={setApplications}

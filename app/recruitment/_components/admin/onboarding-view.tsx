@@ -347,6 +347,27 @@ function leftForRegistry(r: Row, today: string): boolean {
   return d !== null && d >= WORKING_DAYS;
 }
 
+/**
+ * แถวของหน้าติดตามพนักงานใหม่ — ขั้น/ความคืบหน้า/บอร์ดซ่อม + ตัดคนรับรถเกิน 7 วันออก
+ * · หน้าผู้สมัคร (การ์ดรอสรรหา/รับรถแล้ว) นับจากตัวนี้ด้วย ตัวเลขสองหน้าจึงตรงกันเสมอ
+ */
+export function hubRows(records: OnboardingRecord[], repairs: Record<string, RepairStatus>): Row[] {
+  const today = todayInBangkok();
+  return records
+    .map((r) => {
+      const repair = r.vehicle?.plateNo ? (repairs[r.vehicle.plateNo] ?? null) : null;
+      return {
+        ...r,
+        name: personName(r) || r.code || r.applicant?.ref || "",
+        stage: stageOf(r),
+        states: stepStates(r, repair),
+        start: trainingStart(r),
+        repair,
+      };
+    })
+    .filter((r) => r.stage !== "working" || !leftForRegistry(r, today));
+}
+
 const monthLabel = (ym: string) =>
   `${THAI_MONTHS_FULL[Number(ym.slice(5, 7)) - 1] ?? ym} ${Number(ym.slice(0, 4)) + 543}`;
 
@@ -355,13 +376,21 @@ export function OnboardingView({
   repairs,
   options,
   initialStage = "training",
+  embedded = false,
 }: {
   records: OnboardingRecord[];
   repairs: Record<string, RepairStatus>;
-  options: RequisitionOptions;
+  /** ฟอร์มขออัตรา — ไม่ส่ง = ไม่มีปุ่มขออัตรา */
+  options?: RequisitionOptions;
   initialStage?: Stage;
+  /**
+   * ฝังในหน้าผู้สมัคร (การ์ดรอสรรหา/รับรถแล้ว) — ขั้นเดียว ไม่มีการ์ดขั้น/เดือน/ปุ่มแก้
+   * · `records` ตามพ่อแม่สด ๆ (ผูก RQ บนหน้าผู้สมัครแล้วแถวขยับทันที)
+   */
+  embedded?: boolean;
 }) {
-  const [records, setRecords] = useState(initial);
+  const [own, setRecords] = useState(initial);
+  const records = embedded ? initial : own;
   const [stage, setStage] = useState<Stage>(initialStage);
   const [sort, setSort] = useState(DEFAULT_SORT[initialStage]);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
@@ -372,22 +401,7 @@ export function OnboardingView({
   const [cancelling, setCancelling] = useState<Requisition | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const rows = useMemo<Row[]>(() => {
-    const today = todayInBangkok();
-    return records
-      .map((r) => {
-        const repair = r.vehicle?.plateNo ? (repairs[r.vehicle.plateNo] ?? null) : null;
-        return {
-          ...r,
-          name: personName(r) || r.code || r.applicant?.ref || "",
-          stage: stageOf(r),
-          states: stepStates(r, repair),
-          start: trainingStart(r),
-          repair,
-        };
-      })
-      .filter((r) => r.stage !== "working" || !leftForRegistry(r, today));
-  }, [records, repairs]);
+  const rows = useMemo(() => hubRows(records, repairs), [records, repairs]);
 
   const months = useMemo(
     () => [...new Set(rows.map((r) => r.requestedOn.slice(0, 7)).filter(Boolean))].sort().reverse(),
@@ -503,13 +517,14 @@ export function OnboardingView({
     }
   }
 
-  const withActions = stage === "open" || stage === "ended";
+  const withActions = !embedded && (stage === "open" || stage === "ended");
 
   return (
     <div className="flex flex-col gap-3">
-      <h1 className="sr-only">ติดตามพนักงานใหม่</h1>
+      {embedded ? null : <h1 className="sr-only">ติดตามพนักงานใหม่</h1>}
 
-      <SummaryPanel label="ขั้นของพนักงานใหม่">
+      <SummaryPanel label={embedded ? STAGE_LABEL[stage] : "ขั้นของพนักงานใหม่"}>
+        {embedded ? null : (
         <SummaryStats className="grid-cols-2 md:grid-cols-5">
           {STAGES.map((s) => (
             <SummaryStat
@@ -530,6 +545,7 @@ export function OnboardingView({
             />
           ))}
         </SummaryStats>
+        )}
 
         <SummaryToolbar>
           <SearchField
@@ -540,6 +556,7 @@ export function OnboardingView({
             tone="filled"
             className="lg:max-w-sm lg:flex-1"
           />
+          {embedded ? null : (
           <Select
             label="เดือนที่แจ้ง"
             value={month}
@@ -550,6 +567,7 @@ export function OnboardingView({
             clearable={Boolean(month)}
             className="lg:w-48"
           />
+          )}
           <div className="flex items-center gap-2 lg:ml-auto">
             <XlsxExportButton
               className="px-3.5 py-2 text-13"
@@ -573,7 +591,7 @@ export function OnboardingView({
                 rows: visible,
               })}
             />
-            {stage === "open" ? (
+            {stage === "open" && options ? (
               <button
                 type="button"
                 onClick={() => setCreating(true)}
@@ -718,7 +736,7 @@ export function OnboardingView({
 
       {/* ตารางฝึกงานรายวันย้ายไปอยู่ใต้ตารางผู้สมัคร (กรองฝึกงาน) ของ RC แล้ว — Bew 25 ต.ค. 2569 */}
 
-      {creating ? (
+      {creating && options ? (
         <RequisitionForm
           options={options}
           onClose={() => setCreating(false)}

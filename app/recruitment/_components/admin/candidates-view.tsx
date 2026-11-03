@@ -34,7 +34,9 @@ import {
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
 import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
-import { outcomeGroup, outcomeLabel } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { outcomeGroup, outcomeLabel, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
+import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
+import { OnboardingView, hubRows } from "@/app/recruitment/_components/admin/onboarding-view";
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
@@ -411,6 +413,9 @@ function facetOf(
 type ColumnId = (typeof COLUMNS)[number]["id"];
 type Filters = Partial<Record<ColumnId, string[]>>;
 
+/** การ์ดที่ไม่ใช่สถานะใบสมัคร — แถวมาจากหน้าติดตามพนักงานใหม่ (อัตราว่าง · รับรถแล้ว) */
+export type HubView = "open" | "working";
+
 export function CandidatesView({
   title,
   rows,
@@ -422,6 +427,8 @@ export function CandidatesView({
   requisitions = [],
   blacklist = [],
   setRequisitions,
+  hub,
+  initialView = null,
 }: {
   title: string;
   rows: ApplicationSummary[];
@@ -447,6 +454,9 @@ export function CandidatesView({
   setRequisitions?: Dispatch<SetStateAction<Requisition[]>>;
   /** ทุกใบที่ติด Blacklist จากฐาน (ไม่จำกัด 500 ใบ) — ดู `listBlacklist()` */
   blacklist?: BlacklistEntry[];
+  /** ข้อมูลหน้าติดตามพนักงานใหม่ (`getHub()`) — การ์ดรอสรรหา/รับรถแล้ว */
+  hub?: Hub;
+  initialView?: HubView | null;
 }) {
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [filters, setFilters] = useState<Filters>(() => {
@@ -470,6 +480,41 @@ export function CandidatesView({
         .map((a) => ({ ref: a.ref, fullName: a.fullName, phone: a.phone })),
     ];
   }, [rows, blacklist]);
+
+  /**
+   * แถวของหน้าติดตามพนักงานใหม่ ทับด้วยคำขอ + สถานะใบสมัครสดบนจอนี้ — ผูก RQ / เลื่อนสถานะแล้ว
+   * การ์ดรอสรรหา/รับรถแล้วขยับทันที ไม่ต้องโหลดใหม่ · ขั้นคิดด้วย `hubRows()` ตัวเดียวกับหน้านั้น
+   */
+  const [view, setView] = useState<HubView | null>(hub ? initialView : null);
+  const hubRecords = useMemo<OnboardingRecord[]>(() => {
+    if (!hub) return [];
+    const live = new Map(requisitions.map((r) => [r.id, r]));
+    const appStatus = new Map(rows.map((a) => [a.id, a.status]));
+    return hub.records.map((r) => {
+      const next = { ...r, ...live.get(r.id) };
+      return next.match
+        ? { ...next, match: { ...next.match, status: appStatus.get(next.match.applicationId) ?? next.match.status } }
+        : next;
+    });
+  }, [hub, requisitions, rows]);
+  const hubCounts = useMemo(() => {
+    if (!hub) return null;
+    const list = hubRows(hubRecords, hub.repairs);
+    return {
+      open: list.filter((r) => r.stage === "open").length,
+      working: list.filter((r) => r.stage === "working").length,
+    };
+  }, [hub, hubRecords]);
+
+  function pickView(next: HubView | null) {
+    setView(next);
+    try {
+      const url = new URL(window.location.href);
+      if (next) url.searchParams.set("view", next);
+      else url.searchParams.delete("view");
+      window.history.replaceState(null, "", url);
+    } catch {}
+  }
 
   /** ใบสมัคร → คำขอที่ผูกไว้ — ลิงก์ไปเส้นทางพนักงานใหม่ของคนนั้น */
   const rqByApplication = useMemo(
@@ -553,7 +598,7 @@ export function CandidatesView({
   const showTraining = onlyStatus(STATUS_LABEL.training) || onlyStatus(STATUS_LABEL.interview_passed);
 
   /** กรองฝึกงานอย่างเดียว = ตารางฝึกงานรายวัน + ปุ่มคัดลอกสรุปใต้ตาราง (ย้ายมาจากหน้าติดตามพนักงานใหม่ 25 ต.ค. 2569) */
-  const showDaily = onlyStatus(STATUS_LABEL.training);
+  const showDaily = !view && onlyStatus(STATUS_LABEL.training);
 
   const columns = useMemo(
     () =>
@@ -719,7 +764,7 @@ export function CandidatesView({
 
   return (
     /* มุมมองฝึกงานมีตารางรายวันต่อท้าย — หน้าเลื่อนยาวตามปกติแทนการล็อกสูงเท่าจอ */
-    <div className={showDaily ? "flex flex-col gap-4" : "flex flex-col lg:h-[calc(100dvh-4rem)]"}>
+    <div className={showDaily ? "flex flex-col gap-4" : view ? "flex flex-col" : "flex flex-col lg:h-[calc(100dvh-4rem)]"}>
       {/* หัวเรื่องซ่อนไว้ให้โปรแกรมอ่านจอเท่านั้น — ถอดหัวที่มองเห็นออกตามคำขอ 23 ก.ย. 2026
           (`sr-only` เป็น absolute จึงไม่กิน `gap` ของกล่องนอก) */}
       <h1 className="sr-only">{title}</h1>
@@ -728,11 +773,26 @@ export function CandidatesView({
       <CandidateInsights
         rows={rows}
         filters={filters as InsightFilters}
-        onFilter={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
+        onFilter={(patch) => {
+          pickView(null);
+          setFilters((prev) => ({ ...prev, ...patch }));
+        }}
         /* ล้างทุกคอลัมน์ ไม่ใช่เฉพาะที่แถบสรุปเป็นเจ้าของ — ปุ่มอยู่บนการ์ด “ทั้งหมด”
            ไม่ได้เพิ่มแถวใหม่เหนือตาราง (14 ต.ค. 2026 · Bew) */
-        onClearAll={() => setFilters(DEFAULT_FILTERS)}
+        onClearAll={() => {
+          pickView(null);
+          setFilters(DEFAULT_FILTERS);
+        }}
+        hubCounts={hubCounts}
+        view={view}
+        onView={pickView}
       />
+
+      {view && hub ? (
+        /* รอสรรหา / รับรถแล้ว = ตารางของหน้าติดตามพนักงานใหม่ตัวเดียวกัน (ฝัง · อ่านอย่างเดียว) */
+        <OnboardingView key={view} embedded records={hubRecords} repairs={hub.repairs} initialStage={view} />
+      ) : (
+      <>
 
       {/* `relative` ทำให้กล่องนี้เป็น containing block ของลูกที่ `position: absolute`
           (เช่น `.sr-only` ในปุ่มแต่ละแถว) — ไม่งั้นสแปนที่มองไม่เห็นพวกนั้นจะไปอิง
@@ -999,6 +1059,8 @@ export function CandidatesView({
       </div>
 
       <TablePager paged={paged} unit="ใบ" className="sheet-bleed -mt-px flex-none" />
+      </>
+      )}
 
       {showDaily ? <TraineeDailySection pool={dailyPool} people={dailyPeople} /> : null}
 
