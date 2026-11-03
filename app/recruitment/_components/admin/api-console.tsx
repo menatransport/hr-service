@@ -75,7 +75,7 @@ export function JsonBlock({
 
 const ACCESS_TEXT = {
   public: "สาธารณะ — ไม่ต้องล็อกอิน",
-  login: "ต้องล็อกอิน (คุกกี้ hrs.session)",
+  login: "ต้องล็อกอิน (คุกกี้ hrs.session) หรือ header x-api-key",
   "open-get": "อ่านภายใน — proxy ไม่ตรวจ session",
 } as const;
 

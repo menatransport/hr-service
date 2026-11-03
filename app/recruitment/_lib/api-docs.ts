@@ -50,13 +50,21 @@ export interface ApiGroup {
 }
 
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
-export const API_DOCS_SCOPE = ["/api/auth/", "/api/recruitment/", "/api/drivers", "/api/uploads"];
+export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.2.0";
+export const API_DOCS_VERSION = "4.3.0";
 export const API_DOCS_UPDATED = "2026-11-03";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-03",
+    version: "4.3.0",
+    changes: [
+      "เรียกเส้นที่ต้องล็อกอินด้วย header `x-api-key` แทนคุกกี้ได้ — สร้าง key ที่กล่อง “API key ของฉัน” บนหน้านี้ · key ผูกกับคนสร้าง ได้ข้อมูลและสิทธิ์ชุดเดียวกับคนนั้น การแก้ไขลงชื่อคนนั้น",
+      "key อ่านอย่างเดียว (ค่าเริ่มต้น) ยิง POST/PUT/PATCH/DELETE ได้ `403` · key ผิด/ยกเลิก/หมดอายุ (90 วัน) ได้ `401` · เจ้าของเป็น Inactive ใน NCAC = key ถูกยกเลิกเอง",
+    ],
+  },
   {
     date: "2026-11-03",
     version: "4.2.0",
@@ -174,7 +182,7 @@ export const API_GROUPS: ApiGroup[] = [
     id: "auth",
     title: "การยืนยันตัวตน",
     description:
-      "ล็อกอินด้วย Google (โดเมน menatransport.co.th) แล้วส่งต่อให้ NCAC ออกสิทธิ์ ระบบเก็บ session เป็นคุกกี้ `hrs.session` ที่ลงลายเซ็น HMAC-SHA256 อายุ 3 เดือน",
+      "ล็อกอินด้วย Google (โดเมน menatransport.co.th) แล้วส่งต่อให้ NCAC ออกสิทธิ์ ระบบเก็บ session เป็นคุกกี้ `hrs.session` ที่ลงลายเซ็น HMAC-SHA256 อายุ 3 เดือน · **ระบบอื่นเรียกด้วย header `x-api-key`** แทนได้ (สร้างที่กล่อง “API key ของฉัน” บนหน้านี้) — key ผูกกับคนสร้าง ได้ข้อมูล/สิทธิ์ของคนนั้น · เส้นจัดการ key ต้องล็อกอินด้วยคุกกี้เท่านั้น",
     endpoints: [
       {
         method: "GET",
@@ -205,6 +213,37 @@ export const API_GROUPS: ApiGroup[] = [
         description: "ลบคุกกี้ session · ใช้ POST เพื่อไม่ให้ prefetch ของลิงก์ทำให้หลุดจากระบบเอง",
         access: "public",
         response: "{ ok: true }",
+      },
+      {
+        method: "GET",
+        path: "/api/api-keys",
+        summary: "API key ของฉัน",
+        description: "รวมที่ยกเลิก/หมดอายุแล้วไม่เกิน 90 วัน · ไม่มีตัว key (เก็บแค่ hash)",
+        access: "login",
+        response: "[{ id, label, scope: \"read\"|\"write\", hint, createdAt, expiresAt, lastUsedAt, revokedAt, active }]",
+      },
+      {
+        method: "POST",
+        path: "/api/api-keys",
+        summary: "สร้าง API key",
+        description: "**key เต็มออกครั้งเดียวในคำตอบนี้** · อายุ 90 วัน · ใช้งานพร้อมกันได้ไม่เกิน 5 อันต่อคน · ต้องล็อกอินด้วยคุกกี้ (key สร้าง key ไม่ได้)",
+        access: "login",
+        params: [
+          { name: "label", in: "body", type: "string", required: true, desc: "ชื่อ key ≤ 60 ตัวอักษร" },
+          { name: "scope", in: "body", type: '"read" | "write"', desc: "ค่าเริ่มต้น `read` = GET อย่างเดียว" },
+        ],
+        response: "{ key: \"hrs_…\", info: ApiKeyInfo }",
+        errors: [{ status: 400, when: "ไม่มีชื่อ หรือมี key ที่ใช้งานอยู่ครบ 5 อันแล้ว" }],
+      },
+      {
+        method: "DELETE",
+        path: "/api/api-keys/{id}",
+        summary: "ยกเลิก API key",
+        description: "ยกเลิกได้เฉพาะ key ของตัวเอง · มีผลภายใน 1 นาที",
+        access: "login",
+        params: [P("id", "รหัส key")],
+        response: "{ revoked: true }",
+        errors: [{ status: 404, when: "ไม่พบ key หรือถูกยกเลิกไปแล้ว" }],
       },
     ],
   },

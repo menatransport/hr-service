@@ -8,6 +8,7 @@ import {
   type SessionPayload,
 } from "@/lib/auth/token";
 import { isInactive, toSessionUser } from "@/lib/auth/user";
+import { API_KEY_HEADER, resolveApiKey } from "@/lib/auth/api-keys";
 import { NcacError, getUser } from "@/lib/ncac/client";
 
 /**
@@ -24,6 +25,8 @@ import { NcacError, getUser } from "@/lib/ncac/client";
  *    (หน้าที่เรียกมันอยู่ใต้ `/desk/**` ซึ่งถูกกั้นไปแล้วตั้งแต่ชั้นบน)
  *
  * 3. **หน้าล็อกอิน `/`** → ล็อกอินอยู่แล้วไม่ต้องเห็นหน้านี้อีก ส่งต่อไป `/home` (หรือ `next`)
+ *
+ * 4. **`x-api-key`** (ไม่มีคุกกี้) ใต้ `/api/**` → ทำเป็น session ของเจ้าของ key (`authorizeApiKey`)
  *
  * และทุกครั้งที่ **เปิดหน้าเต็ม ๆ** (เข้าระบบ / รีเฟรช — ไม่ใช่ client navigation หรือ
  * prefetch) จะอ่านข้อมูลผู้ใช้ใหม่จาก NCAC ด้วยรหัสพนักงาน แล้วเซ็นคุกกี้ทับ — ย้ายแผนก
@@ -106,6 +109,38 @@ async function refreshSession(request: NextRequest, session: SessionPayload) {
   return response;
 }
 
+/** session ที่ทำจาก API key มีอายุแค่คำขอเดียว — ไม่ส่งกลับไปเป็นคุกกี้ของผู้เรียก */
+const API_KEY_SESSION_MS = 5 * 60 * 1000;
+
+/**
+ * เรียก `/api/**` ด้วย `x-api-key` (สร้างที่หน้า API Docs · ดู `lib/auth/api-keys.ts`)
+ *
+ * key ถูกต้อง = เซ็น session อายุสั้นของ **เจ้าของ key** ใส่ใน request ที่ส่งต่อ (ท่าเดียวกับ
+ * `refreshSession`) route ทุกเส้นจึงอ่าน `readSessionUser()` ได้คนเดียวกับตอนล็อกอินโดยไม่ต้องแก้
+ * · key อ่านอย่างเดียวยิงคำสั่งเขียน = 403 · ไม่ตั้งคุกกี้ในคำตอบ
+ */
+async function authorizeApiKey(request: NextRequest, raw: string) {
+  let resolved;
+  try {
+    resolved = await resolveApiKey(raw);
+  } catch {
+    return NextResponse.json({ error: "ตรวจ API key ไม่สำเร็จ — ลองใหม่อีกครั้ง" }, { status: 503 });
+  }
+  if (!resolved) {
+    return NextResponse.json({ error: "API key ไม่ถูกต้อง ถูกยกเลิก หรือหมดอายุแล้ว" }, { status: 401 });
+  }
+  if (resolved.scope === "read" && WRITE_METHODS.has(request.method)) {
+    return NextResponse.json(
+      { error: "API key นี้อ่านได้อย่างเดียว — สร้าง key ที่อนุญาตให้เขียนได้ที่หน้า API Docs" },
+      { status: 403 },
+    );
+  }
+
+  const cookie = await signSession({ user: resolved.user, token: "", exp: Date.now() + API_KEY_SESSION_MS });
+  request.cookies.set(SESSION_COOKIE, cookie);
+  return NextResponse.next({ request: { headers: request.headers } });
+}
+
 export default async function proxy(request: NextRequest) {
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
   const { pathname, search } = request.nextUrl;
@@ -118,6 +153,12 @@ export default async function proxy(request: NextRequest) {
 
   if (session) {
     return isDocumentLoad(request) ? refreshSession(request, session) : NextResponse.next();
+  }
+
+  /* จัดการ key เองต้องล็อกอินจริง (key สร้าง key ต่อไม่ได้) · เส้นล็อกอินไม่เกี่ยวกับ key */
+  const apiKey = request.headers.get(API_KEY_HEADER);
+  if (apiKey && pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/") && !pathname.startsWith("/api/api-keys")) {
+    return authorizeApiKey(request, apiKey);
   }
 
   if (pathname.startsWith("/api/")) {

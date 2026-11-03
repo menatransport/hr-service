@@ -11,6 +11,7 @@ import {
   requestDoc,
   responseDoc,
 } from "@/app/recruitment/_components/admin/api-console";
+import { ApiKeyPanel } from "@/app/recruitment/_components/admin/api-key-panel";
 import { formatThaiDate } from "@/app/recruitment/_lib/drivers/types";
 import {
   API_CHANGELOG,
@@ -39,7 +40,11 @@ const METHOD_CHIP: Record<HttpMethod, string> = {
 
 const ACCESS: Record<ApiAccess, { label: string; icon: LucideIcon; hint: string }> = {
   public: { label: "สาธารณะ", icon: Globe, hint: "เรียกได้โดยไม่ต้องล็อกอิน" },
-  login: { label: "ต้องล็อกอิน", icon: Lock, hint: "ต้องมีคุกกี้ session — ไม่มีได้ 401" },
+  login: {
+    label: "ต้องล็อกอิน",
+    icon: Lock,
+    hint: "คุกกี้ session หรือ header x-api-key — ไม่มีได้ 401 · key อ่านอย่างเดียวยิงคำสั่งเขียนได้ 403",
+  },
   "open-get": {
     label: "อ่านภายใน",
     icon: LockOpen,
@@ -51,7 +56,8 @@ const STATUS_CODES: [number, string][] = [
   [200, "สำเร็จ — ตัวข้อมูลตอบกลับตรง ๆ ไม่มีซองห่อ"],
   [302, "เปลี่ยนเส้นทาง (เฉพาะเส้นล็อกอิน)"],
   [400, "ข้อมูลที่ส่งมาไม่ผ่านการตรวจ — ข้อความใน error บอกช่องที่ต้องแก้"],
-  [401, "ไม่มี session หรือหมดอายุ — ต้องเข้าสู่ระบบใหม่"],
+  [401, "ไม่มี session หรือหมดอายุ / API key ผิด ถูกยกเลิก หรือหมดอายุ"],
+  [403, "API key อ่านอย่างเดียว แต่ยิงคำสั่งเขียน"],
   [404, "ไม่พบข้อมูลตามรหัสที่ระบุ"],
   [500, "ข้อผิดพลาดฝั่งเซิร์ฟเวอร์หรือฐานข้อมูล"],
   [502, "ขั้นแรกสำเร็จแต่ขั้นบันทึกไม่ติด (เช่น อัปรูปแล้วบันทึกลงทะเบียนไม่สำเร็จ)"],
@@ -111,7 +117,8 @@ export function ApiDocsView() {
             JSON (UTF-8) · อัปโหลดไฟล์ใช้ <code className="font-mono">multipart/form-data</code>
           </Fact>
           <Fact term="การยืนยันตัวตน">
-            คุกกี้ <code className="font-mono">hrs.session</code> จากการล็อกอิน Google · ผู้ทำรายการอ่านจาก session เสมอ
+            คุกกี้ <code className="font-mono">hrs.session</code> จากการล็อกอิน Google หรือ header{" "}
+            <code className="font-mono">x-api-key</code> (สร้างด้านล่าง) · ผู้ทำรายการอ่านจาก session / เจ้าของ key เสมอ
             ไม่รับจาก body
           </Fact>
           <Fact term="รูปแบบข้อผิดพลาด">
@@ -151,6 +158,8 @@ export function ApiDocsView() {
           </div>
         </div>
       </section>
+
+      <ApiKeyPanel />
 
       {/* ------------------------------------------------------- ค้นหา + ดัชนี */}
       <section className="flex flex-col gap-3">
