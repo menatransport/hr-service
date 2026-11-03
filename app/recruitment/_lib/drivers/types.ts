@@ -247,6 +247,14 @@ export interface TraineeDailyEntry {
   recordedBy: string;
 }
 
+/**
+ * คีย์บันทึกรายวันของคนที่ยังไม่มีรหัส พจส. (ATMS ยังไม่ออกรหัส) — `rq:<requisitionId>`
+ * ใช้แทน `drivercode` ใน `trainee_daily` · RC ผูกรหัสเมื่อไหร่ ย้ายไปรหัสจริงให้
+ * (`moveRequisitionDaily()` · Bew 3 พ.ย. 2569)
+ */
+export const RQ_DAILY_PREFIX = "rq:";
+export const requisitionDailyKey = (requisitionId: string) => `${RQ_DAILY_PREFIX}${requisitionId}`;
+
 /** จำนวนวันออกงานรายเดือน — `key` เป็น `YYYY-MM` ของปี ค.ศ. */
 export interface DriverWorkMonth {
   key: string;
@@ -466,6 +474,9 @@ export function driverDocumentUrl(drivercode: string, fileId: string): string {
 
 /* ------------------------------------------------------------ คนขับ */
 
+/** ป้าย “ใหม่” บนตารางทะเบียน — เข้าทะเบียนมาไม่เกินกี่ชั่วโมง */
+export const NEW_DRIVER_HOURS = 8;
+
 export interface DriverRecord {
   drivercode: string;
   name: string;
@@ -522,6 +533,10 @@ export interface DriverRecord {
   /** เลขบัญชีกสิกรไทย 10 หลัก (ตัวเลขล้วน) · สาขาที่เปิดบัญชี — กติกาเดียวกับ `licenseNo` */
   bankAccountNo: string;
   bankBranch: string;
+  /** เข้าทะเบียนเมื่อไหร่ (ISO · `registeredAt`) — ว่าง = เข้ามาก่อนมีฟิลด์นี้ (3 พ.ย. 2569) · ตารางเรียงใหม่สุดก่อน */
+  createdAt: string;
+  /** เพิ่งเข้าทะเบียนภายใน `NEW_DRIVER_HOURS` ชั่วโมง — คิดฝั่งเซิร์ฟเวอร์ (ป้าย “ใหม่” บนตาราง) */
+  isNew: boolean;
   /** แก้ประวัติบนหน้าทะเบียนล่าสุดเมื่อไหร่ (ISO) · โดยใคร — ว่าง = ยังไม่เคยแก้ */
   profileEditedAt: string;
   profileEditedBy: string;

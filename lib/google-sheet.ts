@@ -9,6 +9,10 @@
 export const HR_GOOGLE_SHEET_URL =
   "https://docs.google.com/spreadsheets/d/15uYCaPpRfDViaeeXtt2MX3JBcQbZABTXyQUcH29BNDU/edit?usp=sharing";
 
+/** ชีตรหัส พจส. — ฟอร์ม “ข้อมูล RC” เปิดดูเพื่อคัดลอกรหัส */
+export const DRIVER_CODE_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/18ZmlWG9fgiNvY1kF_EkFNlp68upX4xe_8LpMiMm_pF0";
+
 /** id ของชีตจากลิงก์ `docs.google.com/spreadsheets/d/<id>/…` — ไม่ใช่ลิงก์ชีต = `null` */
 export function googleSheetId(input: string): string | null {
   return /docs\.google\.com\/spreadsheets\/d\/([\w-]{20,})/.exec(input)?.[1] ?? null;

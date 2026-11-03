@@ -487,6 +487,8 @@ async function main() {
         syncedAt: now,
         registry: { source: SOURCE, sheet: SHEET, row: e.row, importedAt: now, by: BY },
       };
+      /* เวลาเข้าทะเบียนครั้งแรก — `registry` ข้างบนถูกเขียนทับทุกรอบ ใช้นับ “ใหม่” ไม่ได้ */
+      if (!before?.registry) $set.registeredAt = now;
       const $unset = {};
 
       /* ช่องที่ฝ่ายบุคคลแก้เองบนหน้าทะเบียน (`updateDriverProfile()`) — ค่าบนเว็บชนะไฟล์ */

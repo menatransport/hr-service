@@ -72,13 +72,13 @@ export interface CellProps {
   locked: boolean;
 }
 
-/** สถานะที่เลือกได้จากช่องสถานะ — เรียงตามลำดับที่ใบสมัครเดินจริง */
+/** สถานะที่เลือกได้จากช่องสถานะ — เรียงตามลำดับที่ใบสมัครเดินจริง
+ *  · ไม่มี `working` (ปฏิบัติงาน) ให้เลือกเอง — มาจากการส่งมอบรถ/ทะเบียนเท่านั้น (Bew 3 พ.ย. 2569) */
 const SELECTABLE: ApplicationStatus[] = [
   "pending_contact",
   "interview_scheduled",
   "interview_passed",
   "training",
-  "working",
   "cancelled",
 ];
 

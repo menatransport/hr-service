@@ -19,6 +19,7 @@ import {
   SelectField,
   TextField,
   TextareaField,
+  type SelectGroupOption,
   type SelectOption,
 } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -30,11 +31,13 @@ import type {
   VehicleOption,
 } from "@/app/recruitment/_lib/requisitions/options";
 import {
+  BRANCHES,
   CUSTOMERS,
   HIRE_TYPES,
   MAX_HEADCOUNT,
   OTHER,
   POSITIONS,
+  isMixerBranch,
   type HireType,
   type Requisition,
 } from "@/app/recruitment/_lib/requisitions/types";
@@ -80,6 +83,7 @@ export function RequisitionForm({
   const me = useDeskIdentity();
 
   const [requestedOn, setRequestedOn] = useState(todayInBangkok());
+  const [branch, setBranch] = useState("");
   const [position, setPosition] = useState("");
   const [positionOther, setPositionOther] = useState("");
   const [customer, setCustomer] = useState("");
@@ -131,12 +135,37 @@ export function RequisitionForm({
    * ค่าที่ระบบเติมรอบล่าสุด — เปลี่ยนคนหรือรถแล้วเติมใหม่ได้เฉพาะช่องที่ยังว่าง
    * หรือยังถือค่าที่ระบบเติมไว้ ช่องที่คนเลือกเองไม่ถูกทับ
    */
-  const auto = useRef({ customer: "", position: "", plant: "" });
+  const auto = useRef({ branch: "", customer: "", position: "", plant: "" });
   const autoVehicle = useRef("");
   const [autoFrom, setAutoFrom] = useState("");
 
+  const mixer = isMixerBranch(branch);
+  const branchCustomers = options.branchCustomers[branch] ?? [];
+
+  /**
+   * เปลี่ยนสาขา — สระบุรี/บางปะกงไม่มีตำแหน่ง/แพล้นท์ จึง**ล้างค่าทิ้งจริง** (หลักเดียวกับ
+   * `switchHireType`) · ลูกค้าที่ไม่อยู่ในรายชื่อของสาขาใหม่ถูกล้าง · มีรายเดียว = เลือกให้เลย
+   */
+  function pickBranch(next: string) {
+    setBranch(next);
+    if (isMixerBranch(next)) {
+      if (customer && customer !== OTHER && !(CUSTOMERS as readonly string[]).includes(customer))
+        setCustomer("");
+      return;
+    }
+    setPosition("");
+    setPositionOther("");
+    setPlant("");
+    setPlantOther("");
+    setCustomerOther("");
+    const list = options.branchCustomers[next] ?? [];
+    if (list.length === 1) setCustomer(list[0]);
+    else if (!list.includes(customer)) setCustomer("");
+  }
+
   function fillFromVehicle(v: VehicleOption | undefined) {
     const next = {
+      branch: inBranches(v?.branch),
       customer: v?.customer ?? "",
       position: v?.position ?? "",
       plant: v?.plant ?? "",
@@ -144,11 +173,17 @@ export function RequisitionForm({
     const take = (cur: string, prev: string, val: string, set: (x: string) => void) => {
       if (val && (!cur || cur === prev)) set(val);
     };
-    take(customer, auto.current.customer, next.customer, setCustomer);
-    take(position, auto.current.position, next.position, setPosition);
-    take(plant, auto.current.plant, next.plant, setPlant);
+    const nextBranch =
+      next.branch && (!branch || branch === auto.current.branch) ? next.branch : branch;
+    if (nextBranch !== branch) pickBranch(nextBranch);
+    /* ลูกค้า/ตำแหน่ง/แพล้นท์จาก fleet มีความหมายแค่งานโม่ (ลาดกระบัง) */
+    if (isMixerBranch(nextBranch)) {
+      take(customer, auto.current.customer, next.customer, setCustomer);
+      take(position, auto.current.position, next.position, setPosition);
+      take(plant, auto.current.plant, next.plant, setPlant);
+    }
     auto.current = next;
-    setAutoFrom(v && (next.customer || next.position || next.plant) ? v.value : "");
+    setAutoFrom(v && (next.branch || next.customer || next.position || next.plant) ? v.value : "");
   }
 
   function pickVehicle(i: number, value: string) {
@@ -159,7 +194,10 @@ export function RequisitionForm({
   /** เลือกคนที่จะแทน → รถประจำของคนนั้นมาเอง (ถ้าช่องรถยังว่างหรือเป็นรถของคนก่อน) */
   function pickReplace(code: string) {
     setReplaceDrivercode(code);
-    const bound = options.drivers.find((d) => d.value === code)?.vehicle ?? "";
+    const driver = options.drivers.find((d) => d.value === code);
+    const site = inBranches(driver?.branch);
+    if (site && !branch) pickBranch(site);
+    const bound = driver?.vehicle ?? "";
     const v = bound
       ? options.vehicles.find((x) => x.value === bound || x.plate === bound)
       : undefined;
@@ -199,13 +237,18 @@ export function RequisitionForm({
 
   const plantValue = plant === OTHER ? plantOther.trim() : plant;
 
+  const customerGroups = useMemo(() => groupCustomers(options, branch), [options, branch]);
+  const plantGroups = useMemo(
+    () => groupPlants(options, branch, customer === OTHER ? "" : customer),
+    [options, branch, customer],
+  );
+
   const ready = Boolean(
     requestedOn &&
-      position &&
-      (position !== OTHER || positionOther.trim()) &&
-      customer &&
+      branch &&
+      customer.trim() &&
       (customer !== OTHER || customerOther.trim()) &&
-      plantValue &&
+      (!mixer || (position && (position !== OTHER || positionOther.trim()) && plantValue)) &&
       (hireType === "new_rate" || replaceDrivercode),
   );
 
@@ -215,7 +258,7 @@ export function RequisitionForm({
   /** สรุปสิ่งที่กำลังจะบันทึกในกล่องยืนยัน — ทุกค่าที่มาจากผู้ใช้ต้อง `escapeHtml()` */
   function summary(): string {
     const head = [
-      [customer === OTHER ? customerOther : customer, plantValue, labelOf(POSITIONS, position) || positionOther]
+      [branch, customer === OTHER ? customerOther : customer, plantValue, labelOf(POSITIONS, position) || positionOther]
         .filter(Boolean)
         .join(" · "),
       hireType === "replace"
@@ -251,9 +294,10 @@ export function RequisitionForm({
               method: "POST",
               body: {
                 requestedOn,
+                branch,
                 position,
                 positionOther: positionOther.trim(),
-                customer,
+                customer: customer.trim(),
                 customerOther: customerOther.trim(),
                 plant: plantValue,
                 headcount: count,
@@ -386,94 +430,109 @@ export function RequisitionForm({
           </p>
         ) : null}
 
-        {/* ตำแหน่งมีสี่ตัว — โชว์ครบเป็นชิป กดครั้งเดียวจบ ไม่ต้องกางดรอปดาวน์ */}
-        <div className="flex flex-col gap-1.5">
-          <span id="rq-position-label" className="text-12-5 font-medium text-mut">
-            ตำแหน่ง
-            <span aria-hidden className="font-normal text-alert">
-              {" "}
-              *
-            </span>
-          </span>
-          <div role="radiogroup" aria-labelledby="rq-position-label" className="flex flex-wrap gap-2">
-            {POSITIONS.map((p) => {
-              const on = position === p.value;
-              return (
-                <button
-                  key={p.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => setPosition(p.value)}
-                  className={`min-w-16 cursor-pointer rounded-full border px-4 py-1.5 text-13 transition-colors ${
-                    on
-                      ? "border-primary bg-primary font-medium text-primary-content"
-                      : "border-line bg-base-100 text-ink hover:border-primary/40"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-          {position === OTHER ? (
-            <TextField
-              id="rq-position-other"
-              label="ระบุตำแหน่ง"
-              srLabel
-              placeholder="ระบุตำแหน่ง…"
-              value={positionOther}
-              onChange={setPositionOther}
-              className="mt-1 sm:max-w-[16rem]"
-            />
-          ) : null}
-        </div>
+        {/* สาขาสามตัว + ตำแหน่งสี่ตัว — โชว์ครบเป็นชิป กดครั้งเดียวจบ ไม่ต้องกางดรอปดาวน์ */}
+        <Chips
+          id="rq-branch"
+          label="สาขา"
+          options={BRANCHES.map((b) => ({ value: b, label: b }))}
+          value={branch}
+          onChange={pickBranch}
+        />
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="flex flex-col gap-2">
+        {mixer ? (
+          <div className="flex flex-col gap-1.5">
+            <Chips
+              id="rq-position"
+              label="ตำแหน่ง"
+              options={POSITIONS}
+              value={position}
+              onChange={setPosition}
+            />
+            {position === OTHER ? (
+              <TextField
+                id="rq-position-other"
+                label="ระบุตำแหน่ง"
+                srLabel
+                placeholder="ระบุตำแหน่ง…"
+                value={positionOther}
+                onChange={setPositionOther}
+                className="mt-1 sm:max-w-[16rem]"
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className={`grid gap-4 ${mixer ? "sm:grid-cols-3" : "sm:grid-cols-[2fr_1fr]"}`}>
+          {mixer ? (
+            <div className="flex flex-col gap-2">
+              <SelectField
+                id="rq-customer"
+                label="ลูกค้า"
+                placeholder="เลือก…"
+                value={customer}
+                onChange={setCustomer}
+                {...customerGroups}
+                searchable
+                searchPlaceholder="ค้นชื่อลูกค้า…"
+              />
+              {customer === OTHER ? (
+                <TextField
+                  id="rq-customer-other"
+                  label="ระบุชื่อลูกค้า"
+                  srLabel
+                  placeholder="ระบุชื่อลูกค้า…"
+                  value={customerOther}
+                  onChange={setCustomerOther}
+                />
+              ) : null}
+            </div>
+          ) : branchCustomers.length > 0 ? (
             <SelectField
               id="rq-customer"
               label="ลูกค้า"
               placeholder="เลือก…"
               value={customer}
               onChange={setCustomer}
-              options={customerOptions}
+              options={branchCustomers.map((c) => ({ value: c, label: c }))}
+              searchable
+              searchPlaceholder="ค้นชื่อลูกค้า…"
             />
-            {customer === OTHER ? (
-              <TextField
-                id="rq-customer-other"
-                label="ระบุชื่อลูกค้า"
-                srLabel
-                placeholder="ระบุชื่อลูกค้า…"
-                value={customerOther}
-                onChange={setCustomerOther}
-              />
-            ) : null}
-          </div>
+          ) : (
+            /* อ่านรายชื่อลูกค้าจาก NCAC ไม่ได้ — พิมพ์เองไปก่อน (เซิร์ฟเวอร์รับชื่อเมื่อ NCAC ล่ม) */
+            <TextField
+              id="rq-customer"
+              label="ลูกค้า"
+              placeholder="ระบุชื่อลูกค้า…"
+              value={customer}
+              onChange={setCustomer}
+            />
+          )}
           {/* แพล้นท์มาจากที่ที่มีจริงในทะเบียนรถ แต่**พิมพ์เองได้** เพราะแพล้นท์
               เปิดใหม่จะยังไม่มีรถประจำจนกว่า ETL จะ sync */}
-          <div className="flex flex-col gap-2">
-            <SelectField
-              id="rq-plant"
-              label="แพล้นท์"
-              placeholder="เลือก…"
-              value={plant}
-              onChange={setPlant}
-              options={plantOptions(options)}
-              searchable
-              searchPlaceholder="ค้นชื่อแพล้นท์…"
-            />
-            {plant === OTHER ? (
-              <TextField
-                id="rq-plant-other"
-                label="ระบุชื่อแพล้นท์"
-                srLabel
-                placeholder="ระบุชื่อแพล้นท์…"
-                value={plantOther}
-                onChange={setPlantOther}
+          {mixer ? (
+            <div className="flex flex-col gap-2">
+              <SelectField
+                id="rq-plant"
+                label="แพล้นท์"
+                placeholder="เลือก…"
+                value={plant}
+                onChange={setPlant}
+                {...plantGroups}
+                searchable
+                searchPlaceholder="ค้นชื่อแพล้นท์…"
               />
-            ) : null}
-          </div>
+              {plant === OTHER ? (
+                <TextField
+                  id="rq-plant-other"
+                  label="ระบุชื่อแพล้นท์"
+                  srLabel
+                  placeholder="ระบุชื่อแพล้นท์…"
+                  value={plantOther}
+                  onChange={setPlantOther}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <DateField
             id="rq-date"
             label="วันที่แจ้งสรรหา"
@@ -701,13 +760,104 @@ function Section({
   );
 }
 
-const customerOptions: SelectOption[] = [
-  ...CUSTOMERS.map((c) => ({ value: c, label: c })),
-  { value: OTHER, label: "อื่นๆ (ระบุเอง)" },
-];
+/** ชิปเลือกได้ตัวเดียว — ใช้กับสาขาและตำแหน่ง */
+function Chips({
+  id,
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  options: readonly { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span id={`${id}-label`} className="text-12-5 font-medium text-mut">
+        {label}
+        <span aria-hidden className="font-normal text-alert">
+          {" "}
+          *
+        </span>
+      </span>
+      <div role="radiogroup" aria-labelledby={`${id}-label`} className="flex flex-wrap gap-2">
+        {options.map((o) => {
+          const on = value === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.value)}
+              className={`min-w-16 cursor-pointer rounded-full border px-4 py-1.5 text-13 transition-colors ${
+                on
+                  ? "border-primary bg-primary font-medium text-primary-content"
+                  : "border-line bg-base-100 text-ink hover:border-primary/40"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-function plantOptions(options: RequisitionOptions): SelectOption[] {
-  return [...options.plants, { value: OTHER, label: "ระบุเอง…" }];
+const inBranches = (v: string | undefined): string =>
+  v && (BRANCHES as readonly string[]).includes(v) ? v : "";
+
+/**
+ * จับกลุ่มจากทะเบียนรถ (`Boom_ETL.vehicles`: branch · fleet → ลูกค้า · plant)
+ * — **แค่เรียงกลุ่มที่ตรงไว้บน ไม่ซ่อนตัวเลือกอื่น** เพราะสระบุรีแทบไม่มีรถลูกค้าในรายการ
+ * `CUSTOMERS` และแพล้นท์เปิดใหม่ยังไม่มีรถจนกว่า ETL จะ sync
+ */
+type Grouped = { options?: SelectOption[]; groups?: SelectGroupOption[] };
+
+function groupCustomers(options: RequisitionOptions, branch: string): Grouped {
+  const other = { value: OTHER, label: "อื่นๆ (ระบุเอง)" };
+  const all = CUSTOMERS.map((c) => ({ value: c, label: c }));
+  const hit = new Set(
+    branch
+      ? options.vehicles.filter((v) => v.branch === branch && v.customer).map((v) => v.customer!)
+      : [],
+  );
+  if (hit.size === 0) return { options: [...all, other] };
+  return {
+    groups: [
+      { label: `ลูกค้าสาขา${branch}`, options: all.filter((o) => hit.has(o.value)) },
+      { label: "ลูกค้าอื่น", options: [...all.filter((o) => !hit.has(o.value)), other] },
+    ],
+  };
+}
+
+function groupPlants(
+  options: RequisitionOptions,
+  branch: string,
+  customer: string,
+): Grouped {
+  const other = { value: OTHER, label: "ระบุเอง…" };
+  const match = (v: VehicleOption) =>
+    (!branch || v.branch === branch) && (!customer || v.customer === customer);
+  const hit = new Set(
+    branch || customer
+      ? options.vehicles.filter((v) => v.plant && match(v)).map((v) => v.plant!)
+      : [],
+  );
+  if (hit.size === 0) return { options: [...options.plants, other] };
+  return {
+    groups: [
+      {
+        label: [customer, branch && `สาขา${branch}`].filter(Boolean).join(" · "),
+        options: options.plants.filter((o) => hit.has(o.value)),
+      },
+      { label: "แพล้นท์อื่น", options: [...options.plants.filter((o) => !hit.has(o.value)), other] },
+    ],
+  };
 }
 
 const labelOf = (

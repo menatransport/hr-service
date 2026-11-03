@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Link2, Loader2, TriangleAlert } from "lucide-react";
+import { ExternalLink, FileSpreadsheet, Link2, Loader2, TriangleAlert } from "lucide-react";
 
 import { DateField, SelectField, TextField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { DRIVER_CODE_SHEET_URL } from "@/lib/google-sheet";
 import { requestJson } from "@/lib/http";
 import { confirm, toastSuccess } from "@/lib/swal";
 import { daysUntil } from "@/app/recruitment/_lib/form";
@@ -103,7 +104,10 @@ export function CandidateRcForm({
   const set = (key: string) => (v: string) => setValues((prev) => ({ ...prev, [key]: v }));
   const start = values.trainingStartOn ?? "";
   const startState = trainingState(start);
-  const ready = Boolean(rqId) && (!target || Boolean(startState)) && !loading;
+  /* เลือก “ฝึกงาน” = เข้าทะเบียนประวัติทันที (Bew 3 พ.ย. 2569) — ทะเบียนผูกกับรหัส พจส. จึงต้องมีรหัสก่อน */
+  const needsCode = target === "training";
+  const ready =
+    Boolean(rqId) && (!target || Boolean(startState)) && (!needsCode || Boolean(drivercode.trim())) && !loading;
 
   async function submit() {
     const picked = requisitions.find((r) => r.id === rqId);
@@ -206,17 +210,37 @@ export function CandidateRcForm({
         <div className="flex flex-col gap-4 border-t border-line pt-3.5">
           <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <TextField id="rc-drivercode" label="รหัส พจส." value={drivercode} onChange={setDrivercode} optional />
-              {!drivercode && form?.codeMatch ? (
-                <button
-                  type="button"
-                  onClick={() => setDrivercode(form.codeMatch!.drivercode)}
-                  className="flex w-fit items-center gap-1 text-12 text-primary hover:underline"
+              <TextField
+                id="rc-drivercode"
+                label="รหัส พจส."
+                value={drivercode}
+                onChange={setDrivercode}
+                optional={!needsCode}
+                hint={needsCode ? "จำเป็นตอนเริ่มฝึกงาน — บันทึกแล้วขึ้นหน้าทะเบียนประวัติทันที" : undefined}
+              />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
+                {!drivercode && form?.codeMatch ? (
+                  <button
+                    type="button"
+                    onClick={() => setDrivercode(form.codeMatch!.drivercode)}
+                    className="flex w-fit items-center gap-1 text-12 text-primary hover:underline"
+                  >
+                    <Link2 size={12} aria-hidden />
+                    พบในทะเบียน {form.codeMatch.drivercode}
+                  </button>
+                ) : null}
+                <a
+                  href={DRIVER_CODE_SHEET_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="เปิด Google Sheet ในแท็บใหม่"
+                  className="btn-excel flex w-fit items-center gap-1.5 px-2 py-1 text-12 font-medium"
                 >
-                  <Link2 size={12} aria-hidden />
-                  พบในทะเบียน {form.codeMatch.drivercode}
-                </button>
-              ) : null}
+                  <FileSpreadsheet size={13} aria-hidden />
+                  ชีตรหัส พจส.
+                  <ExternalLink size={11} className="opacity-70" aria-hidden />
+                </a>
+              </div>
             </div>
             <DateField
               id="rc-trainingStartOn"

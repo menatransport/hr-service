@@ -336,3 +336,16 @@ export function listDepartments(): Promise<DepartmentDto[]> {
 export function listDivisions(): Promise<DivisionDto[]> {
   return call<DivisionDto[]>("/divisions/");
 }
+
+/* ---------------------------------------------------------------- ลูกค้า */
+
+/** master ลูกค้าของ NCAC (หน้า Master Data › ลูกค้า) — `site_id` = หน่วยงาน (3 สสบ. · 6 ศบก. …) */
+export interface ClientDto {
+  client_id: number;
+  client_name: string;
+  site_id: number;
+}
+
+export function listClients(): Promise<ClientDto[]> {
+  return call<ClientDto[]>("/clients/");
+}

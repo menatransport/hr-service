@@ -10,6 +10,7 @@ import { TraineeMatrix } from "@/app/recruitment/_components/admin/trainee-matri
 import { TraineeReportDialog } from "@/app/recruitment/_components/admin/trainee-report-dialog";
 import type { TraineeBoard, TraineeBoardDriver } from "@/app/recruitment/_lib/drivers/trainee-board";
 import type { RequisitionVehicle } from "@/app/recruitment/_lib/requisitions/types";
+import { requisitionDailyKey } from "@/app/recruitment/_lib/drivers/types";
 
 type Data = { board: TraineeBoard; vehicles: SelectOption[] };
 
@@ -22,8 +23,11 @@ export type TraineePerson = {
   vehicle: RequisitionVehicle | null;
 };
 
-/** คนที่ยังไม่มีรหัส พจส. — ขึ้นเป็นแถวชื่ออย่างเดียว (ยังไม่มีสถานะรายวัน) */
-const placeholder = (p: TraineePerson): TraineeBoardDriver => ({
+/**
+ * คนที่ยังไม่มีรหัส พจส. (ยังไม่ผูก ATMS) — ไม่มีครึ่งของ ATMS แต่ RC กรอกเองได้
+ * ด้วยคีย์ `rq:<id>` · `own` = แถวของคีย์นั้นที่เซิร์ฟเวอร์ส่งมา (บันทึกที่กรอกไว้)
+ */
+const placeholder = (p: TraineePerson, own?: TraineeBoardDriver): TraineeBoardDriver => ({
   drivercode: "",
   name: p.name,
   photoUrl: "",
@@ -33,9 +37,9 @@ const placeholder = (p: TraineePerson): TraineeBoardDriver => ({
   tenureMonths: null,
   tenureDays: null,
   days: {},
-  manualDays: {},
-  exitedOn: "",
-  exitReason: "",
+  manualDays: own?.manualDays ?? {},
+  exitedOn: own?.exitedOn ?? "",
+  exitReason: own?.exitReason ?? "",
   requisitionId: p.id,
   requisitionCode: p.code,
   vehicle: p.vehicle,
@@ -55,7 +59,11 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const codes = useMemo(() => [...new Set(pool.map((p) => p.drivercode).filter(Boolean))].sort().join(","), [pool]);
+  /* คนที่ไม่มีรหัสส่ง `rq:<id>` ไปแทน — ได้บันทึกที่ RC กรอกไว้กลับมา */
+  const codes = useMemo(
+    () => [...new Set(pool.map((p) => p.drivercode || (p.code ? requisitionDailyKey(p.id) : "")).filter(Boolean))].sort().join(","),
+    [pool],
+  );
 
   /* ตารางของคนในแท็บนี้เท่านั้น — รหัสที่ซ้ำ/ไม่มีรหัสยังนับเป็นหนึ่งแถวต่อคนเหมือนรายการ */
   const board = useMemo(() => {
@@ -68,7 +76,7 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
         seen.add(p.drivercode);
         return [{ ...found, name: found.name || p.name, requisitionId: found.requisitionId || p.id }];
       }
-      return [placeholder(p)];
+      return [placeholder(p, p.drivercode ? undefined : byCode.get(requisitionDailyKey(p.id)))];
     });
     return { ...data.board, drivers };
   }, [data, people]);

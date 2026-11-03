@@ -4,7 +4,7 @@ import { etlCol, hrCol } from "@/lib/db";
 import { uatDriverCode } from "@/lib/uat";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { findIssuedCodeByName, readDriver, readDrivers } from "@/app/recruitment/_lib/drivers/master";
-import { isExitStatus, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
+import { isExitStatus, RQ_DAILY_PREFIX, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
 import { listApplications, updateApplication } from "@/app/recruitment/_lib/applications";
 import {
   EXIT_REASON_NOTE_MAX,
@@ -190,6 +190,7 @@ function cancelledRows(apps: ApplicationSummary[], docs: WithId<RequisitionDoc>[
             id: a.id,
             code: "",
             requestedOn: bangkokDay(a.createdAt),
+            branch: "",
             position: "" as Requisition["position"],
             positionOther: "",
             customer: "",
@@ -587,8 +588,11 @@ export async function exitFromDaily(
   by: string,
 ): Promise<boolean> {
   if (!isExitStatus(input.code) || !ISO.test(input.dateISO)) return false;
+  /* `rq:<id>` = คนที่ยังไม่มีรหัส พจส. — หาคำขอจาก id ตรง ๆ */
+  const rqId = drivercode.startsWith(RQ_DAILY_PREFIX) ? drivercode.slice(RQ_DAILY_PREFIX.length) : "";
+  if (rqId && !ObjectId.isValid(rqId)) return false;
   const current = await (await requisitions())
-    .find({ drivercode, status: { $ne: "cancelled" }, match: { $ne: null } })
+    .find({ ...(rqId ? { _id: new ObjectId(rqId) } : { drivercode }), status: { $ne: "cancelled" }, match: { $ne: null } })
     .sort({ updatedAt: -1 })
     .limit(1)
     .next();

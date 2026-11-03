@@ -149,6 +149,14 @@ const COLUMNS = [
     text: (a: Row) => a.fullName,
   },
   {
+    id: "contactOwner",
+    label: "ผู้ติดต่อกลับ",
+    width: "min-w-[160px]",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+    text: (a: Row) => a.contactOwner || "ยังไม่มีผู้รับผิดชอบ",
+  },
+  {
     id: "createdAt",
     label: "ประทับเวลา",
     width: "min-w-[130px]",
@@ -250,14 +258,6 @@ const COLUMNS = [
           ? "ตรงกับ Blacklist"
           : "ไม่พบ",
   },
-  {
-    id: "contactOwner",
-    label: "ผู้ติดต่อกลับ",
-    width: "min-w-[160px]",
-    asc: "ก → ฮ",
-    desc: "ฮ → ก",
-    text: (a: Row) => a.contactOwner || "ยังไม่มีผู้รับผิดชอบ",
-  },
 ] as const;
 
 /**
@@ -297,6 +297,7 @@ function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showT
   return [
     { header: "เลขที่ใบสมัคร", width: 14, kind: "code", value: (a) => a.ref },
     { header: "ชื่อ–นามสกุล", width: 28, value: (a) => a.fullName },
+    { header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner },
     { header: "ประทับเวลา", width: 17, kind: "datetime", value: (a) => xlsxDate(a.createdAt) },
     { header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (a) => formatPhone(a.phone) },
     { header: "สนใจงานเขต", width: 18, value: (a) => a.workZone },
@@ -335,7 +336,6 @@ function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showT
           } satisfies XlsxColumn<Row>,
         ]
       : []),
-    { header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner },
     {
       header: "Driver Rating",
       width: 12,
@@ -506,7 +506,8 @@ export function CandidatesView({
    */
   function toStage(a: Row, to: RcTarget) {
     const rq = rqByApplication.get(a.id);
-    if (to === "training" && a.status === "interview_passed" && rq?.trainingStartOn) {
+    /* ยังไม่มีรหัส พจส. = เปิดกล่องให้กรอกก่อน — ฝึกงานต้องเข้าทะเบียนประวัติได้ทันที (Bew 3 พ.ย. 2569) */
+    if (to === "training" && a.status === "interview_passed" && rq?.trainingStartOn && rq.drivercode) {
       void patchCandidate(a.id, { status: "training" });
       return;
     }
@@ -860,6 +861,10 @@ export function CandidatesView({
                     </div>
                   </td>
 
+                  <td className="px-2 py-1.5">
+                    <OwnerCell {...cell} options={contactOptions} />
+                  </td>
+
                   <td className="px-3 py-2 font-mono text-11 whitespace-nowrap text-mut tabular-nums">
                     {stamp.format(new Date(a.createdAt))}
                   </td>
@@ -912,10 +917,6 @@ export function CandidatesView({
                       )}
                     </td>
                   ) : null}
-
-                  <td className="px-2 py-1.5">
-                    <OwnerCell {...cell} options={contactOptions} />
-                  </td>
 
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-1.5">

@@ -9,6 +9,7 @@ import { stageOf, val, type OnboardingRecord } from "@/app/recruitment/_lib/requ
 import { customerLabel, positionLabel } from "@/app/recruitment/_lib/requisitions/types";
 import { IN_REGISTRY } from "./master";
 import { loadManualDay } from "./registry";
+import { requisitionDailyKey } from "./types";
 import { getTraineeBoard } from "./trainee-board";
 import { REPORT_ISSUES, issueOf, type ReportIssue } from "./trainees";
 
@@ -110,7 +111,9 @@ export async function buildTraineeReport(dateISO: string): Promise<string> {
     const status = own?.code || atms.get(code) || "";
     const key = issueOf(status, own?.trial === true);
     if (!key) continue;
-    const record = training.find((r) => r.drivercode === code);
+    /* `rq:<id>` = กรอกไว้ก่อนมีรหัส พจส. — หาคนจากคำขอ */
+    const record =
+      training.find((r) => r.drivercode === code) ?? active.find((r) => requisitionDailyKey(r.id) === code);
     const person = people.byCode.get(code) ?? (record ? people.fromRecord(record) : { code, prefix: "", name: "", position: "", customer: "", plant: "" });
     const list = issues.get(key) ?? [];
     list.push({ person, reason: own?.note ?? "" });

@@ -47,6 +47,24 @@ export const CUSTOMERS = [
   "KP99",
 ] as const;
 
+/**
+ * สาขาที่ขอสรรหาได้ — เก็บเป็นชื่อสาขา ซึ่งตรงกับ `branch` ของ `Boom_ETL.vehicles`
+ * ฟอร์มจึงจับกลุ่มลูกค้า/แพล้นท์ของสาขานั้นจากทะเบียนรถได้ตรง ๆ
+ * · ใบก่อน 3 พ.ย. 2026 ไม่มีค่านี้ (ว่าง)
+ */
+export const BRANCHES = ["ลาดกระบัง", "สระบุรี", "บางปะกง"] as const;
+
+/**
+ * งานโม่ (ตำแหน่ง ML/MS + แพล้นท์ + ลูกค้าใน `CUSTOMERS`) มีเฉพาะลาดกระบัง
+ * · สระบุรี/บางปะกง **ไม่มีตำแหน่งและแพล้นท์** ลูกค้ามาจาก master ลูกค้าของ NCAC
+ * (`branchCustomers` ใน `options.ts`) — ตามคำสั่ง 3 พ.ย. 2026
+ */
+export const isMixerBranch = (branch: string): boolean =>
+  branch !== "สระบุรี" && branch !== "บางปะกง";
+
+/** บางปะกง (ศบก.) รับให้ลูกค้ารายเดียว — ไม่ได้อ่านจาก master เพราะ master ศบก. ยังไม่ตรงงานจริง */
+export const BANGPAKONG_CUSTOMERS = ["บริษัท ทีดี เอ็ม ลอจิสติกส์ จำกัด"];
+
 /** ค่าพิเศษของช่องลูกค้าและตำแหน่ง — เลือกแล้วจะเปิดช่องพิมพ์เองข้างล่าง */
 export const OTHER = "other";
 
@@ -219,6 +237,8 @@ export interface Requisition {
   code: string;
   requestedOn: string;
 
+  /** หนึ่งใน `BRANCHES` · ว่าง = ใบเก่าก่อนมีช่องนี้ */
+  branch: string;
   position: RequisitionPosition;
   positionOther: string;
   customer: string;

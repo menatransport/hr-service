@@ -1,4 +1,5 @@
 import { etlCol } from "@/lib/db";
+import { listClients } from "@/lib/ncac/client";
 import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { siteLabel } from "@/app/recruitment/_lib/drivers/types";
 import { normalizeStatus, type AnswerMap } from "@/app/recruitment/_lib/types";
@@ -6,7 +7,7 @@ import {
   fullNameOf,
   readApplicationsWithSnapshot,
 } from "@/app/recruitment/_lib/applications";
-import { LINKABLE_STATUSES } from "./types";
+import { BANGPAKONG_CUSTOMERS, LINKABLE_STATUSES } from "./types";
 import { getRepairStatuses, type RepairStatus } from "./repair-status";
 
 /**
@@ -33,6 +34,8 @@ export interface PickOption {
 export interface DriverOption extends PickOption {
   /** ค่าที่ใช้เลือกในช่องรถ (`code` หรือทะเบียน) · ว่าง = ไม่มีรถประจำ */
   vehicle?: string;
+  /** ชื่อสาขา (`siteLabel`) — ฟอร์มเติมช่องสาขาให้เมื่อเลือกคนนี้เป็นคนที่จะแทน */
+  branch?: string;
 }
 
 /**
@@ -45,6 +48,8 @@ export interface VehicleOption extends PickOption {
   /** ประเภทรถ เช่น “Mixer 10 ล้อ” — ขึ้นในขั้นยานยนต์ของเส้นทาง พจส.ใหม่ */
   type?: string;
   plant?: string;
+  /** `branch` ของ ETL ตรงกับ `BRANCHES` — ฟอร์มใช้จับกลุ่มลูกค้า/แพล้นท์ตามสาขา */
+  branch?: string;
   customer?: string;
   position?: string;
 }
@@ -63,6 +68,8 @@ export interface RequisitionOptions {
    * คำขอที่บันทึกไว้แล้วไม่ได้ขึ้นกับตัวเลือกพวกนี้เลย
    */
   failed: string[];
+  /** ลูกค้าของสาขาที่ไม่ใช่งานโม่ (สระบุรี/บางปะกง) → รายชื่อ — ดู `loadBranchCustomers()` */
+  branchCustomers: Record<string, string[]>;
 }
 
 const EMPTY: RequisitionOptions = {
@@ -72,6 +79,7 @@ const EMPTY: RequisitionOptions = {
   candidates: [],
   repairs: {},
   failed: [],
+  branchCustomers: {},
 };
 
 /**
@@ -105,6 +113,7 @@ export async function loadDrivers(): Promise<DriverOption[]> {
         value: code,
         label: site ? `${name} — ${code} · ${site}` : `${name} — ${code}`,
         ...(vehicle ? { vehicle } : {}),
+        ...(site ? { branch: site } : {}),
       };
     })
     .sort(thai);
@@ -144,11 +153,12 @@ export async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plant
     plant?: string;
     fleet?: string;
     vehicle_type?: string;
+    branch?: string;
   }>("vehicles");
   const docs = await vehicleCol
     .find(
       { active: true },
-      { projection: { code: 1, plate_no: 1, brand: 1, plant: 1, fleet: 1, vehicle_type: 1 } },
+      { projection: { code: 1, plate_no: 1, brand: 1, plant: 1, fleet: 1, vehicle_type: 1, branch: 1 } },
     )
     .toArray();
 
@@ -170,6 +180,7 @@ export async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plant
         brand: (v.brand ?? "").trim(),
         ...((v.vehicle_type ?? "").trim() ? { type: (v.vehicle_type ?? "").trim() } : {}),
         ...(plant && plant !== "Unknown" ? { plant } : {}),
+        ...((v.branch ?? "").trim() ? { branch: (v.branch ?? "").trim() } : {}),
         ...fromFleet(v.fleet ?? ""),
       };
     })
@@ -204,22 +215,44 @@ async function loadCandidates(): Promise<PickOption[]> {
     });
 }
 
+/** `site_id` ของ NCAC — 3 = สสบ. (สระบุรี) ดู `GET /sites/` */
+const NCAC_SARABURI_SITE = 3;
+
+/**
+ * ลูกค้าสระบุรี = master ลูกค้า NCAC หน่วยงาน สสบ. ตัด "ไม่มี (พนักงานบริษัท)" ออก
+ * · บางปะกง = `BANGPAKONG_CUSTOMERS` ตายตัว — ตามคำสั่ง 3 พ.ย. 2026
+ */
+export async function loadBranchCustomers(): Promise<Record<string, string[]>> {
+  const clients = await listClients();
+  const saraburi = [
+    ...new Set(
+      clients
+        .filter((c) => c.site_id === NCAC_SARABURI_SITE)
+        .map((c) => (c.client_name ?? "").trim())
+        .filter((n) => n && !n.startsWith("ไม่มี")),
+    ),
+  ].sort((a, b) => THAI_ORDER.compare(a, b));
+  return { สระบุรี: saraburi, บางปะกง: BANGPAKONG_CUSTOMERS };
+}
+
 /**
  * อ่านทุกชุดพร้อมกัน — ไม่มีชุดไหนขึ้นกับชุดอื่น การรอทีละอันคือการต่อเวลา
  * โหลดหน้าฟรี ๆ · ชุดที่พังไม่ลากชุดที่เหลือลงไปด้วย (`allSettled`)
  */
 export async function getRequisitionOptions(): Promise<RequisitionOptions> {
-  const [drivers, vehicles, candidates, repairs] = await Promise.allSettled([
+  const [drivers, vehicles, candidates, repairs, branchCustomers] = await Promise.allSettled([
     loadDrivers(),
     loadVehicles(),
     loadCandidates(),
     getRepairStatuses(),
+    loadBranchCustomers(),
   ]);
 
   const failed: string[] = [];
   if (drivers.status === "rejected") failed.push("ทะเบียนประวัติ พจส.");
   if (vehicles.status === "rejected") failed.push("ทะเบียนรถ");
   if (candidates.status === "rejected") failed.push("รายชื่อผู้สมัคร");
+  if (branchCustomers.status === "rejected") failed.push("ลูกค้าสาขาสระบุรี (NCAC)");
 
   return {
     ...EMPTY,
@@ -229,6 +262,10 @@ export async function getRequisitionOptions(): Promise<RequisitionOptions> {
     candidates: candidates.status === "fulfilled" ? candidates.value : [],
     /* อ่านสถานะซ่อมไม่ได้ = ทุกคันขึ้นเป็นปกติ ไม่ใช่เรื่องที่ต้องขึ้นแถบเตือน */
     repairs: repairs.status === "fulfilled" ? repairs.value : {},
+    branchCustomers:
+      branchCustomers.status === "fulfilled"
+        ? branchCustomers.value
+        : { บางปะกง: BANGPAKONG_CUSTOMERS },
     failed,
   };
 }

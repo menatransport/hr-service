@@ -410,7 +410,7 @@ try {
     );
     const first = (counter?.seq ?? list.length) - list.length + 1;
     list.forEach((d, i) => {
-      d.code = `RQ${yymm}-${String(first + i).padStart(3, "0")}`;
+      d.code = `JR${yymm}-${String(first + i).padStart(3, "0")}`;
     });
   }
 

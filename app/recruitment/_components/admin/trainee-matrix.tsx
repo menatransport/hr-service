@@ -40,6 +40,7 @@ import {
   TONE_LABEL,
   TONES,
   buildTraineeRows,
+  dailyKeyOf,
   isoOf,
   type ManualEdits,
   type TraineeRow,
@@ -469,6 +470,7 @@ const MatrixRow = memo(function MatrixRow({
   onEditVehicle: (driver: TraineeBoardDriver) => void;
 }) {
   const { driver } = row;
+  const dailyKey = dailyKeyOf(driver);
   /* ยังไม่มีรหัส พจส. = ยังไม่มีสถานะรายวันให้ดู/กรอก — ลิงก์ไปหน้าเส้นทางของคำขอแทน */
   const href = driver.drivercode
     ? `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`
@@ -530,9 +532,9 @@ const MatrixRow = memo(function MatrixRow({
                 {driver.drivercode ? (
                   <span className="font-mono">{driver.drivercode}</span>
                 ) : (
-                  /* ช่องรายวันผูกกับรหัส พจส. — ไม่มีรหัสจึงกดไม่ได้ บอกเหตุผลไว้ตรงนี้ (เจอตอน UAT 2 พ.ย. 2569) */
-                  <span className="text-st-wait-ink" title="ผูกรหัส พจส. ในข้อมูล RC ก่อน จึงลงตารางรายวันได้">
-                    ยังไม่มีรหัส · ลงตารางไม่ได้
+                  /* ยังไม่ผูก ATMS — กรอกได้ด้วยคีย์คำขอ (`rq:<id>`) ย้ายไปรหัสจริงเมื่อ RC ผูกรหัส (Bew 3 พ.ย. 2569) */
+                  <span className="text-st-wait-ink" title="ลงตารางรายวันได้ · ผูกรหัส พจส. ในข้อมูล RC แล้วบันทึกจะย้ายไปรหัสนั้นให้">
+                    ยังไม่มีรหัส พจส.
                   </span>
                 )}
                 <span aria-hidden>·</span>
@@ -574,7 +576,7 @@ const MatrixRow = memo(function MatrixRow({
         return (
           <TraineeCell
             key={day}
-            drivercode={driver.drivercode}
+            drivercode={dailyKey}
             driverName={driver.name || driver.drivercode}
             iso={iso}
             /* ส่งเป็นสตริง ไม่ใช่อ็อบเจกต์ `DayCell` — `memo` ของช่องถึงจะทำงาน
@@ -585,7 +587,7 @@ const MatrixRow = memo(function MatrixRow({
             trial={cell?.trial ?? false}
             beforeStart={Boolean(driver.startDateISO) && iso < driver.startDateISO}
             isStart={iso === driver.startDateISO}
-            editable={Boolean(maxEntryISO && driver.drivercode) && iso <= maxEntryISO}
+            editable={Boolean(maxEntryISO && dailyKey) && iso <= maxEntryISO}
             onSaved={onSaved}
           />
         );

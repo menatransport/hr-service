@@ -11,12 +11,14 @@ import {
 } from "@/app/recruitment/_lib/types";
 import { fullNameOf } from "@/app/recruitment/_lib/applications";
 import {
+  BRANCHES,
   CANCEL_REASONS,
   CUSTOMERS,
   LINKABLE_STATUSES,
   MAX_HEADCOUNT,
   OTHER,
   POSITIONS,
+  isMixerBranch,
   isRequisitionStatus,
   type CancelReason,
   type HireType,
@@ -28,6 +30,7 @@ import {
 } from "./types";
 import type { Onboarding } from "./onboarding";
 import { isIssuedDriverCode, syncRegistryFromRequisition } from "./registry-sync";
+import { loadBranchCustomers } from "./options";
 
 /**
  * ชั้นข้อมูลของ “ขอสรรหา” — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
@@ -68,6 +71,8 @@ export interface RequisitionDoc {
   code: string;
   requestedOn: string;
 
+  /** ไม่มี = ใบก่อนมีช่องสาขา (3 พ.ย. 2026) หรือใบที่นำเข้าจากไฟล์ */
+  branch?: string;
   position: RequisitionPosition;
   positionOther: string;
   customer: string;
@@ -125,6 +130,7 @@ export function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
     id: doc._id.toHexString(),
     code: doc.code,
     requestedOn: doc.requestedOn,
+    branch: doc.branch ?? "",
     position: doc.position,
     positionOther: doc.positionOther ?? "",
     customer: doc.customer,
@@ -173,7 +179,7 @@ async function reserveCodes(count: number): Promise<string[]> {
   const first = last - count + 1;
   return Array.from(
     { length: count },
-    (_, i) => `RQ${yymm}-${String(first + i).padStart(3, "0")}`,
+    (_, i) => `JR${yymm}-${String(first + i).padStart(3, "0")}`,
   );
 }
 
@@ -214,6 +220,27 @@ function customer(value: unknown, other: unknown): { customer: string; customerO
   if (v === OTHER) return { customer: OTHER, customerOther: text(other, "ชื่อลูกค้า") };
   if (!(CUSTOMERS as readonly string[]).includes(v))
     throw new RequisitionError("กรุณาเลือกลูกค้า");
+  return { customer: v, customerOther: "" };
+}
+
+function branch(value: unknown): string {
+  const v = typeof value === "string" ? value.trim() : "";
+  if (!(BRANCHES as readonly string[]).includes(v)) throw new RequisitionError("กรุณาเลือกสาขา");
+  return v;
+}
+
+/**
+ * ลูกค้าสระบุรี/บางปะกง — ต้องอยู่ในรายชื่อจาก master NCAC (`loadBranchCustomers()`)
+ * · อ่าน NCAC ไม่ได้ = รับชื่อที่ส่งมา ไม่ให้แจ้งสรรหาค้างเพราะ NCAC ล่ม
+ */
+async function branchCustomer(
+  branchName: string,
+  value: unknown,
+): Promise<{ customer: string; customerOther: string }> {
+  const v = text(value, "ลูกค้า");
+  const list = await loadBranchCustomers().catch(() => null);
+  if (list && !(list[branchName] ?? []).includes(v))
+    throw new RequisitionError(`ลูกค้านี้ไม่อยู่ในรายชื่อสาขา${branchName}`);
   return { customer: v, customerOther: "" };
 }
 
@@ -321,6 +348,7 @@ async function byId(col: Collection<RequisitionDoc>, id: string) {
 
 export interface RequisitionInput {
   requestedOn: unknown;
+  branch: unknown;
   position: unknown;
   positionOther: unknown;
   customer: unknown;
@@ -385,7 +413,12 @@ export async function createRequisitions(
   if (!Number.isFinite(headcount) || headcount < 1 || headcount > MAX_HEADCOUNT)
     throw new RequisitionError(`จำนวนอัตราต้องอยู่ระหว่าง 1 ถึง ${MAX_HEADCOUNT}`);
 
-  const position = oneOf<RequisitionPosition>(POSITIONS, input.position, "ตำแหน่ง");
+  const branchName = branch(input.branch);
+  const mixer = isMixerBranch(branchName);
+  /* สระบุรี/บางปะกงไม่มีตำแหน่ง/แพล้นท์ — เก็บค่าว่างจริง ไม่ใช่ค่าที่ค้างจากฟอร์ม */
+  const position = mixer
+    ? oneOf<RequisitionPosition>(POSITIONS, input.position, "ตำแหน่ง")
+    : ("" as RequisitionPosition);
   const hireType =
     input.hireType === "replace" || input.hireType === "new_rate"
       ? (input.hireType as HireType)
@@ -412,11 +445,14 @@ export async function createRequisitions(
   const now = new Date().toISOString();
   const shared = {
     requestedOn: ymd(input.requestedOn, "วันที่แจ้งสรรหา"),
+    branch: branchName,
     position,
     positionOther:
       position === OTHER ? text(input.positionOther, "ชื่อตำแหน่ง") : "",
-    ...customer(input.customer, input.customerOther),
-    plant: text(input.plant, "แพล้นท์"),
+    ...(mixer
+      ? customer(input.customer, input.customerOther)
+      : await branchCustomer(branchName, input.customer)),
+    plant: mixer ? text(input.plant, "แพล้นท์") : "",
     hireType,
     replace,
     status: "open" as const,
@@ -753,20 +789,28 @@ export async function syncRequisitionForApplication(
       return;
     }
 
-    if (isHiredStatus(status) && current.status !== "filled") {
-      const today = todayInBangkok();
-      await apply(
-        col,
-        current,
-        { status: "filled", filledOn: today },
-        by,
-        `${current.match?.fullName ?? "ผู้สมัคร"} เริ่มฝึกงาน — อัตรานี้ปิดรับแล้ว`,
-      );
-      /* วันเริ่มฝึกของส่วน RC ตามมาเอง ถ้ายังไม่มีใครกรอก — ไม่ต้องกรอกซ้ำสองที่ */
-      if (!current.onboarding?.rc?.values.trainingStartOn)
-        await col.updateOne(
-          { _id: current._id },
-          { $set: { "onboarding.rc.values.trainingStartOn": today } },
+    if (isHiredStatus(status)) {
+      if (current.status !== "filled") {
+        const today = todayInBangkok();
+        await apply(
+          col,
+          current,
+          { status: "filled", filledOn: today },
+          by,
+          `${current.match?.fullName ?? "ผู้สมัคร"} เริ่มฝึกงาน — อัตรานี้ปิดรับแล้ว`,
+        );
+        /* วันเริ่มฝึกของส่วน RC ตามมาเอง ถ้ายังไม่มีใครกรอก — ไม่ต้องกรอกซ้ำสองที่ */
+        if (!current.onboarding?.rc?.values.trainingStartOn)
+          await col.updateOne(
+            { _id: current._id },
+            { $set: { "onboarding.rc.values.trainingStartOn": today } },
+          );
+      }
+      /* เป็นฝึกงาน = เข้าทะเบียนประวัติทันทีถ้าผูกรหัส พจส. ไว้แล้ว (Bew 3 พ.ย. 2569) · ซ้ำได้ ไม่ทับคนที่อยู่แล้ว */
+      const fresh = await col.findOne({ _id: current._id });
+      if (fresh)
+        await syncRegistryFromRequisition({ ...toRequisition(fresh), onboarding: fresh.onboarding }, by).catch((err) =>
+          console.warn("[requisitions] ส่งเข้าทะเบียนประวัติไม่สำเร็จ —", err),
         );
       return;
     }

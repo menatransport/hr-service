@@ -526,7 +526,10 @@ export async function importPastedRows(text: string, commit: boolean, actor: str
     if (result.action === "same") continue;
 
     $set.syncedAt = now;
-    if (!inRegistry) $set.registry = { source: SOURCE, sheet: SHEET, via: "paste", importedAt: now, by: actor };
+    if (!inRegistry) {
+      $set.registry = { source: SOURCE, sheet: SHEET, via: "paste", importedAt: now, by: actor };
+      $set.registeredAt = now;
+    }
     else Object.assign($set, { "registry.pastedAt": now, "registry.pastedBy": actor });
 
     ops.push({

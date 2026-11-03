@@ -1,4 +1,4 @@
-import type { Collection } from "mongodb";
+import { ObjectId, type Collection } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
 import { deleteDriverDocumentFile } from "./documents";
@@ -14,6 +14,7 @@ import {
   isExitStatus,
   normalizeDriverEdit,
   isWorkStatusCode,
+  NEW_DRIVER_HOURS,
   ownerTypeLabel,
   resolveOwnerTypeKey,
   siteLabel,
@@ -30,6 +31,8 @@ import {
   type DriverWorkMonth,
   type DriverWorkStatus,
   type TraineeDailyEntry,
+  RQ_DAILY_PREFIX,
+  requisitionDailyKey,
 } from "./types";
 
 /**
@@ -79,6 +82,7 @@ interface MasterDriverDoc {
   position?: unknown;
   active?: unknown;
   syncedAt?: unknown;
+  registeredAt?: unknown;
   /** มี = อยู่ในทะเบียน — ดู `./master.ts` */
   registry?: unknown;
 }
@@ -624,6 +628,7 @@ function toRecord(
   const branch = str(doc.branch);
   const statusOverride = toStatusOverride(doc.statusOverride);
   const vehicle = vehicleRef ? (vehicles.get(vehicleRef) ?? null) : null;
+  const createdAt = toIso(doc.registeredAt);
 
   return {
     drivercode,
@@ -658,6 +663,8 @@ function toRecord(
     emergencyContactPhone: str(doc.emergencyContactPhone),
     bankAccountNo: str(doc.bankAccountNo),
     bankBranch: str(doc.bankBranch),
+    createdAt,
+    isNew: Boolean(createdAt) && Date.now() - Date.parse(createdAt) < NEW_DRIVER_HOURS * 3_600_000,
     profileEditedAt:
       doc.profileEditedAt instanceof Date ? doc.profileEditedAt.toISOString() : str(doc.profileEditedAt),
     profileEditedBy: str(doc.profileEditedBy),
@@ -671,6 +678,13 @@ function toRecord(
     work: work.get(drivercode) ?? null,
     manualDays: manual.get(drivercode) ?? {},
   };
+}
+
+/** `Date` / ข้อความวันเวลา → ISO · อ่านไม่ออก = `""` */
+function toIso(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  const time = Date.parse(str(value));
+  return Number.isFinite(time) ? new Date(time).toISOString() : "";
 }
 
 /** เวลาที่ ETL mirror `main_driver` ล่าสุด = ค่ามากที่สุดในทะเบียน */
@@ -769,6 +783,7 @@ const LIST_FIELDS: DriverField[] = [
   "position",
   "active",
   "syncedAt",
+  "registeredAt",
 ];
 
 /**
@@ -1221,6 +1236,7 @@ export async function enrollDriver(input: EnrollInput, actor: string): Promise<b
         drivercode,
         active: true,
         syncedAt: now,
+        registeredAt: now,
         registry: { source: "onboarding", requisitionId, requisitionCode, at: now, by: actor },
       },
       $unset: { statusOverride: "", resignation: "" },
@@ -1228,6 +1244,55 @@ export async function enrollDriver(input: EnrollInput, actor: string): Promise<b
     { upsert: true },
   );
   return true;
+}
+
+/** ช่องของฟอร์ม “เพิ่ม พจร.” — กติกาค่าเดียวกับ `DRIVER_EDIT_FIELDS` · ช่องที่เหลือเติมทีหลังบนหน้าประวัติ */
+export const MANUAL_DRIVER_FIELDS = ["driverName", "branch", "startDate", "phone", "vehicleCode", "customer", "plant"] as const;
+
+export type ManualDriverInput = { drivercode: string } & Partial<Record<(typeof MANUAL_DRIVER_FIELDS)[number], string>>;
+
+/**
+ * เพิ่ม พจร. เข้าทะเบียนตรง ๆ ไม่ผ่านใบสมัคร/คำขอสรรหา — ประเภทพนักงาน = `2` เสมอ
+ * · รหัสที่อยู่ในทะเบียนแล้ว = `DriverRegistryError` (ไม่ทับคนเดิม) · แถวเก่าจาก ETL ที่ไม่มี `registry` ถูกเขียนทับ
+ * · ช่องที่กรอกลง `editedFields` → ตัวนำเข้า Excel ไม่ทับ (ค่าบนเว็บชนะไฟล์ เหมือนแก้บนหน้าประวัติ)
+ */
+export async function addDriverManually(input: ManualDriverInput, actor: string): Promise<string> {
+  const drivercode = String(input.drivercode ?? "").replace(/\s+/g, "").trim();
+  if (!/^[A-Za-z0-9-]{3,20}$/.test(drivercode)) throw new DriverRegistryError("รหัส พจร. ต้องเป็นตัวเลข/ตัวอักษร 3–20 ตัว");
+
+  const $set: Record<string, string> = {};
+  for (const key of MANUAL_DRIVER_FIELDS) {
+    const field = DRIVER_EDIT_FIELDS.find((f) => f.key === key)!;
+    const required = field.required || key === "startDate";
+    const raw = typeof input[key] === "string" ? (input[key] as string) : "";
+    if (required && !raw.trim()) throw new DriverRegistryError(`ต้องกรอก${field.label}`);
+    const out = normalizeDriverEdit(field, raw);
+    if ("error" in out) throw new DriverRegistryError(`${field.label}: ${out.error}`);
+    if (out.value) $set[key] = out.value;
+  }
+
+  if (await driverExists(drivercode)) throw new DriverRegistryError(`รหัส ${drivercode} อยู่ในทะเบียนแล้ว`);
+
+  const now = new Date();
+  const drivers = await hrCol<MasterDriverDoc>("drivers");
+  await drivers.updateOne(
+    { drivercode },
+    {
+      $set: {
+        ...$set,
+        drivercode,
+        ownerType: "2",
+        active: true,
+        syncedAt: now,
+        registeredAt: now,
+        editedFields: Object.keys($set),
+        registry: { source: "manual", at: now, by: actor },
+      },
+      $unset: { statusOverride: "", resignation: "" },
+    } as Record<string, unknown>,
+    { upsert: true },
+  );
+  return drivercode;
 }
 
 /**
@@ -1312,8 +1377,8 @@ export async function setTraineeDaily(
   const trial = input.trial === true && isExitStatus(status);
 
   try {
-    // ต้องมีรหัสนี้ในทะเบียนจริง — ไม่งั้นพิมพ์รหัสอะไรมาก็สร้างแถวผีได้
-    if (!(await driverExists(drivercode))) return null;
+    // ต้องมีตัวตนจริง — ไม่งั้นพิมพ์รหัสอะไรมาก็สร้างแถวผีได้
+    if (!(await dailyTargetExists(drivercode))) return null;
 
     const collection = await traineeDaily();
     const _id = dailyId(drivercode, dateISO);
@@ -1348,6 +1413,50 @@ export async function setTraineeDaily(
     const reason = err instanceof Error ? err.message : String(err);
     throw new DriverRegistryError(`บันทึกสถานะรายวันไม่สำเร็จ — ${reason}`);
   }
+}
+
+/** คำขอสรรหาที่ยังไม่ยกเลิก ตามเงื่อนไขที่ให้มา — ใช้ยืนยันตัวตนของบันทึกรายวัน */
+async function liveRequisition(filter: Record<string, unknown>): Promise<boolean> {
+  const col = await hrCol("requisitions");
+  return (await col.countDocuments({ ...filter, status: { $ne: "cancelled" } }, { limit: 1 })) > 0;
+}
+
+/**
+ * ปลายทางของบันทึกรายวันมีจริงไหม — RC กรอกได้ทั้งคนที่ยังไม่ผูก ATMS (Bew 3 พ.ย. 2569):
+ * - `rq:<id>` = คำขอสรรหาที่ยังไม่มีรหัส พจส.
+ * - รหัส พจส. ในทะเบียน หรือรหัสที่ผูกกับคำขอแล้วแต่ยังไม่เข้าทะเบียน (เช่น รอฝึกงาน)
+ */
+async function dailyTargetExists(key: string): Promise<boolean> {
+  if (key.startsWith(RQ_DAILY_PREFIX)) {
+    const id = key.slice(RQ_DAILY_PREFIX.length);
+    return ObjectId.isValid(id) && liveRequisition({ _id: new ObjectId(id) });
+  }
+  return (await driverExists(key)) || liveRequisition({ drivercode: key });
+}
+
+/**
+ * RC ผูกรหัส พจส. ให้คำขอแล้ว → ย้ายบันทึกรายวันที่กรอกไว้ใต้ `rq:<id>` ไปไว้ใต้รหัสจริง
+ * · วันที่รหัสจริงมีบันทึกอยู่แล้ว ของรหัสจริงชนะ · เรียกซ้ำได้ (ไม่มีอะไรให้ย้ายก็จบ)
+ */
+export async function moveRequisitionDaily(requisitionId: string, drivercode: string): Promise<number> {
+  const code = drivercode.trim();
+  if (!code || !requisitionId) return 0;
+  const collection = await traineeDaily();
+  const from = requisitionDailyKey(requisitionId);
+  const docs = await collection.find({ drivercode: from }).toArray();
+  if (!docs.length) return 0;
+
+  await collection.bulkWrite(
+    docs.map((doc) => ({
+      updateOne: {
+        filter: { _id: dailyId(code, doc.dateISO) },
+        update: { $setOnInsert: { ...doc, _id: dailyId(code, doc.dateISO), drivercode: code } },
+        upsert: true,
+      },
+    })),
+  );
+  await collection.deleteMany({ drivercode: from });
+  return docs.length;
 }
 
 /**

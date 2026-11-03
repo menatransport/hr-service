@@ -1,9 +1,11 @@
 import { getApplication } from "@/app/recruitment/_lib/applications";
 import { readApplicantFacts } from "@/app/recruitment/_lib/hr-documents";
 import { findIssuedDriver } from "@/app/recruitment/_lib/drivers/master";
+import { isHiredStatus } from "@/app/recruitment/_lib/types";
 import { isUatDriverCode } from "@/lib/uat";
 import {
   enrollDriver,
+  moveRequisitionDaily,
   resignFromOnboarding,
   toIsoDate,
   todayInBangkok,
@@ -34,6 +36,11 @@ export async function syncRegistryFromRequisition(
   const drivercode = r.drivercode.trim();
   if (!drivercode) return;
 
+  /* บันทึกรายวันที่ RC กรอกไว้ก่อนมีรหัส (`rq:<id>`) → ย้ายไปรหัสจริง · ล้มไม่ขวางการเข้าทะเบียน */
+  await moveRequisitionDaily(r.id, drivercode).catch((err) =>
+    console.warn("[registry-sync] ย้ายบันทึกรายวันไปรหัส พจส. ไม่สำเร็จ —", err),
+  );
+
   const outcome = val(r.onboarding, "rc", "outcome") || r.outcome;
   const group = outcomeGroup(outcome);
   if (group === "withdrawn" || group === "lost") {
@@ -47,9 +54,14 @@ export async function syncRegistryFromRequisition(
     return;
   }
 
-  /* รอฝึกงาน/รอรับรถ ยังไม่เข้าทะเบียนจนกว่าจะบันทึกวันรับรถ — กติกาเดียวกับตัวนำเข้า Excel (Bew 19 ต.ค. 2569) */
+  /* รอฝึกงาน/รอรับรถ ยังไม่เข้าทะเบียนจนกว่าจะบันทึกวันรับรถ — กติกาเดียวกับตัวนำเข้า Excel (Bew 19 ต.ค. 2569)
+     · ผูกใบสมัครไว้ = ดูสถานะใบสมัครแทนผลจากไฟล์: เป็น “ฝึกงาน” เมื่อไหร่ = เข้าทะเบียนทันที (Bew 3 พ.ย. 2569) */
+  const application = r.match?.applicationId ? await getApplication(r.match.applicationId) : null;
   const handedOver = Boolean(val(r.onboarding, "handover", "handoverOn"));
-  if (!handedOver && (outcome === "waiting_training" || outcome === "waiting_handover")) return;
+  if (!handedOver) {
+    if (application ? !isHiredStatus(application.status) : outcome === "waiting_training" || outcome === "waiting_handover")
+      return;
+  }
 
   /* รหัสทดสอบ UAT ไม่มีใน ATMS — ให้รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัครอย่างเดียว */
   const issued =
@@ -71,7 +83,6 @@ export async function syncRegistryFromRequisition(
 
   /* เลขบัตร/ใบขับขี่/บัญชี/ผู้ติดต่อฉุกเฉินไม่มีใน ATMS — เอาจากใบสมัครที่ผูกไว้
      (ช่องเอกสารที่ฝ่ายบุคคลกรอก/ตรวจจากรูป + คำตอบในใบสมัคร) */
-  const application = r.match?.applicationId ? await getApplication(r.match.applicationId) : null;
   const doc = application?.documents;
   const facts = application ? readApplicantFacts(application) : null;
   const digits = (v: string | undefined) => (v ?? "").replace(/[^0-9]/g, "");

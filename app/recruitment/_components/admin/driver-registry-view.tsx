@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   ChevronRight,
   ListFilter,
+  Plus,
   SearchX,
   X,
 } from "lucide-react";
 
+import { DriverAddDialog } from "@/app/recruitment/_components/admin/driver-add-dialog";
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
 import { DriverExcelSyncDialog } from "@/app/recruitment/_components/admin/driver-excel-sync";
 import { DriverPasteDialog } from "@/app/recruitment/_components/admin/driver-paste-import";
@@ -35,6 +37,7 @@ import {
 import {
   DRIVER_SITES,
   LICENSE_WARN_DAYS,
+  NEW_DRIVER_HOURS,
   OWNER_TYPE_KEYS,
   OWNER_TYPE_LABELS,
   PROBATION_MONTHS,
@@ -348,6 +351,7 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const deferred = useDeferredValue(query);
 
@@ -521,7 +525,14 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
       );
     });
 
-    if (!sortKey) return rows;
+    /* ค่าตั้งต้น = เข้าทะเบียนล่าสุดขึ้นก่อน · คนที่ไม่มีเวลาเข้า (ก่อน 3 พ.ย. 2569) เรียงวันเริ่มงานใหม่ → เก่า */
+    if (!sortKey)
+      return [...rows].sort(
+        (a, b) =>
+          b.createdAt.localeCompare(a.createdAt) ||
+          b.startDateISO.localeCompare(a.startDateISO) ||
+          b.drivercode.localeCompare(a.drivercode),
+      );
 
     const mul = sortDir === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => compare(a, b, sortKey) * mul);
@@ -714,6 +725,15 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
                 ...(await driverSheet(results, resignedTab)),
               })}
             />
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="btn-pri flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium"
+            >
+              <Plus size={16} strokeWidth={2.2} aria-hidden />
+              เพิ่ม พจร.
+            </button>
+            {adding ? <DriverAddDialog drivers={drivers} onClose={() => setAdding(false)} /> : null}
             {importing ? <DriverPasteDialog onClose={() => setImporting(false)} /> : null}
             {syncing ? <DriverExcelSyncDialog onClose={() => setSyncing(false)} /> : null}
           </div>
@@ -882,6 +902,22 @@ function byNumber(a: number | null, b: number | null): number {
 
 const byText = (a: string, b: string) => (a || LAST).localeCompare(b || LAST, "th");
 
+/** ป้าย “ใหม่” — เข้าทะเบียนไม่เกิน `NEW_DRIVER_HOURS` ชั่วโมง (คิดที่เซิร์ฟเวอร์ `isNew`) */
+function NewBadge() {
+  return (
+    <span
+      title={`เพิ่มเข้าทะเบียนภายใน ${NEW_DRIVER_HOURS} ชั่วโมง`}
+      className="chip chip-new flex-none gap-1 px-1.5 py-0 text-10-5 font-semibold tracking-wide"
+    >
+      <span className="relative flex size-1.5" aria-hidden>
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60" />
+        <span className="relative inline-flex size-1.5 rounded-full bg-current" />
+      </span>
+      ใหม่
+    </span>
+  );
+}
+
 function compare(a: DriverRecord, b: DriverRecord, key: SortKey): number {
   switch (key) {
     case "name":
@@ -961,6 +997,7 @@ function Row({
             <DriverAvatar driver={driver} />
           </span>
           <span className="truncate font-medium text-ink">{driver.name || "—"}</span>
+          {driver.isNew ? <NewBadge /> : null}
         </span>
       </td>
 
@@ -1058,7 +1095,10 @@ function DriverCard({
       <div className="flex items-start gap-3">
         <DriverAvatar driver={driver} size="md" />
         <div className="min-w-0 flex-1">
-          <span className="block text-13-5 font-medium text-pretty">{driver.name || "—"}</span>
+          <span className="flex items-center gap-2 text-13-5 font-medium text-pretty">
+            {driver.name || "—"}
+            {driver.isNew ? <NewBadge /> : null}
+          </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-11-5 text-mut">
             <span className={resigned ? "text-alert" : "text-primary"}>{driver.drivercode}</span>
             {driver.phone ? <span>{primaryPhone(driver.phone)}</span> : null}

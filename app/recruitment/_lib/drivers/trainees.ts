@@ -1,4 +1,4 @@
-import { isExitStatus } from "./types";
+import { isExitStatus, requisitionDailyKey } from "./types";
 import type { TraineeDailyEntry } from "./types";
 import type { TraineeBoardDriver } from "./trainee-board";
 
@@ -179,6 +179,12 @@ export type ManualEdits = Map<string, Record<string, TraineeDailyEntry | null>>;
  * เรียงคนใหม่สุดขึ้นก่อน — คนที่เพิ่งเริ่มคือคนที่ต้องจับตามากที่สุด · อายุงาน
  * เท่ากันค่อยเรียงตามชื่อ เพื่อให้ลำดับคงที่ไม่สลับไปมาทุกครั้งที่โหลด
  */
+/** คีย์บันทึกรายวันของแถว — รหัส พจส. หรือ `rq:<id>` ของคนที่ยังไม่ผูก ATMS · ว่าง = กรอกไม่ได้ */
+export function dailyKeyOf(driver: Pick<TraineeBoardDriver, "drivercode" | "requisitionId" | "requisitionCode">): string {
+  /* `requisitionCode` ว่าง = ไม่มีคำขอจริง (`requisitionId` เป็น id ใบสมัครแทน) — ไม่มีปลายทางให้บันทึก */
+  return driver.drivercode || (driver.requisitionCode ? requisitionDailyKey(driver.requisitionId) : "");
+}
+
 export function buildTraineeRows(
   drivers: TraineeBoardDriver[],
   edits: ManualEdits,
@@ -203,7 +209,7 @@ export function buildTraineeRows(
       }
 
       // ของที่เซิร์ฟเวอร์ส่งมาก่อน แล้วทับด้วยสิ่งที่เพิ่งกรอกในหน้าจอ
-      const own = { ...driver.manualDays, ...(edits.get(driver.drivercode) ?? {}) };
+      const own = { ...driver.manualDays, ...(edits.get(dailyKeyOf(driver)) ?? {}) };
 
       for (const [iso, entry] of Object.entries(own)) {
         if (!entry?.code.trim()) continue;
