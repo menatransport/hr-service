@@ -225,7 +225,6 @@ export const MODULES: ModuleGroup[] = [
         desc: "ห้องเช่าบริษัท · ผู้พัก · ค่าเช่ารายเดือน",
         href: "/desk/rentals",
         icon: House,
-        soon: SOON,
       },
       {
         id: "permissions",

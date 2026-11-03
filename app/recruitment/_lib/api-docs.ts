@@ -50,13 +50,22 @@ export interface ApiGroup {
 }
 
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
-export const API_DOCS_SCOPE = ["/api/auth/", "/api/recruitment/", "/api/drivers/", "/api/uploads"];
+export const API_DOCS_SCOPE = ["/api/auth/", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.1.0";
-export const API_DOCS_UPDATED = "2026-10-19";
+export const API_DOCS_VERSION = "4.2.0";
+export const API_DOCS_UPDATED = "2026-11-03";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-03",
+    version: "4.2.0",
+    changes: [
+      "เพิ่ม `GET /api/drivers?year=&month=` — ทะเบียน พจส. ทั้งหมด ข้อมูลชุดเดียวกับไฟล์ Excel หน้าทะเบียน (รวมตำแหน่ง · บัญชีรับเงิน · ที่มาในทะเบียน) · กรองตามวันเริ่มงานรายปี/รายเดือนได้",
+      "`GET /api/recruitment/applications` — รับ `year` / `month` (กรองตามวันที่ส่งใบ ได้ทุกใบในช่วง ไม่จำกัด 500) · แต่ละแถวเพิ่ม `statusLabel` · `exitReasonLabel` · `form` (คำตอบในฟอร์มทั้งใบ ชุดเดียวกับไฟล์ Excel หน้าผู้สมัคร)",
+      "`year` รับทั้ง ค.ศ. และ พ.ศ. · `month` เป็น `1`–`12` คู่กับ `year` หรือ `YYYY-MM` · นับช่วงตามเวลาไทย",
+    ],
+  },
   {
     date: "2026-10-19",
     version: "4.1.0",
@@ -207,6 +216,34 @@ export const API_GROUPS: ApiGroup[] = [
     description:
       "เขียนลง `hr_service.master_driver` / `trainee_daily` เท่านั้น — **ไม่แตะ `Boom_ETL`** ซึ่งเป็นกระจกเงาของ ETL",
     endpoints: [
+      {
+        method: "GET",
+        path: "/api/drivers",
+        summary: "ทะเบียน พจส. ทั้งหมด (กรองปี/เดือนได้)",
+        description:
+          "ข้อมูลชุดเดียวกับไฟล์ Excel ที่ส่งออกจากหน้าทะเบียน · เรียงตามรหัส · ไม่ส่งช่วง = ทุกคนในทะเบียน · ส่ง `year` / `month` = เฉพาะคนที่ **วันเริ่มงาน** อยู่ในช่วงนั้น · แต่ละแถวรูปเดียวกับ `GET /api/drivers/{drivercode}` ไม่มี `documents` · พ้นสภาพแล้ว `contact` `license` `idCard` `bank` เป็น `null`",
+        access: "login",
+        params: [
+          { name: "year", in: "query", type: "number", desc: "ปี ค.ศ. หรือ พ.ศ. เช่น `2026` / `2569`" },
+          { name: "month", in: "query", type: "1–12 | YYYY-MM", desc: "เดือน — เลขเดือนต้องคู่กับ `year` · หรือ `2026-10` ตัวเดียวจบ" },
+        ],
+        response:
+          "DriverListItem[] — { drivercode, name, photoUrl, status, personalHidden, employment, contact, license, idCard, vehicle, resignation, work, position, bank: { accountNo, branch }, lastEdit: { at, by }, registry: { source, at } }",
+        errors: [{ status: 400, when: "`year` / `month` ผิดรูปแบบ หรือส่งเลขเดือนโดยไม่มี `year`" }],
+      },
+      {
+        method: "POST",
+        path: "/api/drivers",
+        summary: "เพิ่ม พจร. เข้าทะเบียน",
+        description: "ปุ่ม “เพิ่ม พจร.” บนหน้าทะเบียน · เอกสารอัปโหลดทีหลังบนหน้าประวัติ",
+        access: "login",
+        params: [
+          { name: "drivercode", in: "body", type: "string", required: true, desc: "รหัส พจส." },
+          { name: "driverName · branch · startDate · phone · vehicleCode · customer · plant", in: "body", type: "string", desc: "ข้อมูลทะเบียน · วันที่เป็น YYYY-MM-DD" },
+        ],
+        response: "{ drivercode }",
+        errors: [{ status: 400, when: "ข้อมูลไม่ครบ/ไม่ถูกต้อง หรือรหัสนี้อยู่ในทะเบียนแล้ว" }],
+      },
       {
         method: "GET",
         path: "/api/drivers/{drivercode}",
@@ -492,9 +529,17 @@ export const API_GROUPS: ApiGroup[] = [
       {
         method: "GET",
         path: "/api/recruitment/applications",
-        summary: "รายการใบสมัคร (แบบย่อ)",
+        summary: "ผู้สมัครทั้งหมด พร้อมคำตอบในฟอร์ม (กรองปี/เดือนได้)",
+        description:
+          "ข้อมูลชุดเดียวกับไฟล์ Excel ที่ส่งออกจากหน้าผู้สมัคร · ใหม่สุดก่อน · ไม่ส่งช่วง = 500 ใบล่าสุด · ส่ง `year` / `month` = **ทุกใบ** ที่ส่งเข้ามาในช่วงนั้น (ตามเวลาไทย) · `form` เรียงตามหมวด → ลำดับข้อในฟอร์ม ข้อที่ไม่ได้ตอบไม่มีแถว",
         access: "login",
-        response: "ApplicationSummary[]",
+        params: [
+          { name: "year", in: "query", type: "number", desc: "ปี ค.ศ. หรือ พ.ศ. เช่น `2026` / `2569`" },
+          { name: "month", in: "query", type: "1–12 | YYYY-MM", desc: "เดือน — เลขเดือนต้องคู่กับ `year` · หรือ `2026-10` ตัวเดียวจบ" },
+        ],
+        response:
+          "(ApplicationSummary & { statusLabel, exitReasonLabel, form: [{ section, question, answer }] })[]",
+        errors: [{ status: 400, when: "`year` / `month` ผิดรูปแบบ หรือส่งเลขเดือนโดยไม่มี `year`" }],
       },
       {
         method: "POST",

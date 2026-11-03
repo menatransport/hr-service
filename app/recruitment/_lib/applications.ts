@@ -30,6 +30,7 @@ import {
   EMPTY_DOCUMENT_META,
   EMPTY_INTERVIEW,
   EMPTY_RATING,
+  EXIT_REASONS,
   isApplicationStatus,
   isExitReason,
   EXIT_REASON_NOTE_MAX,
@@ -38,6 +39,7 @@ import {
   normalizeStatus,
   QUESTION_SECTIONS,
   statusFromResult,
+  STATUS_LABEL,
   type AnswerMap,
   type BlacklistEntry,
   type AnswerValue,
@@ -1241,14 +1243,20 @@ export async function listBlacklist(): Promise<BlacklistEntry[]> {
     .map((doc) => ({ ref: doc.ref, fullName: fullNameOf(doc), phone: doc.phone ?? "" }));
 }
 
-export async function listApplications(): Promise<ApplicationSummary[]> {
+/**
+ * ใบสมัครใหม่สุดก่อน — ไม่ส่ง `range` = 500 ใบล่าสุด (ตารางแอดมิน) · ส่ง `range` = **ทุกใบ**
+ * ที่ส่งเข้ามา (`createdAt`) ในช่วง `gte` ≤ t < `lt` ไม่จำกัดจำนวน (`GET /api/recruitment/applications?year=&month=`)
+ */
+export async function listApplications(range?: { gte: string; lt: string }): Promise<ApplicationSummary[]> {
   const docs = await readApplicationsWithSnapshot<
     Omit<
       ApplicationDoc,
       "files" | "documents" | "documentMeta" | "consent" | "timeline" | "questionSnapshot"
     > & { fileCount: number }
   >(
-    [{ $sort: { createdAt: -1 } }, { $limit: LIST_LIMIT }],
+    range
+      ? [{ $match: { createdAt: { $gte: range.gte, $lt: range.lt } } }, { $sort: { createdAt: -1 } }]
+      : [{ $sort: { createdAt: -1 } }, { $limit: LIST_LIMIT }],
     // นับไฟล์ในฐานข้อมูล ไม่ต้องส่งรายการไฟล์ทั้งชุดมานับเองที่นี่
     { ...SUMMARY_FIELDS, fileCount: { $size: { $ifNull: ["$files", []] } } },
   );
@@ -1361,6 +1369,37 @@ export async function exportApplicationForms(ids: readonly string[]): Promise<Ap
       .map(({ c }) => c),
     rows,
   };
+}
+
+/** แถวของ `GET /api/recruitment/applications` — รูปย่อ + ข้อมูลชุดเดียวกับไฟล์ Excel หน้าผู้สมัคร */
+export type ApplicationApiRow = ApplicationSummary & {
+  statusLabel: string;
+  exitReasonLabel: string;
+  /** คำตอบในฟอร์มทั้งใบ เรียงตามหมวด → ลำดับข้อในฟอร์ม (ชุดเดียวกับคอลัมน์คำตอบในไฟล์ Excel) · ข้อที่ไม่ได้ตอบไม่มีแถว */
+  form: { section: string; question: string; answer: string }[];
+};
+
+/**
+ * ใบสมัครพร้อมคำตอบในฟอร์ม — `listApplications(range)` + `exportApplicationForms()`
+ * ตัวเดียวกับที่ปุ่มส่งออก Excel หน้าผู้สมัครใช้ API กับไฟล์จึงได้ข้อมูลชุดเดียวกัน
+ */
+export async function listApplicationsForApi(range?: { gte: string; lt: string }): Promise<ApplicationApiRow[]> {
+  const rows = await listApplications(range);
+  const form = rows.length ? await exportApplicationForms(rows.map((r) => r.id)) : { columns: [], rows: [] };
+  const byId = new Map(form.rows.map((r) => [r.id, r.values]));
+  const sectionTitle = (id: SectionId) => QUESTION_SECTIONS.find((x) => x.id === id)?.title ?? id;
+
+  return rows.map((row) => {
+    const values = byId.get(row.id) ?? {};
+    return {
+      ...row,
+      statusLabel: STATUS_LABEL[row.status],
+      exitReasonLabel: EXIT_REASONS.find((r) => r.value === row.exitReason)?.label ?? "",
+      form: form.columns
+        .filter((c) => values[c.id])
+        .map((c) => ({ section: sectionTitle(c.section), question: c.label, answer: values[c.id] })),
+    };
+  });
 }
 
 /* ------------------------------------------------------- ฝั่งผู้สมัครเปิดดูเอง */

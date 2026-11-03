@@ -1039,6 +1039,24 @@ export async function getDriversForExport(codes: readonly string[]): Promise<Dri
   return wanted.map((c) => byCode.get(c)).filter((r): r is DriverExportRow => Boolean(r));
 }
 
+/**
+ * ทะเบียน พจส. ทั้งหมดของ `GET /api/drivers` — กรองตาม **วันเริ่มงาน** ในช่วง `from`–`to` (รวม) ได้
+ *
+ * อ่านแค่รหัส + วันเริ่มงานมากรองก่อน แล้วค่อยอ่านเต็มเฉพาะคนที่ผ่าน ผ่าน `getDriversForExport()`
+ * จึงได้กติกาข้อมูลส่วนบุคคลเดียวกับหน้าประวัติ (พ้นสภาพแล้ว = ล้าง) · เรียงตามรหัส
+ */
+export async function getDriversForApi(range: { from: string; to: string } | null): Promise<DriverExportRow[]> {
+  const docs = await readMasterDrivers(["drivercode", "startDate"]);
+  const codes = docs
+    .filter((doc) => {
+      if (!range) return true;
+      const start = toIsoDate(doc.startDate);
+      return start >= range.from && start <= range.to;
+    })
+    .map((doc) => str(doc.drivercode));
+  return getDriversForExport(codes);
+}
+
 export interface DriverStatusInput {
   status: DriverStatus;
   /** บังคับเมื่อ `status` เป็น `resigned` — `YYYY-MM-DD` */

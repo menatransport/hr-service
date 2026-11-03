@@ -3,7 +3,7 @@ import {
   workStatusFullLabel,
   type DriverRecord,
 } from "./types";
-import type { DriverProfileRecord } from "./registry";
+import type { DriverExportRow, DriverProfileRecord } from "./registry";
 
 /**
  * รูปข้อมูล **สาธารณะ** ของ API ทะเบียน พจส. — แปลงจาก `DriverRecord` (รูปภายในที่หน้าจอใช้)
@@ -157,6 +157,30 @@ export function toDriverDto(d: DriverProfileRecord): DriverDto {
       uploadedAt: orNull(doc.uploadedAt),
       url: `/api/drivers/${code}/documents/${encodeURIComponent(doc.fileId)}`,
     })),
+  };
+}
+
+/**
+ * แถวของ `GET /api/drivers` — ชุดเดียวกับไฟล์ Excel หน้าทะเบียน: `DriverDto` ไม่มี `documents`
+ * + ตำแหน่ง · บัญชีรับเงิน (อยู่ในไฟล์ Excel จึงออกทางนี้ด้วย — พ้นสภาพแล้วเป็น `null` เหมือนข้อมูลส่วนบุคคลอื่น)
+ * · การแก้ประวัติล่าสุด · ที่มาในทะเบียน
+ */
+export type DriverListItemDto = Omit<DriverDto, "documents"> & {
+  position: string | null;
+  bank: { accountNo: string | null; branch: string | null } | null;
+  lastEdit: { at: string | null; by: string | null };
+  registry: { source: string | null; at: string | null };
+};
+
+export function toDriverListItemDto(d: DriverExportRow): DriverListItemDto {
+  const { documents, ...item } = toDriverDto(d);
+  void documents;
+  return {
+    ...item,
+    position: orNull(d.position),
+    bank: d.personalHidden ? null : { accountNo: orNull(d.bankAccountNo), branch: orNull(d.bankBranch) },
+    lastEdit: { at: orNull(d.profileEditedAt), by: orNull(d.profileEditedBy) },
+    registry: { source: orNull(d.source), at: orNull(d.sourceAt) },
   };
 }
 
