@@ -1,7 +1,4 @@
-import { notFound } from "next/navigation";
-
 import { DataError } from "@/components/ui/data-error";
-import { SOON } from "@/lib/modules";
 import { getMonthTotals, getRentalBoard } from "@/lib/rentals/store";
 import { isMonth } from "@/lib/rentals/types";
 import { todayInBangkok } from "@/app/recruitment/_lib/drivers/registry";
@@ -18,7 +15,6 @@ export const dynamic = "force-dynamic";
  * ข้อมูลคนมาจากทะเบียนประวัติ พจส. เท่านั้น · ดู `lib/rentals/store.ts` และ `.claude/docs/rentals.md`
  */
 export default async function RentalsPage(props: PageProps<"/desk/rentals">) {
-  if (SOON) notFound();
   const { m } = await props.searchParams;
   const month = isMonth(m) ? m : todayInBangkok().slice(0, 7);
 
