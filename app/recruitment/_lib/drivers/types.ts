@@ -1161,4 +1161,6 @@ export interface DriverPick {
   position: string;
   /** ยังปฏิบัติงาน (นับ `statusOverride` แล้ว) */
   active: boolean;
+  /** วันเริ่มงาน `YYYY-MM-DD` — ห้องเช่าใช้เป็นวันเข้าพักตั้งต้น */
+  startDate: string;
 }

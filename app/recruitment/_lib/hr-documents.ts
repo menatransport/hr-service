@@ -502,11 +502,17 @@ function numberWords(n: number): string {
   return underMillion(n);
 }
 
-/** `30000` → `สามหมื่นบาทถ้วน` — รับเฉพาะจำนวนเต็มบาท (เอกสารชุดนี้ไม่มีสตางค์) */
+/**
+ * `30000` → `สามหมื่นบาทถ้วน` · `47670.49` → `สี่หมื่นเจ็ดพันหกร้อยเจ็ดสิบบาทสี่สิบเก้าสตางค์`
+ * (สตางค์ใช้กับบันทึกขอเบิกค่าเช่าที่พัก — บิลบางห้องมีเศษสตางค์)
+ */
 export function bahtText(n: number | null): string {
   if (n === null || !Number.isFinite(n) || n < 0) return "";
-  const whole = Math.floor(n);
-  return whole === 0 ? "ศูนย์บาทถ้วน" : `${numberWords(whole)}บาทถ้วน`;
+  const satangAll = Math.round(n * 100);
+  const whole = Math.floor(satangAll / 100);
+  const satang = satangAll % 100;
+  const baht = whole === 0 ? (satang ? "" : "ศูนย์บาท") : `${numberWords(whole)}บาท`;
+  return satang ? `${baht}${underMillion(satang)}สตางค์` : `${baht}ถ้วน`;
 }
 
 /** `30000` → `30,000` — คั่นหลักพันเองแทน `Intl` */

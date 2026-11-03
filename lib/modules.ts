@@ -9,6 +9,7 @@ import {
   Container,
   Database,
   FlaskConical,
+  House,
   Inbox,
   LayoutGrid,
   ShieldCheck,
@@ -216,6 +217,15 @@ export const MODULES: ModuleGroup[] = [
         desc: "ผลแบบสำรวจความเห็น พจส.",
         href: "/desk/survey",
         icon: ClipboardPenLine,
+      },
+      {
+        /* ห้องเช่าของบริษัท (3 พ.ย. 2569) — แทนไฟล์คุม Excel + เมนูห้องเช่าของ Mena-Next · คนมาจากทะเบียน พจส. */
+        id: "rentals",
+        label: "จัดการห้องเช่า",
+        desc: "ห้องเช่าบริษัท · ผู้พัก · ค่าเช่ารายเดือน",
+        href: "/desk/rentals",
+        icon: House,
+        soon: SOON,
       },
       {
         id: "permissions",

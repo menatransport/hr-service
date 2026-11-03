@@ -43,6 +43,7 @@ const SHORT: Record<string, string> = {
   "payroll-intake": "รับข้อมูล",
   "record-cases": "บันทึกเคส",
   survey: "แบบสอบถาม",
+  rentals: "ห้องเช่า",
   permissions: "สิทธิ์",
   uat: "UAT",
   "api-docs": "API",

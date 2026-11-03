@@ -284,6 +284,8 @@
   --animate-sheet-in: sheet-in 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
   /* มาสคอตลอยขึ้นลงช้า ๆ บนหน้าแรกของการรับสมัคร (`mascot.tsx`) */
   --animate-float: float 4.5s ease-in-out infinite;
+  /* กระดิ่งมีรายการใหม่ — สั่นสามจังหวะแล้วพัก (ห้องเช่า: ผู้พักพ้นสภาพ) */
+  --animate-bell-ring: bell-ring 2.6s ease-in-out infinite;
 
   /**
    * สีแบรนด์ MENA — ดูดจากไฟล์โลโก้จริงของ menatransport.co.th
@@ -568,6 +570,28 @@
   }
   to {
     transform: none;
+  }
+}
+
+/** สั่นจากจุดแขวนด้านบน ~0.8 วิ แล้วนิ่งที่เหลือของรอบ — ดึงตาแต่ไม่กวนตลอดเวลา */
+@keyframes bell-ring {
+  0%, 32%, 100% {
+    transform: rotate(0);
+  }
+  4% {
+    transform: rotate(16deg);
+  }
+  10% {
+    transform: rotate(-14deg);
+  }
+  16% {
+    transform: rotate(10deg);
+  }
+  22% {
+    transform: rotate(-6deg);
+  }
+  27% {
+    transform: rotate(3deg);
   }
 }
 
@@ -2739,4 +2763,123 @@ a.home-row:hover .home-row-arrow {
   .hrdoc-keep {
     break-inside: avoid;
   }
+}
+
+/* ------------------------------------------------------------------
+   แผนที่ที่พัก (`rentals/_components/apartment-map.tsx`) — OSM สีจริง ดันสีขึ้นเล็กน้อยให้สดใส
+   หมุด teal = ห้องเต็ม · ม่วง = มีห้องว่าง · หมุดที่เลือก = พื้นสีเต็ม
+------------------------------------------------------------------ */
+.rental-map {
+  font-family: inherit;
+}
+.rental-map .leaflet-tile-pane {
+  filter: saturate(1.25) brightness(1.03) contrast(0.98);
+}
+[data-theme="hrs-dark"] .rental-map .leaflet-tile-pane {
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.9) contrast(0.88) brightness(0.95);
+}
+.rental-map .leaflet-control-attribution {
+  background: color-mix(in oklab, var(--color-base-100) 80%, transparent);
+  color: var(--color-mut, #6b7a76);
+  font-size: 10px;
+}
+.rental-map .leaflet-control-zoom {
+  border: 0;
+  box-shadow: 0 4px 14px -6px rgba(21, 32, 29, 0.3);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.rental-map .leaflet-control-zoom a {
+  background: var(--color-base-100);
+  color: var(--color-ink, #15201d);
+  border-color: var(--color-line, #e3e8e6);
+}
+.apt-pin-wrap {
+  background: none;
+  border: 0;
+}
+.apt-pin {
+  --pin: var(--color-primary);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+  background: var(--color-base-100);
+  color: var(--color-ink, #15201d);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--pin) 22%, transparent),
+    0 6px 16px -8px rgba(21, 32, 29, 0.45);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.apt-pin::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  transform: rotate(45deg);
+  border-radius: 0 0 2px 0;
+  box-shadow: 1px 1px 0 0 color-mix(in oklab, var(--pin) 22%, transparent);
+}
+.apt-pin:hover {
+  transform: translateY(-2px);
+}
+.apt-pin-ic {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--pin) 13%, transparent);
+  color: var(--pin);
+  flex: none;
+}
+.apt-pin-tx {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1;
+}
+.apt-pin-tx b {
+  font-weight: 600;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.apt-pin-tx i {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--pin);
+  font-weight: 600;
+}
+.apt-pin.is-on {
+  background: var(--pin);
+  color: #fff;
+  z-index: 1;
+}
+.apt-pin.is-on .apt-pin-ic {
+  background: color-mix(in oklab, white 22%, transparent);
+  color: inherit;
+}
+.apt-pin.is-on .apt-pin-tx i {
+  color: inherit;
+  opacity: 0.85;
+}
+.apt-pin.is-compact {
+  padding: 2px;
+}
+.apt-pin.is-free {
+  --pin: #7c3aed;
+}
+.apt-pin.is-compact::after {
+  display: none;
 }

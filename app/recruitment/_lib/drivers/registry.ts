@@ -200,7 +200,7 @@ function toVehicle(doc: Record<string, unknown>): DriverVehicle {
  *
  * ปีที่มากกว่า 2400 ถือว่าเป็น พ.ศ. แล้วลบ 543 ให้ ทั้งในคีย์เดือนและคีย์วันที่เต็ม
  */
-function toWorkDays(raw: unknown): Record<string, string> {
+export function toWorkDays(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object") return {};
 
   const days: Record<string, string> = {};
@@ -816,6 +816,7 @@ const PICK_FIELDS: DriverField[] = [
   "position",
   "active",
   "statusOverride",
+  "startDate",
 ];
 
 /**
@@ -838,6 +839,7 @@ export async function getDriverPicks(): Promise<DriverPick[]> {
         customer: str(doc.customer),
         position: str(doc.position),
         active: override ? override === "active" : Boolean(doc.active),
+        startDate: toIsoDate(doc.startDate),
       };
     })
     .filter((p) => p.code && p.name)

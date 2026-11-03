@@ -203,6 +203,13 @@ const C = {
     width: "min-w-[140px]",
     text: (r) => (r.atms ? r.atms.latestLabel || r.atms.latestStatus || DASH : DASH),
   },
+  /* สถานะในทะเบียน พจส. (sync จาก Google Sheet / หน้าทะเบียน) — รับรถแล้วแต่ออกไปแล้วก็ยังอยู่แท็บนี้ */
+  driverStatus: {
+    id: "driverStatus",
+    label: "สถานะ",
+    width: "min-w-[110px]",
+    text: (r) => (r.registry ? (r.registry.active ? "ปฏิบัติงาน" : "พ้นสภาพ") : DASH),
+  },
   end: { id: "end", label: "ผล", width: "min-w-[140px]", text: (r) => endLabel(r) || DASH },
   endOn: {
     id: "endOn",
@@ -221,7 +228,7 @@ const COLUMNS: Record<Stage, Col[]> = {
     C.trainer, C.vehicle, C.repair, C.st, C.orientation, C.examScore,
   ],
   /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding */
-  working: [C.driver, C.code, C.customer, C.plant, C.start, C.handover, C.days],
+  working: [C.driver, C.code, C.driverStatus, C.customer, C.plant, C.start, C.handover, C.days],
   ended: [C.name, C.code, C.customer, C.plant, C.start, C.end, C.endOn, C.atms],
 };
 
@@ -305,6 +312,17 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   handover: [{ header: "รับรถ", width: 13, kind: "date", value: (r) => xlsxDate(C.handover.key(r)) }],
   days: [{ header: "ฝึก→รับรถ (วัน)", width: 12, kind: "int", value: (r) => num(daysToHandover(r)) }],
   atms: [{ header: "ATMS ล่าสุด", width: 20, value: C.atms.text, tone: (r) => (r.atms?.exited ? "alert" : null) }],
+  driverStatus: [
+    {
+      header: "สถานะ",
+      width: 12,
+      kind: "status",
+      value: C.driverStatus.text,
+      tone: (r) => (r.registry ? (r.registry.active ? "ok" : "alert") : null),
+    },
+    { header: "วันที่พ้นสภาพ", width: 13, kind: "date", value: (r) => xlsxDate(r.registry?.resignedOn ?? "") },
+    { header: "เหตุผลพ้นสภาพ", width: 22, value: (r) => r.registry?.reason ?? "" },
+  ],
   end: [{ header: "ผล", width: 20, kind: "status", value: C.end.text, tone: () => "alert" }],
   endOn: [{ header: "วันที่สิ้นสุด", width: 13, kind: "date", value: (r) => xlsxDate(endOn(r)) }],
 };
@@ -312,6 +330,20 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
 /** วันที่สิ้นสุด — วันยกเลิกใบสมัคร → ที่ RC กรอก → วันพ้นสภาพใน ATMS */
 function endOn(r: OnboardingRecord): string {
   return r.applicant?.cancelledOn || val(r.onboarding, "rc", "exitOn") || (r.atms?.exited ? r.atms.latestDate : "");
+}
+
+/** แท็บรับรถแล้วเก็บแค่ 7 วันล่าสุด (นับวันรับรถเป็นวันที่ 1) — เกินนั้นคนอยู่ทะเบียนประวัติ พจส. แล้ว */
+const WORKING_DAYS = 7;
+
+/**
+ * รับรถเกิน 7 วันและเข้าทะเบียนแล้ว = ไม่ต้องตามต่อในหน้านี้ · ยังไม่เข้าทะเบียน หรือไม่มีวันรับรถ
+ * ยังโชว์ไว้ เพราะยังไม่มีที่อื่นให้ดู
+ */
+function leftForRegistry(r: Row, today: string): boolean {
+  const handover = C.handover.key(r);
+  if (!r.registry || !handover) return false;
+  const d = daysBetween(handover, today);
+  return d !== null && d >= WORKING_DAYS;
 }
 
 const monthLabel = (ym: string) =>
@@ -339,9 +371,10 @@ export function OnboardingView({
   const [cancelling, setCancelling] = useState<Requisition | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const rows = useMemo<Row[]>(
-    () =>
-      records.map((r) => {
+  const rows = useMemo<Row[]>(() => {
+    const today = todayInBangkok();
+    return records
+      .map((r) => {
         const repair = r.vehicle?.plateNo ? (repairs[r.vehicle.plateNo] ?? null) : null;
         return {
           ...r,
@@ -351,9 +384,9 @@ export function OnboardingView({
           start: trainingStart(r),
           repair,
         };
-      }),
-    [records, repairs],
-  );
+      })
+      .filter((r) => r.stage !== "working" || !leftForRegistry(r, today));
+  }, [records, repairs]);
 
   const months = useMemo(
     () => [...new Set(rows.map((r) => r.requestedOn.slice(0, 7)).filter(Boolean))].sort().reverse(),
@@ -485,7 +518,11 @@ export function OnboardingView({
               unit={s === "open" ? "อัตรา" : "คน"}
               dot={STAGE_DOT[s]}
               tone={s === "ended" ? "ink" : "primary"}
-              sub={s === "working" && avgDays !== null ? `เฉลี่ยฝึก ${avgDays} วัน` : undefined}
+              sub={
+                s === "working"
+                  ? `${WORKING_DAYS} วันล่าสุด${avgDays !== null ? ` · เฉลี่ยฝึก ${avgDays} วัน` : ""}`
+                  : undefined
+              }
               active={stage === s}
               onClick={() => switchStage(s)}
               className={s === "open" ? "col-span-2 md:col-span-1" : ""}
@@ -793,6 +830,16 @@ function Cell({ column, row }: { column: Col; row: Row }) {
       return <StProgress name={val(row.onboarding, "er", "erName")} results={stResults(row)} />;
     case "repair":
       return row.repair ? <RepairBadge repair={row.repair} compact className="" /> : <span className="text-mut">{DASH}</span>;
+    case "driverStatus":
+      if (!row.registry) return <span className="text-mut">{DASH}</span>;
+      return row.registry.active ? (
+        <span className="rounded-full bg-st-live px-2 py-0.5 text-12 font-medium text-st-live-ink">{text}</span>
+      ) : (
+        <span className="flex flex-col items-start leading-tight" title={row.registry.reason || undefined}>
+          <span className="rounded-full bg-alert/12 px-2 py-0.5 text-12 font-medium text-alert">{text}</span>
+          {row.registry.resignedOn ? <span className="mt-0.5 text-11 text-mut">{date(row.registry.resignedOn)}</span> : null}
+        </span>
+      );
     case "end":
       return text === DASH ? <span className="text-mut">{DASH}</span> : <span className="font-medium text-alert">{text}</span>;
     case "atms":

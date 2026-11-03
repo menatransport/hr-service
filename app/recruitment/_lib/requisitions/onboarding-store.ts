@@ -3,7 +3,7 @@ import { ObjectId, type WithId } from "mongodb";
 import { etlCol, hrCol } from "@/lib/db";
 import { uatDriverCode } from "@/lib/uat";
 import { todayInBangkok } from "@/lib/record-case-flow";
-import { findIssuedCodeByName, readDriver } from "@/app/recruitment/_lib/drivers/master";
+import { findIssuedCodeByName, readDriver, readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { isExitStatus, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
 import { listApplications, updateApplication } from "@/app/recruitment/_lib/applications";
 import {
@@ -38,6 +38,7 @@ import {
   type AtmsBrief,
   type OnboardingPatch,
   type OnboardingRecord,
+  type RegistryStatus,
   type SuggestKey,
   type Suggestions,
 } from "./onboarding";
@@ -115,12 +116,39 @@ async function readAtms(codes: string[]): Promise<Map<string, AtmsBrief>> {
   return out;
 }
 
+/** สถานะในทะเบียน พจส. ของหลายรหัส — พังก็แค่ไม่มีสถานะ */
+async function readRegistryStatus(codes: string[]): Promise<Map<string, RegistryStatus>> {
+  const out = new Map<string, RegistryStatus>();
+  if (!codes.length) return out;
+  try {
+    const docs = await readDrivers<{
+      drivercode: string;
+      active?: unknown;
+      statusOverride?: unknown;
+      resignation?: { dateISO?: unknown; reasonLabel?: unknown } | null;
+    }>(["active", "statusOverride", "resignation"], { codes });
+    for (const d of docs) {
+      const active = d.statusOverride === "active" || d.statusOverride === "resigned" ? d.statusOverride === "active" : d.active === true;
+      out.set(d.drivercode, {
+        active,
+        resignedOn: active ? "" : String(d.resignation?.dateISO ?? "").slice(0, 10),
+        reason: active ? "" : String(d.resignation?.reasonLabel ?? "").trim(),
+      });
+    }
+  } catch (err) {
+    console.warn("[onboarding] อ่านทะเบียน พจส. ไม่สำเร็จ —", err);
+  }
+  return out;
+}
+
 async function toRecords(docs: WithId<RequisitionDoc>[]): Promise<OnboardingRecord[]> {
-  const atms = await readAtms([...new Set(docs.map((d) => d.drivercode).filter(Boolean))]);
+  const codes = [...new Set(docs.map((d) => d.drivercode).filter(Boolean))];
+  const [atms, registry] = await Promise.all([readAtms(codes), readRegistryStatus(codes)]);
   const rows = docs.map((doc) => ({
     ...toRequisition(doc),
     onboarding: doc.onboarding ?? {},
     atms: doc.drivercode ? (atms.get(doc.drivercode) ?? null) : null,
+    registry: doc.drivercode ? (registry.get(doc.drivercode) ?? null) : null,
   }));
   await attachMatchStatus(rows);
   return rows;

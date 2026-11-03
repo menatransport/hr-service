@@ -257,10 +257,20 @@ export interface CancelledApplicant {
   requisitionId: string;
 }
 
+/** สถานะในทะเบียน พจส. (ที่ sync จาก Google Sheet / หน้าทะเบียน) — `statusOverride` ชนะ `active` */
+export interface RegistryStatus {
+  active: boolean;
+  /** วันที่พ้นสภาพ `YYYY-MM-DD` · ว่างถ้ายังปฏิบัติงาน */
+  resignedOn: string;
+  reason: string;
+}
+
 /** หนึ่งแถว = คำขอ + ข้อมูลฝ่าย + ATMS (ถ้ามีรหัส) · หรือผู้สมัครที่ยกเลิก (`applicant`) */
 export type OnboardingRecord = Requisition & {
   onboarding: Onboarding;
   atms: AtmsBrief | null;
+  /** ไม่มีรหัส/ยังไม่เข้าทะเบียน = ไม่มีค่า */
+  registry?: RegistryStatus | null;
   applicant?: CancelledApplicant;
 };
 

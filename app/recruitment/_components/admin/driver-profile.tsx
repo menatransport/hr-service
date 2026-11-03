@@ -24,6 +24,7 @@ import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar"
 import { DriverDocumentSlots } from "@/app/recruitment/_components/admin/driver-document-slots";
 import { DriverProfileEdit } from "@/app/recruitment/_components/admin/driver-profile-edit";
 import { DriverProfileTabs } from "@/app/recruitment/_components/admin/driver-profile-tabs";
+import { DriverRental } from "@/app/recruitment/_components/admin/driver-rental";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { DriverWorkYear } from "@/app/recruitment/_components/admin/driver-work-year";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
@@ -279,6 +280,10 @@ export function DriverProfile({
                       : "ยังไม่ได้ประจำรถคันใด"}
                   </Blank>
                 )}
+              </Section>
+
+              <Section title="ห้องพักบริษัท" note="อัปเดตตามเมนูจัดการห้องเช่า">
+                <DriverRental drivercode={driver.drivercode} />
               </Section>
             </div>
           </div>
