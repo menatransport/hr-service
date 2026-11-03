@@ -288,14 +288,15 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   next: [{ header: "ค้างที่", width: 10, kind: "status", value: C.next.text, tone: () => "warn" }],
   st: [
     { header: "ST ผู้ประเมิน", width: 20, value: (r) => val(r.onboarding, "er", "erName") },
-    ...ST_CHECKPOINTS.map(
-      (c): XlsxColumn<Row> => ({
+    ...ST_CHECKPOINTS.flatMap((c): XlsxColumn<Row>[] => [
+      {
         header: `ST วันที่ ${c.day}${"summary" in c ? " · สรุป" : ""}`,
         width: 16,
         kind: "status",
         value: (r) => val(r.onboarding, "er", c.result),
-      }),
-    ),
+      },
+      { header: `ST วันที่ ${c.day} · วันที่ตรวจ`, width: 13, kind: "date", value: (r) => xlsxDate(val(r.onboarding, "er", c.on)) },
+    ]),
   ],
   orientation: [{ header: "ปฐมนิเทศ", width: 13, kind: "date", value: (r) => xlsxDate(val(r.onboarding, "hrd", "orientationOn")) }],
   examScore: [

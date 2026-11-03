@@ -81,7 +81,7 @@ export interface FieldSpec {
   when?: { key: string; value: string };
   /** โผล่เมื่อช่องนี้มีค่าแล้ว (กรอกทีละครั้ง: ครั้งที่ 2 โผล่หลังลงผลครั้งที่ 1) · ช่องที่มีค่าอยู่แล้วโผล่เสมอ ไม่ถูกทิ้ง */
   after?: string;
-  /** วันที่ของการฝึกที่ควรทำ (ST) — ฟอร์มบอกวันที่จริงจากวันเริ่มฝึกเป็นคำใบ้ */
+  /** วันที่ของการฝึกที่ควรทำ (ST) — ฟอร์มบอกวันตามกำหนดจากวันเริ่มฝึกเป็นคำใบ้ และเติมให้ถ้ายังว่าง */
   day?: number;
   /** ช่องที่ทำให้ขั้นนี้ “เสร็จ” (ตรงกับ `stepStates`) — ฟอร์มขึ้น * แดง แต่ยังบันทึกได้แม้ว่าง */
   required?: boolean;
@@ -170,11 +170,15 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
       /* 3 ครั้งตามรอบติดตามเดิม (Day 1/4/8 ในไฟล์ — คีย์คงชื่อเดิม) ตั้งชื่อตามสิ่งที่ทำ วันเป็นคำใบ้ในฟอร์ม
          · ครั้งถัดไปโผล่หลังลงผลครั้งก่อน · ผลครั้งสุดท้ายคือสรุปความพร้อม */
       { key: "erName", label: "ST ที่ดูแล", kind: "combo", suggest: "erName" },
-      { key: "day1", label: "ตรวจวันแรก · Alc./สาร", kind: "select", options: DAY1_RESULTS, wide: true, day: 1, required: true },
+      /* วันที่ตรวจจริง (`dayNOn`) — ST ลงเองได้ เพราะวันจริงไม่ตรงวันที่ 1/4/8 เสมอ · ว่าง = ใช้วันตามกำหนดจากวันเริ่มฝึก */
+      { key: "day1", label: "ตรวจวันแรก · Alc./สาร", kind: "select", options: DAY1_RESULTS, required: true },
+      { key: "day1On", label: "วันที่ตรวจวันแรก", kind: "date", day: 1, past: true },
       { key: "day1Note", label: "ข้อเสนอแนะ วันแรก", kind: "textarea" },
-      { key: "day4", label: "ติดตามกลางฝึก", kind: "select", options: DAY4_RESULTS, wide: true, day: 4, after: "day1", required: true },
+      { key: "day4", label: "ติดตามกลางฝึก", kind: "select", options: DAY4_RESULTS, after: "day1", required: true },
+      { key: "day4On", label: "วันที่ติดตามกลางฝึก", kind: "date", day: 4, past: true, after: "day1" },
       { key: "day4Note", label: "ข้อเสนอแนะ กลางฝึก", kind: "textarea", after: "day1" },
-      { key: "day8", label: "ประเมินก่อนรับรถ", kind: "select", options: DAY8_RESULTS, wide: true, day: 8, after: "day4", required: true },
+      { key: "day8", label: "ประเมินก่อนรับรถ", kind: "select", options: DAY8_RESULTS, after: "day4", required: true },
+      { key: "day8On", label: "วันที่ประเมินก่อนรับรถ", kind: "date", day: 8, past: true, after: "day4" },
       { key: "day8Note", label: "ข้อเสนอแนะ ก่อนรับรถ", kind: "textarea", after: "day4" },
       /* ช่องเดิมจากไฟล์ — ซ้ำกับผลครั้งสุดท้าย (36/45 แถว) · โชว์ค่าเดิมอย่างเดียว ไม่มีในฟอร์ม */
       { key: "readiness", label: "สรุปความพร้อม (เดิม)", kind: "select", options: READINESS, readOnly: true },
@@ -199,11 +203,11 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
   },
 };
 
-/** ST 3 รอบ — หน้า journey แสดงเป็นแถว วันที่ 1 / 4 / 8 (สรุป) กดอัปเดตทีละรอบ · รอบถัดไปเปิดหลังลงผลรอบก่อน */
+/** ST 3 รอบ — หน้า journey แสดงเป็นแถว วันที่ 1 / 4 / 8 (สรุป) กดอัปเดตทีละรอบ · รอบถัดไปเปิดหลังลงผลรอบก่อน · `on` = วันที่ตรวจจริง */
 export const ST_CHECKPOINTS = [
-  { day: 1, result: "day1", note: "day1Note" },
-  { day: 4, result: "day4", note: "day4Note" },
-  { day: 8, result: "day8", note: "day8Note", summary: true },
+  { day: 1, result: "day1", on: "day1On", note: "day1Note" },
+  { day: 4, result: "day4", on: "day4On", note: "day4Note" },
+  { day: 8, result: "day8", on: "day8On", note: "day8Note", summary: true },
 ] as const;
 
 /* ------------------------------------------------------------ 6 ขั้น */

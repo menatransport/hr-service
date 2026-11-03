@@ -6,6 +6,7 @@ import { Loader2, TriangleAlert } from "lucide-react";
 import { DateField, NumberField, SelectField, TextField, TextareaField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
+import { todayInBangkok } from "@/lib/record-case-flow";
 import { toastSuccess } from "@/lib/swal";
 import { thaiDate } from "@/app/recruitment/_lib/form";
 import type { Journey } from "@/app/recruitment/_lib/requisitions/onboarding-store";
@@ -48,7 +49,18 @@ export function OnboardingSectionForm({
   onSaved: (next: OnboardingRecord) => void;
 }) {
   const meta = STEP_META[section];
-  const [values, setValues] = useState<Record<string, string>>(() => ({ ...(record.onboarding[section]?.values ?? {}) }));
+  const start = trainingStart(record);
+  /* ST ทีละรอบ — วันที่ตรวจที่ยังว่างเติมวันตามกำหนด (เกินวันนี้ = วันนี้) ให้ ST แก้เป็นวันจริงได้ */
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init = { ...(record.onboarding[section]?.values ?? {}) };
+    for (const field of SECTION_SPECS[section].fields) {
+      if (!only?.includes(field.key) || field.kind !== "date" || !field.day || init[field.key]) continue;
+      const due = trainingDayOn(start, field.day);
+      const today = todayInBangkok();
+      init[field.key] = !due || due > today ? today : due;
+    }
+    return init;
+  });
   const [drivercode, setDrivercode] = useState(record.drivercode);
   const [trainer, setTrainer] = useState(record.trainer?.drivercode ?? "");
   const [vehicle, setVehicle] = useState(record.vehicle?.code ?? "");
@@ -60,11 +72,10 @@ export function OnboardingSectionForm({
   const repair = plate ? journey.repairs[plate] : undefined;
 
   const set = (key: string) => (v: string) => setValues((prev) => ({ ...prev, [key]: v }));
-  const start = trainingStart(record);
   /* ST — บอกว่าครั้งนี้ตรงกับวันไหนของการฝึก (คำนวณจากวันเริ่มฝึก) */
   const dayHint = (day: number) => {
     const on = trainingDayOn(start, day);
-    return on ? `วันที่ ${day} ของการฝึก · ${thaiDate(on)}` : `วันที่ ${day} ของการฝึก`;
+    return on ? `กำหนด วันที่ ${day} ของการฝึก · ${thaiDate(on)}` : `วันที่ ${day} ของการฝึก`;
   };
 
   async function submit() {

@@ -473,7 +473,8 @@ function StSection({ record, state, onEdit }: { record: OnboardingRecord; state:
           const prev = i ? ST_CHECKPOINTS[i - 1] : null;
           const locked = Boolean(prev && !values[prev.result] && !values[c.result]);
           const done = Boolean(values[c.result]);
-          const on = trainingDayOn(start, c.day);
+          /* วันที่ ST ลงเอง ชนะวันตามกำหนด (วันเริ่มฝึก + วันที่ N) */
+          const on = values[c.on] || trainingDayOn(start, c.day);
           const title = `วันที่ ${c.day}${"summary" in c ? " · สรุป" : ""}`;
           /* สรุปเดิมจากไฟล์ (readiness) — โชว์ในวันที่ 8 เมื่อยังไม่ลงผลรอบนี้ */
           const legacy = "summary" in c && !done ? values.readiness : "";
@@ -519,7 +520,7 @@ function StSection({ record, state, onEdit }: { record: OnboardingRecord; state:
               {locked ? null : (
                 <button
                   type="button"
-                  onClick={() => onEdit({ section: "er", only: ["erName", c.result, c.note], title: `ST · ${title}` })}
+                  onClick={() => onEdit({ section: "er", only: ["erName", c.result, c.on, c.note], title: `ST · ${title}` })}
                   className={`flex w-fit cursor-pointer items-center gap-1.5 px-3 py-1.5 text-12-5 font-medium ${done ? "btn-soft" : "btn-pri"}`}
                 >
                   <Pencil size={13} strokeWidth={2} aria-hidden />
