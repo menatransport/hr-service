@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check, CircleAlert, FlaskConical, Loader2, X } from "lucide-react";
+import { ArrowUpRight, Check, CircleAlert, FlaskConical, Hourglass, Loader2, X } from "lucide-react";
 
 import { requestJson } from "@/lib/http";
 import { toastError } from "@/lib/swal";
-import { UAT_SCOPE, uatTeam, type MyUat, type UatResult, type UatStatus } from "@/lib/uat";
+import { UAT_SCOPE, uatTeam, waitingFor, type MyUat, type UatResult, type UatStatus } from "@/lib/uat";
 
 /**
  * แผง UAT ของผู้ทดสอบ — ปุ่มกลมมุมขวาล่าง (วงแหวน = ความคืบหน้าของตัวเอง) กดแล้วกางรายการข้อทดสอบของฝ่ายตัวเอง
  * · วงกลมหน้าข้อ = ติ๊กผ่าน (กดซ้ำ = ยกเลิก) · ไอคอน ! = แจ้งปัญหาพร้อมหมายเหตุ · ลูกศร = ไปหน้าที่ใช้ทดสอบ
+ * · ข้อที่ถึงคิวแสดงวิธีทำ + ผลที่ต้องเห็น · ข้อที่ขั้นก่อนหน้ายังไม่มีใครผ่าน (`needs`) ขึ้นแค่ “รอ …” และติ๊กผ่านไม่ได้
  * · ปุ่มสุ่มผู้สมัครทดสอบอยู่บนหน้า `/desk/uat`
  */
 export function UatDockPanel({ initial }: { initial: MyUat }) {
@@ -21,6 +22,7 @@ export function UatDockPanel({ initial }: { initial: MyUat }) {
   const [note, setNote] = useState("");
 
   const teams = my.teams.map(uatTeam).filter((t) => t !== undefined);
+  const passed = new Set(my.passed);
   const cases = teams.flatMap((t) => t.cases);
   const resultOf = (id: string): UatResult | undefined => my.results.find((r) => r.caseId === id);
   const done = cases.filter((c) => resultOf(c.id)?.status === "pass").length;
@@ -45,7 +47,7 @@ export function UatDockPanel({ initial }: { initial: MyUat }) {
   };
 
   return (
-    <div className="pointer-events-none fixed right-3 bottom-3 z-[60] flex flex-col items-end gap-2.5 sm:right-5 sm:bottom-5 print:hidden">
+    <div data-uat-dock className="pointer-events-none fixed right-3 bottom-3 z-[60] flex flex-col items-end gap-2.5 sm:right-5 sm:bottom-5 print:hidden">
       {open ? (
         <section
           aria-label="UAT"
@@ -82,12 +84,14 @@ export function UatDockPanel({ initial }: { initial: MyUat }) {
                   {team.cases.map((c) => {
                     const r = resultOf(c.id);
                     const busy = pending === c.id;
+                    const waiting = r?.status === "pass" ? [] : waitingFor(c, passed);
                     return (
                       <li key={c.id} className="px-2">
                         <div className="group flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-base-200/60">
                           <button
                             type="button"
-                            disabled={busy}
+                            disabled={busy || waiting.length > 0}
+                            title={waiting.length ? "ต้องรอขั้นก่อนหน้าผ่านก่อน" : undefined}
                             onClick={() => mark(c.id, r?.status === "pass" ? null : "pass")}
                             aria-pressed={r?.status === "pass"}
                             aria-label={r?.status === "pass" ? `ยกเลิกผ่าน: ${c.title}` : `ติ๊กผ่าน: ${c.title}`}
@@ -96,7 +100,9 @@ export function UatDockPanel({ initial }: { initial: MyUat }) {
                                 ? "border-primary bg-primary text-base-100"
                                 : r?.status === "fail"
                                   ? "border-alert text-alert"
-                                  : "border-line-strong text-transparent hover:border-primary hover:text-primary/50"
+                                  : waiting.length
+                                    ? "cursor-not-allowed border-dashed border-line-strong text-transparent"
+                                    : "border-line-strong text-transparent hover:border-primary hover:text-primary/50"
                             }`}
                           >
                             {busy ? (
@@ -109,6 +115,7 @@ export function UatDockPanel({ initial }: { initial: MyUat }) {
                           </button>
 
                           <span className={`min-w-0 flex-1 text-13 ${r?.status === "pass" ? "text-mut line-through decoration-line-strong" : ""}`}>
+                            <span className="mr-1.5 text-11 font-semibold text-mut tabular-nums">ขั้น {c.phase}</span>
                             {c.title}
                           </span>
 
@@ -137,6 +144,24 @@ export function UatDockPanel({ initial }: { initial: MyUat }) {
                             </Link>
                           ) : null}
                         </div>
+
+                        {r?.status !== "pass" ? (
+                          <div className="flex flex-col gap-0.5 pr-2 pb-1.5 pl-[2.6rem] text-12 leading-relaxed text-mut">
+                            {waiting.length ? (
+                              <p className="flex items-start gap-1 font-medium text-warning">
+                                <Hourglass size={12} className="mt-[3px] flex-none" aria-hidden />
+                                รอ {waiting.map((w) => `${w.team.short} · ${w.item.title}`).join(" และ ")}
+                              </p>
+                            ) : (
+                              <>
+                                <p>{c.how}</p>
+                                <p>
+                                  <span className="font-medium text-ink">ตรวจ</span> {c.check}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
 
                         {r?.status === "fail" && r.note && noteFor !== c.id ? (
                           <p className="pr-2 pb-1 pl-[2.6rem] text-12 text-alert">{r.note}</p>

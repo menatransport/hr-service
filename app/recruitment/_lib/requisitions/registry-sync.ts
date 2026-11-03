@@ -1,6 +1,7 @@
 import { getApplication } from "@/app/recruitment/_lib/applications";
 import { readApplicantFacts } from "@/app/recruitment/_lib/hr-documents";
 import { findIssuedDriver } from "@/app/recruitment/_lib/drivers/master";
+import { isUatDriverCode } from "@/lib/uat";
 import {
   enrollDriver,
   resignFromOnboarding,
@@ -50,7 +51,22 @@ export async function syncRegistryFromRequisition(
   const handedOver = Boolean(val(r.onboarding, "handover", "handoverOn"));
   if (!handedOver && (outcome === "waiting_training" || outcome === "waiting_handover")) return;
 
-  const issued = await findIssuedDriver(drivercode);
+  /* รหัสทดสอบ UAT ไม่มีใน ATMS — ให้รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัครอย่างเดียว */
+  const issued =
+    (await findIssuedDriver(drivercode)) ??
+    (isUatDriverCode(drivercode)
+      ? {
+          drivercode,
+          driverName: "",
+          phone: "",
+          ownerType: "",
+          branch: "",
+          vehicleCode: "",
+          startDate: "",
+          licenseExpiryDate: "",
+          inRegistry: false,
+        }
+      : null);
   if (!issued || issued.inRegistry) return;
 
   /* เลขบัตร/ใบขับขี่/บัญชี/ผู้ติดต่อฉุกเฉินไม่มีใน ATMS — เอาจากใบสมัครที่ผูกไว้

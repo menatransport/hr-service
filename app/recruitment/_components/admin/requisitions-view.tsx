@@ -15,6 +15,7 @@ import {
 
 import { ColumnMenu, type ColumnFilterOption, type SortDir } from "@/components/ui/column-menu";
 import { SearchField, Select } from "@/components/ui/field";
+import { TablePager, usePaged } from "@/components/ui/table-pager";
 import {
   SummaryPanel,
   SummaryStat,
@@ -331,6 +332,12 @@ export function RequisitionsView({
     });
   }, [rows, filters, staleOnly, needle, sort]);
 
+  /** หน้าละ 25 แถว — กรอง/ค้น/เรียงใหม่แล้วกลับหน้า 1 */
+  const [paged, pagedScroll] = usePaged(
+    visible,
+    JSON.stringify([filters, staleOnly, needle, sort]),
+  );
+
   const customerPicked = filters.customer ?? [];
 
   const filtering =
@@ -546,7 +553,10 @@ export function RequisitionsView({
           </p>
         ) : null}
 
-      <div className="relative max-h-[calc(100dvh-17.5rem)] overflow-auto border-y border-line">
+      <div
+        ref={pagedScroll}
+        className="relative max-h-[calc(100dvh-20.5rem)] overflow-auto border-y border-line"
+      >
         <table className="sheet-table w-full border-collapse text-13">
           <thead>
             <tr>
@@ -604,7 +614,7 @@ export function RequisitionsView({
           </thead>
 
           <tbody>
-            {visible.map((row) => {
+            {paged.pageRows.map((row) => {
               const busy = busyId === row.id;
               const stale = isStale(row);
 
@@ -781,6 +791,7 @@ export function RequisitionsView({
           </div>
         ) : null}
       </div>
+      <TablePager paged={paged} unit="คำขอ" className="-mt-px" />
       </SummaryPanel>
 
       {creating ? (

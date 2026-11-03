@@ -14,6 +14,7 @@ import {
   SummaryStrip,
   SummaryToolbar,
 } from "@/components/ui/summary-panel";
+import { TablePager, usePaged } from "@/components/ui/table-pager";
 import { XlsxExportButton } from "@/components/ui/xlsx-export-button";
 import { requestJson } from "@/lib/http";
 import { xlsxDate, type XlsxColumn } from "@/lib/xlsx-table";
@@ -423,6 +424,9 @@ export function OnboardingView({
     });
   }, [inStage, stage, dept, needle, columns, filters, sort]);
 
+  /** หน้าละ 25 แถว — เปลี่ยนขั้น/เดือน/ฝ่าย/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([stage, month, dept, needle, filters, sort]));
+
   const filtering = Boolean(needle) || dept !== "all" || Object.values(filters).some((p) => p?.length);
 
   function switchStage(next: Stage) {
@@ -591,7 +595,7 @@ export function OnboardingView({
           ) : null}
         </SummaryStrip>
 
-        <div className="relative max-h-[calc(100dvh-18rem)] overflow-auto border-y border-line">
+        <div ref={pagedScroll} className="relative max-h-[calc(100dvh-21rem)] overflow-auto border-y border-line">
           <table className="sheet-table w-full border-collapse text-13">
             <thead>
               <tr>
@@ -627,7 +631,7 @@ export function OnboardingView({
               </tr>
             </thead>
             <tbody>
-              {visible.map((row) => (
+              {paged.pageRows.map((row) => (
                 <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-base-200/50">
                   {columns.map((column, i) => (
                     <td
@@ -671,6 +675,7 @@ export function OnboardingView({
             </div>
           ) : null}
         </div>
+        <TablePager paged={paged} unit={stage === "open" ? "อัตรา" : "คน"} className="-mt-px" />
       </SummaryPanel>
 
       {/* ตารางฝึกงานรายวันย้ายไปอยู่ใต้ตารางผู้สมัคร (กรองฝึกงาน) ของ RC แล้ว — Bew 25 ต.ค. 2569 */}

@@ -38,6 +38,7 @@ import { outcomeGroup, outcomeLabel } from "@/app/recruitment/_lib/requisitions/
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
+import { TablePager, usePaged } from "@/components/ui/table-pager";
 import { XlsxMenuButton } from "@/components/ui/xlsx-export-button";
 import { FormSyncDialog, type FormSyncMode } from "@/app/recruitment/_components/admin/form-import-dialog";
 import { requestJson } from "@/lib/http";
@@ -585,6 +586,12 @@ export function CandidatesView({
     });
   }, [enriched, columns, filters, sort]);
 
+  /**
+   * หน้าละ 25 แถว (2 พ.ย. 2569) — ตัดหลังกรอง/เรียงแล้ว · แถบสรุป ตัวเลขในหัวคอลัมน์
+   * ปุ่ม Excel และตารางฝึกงานรายวันยังใช้ `visible` ทั้งชุดเหมือนเดิม
+   */
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort]));
+
   /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
   const toPerson = (a: ApplicationSummary): TraineePerson => {
     const rq = rqByApplication.get(a.id);
@@ -731,8 +738,9 @@ export function CandidatesView({
           ตำแหน่งกับเอกสารทั้งหน้าแทนกล่องนี้ ดันความสูงจริงของหน้าให้ยาวเกินของจริง
           (เห็นผลเป็นแถบข้างที่ดูเหมือนเลื่อนตามเพราะ container คำนวณความสูงผิด) */}
       <div
+        ref={pagedScroll}
         className={`sheet-bleed relative overflow-auto border-y border-line ${
-          showDaily ? "max-h-[60dvh]" : "max-h-[calc(100dvh-10.5rem)] lg:max-h-none lg:min-h-0 lg:flex-1"
+          showDaily ? "max-h-[60dvh]" : "max-h-[calc(100dvh-13.5rem)] lg:max-h-none lg:min-h-0 lg:flex-1"
         }`}
       >
         <table className="sheet-table w-full border-collapse text-13">
@@ -813,7 +821,7 @@ export function CandidatesView({
           </thead>
 
           <tbody>
-            {visible.map((a) => {
+            {paged.pageRows.map((a) => {
               const locked = a.erased;
               const cell = {
                 candidate: a,
@@ -988,6 +996,8 @@ export function CandidatesView({
           </div>
         ) : null}
       </div>
+
+      <TablePager paged={paged} unit="ใบ" className="sheet-bleed -mt-px flex-none" />
 
       {showDaily ? <TraineeDailySection pool={dailyPool} people={dailyPeople} /> : null}
 

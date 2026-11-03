@@ -1,6 +1,7 @@
 import { ObjectId, type WithId } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
+import { uatDriverCode } from "@/lib/uat";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { findIssuedCodeByName, readDriver } from "@/app/recruitment/_lib/drivers/master";
 import { isExitStatus, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
@@ -471,6 +472,26 @@ export async function updateOnboardingSection(
         throw new RequisitionError(`ไม่พบรหัส พจส. ${code} ในทะเบียนประวัติหรือใน ATMS`);
       set.drivercode = code;
       changes.push(code ? `ผูกรหัส ${code}` : "ถอดรหัส พจส.");
+    }
+  }
+
+  /* ผู้สมัคร UAT รับรถผ่าน → ออกรหัสทดสอบให้ (ATMS ไม่ออกรหัสให้คนทดสอบ) แล้วเข้าทะเบียนตามปกติด้านล่าง */
+  if (
+    patch.section === "handover" &&
+    values.handoverOn &&
+    values.result === HANDOVER_PASS &&
+    current.match &&
+    !current.drivercode
+  ) {
+    const app = ObjectId.isValid(current.match.applicationId)
+      ? await (await hrCol<{ _id: ObjectId; ref?: string; uat?: string }>("applications")).findOne(
+          { _id: new ObjectId(current.match.applicationId), uat: { $exists: true } },
+          { projection: { ref: 1 } },
+        )
+      : null;
+    if (app?.ref) {
+      set.drivercode = uatDriverCode(app.ref);
+      changes.push(`ผูกรหัสทดสอบ ${set.drivercode}`);
     }
   }
 

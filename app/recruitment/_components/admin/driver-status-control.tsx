@@ -32,7 +32,7 @@ import { ExitTypePicker } from "@/app/recruitment/_components/admin/exit-type-pi
  * บันทึกเสร็จเรียก `router.refresh()` ให้ server component อ่านค่าจริงกลับมา
  * **ไม่เดาสถานะเองในหน้าจอ** ถ้าบันทึกไม่ติดผู้ใช้ต้องเห็นว่าไม่เปลี่ยน
  *
- * อยู่ในแถวตารางที่ทั้งแถวกดแล้วเปิดประวัติ จึง `stopPropagation()` ทุก event
+ * อยู่ในแถวตารางที่ทั้งแถวกดแล้วเปิดประวัติ จึง `stopPropagation()` ทุก event — ครอบทั้งเมนูและฟอร์ม
  */
 export function DriverStatusControl({
   driver,
@@ -105,50 +105,50 @@ export function DriverStatusControl({
       </button>
     );
 
+  /* ทั้งเมนูและฟอร์มอยู่ใน span ที่หยุด event — ฟอร์มเป็น portal แต่ event ของ React ยังไหลตามต้นไม้คอมโพเนนต์
+     ขึ้นไปถึง `<tr onClick>` ของตาราง คลิกในฟอร์มเลยพาเข้าหน้าประวัติ (บั๊ก 2 พ.ย. 2569) */
   return (
-    <>
-      <span onClick={(e) => e.stopPropagation()} className="inline-flex">
-        <RPopover.Root open={menuOpen} onOpenChange={setMenuOpen}>
-          <RPopover.Trigger asChild>{trigger}</RPopover.Trigger>
+    <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+      <RPopover.Root open={menuOpen} onOpenChange={setMenuOpen}>
+        <RPopover.Trigger asChild>{trigger}</RPopover.Trigger>
 
-          <RPopover.Portal>
-            <RPopover.Content
-              data-hrs-dropdown=""
-              align="start"
-              sideOffset={6}
-              collisionPadding={12}
-              className="z-60 flex w-56 flex-col gap-0.5 rounded-box border border-line bg-base-100 p-1.5 text-ink shadow-[0_18px_44px_-18px_rgba(21,32,29,0.38)] max-sm:w-full max-sm:rounded-b-none max-sm:rounded-t-[18px]"
+        <RPopover.Portal>
+          <RPopover.Content
+            data-hrs-dropdown=""
+            align="start"
+            sideOffset={6}
+            collisionPadding={12}
+            className="z-60 flex w-56 flex-col gap-0.5 rounded-box border border-line bg-base-100 p-1.5 text-ink shadow-[0_18px_44px_-18px_rgba(21,32,29,0.38)] max-sm:w-full max-sm:rounded-b-none max-sm:rounded-t-[18px]"
+          >
+            <MenuItem
+              icon={UserRound}
+              active={!resigned}
+              onClick={() => {
+                setMenuOpen(false);
+                if (resigned) void revertToActive();
+              }}
             >
-              <MenuItem
-                icon={UserRound}
-                active={!resigned}
-                onClick={() => {
-                  setMenuOpen(false);
-                  if (resigned) void revertToActive();
-                }}
-              >
-                ปฏิบัติงาน
-              </MenuItem>
+              ปฏิบัติงาน
+            </MenuItem>
 
-              <MenuItem
-                icon={UserMinus}
-                active={resigned}
-                onClick={() => {
-                  setMenuOpen(false);
-                  setFormOpen(true);
-                }}
-              >
-                {resigned ? "แก้ไขข้อมูลพ้นสภาพ…" : "พ้นสภาพ…"}
-              </MenuItem>
-            </RPopover.Content>
-          </RPopover.Portal>
-        </RPopover.Root>
-      </span>
+            <MenuItem
+              icon={UserMinus}
+              active={resigned}
+              onClick={() => {
+                setMenuOpen(false);
+                setFormOpen(true);
+              }}
+            >
+              {resigned ? "แก้ไขข้อมูลพ้นสภาพ…" : "พ้นสภาพ…"}
+            </MenuItem>
+          </RPopover.Content>
+        </RPopover.Portal>
+      </RPopover.Root>
 
       {formOpen ? (
         <ResignForm driver={driver} onClose={() => setFormOpen(false)} />
       ) : null}
-    </>
+    </span>
   );
 }
 

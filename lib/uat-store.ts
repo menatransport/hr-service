@@ -4,9 +4,11 @@ import { unstable_rethrow } from "next/navigation";
 import { readSessionUser } from "./auth/session";
 import { hrCol } from "./db";
 import {
+  UAT_CODE_PREFIX,
   UAT_TEAMS,
   uatCase,
   uatTeam,
+  waitingFor,
   type MyUat,
   type UatBoard,
   type UatResult,
@@ -150,8 +152,13 @@ export async function getMyUat(): Promise<MyUat | null> {
       (t) => t.id,
     );
     if (!teams.length) return null;
-    const rows = await (await hrCol<ResultDoc>("uatResults")).find({ employeeId: user.employeeId }).toArray();
+    const col = await hrCol<ResultDoc>("uatResults");
+    const [rows, passed] = await Promise.all([
+      col.find({ employeeId: user.employeeId }).toArray(),
+      col.distinct("caseId", { status: "pass" }),
+    ]);
     return {
+      passed: passed.map(String),
       teams,
       results: rows.map(({ caseId, employeeId, status, note, at }) => ({
         caseId,
@@ -191,6 +198,13 @@ export async function saveMyResult(caseId: unknown, status: unknown, note: unkno
     await col.deleteOne({ _id });
   } else {
     if (status !== "pass" && status !== "fail") throw new UatError("ผลทดสอบไม่ถูกต้อง");
+    if (status === "pass") {
+      const passed = new Set((await col.distinct("caseId", { status: "pass" })).map(String));
+      const waiting = waitingFor(found.item, passed);
+      if (waiting.length) {
+        throw new UatError(`ต้องรอ ${waiting.map((w) => `${w.team.short} · ${w.item.title}`).join(", ")} ผ่านก่อน`, 409);
+      }
+    }
     const doc: ResultDoc = {
       _id,
       caseId: found.item.id,
@@ -222,6 +236,7 @@ export async function assertUatManager(): Promise<{
  * - ใบสมัครทดสอบ (มีคีย์ `uat`) → ลบ
  * - คำขอสรรหาที่ **หมายเหตุขึ้นต้น “UAT”** และไม่เคยผูกคนจริง → ลบ (กติกาของผู้ทดสอบ KA ตอนขออัตรา)
  * - คำขอจริงที่ผูกผู้สมัครทดสอบ → ปลดผูก ล้างข้อมูลฝึกงานของคนทดสอบ กลับเป็นเปิดรับ (ยกเลิกแล้วคงยกเลิก)
+ * - คนทดสอบในทะเบียนประวัติ (รหัสขึ้นต้น `UAT` ที่ออกตอนรับรถ) + ตารางรายวันของรหัสนั้น → ลบ
  * - ผลทดสอบทั้งหมด → ลบ · **ผู้ทดสอบกับสวิตช์คงไว้**
  *
  * ก่อนลบเก็บสำเนาทั้งหมดลง `uat_trash` (บน Vercel ไม่มีดิสก์ให้เขียนไฟล์สำรอง)
@@ -230,18 +245,24 @@ export interface UatClearPlan {
   applications: number;
   requisitionsDeleted: number;
   requisitionsReset: number;
+  /** คนทดสอบในทะเบียนประวัติ (รหัสขึ้นต้น UAT) */
+  drivers: number;
   results: number;
 }
 
 type Doc = Document & { _id: ObjectId };
 
 const isUatNote = (note: unknown) => typeof note === "string" && /^\s*uat/i.test(note);
+/** รหัส พจส. ทดสอบ (`uatDriverCode`) — คนทดสอบที่รับรถแล้วเข้าทะเบียน + ตารางรายวันของเขา */
+const UAT_CODE = { drivercode: { $regex: new RegExp(`^${UAT_CODE_PREFIX}`) } };
 
 async function planClear() {
-  const [apps, rqs, results] = await Promise.all([
+  const [apps, rqs, results, drivers, daily] = await Promise.all([
     hrCol<Doc>("applications"),
     hrCol<Doc>("requisitions"),
     hrCol<ResultDoc>("uatResults"),
+    hrCol<Doc>("drivers"),
+    hrCol<Doc>("traineeDaily"),
   ]);
   const appDocs = await apps.find({ uat: { $exists: true } }).toArray();
   const ids = appDocs.map((d) => d._id.toHexString());
@@ -267,6 +288,9 @@ async function planClear() {
     apps,
     rqs,
     results,
+    drivers,
+    daily,
+    driverDocs: await drivers.find(UAT_CODE).toArray(),
     appDocs,
     ids,
     toDelete,
@@ -281,6 +305,7 @@ export async function previewUatClear(): Promise<UatClearPlan> {
     applications: p.appDocs.length,
     requisitionsDeleted: p.toDelete.length,
     requisitionsReset: p.toReset.length,
+    drivers: p.driverDocs.length,
     results: p.resultCount,
   };
 }
@@ -298,6 +323,8 @@ export async function clearUatData(): Promise<UatClearPlan> {
     applications: p.appDocs,
     requisitionsDeleted: p.toDelete,
     requisitionsBeforeReset: p.toReset,
+    drivers: p.driverDocs,
+    traineeDaily: await p.daily.find(UAT_CODE).toArray(),
     results: await p.results.find({}).toArray(),
   });
 
@@ -334,12 +361,15 @@ export async function clearUatData(): Promise<UatClearPlan> {
   }
   if (p.toDelete.length) await p.rqs.deleteMany({ _id: { $in: p.toDelete.map((r) => r._id) } });
   if (p.appDocs.length) await p.apps.deleteMany({ _id: { $in: p.appDocs.map((d) => d._id) } });
+  await p.drivers.deleteMany(UAT_CODE);
+  await p.daily.deleteMany(UAT_CODE);
   await p.results.deleteMany({});
 
   return {
     applications: p.appDocs.length,
     requisitionsDeleted: p.toDelete.length,
     requisitionsReset: p.toReset.length,
+    drivers: p.driverDocs.length,
     results: p.resultCount,
   };
 }
