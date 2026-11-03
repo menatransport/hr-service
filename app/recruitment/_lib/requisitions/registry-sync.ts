@@ -24,9 +24,15 @@ import { customerLabel, positionLabel, type Requisition } from "./types";
  * เรียกหลังบันทึกคำขอสำเร็จแล้วเท่านั้น และ **ล้มแล้วไม่ทำให้การบันทึกคำขอล้ม** — ผู้เรียกครอบ try เอง
  */
 
-/** รหัส พจส. ที่ผูกให้คำขอได้ — มีในทะเบียนแล้ว หรือ ATMS ออกรหัสให้แล้ว */
+/**
+ * รหัสที่ยังไม่มีในทะเบียน/ATMS แต่ผูกได้ — รหัสทดสอบ UAT · หรือรหัสตัวเลขที่ HR ออกจากชีตรหัส พจส. แล้ว
+ * แต่ ATMS ยังไม่ซิงก์เข้า `main_driver` (Bew 3 พ.ย. 2569) → รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัคร
+ */
+const isPendingDriverCode = (code: string): boolean => isUatDriverCode(code) || /^\d{4,8}$/.test(code.trim());
+
+/** รหัส พจส. ที่ผูกให้คำขอได้ — มีในทะเบียน/ATMS แล้ว หรือเป็นรหัสที่รอ ATMS (`isPendingDriverCode`) */
 export async function isIssuedDriverCode(code: string): Promise<boolean> {
-  return Boolean(await findIssuedDriver(code));
+  return isPendingDriverCode(code) || Boolean(await findIssuedDriver(code));
 }
 
 export async function syncRegistryFromRequisition(
@@ -63,10 +69,10 @@ export async function syncRegistryFromRequisition(
       return;
   }
 
-  /* รหัสทดสอบ UAT ไม่มีใน ATMS — ให้รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัครอย่างเดียว */
+  /* รหัสทดสอบ UAT / รหัสที่ ATMS ยังไม่ซิงก์ — รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัครอย่างเดียว */
   const issued =
     (await findIssuedDriver(drivercode)) ??
-    (isUatDriverCode(drivercode)
+    (isPendingDriverCode(drivercode)
       ? {
           drivercode,
           driverName: "",

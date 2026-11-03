@@ -553,7 +553,7 @@ export async function updateRequisition(
   if (patch.drivercode !== undefined) {
     const code = text(patch.drivercode, "รหัส พจส.", MAX_TEXT, false);
     if (code && !(await isIssuedDriverCode(code)))
-      throw new RequisitionError(`ไม่พบรหัส พจส. ${code} ในทะเบียนประวัติหรือใน ATMS`);
+      throw new RequisitionError(`รหัส พจส. ${code} ไม่ถูกต้อง — ใช้รหัสตัวเลขจากชีตรหัส พจส. (ทดสอบใช้ UAT…)`);
     const updated = await apply(
       col,
       current,

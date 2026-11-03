@@ -498,7 +498,7 @@ export async function updateOnboardingSection(
     const code = patch.drivercode.trim();
     if (code !== (current.drivercode ?? "")) {
       if (code && !(await isIssuedDriverCode(code)))
-        throw new RequisitionError(`ไม่พบรหัส พจส. ${code} ในทะเบียนประวัติหรือใน ATMS`);
+        throw new RequisitionError(`รหัส พจส. ${code} ไม่ถูกต้อง — ใช้รหัสตัวเลขจากชีตรหัส พจส. (ทดสอบใช้ UAT…)`);
       set.drivercode = code;
       changes.push(code ? `ผูกรหัส ${code}` : "ถอดรหัส พจส.");
     }
