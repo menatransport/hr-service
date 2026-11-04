@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (!(await readSessionUser())) return unauthorized();
     const date = request.nextUrl.searchParams.get("date") ?? "";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return badRequest("วันที่ไม่ถูกต้อง");
-    return ok({ date, text: await buildTraineeReport(date) });
+    return ok({ date, ...(await buildTraineeReport(date)) });
   } catch (err) {
     return fail(err);
   }

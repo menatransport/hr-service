@@ -57,9 +57,16 @@ function reportDate(iso: string): string {
   return `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${String((y + 543) % 100).padStart(2, "0")}`;
 }
 
-/** หนึ่งบรรทัดของคน — เว้นวรรคตามตัวอย่างของฝ่ายบุคคล (ชื่อ ↔ ตำแหน่งเว้นกว้างกว่า) */
+/** หนึ่งบรรทัดของคน — `[รหัส] [คำนำหน้า] [ชื่อ-นามสกุล] [ตำแหน่ง] [สังกัด] [สาขา]` (template 4 พ.ย. 2569) */
 function personLine(p: Person): string {
-  return [p.code, p.prefix, `${p.name}        ${p.position}`, p.customer, p.plant].filter(Boolean).join("    ");
+  return [p.code, p.prefix, p.name, p.position, p.customer, p.plant].filter(Boolean).join(" ");
+}
+
+/** ตัวเลขสรุปของรายงาน — ป้ายบนหัวกล่องส่งไลน์ */
+export interface TraineeReportSummary {
+  issues: number;
+  starters: number;
+  waiting: number;
 }
 
 /** ชื่อในทะเบียนบางแถวพิมพ์คำนำหน้าติดมา — ตัดออกไม่ให้ซ้ำกับช่องคำนำหน้า */
@@ -67,7 +74,7 @@ function stripPrefix(name: string, prefix: string): string {
   return prefix && name.startsWith(prefix) ? name.slice(prefix.length).trim() : name;
 }
 
-export async function buildTraineeReport(dateISO: string): Promise<string> {
+export async function buildTraineeReport(dateISO: string): Promise<{ text: string; summary: TraineeReportSummary }> {
   const [records, dayEntries, questions] = await Promise.all([
     getOnboardingRecords(),
     loadManualDay(dateISO),
@@ -136,7 +143,7 @@ export async function buildTraineeReport(dateISO: string): Promise<string> {
   /* ---------- 2. พนักงานใหม่ */
   out.push(LINE, "");
   if (starters.length) {
-    out.push(`🚨 วันนี้มีพนักงานใหม่มาเริ่มงาน ${starters.length} คนค่ะ`);
+    out.push(`🚨 วันนี้มีพนักงานใหม่มาเริ่มงาน ${starters.length} คน`);
     for (const r of starters) out.push(`🔹${personLine(personOf(r))}`);
   } else {
     out.push("🚨 วันนี้ไม่มีพนักงานใหม่มาเริ่มงานค่ะ");
@@ -146,7 +153,11 @@ export async function buildTraineeReport(dateISO: string): Promise<string> {
   out.push("", LINE, "", `สถานะรอรับรถปัจจุบันจำนวน ${waiting.length} คน`);
   waiting.forEach((r, i) => out.push(`${i + 1}. ${personLine(personOf(r))}`));
 
-  return out.join("\n").trimEnd();
+  const issueCount = [...issues.values()].reduce((n, list) => n + list.length, 0);
+  return {
+    text: out.join("\n").trimEnd(),
+    summary: { issues: issueCount, starters: starters.length, waiting: waiting.length },
+  };
 }
 
 /** ข้อมูลคนจากทะเบียน (ตามรหัส) + ตัวสร้างจากคำขอสรรหาสำหรับคนที่ยังไม่มีในทะเบียน */

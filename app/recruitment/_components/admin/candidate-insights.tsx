@@ -197,6 +197,7 @@ export function CandidateInsights({
             compact
             label={STATUS_LABEL[status]}
             value={count.get(status) ?? 0}
+            unit="คน"
             share={(count.get(status) ?? 0) / (rows.length || 1)}
             dot={DOT[status]}
             tone={status === "cancelled" ? "alert" : "primary"}

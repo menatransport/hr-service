@@ -23,8 +23,8 @@ import { LEGACY_REPLACE_REASON_LABELS } from "@/app/recruitment/_lib/resign-reas
  * เขาอ่านคำชุดนี้อยู่ทุกวันแล้ว
  */
 export const POSITIONS = [
-  { value: "ML", label: "ML" },
-  { value: "MS", label: "MS" },
+  { value: "ML", label: "Mixer L" },
+  { value: "MS", label: "Mixer S" },
   { value: "spare", label: "Spare driver" },
   { value: "other", label: "อื่นๆ" },
 ] as const;

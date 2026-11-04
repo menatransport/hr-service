@@ -2,9 +2,8 @@
 
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  ChevronRight,
+  Eye,
   ListFilter,
   Plus,
   SearchX,
@@ -959,11 +958,10 @@ function Row({
    */
   hideVehicle: boolean;
 }) {
-  const router = useRouter();
-  const href = `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`;
+  const href = driverHref(driver);
 
   /**
-   * แถวของคนที่พ้นสภาพแล้วเป็น **โทนแดงทั้งแถว** — รูป รหัส พื้นตอนชี้ ลูกศรท้ายแถว
+   * แถวของคนที่พ้นสภาพแล้วเป็น **โทนแดงทั้งแถว** — รูป รหัส พื้นตอนชี้ ปุ่มตาท้ายแถว
    * (ย้ายไปรถร่วม = โทนม่วง `EXIT_TONE.transfer` · 4 พ.ย. 2569)
    *
    * ดูจาก `driver.active` ไม่ใช่จากแท็บที่เปิดอยู่ — สีจึงติดไปกับภาพที่แคปส่งต่อ
@@ -980,10 +978,10 @@ function Row({
       หน่วงไล่กันแค่ 12 แถวแรก แถวที่เหลือขึ้นพร้อมกัน ไม่งั้นหน้าละ 500 แถว
       จะค่อย ๆ ไล่ขึ้นเป็นนาที
     */
+    /* เข้าหน้ารายละเอียดได้ทางปุ่มรูปตาท้ายแถวเท่านั้น (4 พ.ย. 2569) — คลิกตรงอื่นในแถวไม่พาออกจากหน้า */
     <tr
-      onClick={() => router.push(href)}
       style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
-      className={`group animate-fade-in cursor-pointer border-b transition-colors last:border-b-0 ${
+      className={`group animate-fade-in border-b transition-colors last:border-b-0 ${
         exit ? exit.row : "border-line hover:bg-base-200/50"
       }`}
     >
@@ -1004,15 +1002,7 @@ function Row({
       </td>
 
       <td className="px-3 py-2 font-mono text-12 tracking-wider whitespace-nowrap">
-        {/* ลิงก์จริงหนึ่งจุดต่อแถว — แถวที่คลิกได้ด้วย onClick อย่างเดียว
-            แท็บไปไม่ถึงและโปรแกรมอ่านหน้าจอไม่เห็นว่ามีอะไรให้กด */}
-        <Link
-          href={href}
-          onClick={(e) => e.stopPropagation()}
-          className={`transition-colors hover:text-ink ${exit ? exit.text : "text-primary"}`}
-        >
-          {driver.drivercode}
-        </Link>
+        <span className={exit ? exit.text : "text-primary"}>{driver.drivercode}</span>
       </td>
 
       <td className="px-3 py-2 font-mono text-12 tabular-nums whitespace-nowrap text-ink">
@@ -1059,15 +1049,8 @@ function Row({
         </td>
       ) : null}
 
-      <td className="px-3 py-2 text-right">
-        <ChevronRight
-          size={15}
-          strokeWidth={1.8}
-          aria-hidden
-          className={`inline-block text-mut/60 transition-transform duration-200 group-hover:translate-x-0.5 ${
-            exit ? exit.hoverText : "group-hover:text-primary"
-          }`}
-        />
+      <td className="px-2 py-1.5 text-right">
+        <ViewDetailLink href={href} name={driver.name} exit={exit} />
       </td>
     </tr>
   );
@@ -1096,6 +1079,34 @@ function exitToneOf(driver: DriverRecord) {
   return EXIT_TONE[driver.resignation?.kind === "transfer" ? "transfer" : "resign"];
 }
 
+function driverHref(driver: DriverRecord) {
+  return `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`;
+}
+
+/** ทางเข้าหน้ารายละเอียดทางเดียวของแถว/การ์ด — ปุ่มรูปตา */
+function ViewDetailLink({
+  href,
+  name,
+  exit,
+}: {
+  href: string;
+  name: string;
+  exit: ReturnType<typeof exitToneOf>;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={`ดูรายละเอียด ${name || ""}`.trim()}
+      title="ดูรายละเอียด"
+      className={`inline-grid size-8 flex-none place-items-center rounded-full transition-colors ${
+        exit ? `${exit.text} hover:bg-base-100` : "text-mut hover:bg-soft hover:text-primary"
+      }`}
+    >
+      <Eye size={16} strokeWidth={1.8} aria-hidden />
+    </Link>
+  );
+}
+
 function DriverCard({
   driver,
   index,
@@ -1110,8 +1121,7 @@ function DriverCard({
   const exit = exitToneOf(driver);
 
   return (
-    <Link
-      href={`/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`}
+    <div
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
       className={`group flex animate-fade-in flex-col gap-2.5 px-(--sheet-px) py-3.5 transition-colors ${
         exit ? exit.cardHover : "hover:bg-soft/35"
@@ -1130,6 +1140,7 @@ function DriverCard({
           </span>
         </div>
         <StatusCell driver={driver} />
+        <ViewDetailLink href={driverHref(driver)} name={driver.name} exit={exit} />
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-12">
@@ -1153,7 +1164,7 @@ function DriverCard({
           <LicenseCell driver={driver} />
         </CardField>
       </div>
-    </Link>
+    </div>
   );
 }
 

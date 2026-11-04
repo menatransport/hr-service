@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
 import { DataError } from "@/components/ui/data-error";
-import { OnboardingView } from "@/app/recruitment/_components/admin/onboarding-view";
 import { getHub, type Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { getRequisitionOptions, type RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
-import { STAGES, type Stage } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { OnboardingView } from "@/app/recruitment/_components/admin/onboarding-view";
+import { TABS, type Tab } from "@/app/recruitment/_lib/requisitions/onboarding";
 
 /**
  * ติดตามพนักงานใหม่ — หน้าเดียวของ ขออัตรา → ฝึกงาน → รับรถ (`?tab=` = ขั้นที่เปิด)
@@ -21,7 +21,7 @@ function linkedApplications(hub: Hub) {
 
 export default async function OnboardingPage({ searchParams }: PageProps<"/recruitment/admin/onboarding">) {
   const { tab, open } = await searchParams;
-  const stage = (STAGES as readonly string[]).includes(String(tab)) ? (tab as Stage) : "training";
+  const stage = (TABS as readonly string[]).includes(String(tab)) ? (tab as Tab) : "training";
 
   let hub: Hub | null = null;
   let options: RequisitionOptions | null = null;

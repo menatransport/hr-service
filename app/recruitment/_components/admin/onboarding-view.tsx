@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Eye, FileText, Loader2, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
+import { ArrowUpRight, Eye, FileText, Loader2, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
 
 import { ColumnMenu, type ColumnFilterOption, type SortDir } from "@/components/ui/column-menu";
-import { SearchField, Select, THAI_MONTHS_FULL } from "@/components/ui/field";
+import { SearchField } from "@/components/ui/field";
 import {
   SummaryPanel,
   SummaryStat,
@@ -27,7 +27,8 @@ import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/opt
 import type { RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
 import {
   HANDOVER_MIN_TRAINING_DAYS,
-  STAGES,
+  TAB_NOTE,
+  TABS,
   STAGE_DOT,
   STAGE_LABEL,
   awaitingHandover,
@@ -39,11 +40,13 @@ import {
   stepStates,
   trainingStart,
   val,
+  vehicleReadiness,
   type HandoverCheck,
   type OnboardingRecord,
   type Stage,
   type Step,
   type StepState,
+  type Tab,
 } from "@/app/recruitment/_lib/requisitions/onboarding";
 import {
   customerLabel,
@@ -53,7 +56,7 @@ import {
   waitingDays,
   type Requisition,
 } from "@/app/recruitment/_lib/requisitions/types";
-import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
+import { VehicleStatusCell } from "@/app/recruitment/_components/admin/repair-badge";
 import { RequisitionForm } from "@/app/recruitment/_components/admin/requisition-form";
 import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requisition-cancel";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
@@ -84,6 +87,10 @@ type Row = OnboardingRecord & {
 
 const TRAINING_LABEL = "ฝึกงาน";
 const WAIT_HANDOVER_LABEL = "รอรับรถ";
+
+const TAB_LABEL: Record<Tab, string> = { ...STAGE_LABEL, handover: WAIT_HANDOVER_LABEL };
+const TAB_DOT: Record<Tab, string> = { ...STAGE_DOT, handover: "bg-st-live-ink" };
+const tabStage = (t: Tab): Stage => (t === "handover" ? "training" : t);
 
 const DASH = "—";
 const date = (v: string) => (v ? thaiDate(v) : DASH);
@@ -133,8 +140,13 @@ const C = {
     width: "min-w-[130px]",
     text: (r) => r.vehicle?.plateNo || r.vehicle?.code || DASH,
   },
-  /* สถานะซ่อม ณ ตอนนี้จากบอร์ดซ่อม — แยกจากทะเบียนรถให้กรองได้ · คันปกติ = พร้อม · ไม่มีรถ = — */
-  repair: { id: "repair", label: "สถานะรถ", width: "min-w-[130px]", text: (r) => r.repair?.label || (r.vehicle ? "พร้อม" : DASH) },
+  /* สถานะรถ 2 กลุ่มจากบอร์ดซ่อม (`vehicleReadiness`) — กรองได้ · เหตุผล/กำหนดเสร็จซ้อนใต้ป้าย · ไม่มีรถ = — */
+  repair: {
+    id: "repair",
+    label: "สถานะรถ",
+    width: "min-w-[140px]",
+    text: (r) => vehicleReadiness(r, r.repair)?.label ?? DASH,
+  },
   trainer: { id: "trainer", label: "ครูฝึก", width: "min-w-[150px]", text: (r) => r.trainer?.name || DASH },
   application: {
     id: "application",
@@ -317,7 +329,11 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
     { header: "ทะเบียนรถ", width: 14, kind: "code", value: (r) => r.vehicle?.plateNo },
     { header: "เลขรถ", width: 10, kind: "code", value: (r) => r.vehicle?.code },
   ],
-  repair: [{ header: "สถานะรถ", width: 16, kind: "status", value: C.repair.text, tone: (r) => (r.repair ? "warn" : r.vehicle ? "ok" : null) }],
+  repair: [
+    { header: "สถานะรถ", width: 18, kind: "status", value: C.repair.text, tone: (r) => (r.repair ? "warn" : r.vehicle ? "ok" : null) },
+    { header: "เหตุผล", width: 18, value: (r) => r.repair?.label ?? "" },
+    { header: "กำหนดเสร็จ", width: 13, kind: "date", value: (r) => xlsxDate(r.repair?.due ?? "") },
+  ],
   trainer: [{ header: "ครูฝึก", width: 22, value: C.trainer.text }],
   application: [{ header: "ใบสมัคร", width: 18, kind: "status", value: C.application.text }],
   start: [{ header: "เริ่มฝึก", width: 13, kind: "date", value: (r) => xlsxDate(r.start) }],
@@ -393,9 +409,6 @@ export function hubRows(
     .filter((r) => r.stage !== "working" || !leftForRegistry(r, today));
 }
 
-const monthLabel = (ym: string) =>
-  `${THAI_MONTHS_FULL[Number(ym.slice(5, 7)) - 1] ?? ym} ${Number(ym.slice(0, 4)) + 543}`;
-
 export function OnboardingView({
   records: initial,
   repairs,
@@ -405,6 +418,7 @@ export function OnboardingView({
   initialFilters = {},
   initialOpen = "",
   embedded = false,
+  note,
   onCreated,
   onUpdated,
 }: {
@@ -414,7 +428,7 @@ export function OnboardingView({
   applications?: ApplicationSummary[];
   /** ฟอร์มขออัตรา — ไม่ส่ง = ไม่มีปุ่มขออัตรา */
   options?: RequisitionOptions;
-  initialStage?: Stage;
+  initialStage?: Tab;
   /** ตัวกรองคอลัมน์ตั้งต้น — การ์ดรอรับรถของหน้าผู้สมัครเปิดแท็บฝึกงานกรองสถานะรอรับรถ */
   initialFilters?: Record<string, string[]>;
   /** `?open=<id>` — เปิด dialog ของคำขอนี้ตอนโหลด (ลิงก์เก่า `/onboarding/[id]` redirect มา) */
@@ -424,6 +438,8 @@ export function OnboardingView({
    * · `records` ตามพ่อแม่สด ๆ (ผูก RQ บนหน้าผู้สมัครแล้วแถวขยับทันที)
    */
   embedded?: boolean;
+  /** เงื่อนไขข้างช่องค้นหา (ทีละข้อ) — แถวของหน้านี้มาจากอะไร */
+  note?: string[];
   /** ฝังอยู่ = หน้าแม่ถือแถวเอง — คำขอที่เพิ่งสร้างส่งกลับไปให้หน้าแม่ต่อเข้ารายการ */
   onCreated?: (created: Requisition[]) => void;
   /** ฝังอยู่ = คำขอที่เพิ่งแก้ (ฟอร์มคำขอ · KA / dialog) ส่งกลับให้หน้าแม่ทับแถวเดิม */
@@ -432,15 +448,15 @@ export function OnboardingView({
   const [own, setRecords] = useState(initial);
   const records = embedded ? initial : own;
   /* เปิดจากลิงก์ `?open=` — ไปแท็บของคนนั้นเลย */
-  const [startStage] = useState<Stage>(() => {
+  const [startTab] = useState<Tab>(() => {
     const hit = initialOpen ? initial.find((r) => r.id === initialOpen) : undefined;
     return hit ? stageOf(hit) : initialStage;
   });
-  const [stage, setStage] = useState<Stage>(startStage);
-  const [sort, setSort] = useState(DEFAULT_SORT[startStage]);
+  const [tab, setTab] = useState<Tab>(startTab);
+  const stage = tabStage(tab);
+  const [sort, setSort] = useState(DEFAULT_SORT[tabStage(startTab)]);
   const [filters, setFilters] = useState<Record<string, string[]>>(initialFilters);
   const [query, setQuery] = useState("");
-  const [month, setMonth] = useState("");
   const [creating, setCreating] = useState(false);
   /* ฝังในหน้าผู้สมัครไม่ได้ส่งตัวเลือกมา — โหลดตอนกดปุ่มเพิ่มอัตราครั้งแรก */
   const [loadedOptions, setLoadedOptions] = useState<RequisitionOptions | null>(null);
@@ -453,33 +469,31 @@ export function OnboardingView({
 
   const rows = useMemo(() => hubRows(records, repairs, applications), [records, repairs, applications]);
 
-  const months = useMemo(
-    () => [...new Set(rows.map((r) => r.requestedOn.slice(0, 7)).filter(Boolean))].sort().reverse(),
-    [rows],
-  );
-  const inMonth = useMemo(
-    () => (month ? rows.filter((r) => r.requestedOn.startsWith(month)) : rows),
-    [rows, month],
-  );
 
   const counts = useMemo(() => {
-    const c = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>;
-    for (const r of inMonth) c[r.stage]++;
+    const c = Object.fromEntries(TABS.map((s) => [s, 0])) as Record<Tab, number>;
+    for (const r of rows) {
+      c[r.stage]++;
+      if (r.waitHandover) c.handover++;
+    }
     return c;
-  }, [inMonth]);
+  }, [rows]);
 
-  const inStage = useMemo(() => inMonth.filter((r) => r.stage === stage), [inMonth, stage]);
-  const waitHandover = useMemo(() => inMonth.filter((r) => r.waitHandover).length, [inMonth]);
+  const inStage = useMemo(
+    () => rows.filter((r) => r.stage === stage && (tab !== "handover" || r.waitHandover)),
+    [rows, stage, tab],
+  );
 
   const avgDays = useMemo(() => {
-    const d = inMonth
+    const d = rows
       .filter((r) => r.stage === "working")
       .map(daysToHandover)
       .filter((n): n is number => n !== null && n >= 0);
     return d.length ? Math.round(d.reduce((a, b) => a + b, 0) / d.length) : null;
-  }, [inMonth]);
+  }, [rows]);
 
   const columns = COLUMNS[stage];
+  const shownNote = note ?? TAB_NOTE[tab];
 
   const choices = useMemo(() => {
     const map: Record<string, ColumnFilterOption[]> = {};
@@ -513,14 +527,14 @@ export function OnboardingView({
     });
   }, [inStage, needle, columns, filters, sort]);
 
-  /** หน้าละ 25 แถว — เปลี่ยนขั้น/เดือน/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([stage, month, needle, filters, sort]));
+  /** หน้าละ 25 แถว — เปลี่ยนขั้น/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([tab, needle, filters, sort]));
 
   const filtering = Boolean(needle) || Object.values(filters).some((p) => p?.length);
 
-  function switchStage(next: Stage) {
-    setStage(next);
-    setSort(DEFAULT_SORT[next]);
+  function switchStage(next: Tab) {
+    setTab(next);
+    setSort(DEFAULT_SORT[tabStage(next)]);
     setFilters({});
     try {
       const url = new URL(window.location.href);
@@ -594,30 +608,31 @@ export function OnboardingView({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    /* หน้าเต็ม = สูงเท่าจอแบบหน้าผู้สมัคร: ตารางยืดเต็มที่เหลือ แถบเลขหน้าชิดล่างเสมอ */
+    <div className={embedded ? "flex flex-col gap-3" : "flex flex-col gap-3 lg:h-[calc(100dvh-4rem)]"}>
       {embedded ? null : <h1 className="sr-only">ติดตามพนักงานใหม่</h1>}
 
-      <SummaryPanel label={embedded ? STAGE_LABEL[stage] : "ขั้นของพนักงานใหม่"}>
+      <SummaryPanel
+        label={embedded ? TAB_LABEL[tab] : "ขั้นของพนักงานใหม่"}
+        className={embedded ? "" : "flex flex-col lg:min-h-0 lg:flex-1"}
+      >
         {embedded ? null : (
-        <SummaryStats className="grid-cols-2 md:grid-cols-5">
-          {STAGES.map((s) => (
+        <SummaryStats className="grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          {TABS.map((s) => (
             <SummaryStat
               key={s}
-              label={STAGE_LABEL[s]}
+              label={TAB_LABEL[s]}
               value={counts[s]}
               unit={s === "open" ? "อัตรา" : "คน"}
-              dot={STAGE_DOT[s]}
+              dot={TAB_DOT[s]}
               tone={s === "ended" ? "ink" : "primary"}
               sub={
                 s === "working"
                   ? `${WORKING_DAYS} วันล่าสุด${avgDays !== null ? ` · เฉลี่ยฝึก ${avgDays} วัน` : ""}`
-                  : s === "training" && waitHandover
-                    ? `${WAIT_HANDOVER_LABEL} ${waitHandover} คน`
-                    : undefined
+                  : undefined
               }
-              active={stage === s}
+              active={tab === s}
               onClick={() => switchStage(s)}
-              className={s === "open" ? "col-span-2 md:col-span-1" : ""}
             />
           ))}
         </SummaryStats>
@@ -632,28 +647,26 @@ export function OnboardingView({
             tone="filled"
             className="lg:max-w-sm lg:flex-1"
           />
-          {embedded ? null : (
-          <Select
-            label="เดือนที่แจ้ง"
-            value={month}
-            onChange={setMonth}
-            options={months.map((m) => ({ value: m, label: monthLabel(m) }))}
-            placeholder="ทุกเดือน"
-            icon={<CalendarDays size={14} strokeWidth={1.8} aria-hidden className="text-mut" />}
-            clearable={Boolean(month)}
-            className="lg:w-48"
-          />
-          )}
+          {shownNote?.length ? (
+            <p className="text-12 leading-relaxed text-ink">
+              <span className="font-medium">เงื่อนไข: </span>
+              {shownNote.map((n, i) => (
+                <span key={n} className="text-alert">
+                  {i ? ", " : ""}
+                  {n}
+                </span>
+              ))}
+            </p>
+          ) : null}
           <div className="flex items-center gap-2 lg:ml-auto">
             <XlsxExportButton
               className="px-3.5 py-2 text-13"
-              name={`ติดตามพนักงานใหม่-${STAGE_LABEL[stage]}`}
+              name={`ติดตามพนักงานใหม่-${TAB_LABEL[tab]}`}
               count={visible.length}
               build={() => ({
-                sheet: STAGE_LABEL[stage],
-                title: `ติดตามพนักงานใหม่ · ${STAGE_LABEL[stage]}`,
+                sheet: TAB_LABEL[tab],
+                title: `ติดตามพนักงานใหม่ · ${TAB_LABEL[tab]}`,
                 filter: [
-                  month ? `เดือนที่แจ้ง: ${monthLabel(month)}` : "",
                   needle ? `คำค้น: “${query.trim()}”` : "",
                   ...columns
                     .filter((c) => filters[c.id]?.length)
@@ -726,7 +739,12 @@ export function OnboardingView({
           ) : null}
         </SummaryStrip>
 
-        <div ref={pagedScroll} className="relative max-h-[calc(100dvh-21rem)] overflow-auto border-y border-line">
+        <div
+          ref={pagedScroll}
+          className={`relative max-h-[calc(100dvh-21rem)] overflow-auto border-y border-line ${
+            embedded ? "" : "lg:max-h-none lg:min-h-0 lg:flex-1"
+          }`}
+        >
           <table className="sheet-table w-full border-collapse text-13">
             <thead>
               <tr>
@@ -811,7 +829,7 @@ export function OnboardingView({
             </div>
           ) : null}
         </div>
-        <TablePager paged={paged} unit={stage === "open" ? "อัตรา" : "คน"} className="-mt-px" />
+        <TablePager paged={paged} unit={stage === "open" ? "อัตรา" : "คน"} className="-mt-px flex-none" />
       </SummaryPanel>
 
       {/* ตารางฝึกงานรายวันย้ายไปอยู่ใต้ตารางผู้สมัคร (กรองฝึกงาน) ของ RC แล้ว — Bew 25 ต.ค. 2569 */}
@@ -915,12 +933,7 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
         <span className="text-mut">{DASH}</span>
       );
     case "repair":
-      if (row.repair) return <RepairBadge repair={row.repair} compact className="" />;
-      return row.vehicle ? (
-        <span className="rounded-full bg-st-live px-2 py-0.5 text-12 font-medium text-st-live-ink">{text}</span>
-      ) : (
-        <span className="text-mut">{DASH}</span>
-      );
+      return row.vehicle ? <VehicleStatusCell repair={row.repair} /> : <span className="text-mut">{DASH}</span>;
     case "appStatus":
       return row.app ? (
         <span className={`rounded-full px-2 py-0.5 text-12 font-medium ${APPLICANT_TONE[row.app.status]}`}>{text}</span>

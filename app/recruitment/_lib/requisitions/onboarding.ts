@@ -309,6 +309,11 @@ export interface OnboardingPatch {
 export const STAGES = ["open", "recruiting", "training", "working", "ended"] as const;
 export type Stage = (typeof STAGES)[number];
 
+/** การ์ดบนสุดของหน้าติดตาม — รอรับรถ = แท็บฝึกงานเฉพาะคนที่ครบ `awaitingHandover()` (ชุดเดียวกับการ์ดหน้าผู้สมัคร)
+ *  · อยู่ไฟล์นี้ (ไม่ใช่ onboarding-view) เพราะหน้า server ใช้ตรวจ `?tab=` — ค่าจากไฟล์ "use client" เป็นแค่ client reference */
+export type Tab = Stage | "handover";
+export const TABS: readonly Tab[] = ["open", "recruiting", "training", "handover", "working", "ended"];
+
 export const STAGE_LABEL: Record<Stage, string> = {
   open: "อัตราว่าง",
   /* คนที่ผูกคำขอแล้วแต่ยังไม่ถึงวันเริ่มฝึก = ชุดเดียวกับ “รอฝึกงาน” ของหน้าผู้สมัคร (Bew 4 พ.ย. 2569) */
@@ -363,17 +368,33 @@ export function stageOf(r: OnboardingRecord): Stage {
     Boolean(r.atms?.firstWork);
   if (worked) return "working";
   if (r.atms?.exited) return "ended";
-  /* วันเริ่มฝึกที่ยังไม่ถึง = ยังรอเริ่ม (อยู่ขั้นสรรหา) — ใบสมัคร “ฝึกงาน” ที่วันยังไม่ถึงก็ยังรอ
-     (หน้าผู้สมัครขึ้น “รอฝึกงาน” · Bew 22 ต.ค. 2569) · ไม่มีวันเลยถึงเชื่อสถานะใบสมัคร */
+  /* ผูกใบสมัครแล้ว = ตามสถานะบนหน้าผู้สมัครเท่านั้น — ถึงวันเริ่มฝึกแล้วก็ยังรอฝึกงานจนกว่า RC
+     เปลี่ยนเป็น “ฝึกงาน” ที่หน้าผู้สมัคร (Bew 5 พ.ย. 2569) · ไม่มีใบ (แถวจาก Excel) = ดูวันเริ่มฝึก */
+  if (r.match) return r.match.status === "training" ? "training" : "recruiting";
   const start = trainingStart(r);
-  if (start) return start <= todayInBangkok() ? "training" : "recruiting";
-  return r.match?.status === "training" ? "training" : "recruiting";
+  return start && start <= todayInBangkok() ? "training" : "recruiting";
 }
 
 /* ------------------------------------------------------------ รอรับรถ */
 
 /** ฝึกงานครบกี่วันถึงรอรับรถได้ — นับเฉพาะวัน `ฝ` (Bew 4 พ.ย. 2569) */
 export const HANDOVER_MIN_TRAINING_DAYS = 10;
+/** เงื่อนไขรอรับรถ เป็นข้อความข้างช่องค้นหา (ชุดเดียวกับ `awaitingHandover()`) */
+export const HANDOVER_NOTE = [
+  `ฝึกงานครบ ${HANDOVER_MIN_TRAINING_DAYS} วัน (นับเฉพาะวันฝึกงาน)`,
+  "ปฐมนิเทศแล้ว",
+  "ST ประเมินผ่าน",
+];
+/** เงื่อนไขรับรถแล้ว เป็นข้อความข้างช่องค้นหา */
+export const WORKING_NOTE = ["จัดส่ง (KA) อัปเดต “รับรถแล้ว”"];
+/** เงื่อนไขฝึกงาน — ตามสถานะใบสมัครบนหน้าผู้สมัคร ไม่ใช่วันเริ่มฝึก (`stageOf` · Bew 5 พ.ย. 2569) */
+export const TRAINING_NOTE = ["RC อัปเดตสถานะเป็น “ฝึกงาน”"];
+/** แท็บที่โชว์เงื่อนไขข้างช่องค้นหา (หน้าติดตาม + การ์ดหน้าผู้สมัคร + กรองฝึกงานบนหน้าผู้สมัคร) */
+export const TAB_NOTE: Partial<Record<Tab, string[]>> = {
+  training: TRAINING_NOTE,
+  handover: HANDOVER_NOTE,
+  working: WORKING_NOTE,
+};
 
 /** ผล ST ที่ถือว่าผ่านการประเมิน — ประเมินก่อนรับรถ / ติดตามกลางฝึกที่ให้พร้อมรับรถเลย / สรุปเดิมจากไฟล์ */
 const ST_READY: { key: string; value: string }[] = [
@@ -429,6 +450,28 @@ export function pipelineOf(r: OnboardingRecord): Pipeline | null {
   if (stage === "recruiting") return "waitTraining";
   if (stage !== "training") return null;
   return awaitingHandover(r) ? "waitHandover" : "training";
+}
+
+/* ------------------------------------------------------------ สถานะรถ */
+
+export type VehicleReadiness = "ready" | "notReady";
+
+export const VEHICLE_READINESS_LABEL: Record<VehicleReadiness, string> = {
+  ready: "พร้อมใช้งาน",
+  notReady: "ยังไม่พร้อมใช้งาน",
+};
+
+/**
+ * สถานะรถ 2 กลุ่ม (Bew 4 พ.ย. 2569) — อยู่บนบอร์ดซ่อม = ยังไม่พร้อมใช้งาน · เหตุผล = ขั้นซ่อมล่าสุด
+ * · กำหนดเสร็จ `YYYY-MM-DD` ว่างได้ · ยังไม่มีรถ = `null` · ใช้ทั้งตาราง/Excel และ `GET /api/recruitment/pipeline`
+ */
+export function vehicleReadiness(
+  r: Pick<OnboardingRecord, "vehicle">,
+  repair: RepairStatus | null | undefined,
+): { status: VehicleReadiness; label: string; reason: string; due: string } | null {
+  if (!r.vehicle) return null;
+  const status: VehicleReadiness = repair ? "notReady" : "ready";
+  return { status, label: VEHICLE_READINESS_LABEL[status], reason: repair?.label ?? "", due: repair?.due ?? "" };
 }
 
 /** ป้ายผลของคนที่จบ — ยกเลิกใบสมัคร → ผลที่กรอก → ATMS → ยกเลิกคำขอ */

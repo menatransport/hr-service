@@ -5,6 +5,7 @@ import { unauthorized } from "@/app/api/recruitment/_lib";
 import { readSessionUser } from "@/lib/auth/session";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { getOnboardingRecords } from "@/app/recruitment/_lib/requisitions/onboarding-store";
+import { getRepairStatuses } from "@/app/recruitment/_lib/requisitions/repair-status";
 import {
   PIPELINE,
   PIPELINE_LABEL,
@@ -12,6 +13,7 @@ import {
   pipelineOf,
   trainingStart,
   val,
+  vehicleReadiness,
   type Pipeline,
 } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { customerLabel, personName, positionLabel } from "@/app/recruitment/_lib/requisitions/types";
@@ -22,6 +24,7 @@ import { customerLabel, personName, positionLabel } from "@/app/recruitment/_lib
  *
  * ช่วงคิดด้วย `pipelineOf()` ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร/แดชบอร์ด · รอรับรถ = ฝึกครบ 10 วัน
  * (เฉพาะวันฝึกงาน `ฝ`) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน · รอสรรหายังไม่มีคน = `name` / `drivercode` ว่าง
+ * · สถานะรถ = `vehicleReadiness()` จากบอร์ดซ่อม (อ่านไม่ได้ = ทุกคันพร้อมใช้งาน) · ยังไม่มีรถ = `null` / ว่าง
  */
 export async function GET(request: NextRequest) {
   try {
@@ -34,13 +37,15 @@ export async function GET(request: NextRequest) {
 
     const counts = Object.fromEntries(PIPELINE.map((p) => [p, 0])) as Record<Pipeline, number>;
     const rows = [];
-    for (const r of await getOnboardingRecords()) {
+    const [records, repairs] = await Promise.all([getOnboardingRecords(), getRepairStatuses()]);
+    for (const r of records) {
       const status = pipelineOf(r);
       if (!status) continue;
       counts[status]++;
       if (!wanted.includes(status)) continue;
       const check = handoverCheck(r);
       const person = status !== "open";
+      const car = vehicleReadiness(r, r.vehicle?.plateNo ? repairs[r.vehicle.plateNo] : null);
       rows.push({
         status,
         statusLabel: PIPELINE_LABEL[status],
@@ -52,6 +57,10 @@ export async function GET(request: NextRequest) {
         customer: customerLabel(r),
         plant: r.plant,
         vehicle: r.vehicle ? { code: r.vehicle.code, plateNo: r.vehicle.plateNo } : null,
+        vehicleStatus: car?.status ?? null,
+        vehicleStatusLabel: car?.label ?? "",
+        vehicleStatusReason: car?.reason ?? "",
+        vehicleStatusDue: car?.due ?? "",
         trainer: r.trainer,
         drivercode: person ? r.drivercode : "",
         name: person ? personName(r) : "",

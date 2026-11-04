@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ClipboardCopy, Loader2 } from "lucide-react";
+import { BellRing, ChevronDown, Loader2 } from "lucide-react";
 
 import { DataError } from "@/components/ui/data-error";
 import type { SelectOption } from "@/components/ui/field";
 import { requestJson } from "@/lib/http";
+import { todayInBangkok } from "@/lib/record-case-flow";
 import { TraineeMatrix } from "@/app/recruitment/_components/admin/trainee-matrix";
 import { TraineeReportDialog } from "@/app/recruitment/_components/admin/trainee-report-dialog";
 import type { TraineeBoard, TraineeBoardDriver } from "@/app/recruitment/_lib/drivers/trainee-board";
 import type { RequisitionVehicle } from "@/app/recruitment/_lib/requisitions/types";
 import { requisitionDailyKey } from "@/app/recruitment/_lib/drivers/types";
+import { issueOf } from "@/app/recruitment/_lib/drivers/trainees";
 
 type Data = { board: TraineeBoard; vehicles: SelectOption[] };
 
@@ -82,6 +84,16 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
     return { ...data.board, drivers };
   }, [data, people]);
 
+  /* ป้ายแจ้งเตือนบนปุ่ม RC Alert — คนที่วันนี้ขึ้นหัวข้อ Issue (กรอกเองชนะ ATMS แบบเดียวกับรายงาน) */
+  const alerts = useMemo(() => {
+    if (!data) return 0;
+    const today = todayInBangkok();
+    return data.board.drivers.filter((d) => {
+      const own = d.manualDays[today];
+      return issueOf(own?.code || d.days[today] || "", own?.trial === true) !== null;
+    }).length;
+  }, [data]);
+
   async function load(month = "") {
     setError(null);
     try {
@@ -128,15 +140,25 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
           <ChevronDown size={16} strokeWidth={2} aria-hidden className={`transition-transform ${open ? "rotate-180" : ""}`} />
           {open ? "ซ่อนตารางรายวัน" : "แสดงตารางรายวัน"}
         </button>
-        {/* คัดลอกสรุปฝึกงานส่งไลน์ (RC Alert · Bew 25 ต.ค. 2569) */}
+        {/* แจ้ง RC Alert ส่งไลน์ (Bew 25 ต.ค. → ไอคอนแจ้งเตือน 4 พ.ย. 2569) · ป้ายแดง = Issue วันนี้ */}
         <button
           type="button"
           onClick={() => setReporting(true)}
-          title="คัดลอกสรุปฝึกงาน (ส่งไลน์)"
-          className="btn-sec flex size-9 cursor-pointer items-center justify-center hover:text-primary"
+          title={alerts ? `RC Alert ส่งไลน์ · วันนี้มี Issue ${alerts} คน` : "RC Alert ส่งไลน์"}
+          className="group relative grid size-9 cursor-pointer place-items-center rounded-full bg-chat text-white shadow-[0_4px_12px_-4px] shadow-chat/60 ring-1 ring-chat/30 transition hover:-translate-y-px hover:shadow-[0_6px_16px_-4px] hover:shadow-chat/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chat"
         >
-          <ClipboardCopy size={16} strokeWidth={1.9} aria-hidden />
-          <span className="sr-only">คัดลอกสรุปฝึกงาน</span>
+          <BellRing
+            size={17}
+            strokeWidth={2}
+            aria-hidden
+            className={`origin-top ${alerts ? "animate-bell-ring" : "group-hover:animate-bell-ring"}`}
+          />
+          {alerts ? (
+            <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-alert px-1 text-10-5 font-semibold leading-none text-white ring-2 ring-base-100">
+              {alerts > 99 ? "99+" : alerts}
+            </span>
+          ) : null}
+          <span className="sr-only">{alerts ? `RC Alert ส่งไลน์ · Issue วันนี้ ${alerts} คน` : "RC Alert ส่งไลน์"}</span>
         </button>
       </div>
       {reporting ? <TraineeReportDialog onClose={() => setReporting(false)} /> : null}

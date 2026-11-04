@@ -55,6 +55,39 @@ export function RepairBadge({
   );
 }
 
+/**
+ * ช่องสถานะรถในตาราง — ป้าย พร้อมใช้งาน / ยังไม่พร้อมใช้งาน · ใต้ป้ายซ้อนเหตุผล (ขั้นซ่อม)
+ * และกำหนดเสร็จถ้ามี (Bew 4 พ.ย. 2569) · ใช้กับแถวที่มีรถแล้วเท่านั้น
+ */
+export function VehicleStatusCell({ repair }: { repair: RepairStatus | null }) {
+  if (!repair)
+    return (
+      <span className="rounded-full bg-st-live px-2 py-0.5 text-12 font-medium whitespace-nowrap text-st-live-ink">
+        พร้อมใช้งาน
+      </span>
+    );
+
+  const overdue = Boolean(repair.due) && repair.due < todayInBangkok();
+  const title = [repair.mrCode && `ใบแจ้งซ่อม ${repair.mrCode}`, repair.note].filter(Boolean).join(" · ");
+  return (
+    <span className="inline-flex cursor-help flex-col items-start gap-0.5" title={title || undefined}>
+      <span className="rounded-full bg-alert/12 px-2 py-0.5 text-12 font-medium whitespace-nowrap text-alert">
+        ยังไม่พร้อมใช้งาน
+      </span>
+      <span className="inline-flex items-center gap-1 pl-1 text-11-5 leading-tight text-mut">
+        <Wrench size={11} aria-hidden />
+        {repair.label}
+      </span>
+      {repair.due ? (
+        <span className={`pl-1 text-11-5 leading-tight whitespace-nowrap ${overdue ? "text-alert" : "text-mut"}`}>
+          เสร็จ {thaiDate(repair.due)}
+          {overdue ? " · เลยกำหนด" : ""}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 /** `2026-10-31` → `31 ต.ค. 69` */
 function thaiDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);

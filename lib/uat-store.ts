@@ -236,7 +236,8 @@ export async function assertUatManager(): Promise<{
  * - ใบสมัครทดสอบ (มีคีย์ `uat`) → ลบ
  * - คำขอสรรหาที่ **หมายเหตุขึ้นต้น “UAT”** และไม่เคยผูกคนจริง → ลบ (กติกาของผู้ทดสอบ KA ตอนขออัตรา)
  * - คำขอจริงที่ผูกผู้สมัครทดสอบ → ปลดผูก ล้างข้อมูลฝึกงานของคนทดสอบ กลับเป็นเปิดรับ (ยกเลิกแล้วคงยกเลิก)
- * - คนทดสอบในทะเบียนประวัติ (รหัสขึ้นต้น `UAT` ที่ออกตอนรับรถ) + ตารางรายวันของรหัสนั้น → ลบ
+ * - คนทดสอบในทะเบียนประวัติ (รหัสขึ้นต้น `UAT` ที่ออกตอนรับรถ **หรือชื่อขึ้นต้น `UAT-`** — ผู้ทดสอบ
+ *   กรอกรหัสจริง/มั่ว เช่น `0000` `5555` ได้ · 4 พ.ย. 2569) + ตารางรายวันของรหัสนั้น → ลบ
  * - ผลทดสอบทั้งหมด → ลบ · **ผู้ทดสอบกับสวิตช์คงไว้**
  *
  * ก่อนลบเก็บสำเนาทั้งหมดลง `uat_trash` (บน Vercel ไม่มีดิสก์ให้เขียนไฟล์สำรอง)
@@ -255,6 +256,8 @@ type Doc = Document & { _id: ObjectId };
 const isUatNote = (note: unknown) => typeof note === "string" && /^\s*uat/i.test(note);
 /** รหัส พจส. ทดสอบ (`uatDriverCode`) — คนทดสอบที่รับรถแล้วเข้าทะเบียน + ตารางรายวันของเขา */
 const UAT_CODE = { drivercode: { $regex: new RegExp(`^${UAT_CODE_PREFIX}`) } };
+/** คนทดสอบในทะเบียน — รหัส UAT หรือชื่อ `UAT-` (ชื่อจากใบสมัครที่สุ่ม `createUatApplication`) */
+const UAT_DRIVER = { $or: [UAT_CODE, { driverName: { $regex: /^\s*UAT-/ } }] };
 
 async function planClear() {
   const [apps, rqs, results, drivers, daily] = await Promise.all([
@@ -283,6 +286,9 @@ async function planClear() {
     (r.pastOnboarding ?? []).some((p: { applicationId?: string }) => p.applicationId && !ids.includes(p.applicationId));
   const toDelete = touched.filter((r) => isUatNote(r.note) && !realPerson(r));
   const toReset = touched.filter((r) => !toDelete.includes(r));
+  const driverDocs = await drivers.find(UAT_DRIVER).toArray();
+  /* ตารางรายวันของคนทดสอบ — ตามรหัสที่เจอจริง ไม่ใช่แค่รหัสขึ้นต้น UAT */
+  const dailyFilter = { $or: [UAT_CODE, { drivercode: { $in: driverDocs.map((d) => d.drivercode) } }] };
 
   return {
     apps,
@@ -290,7 +296,8 @@ async function planClear() {
     results,
     drivers,
     daily,
-    driverDocs: await drivers.find(UAT_CODE).toArray(),
+    driverDocs,
+    dailyFilter,
     appDocs,
     ids,
     toDelete,
@@ -324,7 +331,7 @@ export async function clearUatData(): Promise<UatClearPlan> {
     requisitionsDeleted: p.toDelete,
     requisitionsBeforeReset: p.toReset,
     drivers: p.driverDocs,
-    traineeDaily: await p.daily.find(UAT_CODE).toArray(),
+    traineeDaily: await p.daily.find(p.dailyFilter).toArray(),
     results: await p.results.find({}).toArray(),
   });
 
@@ -361,8 +368,8 @@ export async function clearUatData(): Promise<UatClearPlan> {
   }
   if (p.toDelete.length) await p.rqs.deleteMany({ _id: { $in: p.toDelete.map((r) => r._id) } });
   if (p.appDocs.length) await p.apps.deleteMany({ _id: { $in: p.appDocs.map((d) => d._id) } });
-  await p.drivers.deleteMany(UAT_CODE);
-  await p.daily.deleteMany(UAT_CODE);
+  if (p.driverDocs.length) await p.drivers.deleteMany({ _id: { $in: p.driverDocs.map((d) => d._id) } });
+  await p.daily.deleteMany(p.dailyFilter);
   await p.results.deleteMany({});
 
   return {

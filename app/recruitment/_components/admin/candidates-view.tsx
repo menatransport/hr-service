@@ -33,8 +33,16 @@ import {
 } from "@/app/recruitment/_components/admin/candidate-insights";
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
 import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
+import { SearchField } from "@/components/ui/field";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
-import { outcomeGroup, outcomeLabel, type OnboardingRecord, type Stage } from "@/app/recruitment/_lib/requisitions/onboarding";
+import {
+  TAB_NOTE,
+  TRAINING_NOTE,
+  outcomeGroup,
+  type Tab,
+  outcomeLabel,
+  type OnboardingRecord,
+} from "@/app/recruitment/_lib/requisitions/onboarding";
 import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { OnboardingView, hubRows } from "@/app/recruitment/_components/admin/onboarding-view";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
@@ -432,9 +440,8 @@ type Filters = Partial<Record<ColumnId, string[]>>;
 /** การ์ดที่ไม่ใช่สถานะใบสมัคร — แถวมาจากหน้าติดตามพนักงานใหม่ (อัตราว่าง · รอรับรถ · รับรถแล้ว) */
 export type HubView = "open" | "handover" | "working";
 
-/** การ์ด → แท็บของหน้าติดตาม · รอรับรถ = แท็บฝึกงานกรองสถานะรอรับรถ */
-const HUB_STAGE: Record<HubView, Stage> = { open: "open", handover: "training", working: "working" };
-const HUB_FILTERS: Partial<Record<HubView, Record<string, string[]>>> = { handover: { trainStatus: ["รอรับรถ"] } };
+/** การ์ด → แท็บของหน้าติดตาม (รอรับรถ = แท็บรอรับรถ ชุดเดียวกัน) */
+const HUB_STAGE: Record<HubView, Tab> = { open: "open", handover: "handover", working: "working" };
 
 export function CandidatesView({
   title,
@@ -633,6 +640,10 @@ export function CandidatesView({
   /** กรองฝึกงานอย่างเดียว = ตารางฝึกงานรายวัน + ปุ่มคัดลอกสรุปใต้ตาราง (ย้ายมาจากหน้าติดตามพนักงานใหม่ 25 ต.ค. 2569) */
   const showDaily = !view && onlyStatus(STATUS_LABEL.training);
 
+  /** ช่องค้นหา — มีเฉพาะตอนกรองฝึกงานอย่างเดียว (Bew 5 พ.ย. 2569) · ช่องซ่อน = ไม่กรองต่อเบื้องหลัง */
+  const [query, setQuery] = useState("");
+  const needle = showDaily ? query.trim().toLowerCase() : "";
+
   const columns = useMemo(
     () =>
       COLUMNS.filter(
@@ -647,12 +658,17 @@ export function CandidatesView({
   const visible = useMemo(() => {
     /* กรองด้วยคอลัมน์ที่เห็นอยู่จริงเท่านั้น — ตัวกรองของคอลัมน์เหตุผลที่ถูกซ่อนไป
        แล้วต้องไม่แอบกรองต่ออยู่เบื้องหลัง */
-    const matched = enriched.filter((a) =>
-      columns.every((column) => {
+    const matched = enriched.filter((a) => {
+      if (needle) {
+        const rq = rqByApplication.get(a.id);
+        const hay = [a.fullName, a.ref, a.phone, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
+        if (!hay.some((t) => t?.toLowerCase().includes(needle))) return false;
+      }
+      return columns.every((column) => {
         const picked = filters[column.id];
         return !picked?.length || picked.includes(facetOf(column, a));
-      }),
-    );
+      });
+    });
 
     const column = COLUMNS.find((c) => c.id === sort.column) ?? COLUMNS[0];
 
@@ -663,13 +679,13 @@ export function CandidatesView({
       const order = read(a).localeCompare(read(b), "th", { numeric: true });
       return sort.dir === "asc" ? order : -order;
     });
-  }, [enriched, columns, filters, sort]);
+  }, [enriched, columns, filters, sort, needle, rqByApplication]);
 
   /**
    * หน้าละ 25 แถว (2 พ.ย. 2569) — ตัดหลังกรอง/เรียงแล้ว · แถบสรุป ตัวเลขในหัวคอลัมน์
    * ปุ่ม Excel และตารางฝึกงานรายวันยังใช้ `visible` ทั้งชุดเหมือนเดิม
    */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort]));
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort, needle]));
 
   /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
   const toPerson = (a: ApplicationSummary): TraineePerson => {
@@ -829,7 +845,7 @@ export function CandidatesView({
           records={hubRecords}
           repairs={hub.repairs}
           initialStage={HUB_STAGE[view]}
-          initialFilters={HUB_FILTERS[view]}
+          note={TAB_NOTE[HUB_STAGE[view]]}
           onCreated={(created) => setRequisitions?.((prev) => [...created, ...prev])}
           onUpdated={(updated) =>
             setRequisitions?.((prev) =>
@@ -846,6 +862,22 @@ export function CandidatesView({
           (เช่น `.sr-only` ในปุ่มแต่ละแถว) — ไม่งั้นสแปนที่มองไม่เห็นพวกนั้นจะไปอิง
           ตำแหน่งกับเอกสารทั้งหน้าแทนกล่องนี้ ดันความสูงจริงของหน้าให้ยาวเกินของจริง
           (เห็นผลเป็นแถบข้างที่ดูเหมือนเลื่อนตามเพราะ container คำนวณความสูงผิด) */}
+      {showDaily ? (
+        <div className="flex flex-col gap-2 pb-3 lg:flex-row lg:items-center lg:gap-4">
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            label="ค้นหา"
+            placeholder="ชื่อ เลขที่ รหัส แพล้นท์ ครูฝึก รถ…"
+            tone="filled"
+            className="lg:max-w-sm lg:flex-1"
+          />
+          <p className="text-12 leading-relaxed text-ink">
+            <span className="font-medium">เงื่อนไข: </span>
+            <span className="text-alert">{TRAINING_NOTE.join(", ")}</span>
+          </p>
+        </div>
+      ) : null}
       <div
         ref={pagedScroll}
         className={`sheet-bleed relative overflow-auto border-y border-line ${

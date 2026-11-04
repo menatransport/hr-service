@@ -729,7 +729,7 @@ export interface ImportRow {
   driverName: string;
   /** รหัสสถานะล่าสุดจาก ATMS เช่น `A` `ฝ` `ลอ` */
   workStatus: string;
-  /** ใบใหม่ที่ชื่อ/เบอร์ตรงกับคนติด Blacklist — เช่น `DRV-69-0012 สมชาย ใจดี (เบอร์)` */
+  /** ใบใหม่ที่ชื่อ/เบอร์ตรงกับคนติด Blacklist — เช่น `DRV2601-0012 สมชาย ใจดี (เบอร์)` */
   blacklistHit?: string;
   /** สถานะที่ฝ่ายบุคคลเขียนไว้ในชีต (คอลัมน์ “สถานะสัมภาษณ์”) */
   sheetStatus?: string;

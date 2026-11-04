@@ -52,11 +52,18 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.4.0";
+export const API_DOCS_VERSION = "4.5.0";
 export const API_DOCS_UPDATED = "2026-11-04";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-04",
+    version: "4.5.0",
+    changes: [
+      "`GET /api/recruitment/pipeline` เพิ่มสถานะรถในแต่ละแถว — `vehicleStatus` (`ready` | `notReady` | `null`) · `vehicleStatusLabel` (พร้อมใช้งาน / ยังไม่พร้อมใช้งาน) · `vehicleStatusReason` (ขั้นซ่อม) · `vehicleStatusDue` (กำหนดเสร็จ `YYYY-MM-DD` ถ้ามี)",
+    ],
+  },
   {
     date: "2026-11-04",
     version: "4.4.0",
@@ -581,13 +588,13 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/recruitment/pipeline",
         summary: "คนตามช่วงก่อนรับรถ — รอสรรหา · รอฝึกงาน · ฝึกงาน · รอรับรถ",
         description:
-          "ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร · **รอรับรถ = ฝึกงานครบ 10 วัน (นับเฉพาะวันที่สถานะเป็น `ฝ` · ที่ RC กรอกเองชนะ ATMS) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน** ระบบเปลี่ยนให้เอง · รอสรรหา = อัตราว่าง `name` / `drivercode` ว่าง · `counts` นับทุกช่วงเสมอไม่ขึ้นกับ `status` · `total` = ผลรวม 4 ช่วง · เรียงตามช่วง → เลขที่ JR",
+          "ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร · **รอรับรถ = ฝึกงานครบ 10 วัน (นับเฉพาะวันที่สถานะเป็น `ฝ` · ที่ RC กรอกเองชนะ ATMS) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน** ระบบเปลี่ยนให้เอง · รอสรรหา = อัตราว่าง `name` / `drivercode` ว่าง · `counts` นับทุกช่วงเสมอไม่ขึ้นกับ `status` · `total` = ผลรวม 4 ช่วง · เรียงตามช่วง → เลขที่ JR · **สถานะรถ** จากบอร์ดซ่อม: อยู่บนบอร์ด = `notReady` (ยังไม่พร้อมใช้งาน) + เหตุผล (ขั้นซ่อมล่าสุด) + กำหนดเสร็จถ้ามี · ไม่อยู่ = `ready` · ยังไม่มีรถ = `null` และข้อความว่าง",
         access: "login",
         params: [
           { name: "status", in: "query", type: '"open" | "waitTraining" | "training" | "waitHandover" (คั่นด้วย ,)', desc: "ไม่ส่ง = ทั้ง 4 ช่วง" },
         ],
         response:
-          "{ asOf, counts: { open, waitTraining, training, waitHandover, total }, rows: [{ status, statusLabel, requisitionId, jr, requestedOn, branch, position, customer, plant, vehicle: { code, plateNo } | null, trainer: { drivercode, name } | null, drivercode, name, applicationRef, trainingStartOn, trainedDays, orientationOn, stResult, handoverReady: { days, orientation, st } }] }",
+          "{ asOf, counts: { open, waitTraining, training, waitHandover, total }, rows: [{ status, statusLabel, requisitionId, jr, requestedOn, branch, position, customer, plant, vehicle: { code, plateNo } | null, vehicleStatus: \"ready\" | \"notReady\" | null, vehicleStatusLabel, vehicleStatusReason, vehicleStatusDue, trainer: { drivercode, name } | null, drivercode, name, applicationRef, trainingStartOn, trainedDays, orientationOn, stResult, handoverReady: { days, orientation, st } }] }",
         errors: [{ status: 400, when: "`status` ไม่อยู่ใน 4 ค่านี้" }],
       },
       {

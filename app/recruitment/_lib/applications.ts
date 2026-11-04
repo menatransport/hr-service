@@ -84,6 +84,8 @@ const DUPLICATE_WINDOW_DAYS = 30;
 
 interface ApplicationDoc {
   ref: string;
+  /** เลขแบบเก่า `DRV-69-0001` ก่อนแปลงเป็น `DRV2601-0001` (4 พ.ย. 2569) — ผู้สมัครยังค้นสถานะด้วยเลขนี้ได้ · ไฟล์แนบเดิมอยู่ในโฟลเดอร์ของเลขนี้ */
+  legacyRef?: string;
   status: ApplicationStatus;
   fullName: string;
   /** ตัวเลขล้วน 10 หลัก — จัดรูปตอนแสดงผลด้วย `formatPhone()` */
@@ -243,9 +245,10 @@ function toApplication(doc: WithId<ApplicationDoc>): Application {
 
 /**
  * เลขใบสมัคร `DRV2610-0001` = ปี ค.ศ. 2 หลัก + เดือน (แบบเดียวกับ RQ) · **เลขรันนับใหม่ทุกปี
- * ไม่ใช่ทุกเดือน** (Bew 25 ต.ค. 2569) เดือนเป็นแค่ป้ายบอกช่วงเวลา · ใบก่อนหน้านี้ยังถือเลขเดิม
- * `DRV-69-0001` (ผู้สมัครใช้เลขนั้นติดตามสถานะอยู่ ห้ามเปลี่ยน) · ตัวนับคนละตัวกับของเดิม
- * (`recruitment:2026` ไม่ใช่ `recruitment:69`) ปีแรกจึงเริ่มที่ 0001
+ * ไม่ใช่ทุกเดือน** (Bew 25 ต.ค. 2569) เดือนเป็นแค่ป้ายบอกช่วงเวลา · ใบเลขเก่า `DRV-69-0316`
+ * แปลงเป็น `DRV2611-0316` แล้ว (4 พ.ย. 2569, เลขท้ายเดิม เดือนตามวันที่สมัคร เลขเก่าอยู่ใน
+ * `legacyRef`) และตัวนับ `recruitment:2026` ถูกดันให้ต่อจากเลขเก่าของปีนั้น
+ * (`backups/convert_legacy_drv_refs.mjs`)
  */
 export function applicationRef(year: number, month: number, seq: number): string {
   return `DRV${String(year % 100).padStart(2, "0")}${String(month).padStart(2, "0")}-${String(seq).padStart(4, "0")}`;
@@ -1464,7 +1467,7 @@ export async function lookupStatus(
     throw new RecruitmentError("กรอกเลขอ้างอิงและเบอร์มือถือที่ใช้สมัครให้ครบ");
   }
 
-  const doc = await (await applications()).findOne({ ref, phone });
+  const doc = await (await applications()).findOne({ $or: [{ ref }, { legacyRef: ref }], phone });
   if (!doc) {
     throw new RecruitmentError(
       "ไม่พบใบสมัครที่ตรงกับเลขอ้างอิงและเบอร์นี้ — ลองตรวจอีกครั้งว่าพิมพ์ครบถ้วน",
@@ -1532,7 +1535,7 @@ export async function cancelApplication(
       },
       $push: { timeline: entry },
     },
-    { projection: { _id: 1 } },
+    { projection: { _id: 1, legacyRef: 1 } },
   );
 
   /* เอกสาร HR (สัญญาจ้าง/สัญญาค้ำ/ยินยอมคืนเงินค้ำ) ที่เคยทำไว้กับใบนี้มีเลขบัตร
@@ -1543,6 +1546,12 @@ export async function cancelApplication(
   await deleteMediaFolder(mediaKeys.applicationFolder(current.ref)).catch((err: unknown) => {
     console.warn("[applications] ลบไฟล์แนบบน S3 ของใบที่ยกเลิกไม่สำเร็จ —", current.ref, err);
   });
+  /* ใบที่แปลงเลขมา — ไฟล์ที่แนบก่อนแปลงยังอยู่ใต้โฟลเดอร์เลขเก่า */
+  if (updated?.legacyRef) {
+    await deleteMediaFolder(mediaKeys.applicationFolder(updated.legacyRef)).catch((err: unknown) => {
+      console.warn("[applications] ลบไฟล์แนบบน S3 (เลขเก่า) ไม่สำเร็จ —", updated.legacyRef, err);
+    });
+  }
 
   if (updated?._id) {
     await eraseHrDocuments(updated._id.toHexString()).catch((err: unknown) => {
