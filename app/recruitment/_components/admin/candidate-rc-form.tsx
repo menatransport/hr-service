@@ -42,6 +42,7 @@ const TARGET_LABEL: Record<RcTarget, string> = { interview_passed: "รอฝึ
  * **ไม่มีช่อง RC ผู้แจ้ง / ผลสิ้นสุด / วันที่สิ้นสุดแล้ว** (Bew 25 ต.ค. 2569) — RC ผู้แจ้งตั้งจาก
  * ผู้ติดต่อกลับให้เองเงียบ ๆ ถ้ายังว่าง · ปลด/ลาออก/ฝึกงาน 1-2 วัน ลงที่ตารางรายวันแทน
  * (เลือก `ลอ`/`ปอ` → `exitFromDaily()` เขียนผลสิ้นสุดให้)
+ * · ใช้ร่วมกับขั้น RC บนหน้าติดตามพนักงานใหม่ (`fixed` = ล็อก JR ไว้ที่คำขอนั้น · Bew 4 พ.ย. 2569)
  */
 export function CandidateRcForm({
   applicationId,
@@ -50,6 +51,7 @@ export function CandidateRcForm({
   name,
   contactOwner,
   target = null,
+  fixed = false,
   onClose,
   onLinked,
   onSaved,
@@ -59,10 +61,12 @@ export function CandidateRcForm({
   linked: Requisition | null;
   requisitions: Requisition[];
   name: string;
-  status: ApplicationStatus;
+  status?: ApplicationStatus;
   /** ผู้รับเรื่องของใบสมัคร — ตั้งเป็น RC ผู้แจ้งให้ก่อนถ้ายังว่าง */
   contactOwner: string;
   target?: RcTarget | null;
+  /** เปลี่ยน JR ไม่ได้ (เปิดจากหน้าติดตามพนักงานใหม่ของคำขอนั้น) */
+  fixed?: boolean;
   onClose: () => void;
   /** คำขอที่ผูก/ปลดไปแล้ว (ก่อนบันทึกข้อมูล RC) — หน้าแม่อัปเดตแถวคำขอ */
   onLinked: (rows: Requisition[]) => void;
@@ -196,7 +200,7 @@ export function CandidateRcForm({
         placeholder={rqOptions.length ? "เลือก JR ที่เปิดรับ" : "ไม่มีคำขอที่เปิดรับอยู่"}
         searchable
         searchPlaceholder="ค้นเลข JR ลูกค้า แพล้น"
-        readOnly={saving}
+        readOnly={saving || fixed}
         options={rqOptions}
         value={rqId}
         onChange={setRqId}

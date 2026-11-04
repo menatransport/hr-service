@@ -133,6 +133,7 @@ export function OnboardingSectionForm({
         </>
       }
     >
+      {only?.length === 0 ? <p className="text-12-5 text-mut">ยังไม่มีผู้สมัคร — เตรียมครูฝึกและรถไว้ก่อนได้</p> : null}
       <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
         {section === "rc" ? (
           <TextField id="ob-drivercode" label="รหัส พจส." value={drivercode} onChange={setDrivercode} optional />
@@ -151,29 +152,24 @@ export function OnboardingSectionForm({
               clearable
               searchPlaceholder="ชื่อ หรือรหัส…"
             />
-            <div className="flex flex-col gap-1.5">
-              <SelectField
-                id="ob-vehicle"
-                label="รถ"
-                value={vehicle}
-                onChange={setVehicle}
-                options={journey.vehicles}
-                placeholder="— เลือก —"
-                searchable
-                clearable
-                searchPlaceholder="เลขรถ ทะเบียน แพล้นท์…"
-              />
-              {repair ? (
-                <RepairBadge repair={repair} />
-              ) : plate ? (
-                <p className="text-12 text-primary">ไม่มีงานซ่อมค้าง</p>
-              ) : null}
-            </div>
+            {/* ป้ายซ่อมอยู่แถวเดียวกับป้ายช่อง — สองคอลัมน์สูงเท่ากัน · ไม่มีป้าย = รถปกติ */}
+            <SelectField
+              id="ob-vehicle"
+              label="เบอร์รถ"
+              labelRight={repair ? <RepairBadge repair={repair} compact className="" /> : null}
+              value={vehicle}
+              onChange={setVehicle}
+              options={journey.vehicles}
+              placeholder="— เลือก —"
+              searchable
+              clearable
+              searchPlaceholder="เลขรถ ทะเบียน แพล้นท์…"
+            />
           </>
         ) : null}
 
         {SECTION_SPECS[section].fields
-          .filter((field) => !field.readOnly && (only ? only.includes(field.key) : fieldApplies(field, values)))
+          .filter((field) => !field.readOnly && !field.byUser && (only ? only.includes(field.key) : fieldApplies(field, values)))
           .map((field) => (
             <Field
               key={field.key}

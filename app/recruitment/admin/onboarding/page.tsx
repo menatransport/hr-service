@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "ติดตามพนักงา
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage({ searchParams }: PageProps<"/recruitment/admin/onboarding">) {
-  const { tab } = await searchParams;
+  const { tab, open } = await searchParams;
   const stage = (STAGES as readonly string[]).includes(String(tab)) ? (tab as Stage) : "training";
 
   let hub: Hub | null = null;
@@ -29,7 +29,13 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/recru
   return (
     <div className="animate-rise">
       {hub && options ? (
-        <OnboardingView records={hub.records} repairs={hub.repairs} options={options} initialStage={stage} />
+        <OnboardingView
+          records={hub.records}
+          repairs={hub.repairs}
+          options={options}
+          initialStage={stage}
+          initialOpen={typeof open === "string" ? open : ""}
+        />
       ) : (
         <div className="mx-auto max-w-xl py-6">
           <DataError title="โหลดข้อมูลพนักงานใหม่ไม่สำเร็จ" envKey="MONGO_URI" message={error ?? "เชื่อมต่อฐานข้อมูลไม่สำเร็จ"} />

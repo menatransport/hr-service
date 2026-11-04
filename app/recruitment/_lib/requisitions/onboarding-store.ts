@@ -258,10 +258,6 @@ export async function getOnboardingRecords(): Promise<OnboardingRecord[]> {
 
 const SUGGEST_PATHS: Record<SuggestKey, string> = {
   rcName: "onboarding.rc.values.rcName",
-  zone: "onboarding.ka.values.zone",
-  kaName: "onboarding.ka.values.kaName",
-  trainingSite: "onboarding.ka.values.trainingSite",
-  erName: "onboarding.er.values.erName",
 };
 
 async function getSuggestions(): Promise<Suggestions> {
@@ -408,12 +404,16 @@ export async function getRcForm(id: string): Promise<RcForm | null> {
 
 /* -------------------------------------------------------------------- บันทึก */
 
-function cleanValues(patch: OnboardingPatch, before: Record<string, string>): Record<string, string> {
+function cleanValues(patch: OnboardingPatch, before: Record<string, string>, by: string): Record<string, string> {
   const spec = SECTION_SPECS[patch.section];
   const input = patch.values && typeof patch.values === "object" ? patch.values : {};
   const out: Record<string, string> = {};
 
   for (const field of spec.fields) {
+    if (field.byUser) {
+      out[field.key] = by;
+      continue;
+    }
     if (field.readOnly) {
       if (before[field.key]) out[field.key] = before[field.key];
       continue;
@@ -474,7 +474,7 @@ export async function updateOnboardingSection(
   if (!current) throw new RequisitionError("ไม่พบคำขอที่ระบุ");
 
   const before = current.onboarding?.[patch.section]?.values ?? {};
-  const values = cleanValues(patch, before);
+  const values = cleanValues(patch, before, by);
   if (patch.section === "rc" && patch.exit && typeof patch.exit === "object") {
     const outcome = typeof patch.exit.outcome === "string" ? patch.exit.outcome.trim() : "";
     const exitOn = typeof patch.exit.exitOn === "string" ? patch.exit.exitOn.trim() : "";

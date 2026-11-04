@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, FileText, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Eye, FileText, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
 
 import { ColumnMenu, type ColumnFilterOption, type SortDir } from "@/components/ui/column-menu";
 import { SearchField, Select, THAI_MONTHS_FULL } from "@/components/ui/field";
 import {
-  SegmentedControl,
   SummaryPanel,
   SummaryStat,
   SummaryStats,
@@ -29,13 +29,9 @@ import {
   STAGES,
   STAGE_DOT,
   STAGE_LABEL,
-  STEP_META,
-  STEP_ORDER,
-  ST_CHECKPOINTS,
   daysBetween,
   daysToHandover,
   endLabel,
-  nextStep,
   stageOf,
   stepStates,
   trainingStart,
@@ -53,17 +49,17 @@ import {
   waitingDays,
   type Requisition,
 } from "@/app/recruitment/_lib/requisitions/types";
-import { StProgress, StepDots } from "@/app/recruitment/_components/admin/onboarding-bits";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
 import { RequisitionForm } from "@/app/recruitment/_components/admin/requisition-form";
 import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requisition-cancel";
+import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
 
 /**
  * ติดตามพนักงานใหม่ — **หน้าเดียวแทน** ขออัตราสรรหา + Onboarding + ติดตามฝึกงาน (14 ต.ค. 2026)
  *
  * 1 แถว = 1 คำขอ = 1 คน ตลอดเส้นทาง · การ์ดบนสุดคือแท็บตามขั้น (`stageOf()` คิดจาก
  * คำขอ + ใบสมัคร + ข้อมูลฝ่าย + ATMS) แต่ละแท็บโชว์เฉพาะคอลัมน์ที่ขั้นนั้นใช้ ·
- * กดชื่อ/เลขที่ → หน้าเส้นทางรายคน (ที่เดียวที่แก้ข้อมูลได้) · ตารางรายวันย้ายไปหน้าผู้สมัคร
+ * ไอคอนตาท้ายแถว → dialog รายคน (ที่เดียวที่แก้ข้อมูลฝ่ายได้ · แทนหน้า `/onboarding/[id]`) · ตารางรายวันย้ายไปหน้าผู้สมัคร
  * (กรองฝึกงาน · 25 ต.ค. 2569) · ผู้สมัครยังเป็นหน้าแยก เพราะหลายใบต่อหนึ่งอัตรา
  */
 
@@ -77,8 +73,6 @@ type Row = OnboardingRecord & {
 
 const DASH = "—";
 const date = (v: string) => (v ? thaiDate(v) : DASH);
-const stResults = (r: OnboardingRecord) => ST_CHECKPOINTS.map((c) => val(r.onboarding, "er", c.result));
-const ok = (s: StepState) => s === "done" || s === "skip";
 
 type Col = {
   id: string;
@@ -115,8 +109,8 @@ const C = {
     width: "min-w-[130px]",
     text: (r) => r.vehicle?.plateNo || r.vehicle?.code || DASH,
   },
-  /* สถานะซ่อม ณ ตอนนี้จากบอร์ดซ่อม — แยกจากทะเบียนรถให้กรองได้ · คันปกติหรือไม่มีรถ = — */
-  repair: { id: "repair", label: "สถานะรถ", width: "min-w-[130px]", text: (r) => r.repair?.label || DASH },
+  /* สถานะซ่อม ณ ตอนนี้จากบอร์ดซ่อม — แยกจากทะเบียนรถให้กรองได้ · คันปกติ = พร้อม · ไม่มีรถ = — */
+  repair: { id: "repair", label: "สถานะรถ", width: "min-w-[130px]", text: (r) => r.repair?.label || (r.vehicle ? "พร้อม" : DASH) },
   trainer: { id: "trainer", label: "ครูฝึก", width: "min-w-[150px]", text: (r) => r.trainer?.name || DASH },
   application: {
     id: "application",
@@ -136,48 +130,6 @@ const C = {
       return d === null ? DASH : `${d + 1} วัน`;
     },
     key: (r) => String(daysBetween(r.start, todayInBangkok()) ?? -1).padStart(5, "0"),
-  },
-  progress: {
-    id: "progress",
-    label: "ขั้นตอน",
-    width: "min-w-[110px]",
-    noFilter: true,
-    text: (r) => String(STEP_ORDER.filter((s) => ok(r.states[s])).length),
-  },
-  next: {
-    id: "next",
-    label: "ค้างที่",
-    width: "min-w-[80px]",
-    text: (r) => {
-      const n = nextStep(r.states);
-      return n ? STEP_META[n].short : DASH;
-    },
-  },
-  /* ST รวมคอลัมน์เดียว — กรองตามผลล่าสุด · เรียงตามจำนวนรอบที่ลงผลแล้ว */
-  st: {
-    id: "st",
-    label: "ST",
-    width: "min-w-[170px]",
-    text: (r) => stResults(r).filter(Boolean).pop() || DASH,
-    key: (r) => String(stResults(r).filter(Boolean).length),
-  },
-  orientation: {
-    id: "orientation",
-    label: "ปฐมนิเทศ",
-    width: "min-w-[110px]",
-    text: (r) => date(val(r.onboarding, "hrd", "orientationOn")),
-    key: (r) => val(r.onboarding, "hrd", "orientationOn"),
-  },
-  examScore: {
-    id: "examScore",
-    label: "คะแนนปฐมนิเทศ",
-    width: "min-w-[110px]",
-    noFilter: true,
-    text: (r) => val(r.onboarding, "hrd", "examScore") || DASH,
-    key: (r) => {
-      const s = val(r.onboarding, "hrd", "examScore");
-      return s ? Number(s).toFixed(2).padStart(10, "0") : "";
-    },
   },
   handover: {
     id: "handover",
@@ -224,8 +176,8 @@ const COLUMNS: Record<Stage, Col[]> = {
   open: [C.code, C.waiting, C.requested, C.customer, C.plant, C.position, C.hireType, C.vehicle, C.repair, C.trainer],
   recruiting: [C.applicant, C.code, C.application, C.start, C.waiting, C.customer, C.plant, C.position, C.trainer, C.vehicle, C.repair],
   training: [
-    C.trainee, C.drivercode, C.customer, C.plant, C.start, C.trainDays, C.progress, C.next,
-    C.trainer, C.vehicle, C.repair, C.st, C.orientation, C.examScore,
+    C.trainee, C.drivercode, C.customer, C.plant, C.start, C.trainDays,
+    C.trainer, C.vehicle, C.repair,
   ],
   /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding */
   working: [C.driver, C.code, C.driverStatus, C.customer, C.plant, C.start, C.handover, C.days],
@@ -261,7 +213,7 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
     { header: "ทะเบียนรถ", width: 14, kind: "code", value: (r) => r.vehicle?.plateNo },
     { header: "เลขรถ", width: 10, kind: "code", value: (r) => r.vehicle?.code },
   ],
-  repair: [{ header: "สถานะรถ", width: 16, kind: "status", value: C.repair.text, tone: (r) => (r.repair ? "warn" : null) }],
+  repair: [{ header: "สถานะรถ", width: 16, kind: "status", value: C.repair.text, tone: (r) => (r.repair ? "warn" : r.vehicle ? "ok" : null) }],
   trainer: [{ header: "ครูฝึก", width: 22, value: C.trainer.text }],
   application: [{ header: "ใบสมัคร", width: 18, kind: "status", value: C.application.text }],
   drivercode: [{ header: "รหัส", width: 10, kind: "code", value: (r) => r.drivercode }],
@@ -274,39 +226,6 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
       value: (r) => {
         const d = daysBetween(r.start, todayInBangkok());
         return d === null ? null : d + 1;
-      },
-    },
-  ],
-  progress: [
-    {
-      header: `ขั้นตอนผ่าน (จาก ${STEP_ORDER.length})`,
-      width: 12,
-      kind: "int",
-      value: (r) => STEP_ORDER.filter((s) => ok(r.states[s])).length,
-    },
-  ],
-  next: [{ header: "ค้างที่", width: 10, kind: "status", value: C.next.text, tone: () => "warn" }],
-  st: [
-    { header: "ST ผู้ประเมิน", width: 20, value: (r) => val(r.onboarding, "er", "erName") },
-    ...ST_CHECKPOINTS.flatMap((c): XlsxColumn<Row>[] => [
-      {
-        header: `ST วันที่ ${c.day}${"summary" in c ? " · สรุป" : ""}`,
-        width: 16,
-        kind: "status",
-        value: (r) => val(r.onboarding, "er", c.result),
-      },
-      { header: `ST วันที่ ${c.day} · วันที่ตรวจ`, width: 13, kind: "date", value: (r) => xlsxDate(val(r.onboarding, "er", c.on)) },
-    ]),
-  ],
-  orientation: [{ header: "ปฐมนิเทศ", width: 13, kind: "date", value: (r) => xlsxDate(val(r.onboarding, "hrd", "orientationOn")) }],
-  examScore: [
-    {
-      header: "คะแนนปฐมนิเทศ",
-      width: 12,
-      kind: "decimal",
-      value: (r) => {
-        const s = val(r.onboarding, "hrd", "examScore");
-        return s && Number.isFinite(Number(s)) ? Number(s) : s;
       },
     },
   ],
@@ -376,6 +295,7 @@ export function OnboardingView({
   repairs,
   options,
   initialStage = "training",
+  initialOpen = "",
   embedded = false,
 }: {
   records: OnboardingRecord[];
@@ -383,6 +303,8 @@ export function OnboardingView({
   /** ฟอร์มขออัตรา — ไม่ส่ง = ไม่มีปุ่มขออัตรา */
   options?: RequisitionOptions;
   initialStage?: Stage;
+  /** `?open=<id>` — เปิด dialog ของคำขอนี้ตอนโหลด (ลิงก์เก่า `/onboarding/[id]` redirect มา) */
+  initialOpen?: string;
   /**
    * ฝังในหน้าผู้สมัคร (การ์ดรอสรรหา/รับรถแล้ว) — ขั้นเดียว ไม่มีการ์ดขั้น/เดือน/ปุ่มแก้
    * · `records` ตามพ่อแม่สด ๆ (ผูก RQ บนหน้าผู้สมัครแล้วแถวขยับทันที)
@@ -391,15 +313,21 @@ export function OnboardingView({
 }) {
   const [own, setRecords] = useState(initial);
   const records = embedded ? initial : own;
-  const [stage, setStage] = useState<Stage>(initialStage);
-  const [sort, setSort] = useState(DEFAULT_SORT[initialStage]);
+  /* เปิดจากลิงก์ `?open=` — ไปแท็บของคนนั้นเลย */
+  const [startStage] = useState<Stage>(() => {
+    const hit = initialOpen ? initial.find((r) => r.id === initialOpen) : undefined;
+    return hit ? stageOf(hit) : initialStage;
+  });
+  const [stage, setStage] = useState<Stage>(startStage);
+  const [sort, setSort] = useState(DEFAULT_SORT[startStage]);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [query, setQuery] = useState("");
   const [month, setMonth] = useState("");
-  const [dept, setDept] = useState<Step | "all">("all");
   const [creating, setCreating] = useState(false);
   const [cancelling, setCancelling] = useState<Requisition | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(initialOpen);
+  const router = useRouter();
 
   const rows = useMemo(() => hubRows(records, repairs), [records, repairs]);
 
@@ -419,15 +347,6 @@ export function OnboardingView({
   }, [inMonth]);
 
   const inStage = useMemo(() => inMonth.filter((r) => r.stage === stage), [inMonth, stage]);
-
-  const pending = useMemo(
-    () =>
-      Object.fromEntries(STEP_ORDER.map((s) => [s, inStage.filter((r) => !ok(r.states[s])).length])) as Record<
-        Step,
-        number
-      >,
-    [inStage],
-  );
 
   const avgDays = useMemo(() => {
     const d = inMonth
@@ -454,7 +373,6 @@ export function OnboardingView({
   const needle = query.trim().toLowerCase();
   const visible = useMemo(() => {
     const list = inStage.filter((row) => {
-      if (stage === "training" && dept !== "all" && ok(row.states[dept])) return false;
       if (
         needle &&
         ![row.name, row.code, row.applicant?.ref ?? "", row.drivercode, row.plant, row.trainer?.name ?? "", row.vehicle?.code ?? "", row.vehicle?.plateNo ?? ""].some((t) =>
@@ -470,18 +388,17 @@ export function OnboardingView({
       const order = read(a).localeCompare(read(b), "th", { numeric: true });
       return sort.dir === "asc" ? order : -order;
     });
-  }, [inStage, stage, dept, needle, columns, filters, sort]);
+  }, [inStage, needle, columns, filters, sort]);
 
-  /** หน้าละ 25 แถว — เปลี่ยนขั้น/เดือน/ฝ่าย/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([stage, month, dept, needle, filters, sort]));
+  /** หน้าละ 25 แถว — เปลี่ยนขั้น/เดือน/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([stage, month, needle, filters, sort]));
 
-  const filtering = Boolean(needle) || dept !== "all" || Object.values(filters).some((p) => p?.length);
+  const filtering = Boolean(needle) || Object.values(filters).some((p) => p?.length);
 
   function switchStage(next: Stage) {
     setStage(next);
     setSort(DEFAULT_SORT[next]);
     setFilters({});
-    setDept("all");
     try {
       const url = new URL(window.location.href);
       url.searchParams.set("tab", next);
@@ -492,7 +409,6 @@ export function OnboardingView({
   function clearAll() {
     setFilters({});
     setQuery("");
-    setDept("all");
   }
 
   /** แถวคำขอที่โมดัลส่งกลับมา — คงข้อมูลฝ่าย/ATMS เดิมไว้ */
@@ -517,7 +433,22 @@ export function OnboardingView({
     }
   }
 
-  const withActions = !embedded && (stage === "open" || stage === "ended");
+  /** บันทึกใน dialog → แถวในตารางตาม · ฝังในหน้าผู้สมัคร = ให้หน้าแม่โหลดใหม่ */
+  function saved(next: OnboardingRecord) {
+    if (embedded) router.refresh();
+    else setRecords((prev) => prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)));
+  }
+
+  function closeDialog() {
+    setViewing("");
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("open")) {
+        url.searchParams.delete("open");
+        window.history.replaceState(null, "", url);
+      }
+    } catch {}
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -578,7 +509,6 @@ export function OnboardingView({
                 title: `ติดตามพนักงานใหม่ · ${STAGE_LABEL[stage]}`,
                 filter: [
                   month ? `เดือนที่แจ้ง: ${monthLabel(month)}` : "",
-                  stage === "training" && dept !== "all" ? `ค้างที่: ${STEP_META[dept].short}` : "",
                   needle ? `คำค้น: “${query.trim()}”` : "",
                   ...columns
                     .filter((c) => filters[c.id]?.length)
@@ -611,21 +541,6 @@ export function OnboardingView({
             ) : null}
           </div>
         </SummaryToolbar>
-
-        {stage === "training" ? (
-          <SummaryStrip className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
-            <span className="text-12 text-mut">ค้างที่</span>
-            <SegmentedControl<Step | "all">
-              label="กรองงานค้างของฝ่าย"
-              value={dept}
-              onChange={setDept}
-              options={[
-                { value: "all", label: "ทุกฝ่าย" },
-                ...STEP_ORDER.map((s) => ({ value: s, label: STEP_META[s].short, count: pending[s] })),
-              ]}
-            />
-          </SummaryStrip>
-        ) : null}
 
         <SummaryStrip className="flex items-center justify-between gap-2 py-2 text-12 text-mut">
           <p role="status" aria-live="polite" className="tabular-nums">
@@ -683,7 +598,7 @@ export function OnboardingView({
                     />
                   </th>
                 ))}
-                {withActions ? <th className="sticky top-0 z-10 w-12 border-b border-line-strong bg-head" /> : null}
+                <th className="sticky top-0 right-0 z-10 w-16 border-b border-line-strong bg-head" />
               </tr>
             </thead>
             <tbody>
@@ -701,9 +616,14 @@ export function OnboardingView({
                       <Cell column={column} row={row} />
                     </td>
                   ))}
-                  {withActions ? (
-                    <td className="px-2 py-1 text-right">
-                      {row.status === "cancelled" && stage === "ended" && !row.match && !row.hireName && !row.applicant ? (
+                  <td className="sticky right-0 z-[5] bg-base-100 px-2 py-1 text-right whitespace-nowrap group-hover:bg-base-200">
+                    <span className="inline-flex items-center gap-0.5">
+                      {journeyId(row) ? (
+                        <IconButton label={`ดูรายละเอียด ${row.name || row.code}`} onClick={() => setViewing(journeyId(row))}>
+                          <Eye size={15} strokeWidth={1.8} aria-hidden />
+                        </IconButton>
+                      ) : null}
+                      {embedded ? null : row.status === "cancelled" && stage === "ended" && !row.match && !row.hireName && !row.applicant ? (
                         <IconButton label={`เปิดรับอีกครั้ง ${row.code}`} disabled={busyId === row.id} onClick={() => reopen(row)}>
                           <RotateCcw size={14} strokeWidth={1.8} aria-hidden />
                         </IconButton>
@@ -712,8 +632,8 @@ export function OnboardingView({
                           <Trash2 size={14} strokeWidth={1.8} aria-hidden />
                         </IconButton>
                       ) : null}
-                    </td>
-                  ) : null}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -748,8 +668,14 @@ export function OnboardingView({
       {cancelling ? (
         <RequisitionCancelModal row={cancelling} onClose={() => setCancelling(null)} onCancelled={merge} />
       ) : null}
+      {viewing ? <OnboardingDialog id={viewing} onClose={closeDialog} onSaved={saved} /> : null}
     </div>
   );
+}
+
+/** คำขอที่ dialog เปิดได้ — ใบสมัครยกเลิกใช้คำขอที่เคยผูก · ไม่เคยผูก = ไม่มี dialog */
+function journeyId(row: Row): string {
+  return row.applicant ? row.applicant.requisitionId : row.id;
 }
 
 /** สีวงกลมหน้าชื่อผู้สมัคร = สถานะใบสมัคร (ชุดเดียวกับหน้าผู้สมัคร) */
@@ -764,7 +690,6 @@ const APPLICANT_TONE: Record<ApplicationStatus, string> = {
 
 function Cell({ column, row }: { column: Col; row: Row }) {
   const text = column.text(row);
-  const href = `${ADMIN_ROOT}/onboarding/${row.id}`;
 
   /* ผู้สมัครที่ยกเลิก — ชื่อพาไปหน้าผู้สมัคร · เลขที่ = อัตราที่เคยอยู่ หรือเลขใบสมัครถ้าไม่เคยผูก */
   if (row.applicant && (column.id === "name" || column.id === "code")) {
@@ -774,53 +699,40 @@ function Cell({ column, row }: { column: Col; row: Row }) {
         {row.name}
       </Link>
     ) : (
-      <Link
-        href={row.applicant.requisitionId ? `${ADMIN_ROOT}/onboarding/${row.applicant.requisitionId}` : toCandidate}
-        className="font-mono text-11 tracking-wider text-primary underline decoration-primary/30 decoration-dotted underline-offset-4"
-      >
-        {row.code || row.applicant.ref}
-      </Link>
+      <span className="font-mono text-11 tracking-wider text-primary">{row.code || row.applicant.ref}</span>
     );
   }
 
   switch (column.id) {
     case "code":
-      return (
-        <Link href={href} className="font-mono text-11 tracking-wider text-primary underline decoration-primary/30 decoration-dotted underline-offset-4">
-          {row.code}
-        </Link>
-      );
+      return <span className="font-mono text-11 tracking-wider text-primary">{row.code}</span>;
     case "name":
-      return (
-        <Link href={href} className="font-medium underline decoration-line decoration-dotted underline-offset-4 hover:text-primary">
-          {row.name}
-        </Link>
-      );
+      return <span className="font-medium">{row.name}</span>;
     case "driver":
-      return (
+      return row.drivercode ? (
         <Link
-          href={row.drivercode ? `${ADMIN_ROOT}/drivers/${row.drivercode}` : href}
-          title={row.drivercode ? `ทะเบียนประวัติ · ${row.drivercode}` : undefined}
+          href={`${ADMIN_ROOT}/drivers/${row.drivercode}`}
+          title={`ทะเบียนประวัติ · ${row.drivercode}`}
           className="font-medium underline decoration-line decoration-dotted underline-offset-4 hover:text-primary"
         >
           {row.name}
         </Link>
+      ) : (
+        <span className="font-medium">{row.name}</span>
       );
     case "applicant":
     case "trainee":
       return (
-        <Link href={href} title="ดูใบสมัคร" className="group/app inline-flex items-center gap-2.5 font-medium hover:text-primary">
+        <span className="inline-flex items-center gap-2.5 font-medium">
           <span
-            className={`flex size-7 flex-none items-center justify-center rounded-full ring-primary/30 transition-shadow group-hover/app:ring-2 ${
+            className={`flex size-7 flex-none items-center justify-center rounded-full ${
               row.match?.status ? APPLICANT_TONE[row.match.status] : "bg-primary/10 text-primary"
             }`}
           >
             <FileText size={14} strokeWidth={2} aria-hidden />
           </span>
-          <span className="underline decoration-line decoration-dotted underline-offset-4 group-hover/app:decoration-primary/50">
-            {row.name}
-          </span>
-        </Link>
+          {row.name}
+        </span>
       );
     case "drivercode":
       return row.drivercode ? (
@@ -830,10 +742,6 @@ function Cell({ column, row }: { column: Col; row: Row }) {
       ) : (
         <span className="text-mut">{DASH}</span>
       );
-    case "progress":
-      return <StepDots states={row.states} />;
-    case "next":
-      return text === DASH ? <span className="text-mut">{DASH}</span> : <span className="font-medium text-sla">{text}</span>;
     case "vehicle":
       return row.vehicle ? (
         <span className="flex flex-col leading-tight">
@@ -845,10 +753,13 @@ function Cell({ column, row }: { column: Col; row: Row }) {
       ) : (
         <span className="text-mut">{DASH}</span>
       );
-    case "st":
-      return <StProgress name={val(row.onboarding, "er", "erName")} results={stResults(row)} />;
     case "repair":
-      return row.repair ? <RepairBadge repair={row.repair} compact className="" /> : <span className="text-mut">{DASH}</span>;
+      if (row.repair) return <RepairBadge repair={row.repair} compact className="" />;
+      return row.vehicle ? (
+        <span className="rounded-full bg-st-live px-2 py-0.5 text-12 font-medium text-st-live-ink">{text}</span>
+      ) : (
+        <span className="text-mut">{DASH}</span>
+      );
     case "driverStatus":
       if (!row.registry) return <span className="text-mut">{DASH}</span>;
       return row.registry.active ? (

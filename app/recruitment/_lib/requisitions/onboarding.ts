@@ -63,7 +63,7 @@ export function isSection(v: unknown): v is OnboardingSection {
   return typeof v === "string" && (SECTIONS as readonly string[]).includes(v);
 }
 
-export type SuggestKey = "rcName" | "zone" | "kaName" | "trainingSite" | "erName";
+export type SuggestKey = "rcName";
 
 export type FieldKind = "text" | "tel" | "date" | "select" | "number" | "textarea" | "combo";
 
@@ -77,6 +77,8 @@ export interface FieldSpec {
   wide?: boolean;
   /** โชว์อย่างเดียว — ฟอร์มไม่มีช่อง เซิร์ฟเวอร์คงค่าเดิมไว้ (ปลด/ลาออกทำที่หน้าผู้สมัครของ RC เท่านั้น) */
   readOnly?: boolean;
+  /** ไม่มีช่องในฟอร์ม — เซิร์ฟเวอร์ลงชื่อผู้บันทึก (user profile จาก session) ทุกครั้งที่บันทึกส่วนนี้ (KA/ST ที่ดูแล · Bew 4 พ.ย. 2569) */
+  byUser?: boolean;
   /** มีช่องนี้เฉพาะเมื่อช่องอื่นเป็นค่านี้ (เช่น วันอบรม Co-Driver เมื่อเลือก “อบรม”) · ไม่ตรง = ฟอร์มซ่อน เซิร์ฟเวอร์ทิ้ง */
   when?: { key: string; value: string };
   /** โผล่เมื่อช่องนี้มีค่าแล้ว (กรอกทีละครั้ง: ครั้งที่ 2 โผล่หลังลงผลครั้งที่ 1) · ช่องที่มีค่าอยู่แล้วโผล่เสมอ ไม่ถูกทิ้ง */
@@ -154,10 +156,8 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
   ka: {
     id: "ka",
     fields: [
-      { key: "zone", label: "Zone", kind: "combo", suggest: "zone" },
-      { key: "kaName", label: "KA ที่ดูแล", kind: "combo", suggest: "kaName" },
-      { key: "trainerPhone", label: "เบอร์ครูฝึก", kind: "tel" },
-      { key: "trainingSite", label: "สถานที่ฝึก", kind: "combo", suggest: "trainingSite" },
+      /* Zone / เบอร์ครูฝึก / สถานที่ฝึก เอาออกแล้ว (Bew 4 พ.ย. 2569) — ค่าเดิมในฐานถูกทิ้งเมื่อบันทึกครั้งถัดไป */
+      { key: "kaName", label: "KA ที่ดูแล", kind: "text", byUser: true },
       { key: "coDriver", label: "อบรม Co-Driver", kind: "select", options: CO_DRIVER },
       { key: "coDriverOn", label: "วันอบรม Co-Driver", kind: "date", when: CO_DRIVER_TRAIN },
       { key: "coDriverResult", label: "ผล Co-Driver", kind: "select", options: PASS_FAIL, when: CO_DRIVER_TRAIN },
@@ -169,7 +169,7 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
     fields: [
       /* 3 ครั้งตามรอบติดตามเดิม (Day 1/4/8 ในไฟล์ — คีย์คงชื่อเดิม) ตั้งชื่อตามสิ่งที่ทำ วันเป็นคำใบ้ในฟอร์ม
          · ครั้งถัดไปโผล่หลังลงผลครั้งก่อน · ผลครั้งสุดท้ายคือสรุปความพร้อม */
-      { key: "erName", label: "ST ที่ดูแล", kind: "combo", suggest: "erName" },
+      { key: "erName", label: "ST ที่ดูแล", kind: "text", byUser: true },
       /* วันที่ตรวจจริง (`dayNOn`) — ST ลงเองได้ เพราะวันจริงไม่ตรงวันที่ 1/4/8 เสมอ · ว่าง = ใช้วันตามกำหนดจากวันเริ่มฝึก */
       { key: "day1", label: "ตรวจวันแรก · Alc./สาร", kind: "select", options: DAY1_RESULTS, required: true },
       { key: "day1On", label: "วันที่ตรวจวันแรก", kind: "date", day: 1, past: true },
