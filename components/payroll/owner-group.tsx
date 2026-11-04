@@ -1,0 +1,374 @@
+"use client";
+
+import { ChevronDown, Download, TriangleAlert } from "lucide-react";
+
+import {
+  emptyRecord,
+  lateDays,
+  needsChasing,
+  STAGE_LABEL,
+  STAGE_TONE,
+  STAGE_URGENCY,
+  tallyOwner,
+  type IntakeRecord,
+} from "@/lib/payroll/intake-status";
+import { KIND_LABEL, kindOf, type ItemKind } from "@/lib/payroll/classify";
+import type { IntakeCategory, IntakeItem, IntakeOwner } from "@/lib/payroll/registry";
+import { CATEGORY_ORDER, dueDaysOf } from "@/lib/payroll/registry";
+import type { PeriodRef } from "@/lib/payroll/period";
+
+/**
+ * หนึ่งเจ้าของข้อมูล = หนึ่งกล่อง — แถวข้างในคือของที่ฝ่ายนั้นต้องส่งในรอบนี้
+ *
+ * **จัดกลุ่มตามคนที่ต้องตาม ไม่ใช่ตามประเภทเงิน** เพราะงานจริงของคนทำเงินเดือนคือ
+ * โทรตามเป็นรายฝ่าย ไม่ใช่ไล่ทีละรายการข้ามฝ่ายไปมา · ข้อมูลยืนยันเรื่องนี้ด้วย:
+ * อัตราส่งตรงกำหนดเกาะกลุ่มตามฝ่ายชัดมาก (ยานยนต์ 0% · HR C&B 54%)
+ *
+ * **หัวกล่องบอกจำนวนที่ต้องตามก่อนบอกความคืบหน้า** — คนเปิดหน้านี้มาหาว่า
+ * “เหลือตามใครบ้าง” ไม่ได้มาหาว่า “ทำไปกี่เปอร์เซ็นต์แล้ว”
+ *
+ * **ข้างในแบ่งเป็นหมวดอีกชั้น** — ฝ่ายจัดส่งมี 12 รายการซึ่งเกินกว่าที่คนจะกวาดตา
+ * เป็นรายชิ้นได้ และของจริงที่คนคุยกันคือก้อน ("ค่าล่วงเวลาสี่ลูกค้ายังไม่มาเลย")
+ * ไม่ใช่รายชิ้น · ฝ่ายที่มีหมวดเดียวจะไม่มีหัวหมวดมาคั่นให้รำคาญ (ผู้ใช้สั่ง 14 ต.ค. 2569)
+ */
+export function OwnerGroup({
+  owner,
+  items,
+  period,
+  records,
+  now,
+  open,
+  onToggle,
+  activeId,
+  onPick,
+  templateHref,
+  action,
+}: {
+  owner: IntakeOwner;
+  items: IntakeItem[];
+  period: PeriodRef;
+  records: Map<string, IntakeRecord>;
+  now: Date;
+  open: boolean;
+  onToggle: () => void;
+  activeId: string | null;
+  onPick: (item: IntakeItem) => void;
+  /** ลิงก์ดาวน์โหลดแบบฟอร์มของรายการหนึ่ง */
+  templateHref: (item: IntakeItem) => string;
+  /** ปุ่มประจำกลุ่ม (เช่น แจ้งฝ่ายทางอีเมล) — วางข้างหัวกล่อง ไม่ซ้อนในปุ่มพับ */
+  action?: React.ReactNode;
+}) {
+  const sum = tallyOwner(items, period, records, now);
+  const dueDays = dueDaysOf(owner);
+
+  /* ของที่ต้องตามขึ้นก่อนเสมอ ของที่ผ่านแล้วไปท้าย — ลำดับในทะเบียนไม่ช่วยอะไร
+     เมื่อเหลือของต้องตามอยู่ 3 ชิ้นในกลุ่มที่มี 12 รายการ */
+  const sorted = [...items].sort((a, b) => {
+    const ra = records.get(a.id) ?? emptyRecord(a.id);
+    const rb = records.get(b.id) ?? emptyRecord(b.id);
+    const byStage = STAGE_URGENCY[ra.stage] - STAGE_URGENCY[rb.stage];
+    if (byStage !== 0) return byStage;
+    const la = lateDays(a, period, ra, now);
+    const lb = lateDays(b, period, rb, now);
+    if (la !== lb) return lb - la;
+    return a.id.localeCompare(b.id);
+  });
+
+  /* **หมวดเรียงตามลำดับที่เจ้าของงานกำหนดไว้ใน `CATEGORY_ORDER` เสมอ** ไม่เรียงตาม
+     ความด่วน — ลำดับที่ขยับไปมาตามสถานะทำให้คนที่เปิดหน้านี้ทุกเดือนต้องไล่หาใหม่ทุกครั้ง
+     ส่วนความด่วนยังเห็นได้จากตัวนับบนหัวหมวด และลำดับของรายชิ้นข้างในหมวด */
+  const byCategory = new Map<IntakeCategory, IntakeItem[]>();
+  for (const item of sorted) {
+    const bucket = byCategory.get(item.category);
+    if (bucket) bucket.push(item);
+    else byCategory.set(item.category, [item]);
+  }
+  const groups = CATEGORY_ORDER.filter((category) => byCategory.has(category)).map(
+    (category) => ({ category, items: byCategory.get(category)! }),
+  );
+
+  return (
+    <section
+      id={`owner-${owner}`}
+      className="overflow-hidden rounded-box border border-line bg-base-100 scroll-mt-4"
+    >
+      <div className="flex items-center transition-colors hover:bg-base-200/50">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-left"
+      >
+        <ChevronDown
+          size={15}
+          strokeWidth={2}
+          aria-hidden
+          className={`flex-none text-mut transition-transform ${open ? "" : "-rotate-90"}`}
+        />
+
+        <h2 className="text-13-5 font-semibold">{owner}</h2>
+
+        <span className="font-mono text-11-5 text-mut tabular-nums">
+          กำหนดส่งวันที่ {dueDays.join(" และ ")}
+        </span>
+
+        {sum.chasing > 0 ? (
+          <span className="flex items-center gap-1 rounded-field bg-sla/12 px-2 py-0.5 text-12 font-medium text-sla">
+            <TriangleAlert size={12} strokeWidth={2} aria-hidden />
+            ต้องตาม {sum.chasing}
+          </span>
+        ) : null}
+
+        {/* คนละตัวนับกับ “ต้องตาม” — อันนี้ลูกบอลอยู่ที่ HR ไม่ใช่ที่ฝ่ายนี้ */}
+        {sum.awaitingReview > 0 ? (
+          <span className="rounded-field bg-warning/15 px-2 py-0.5 text-12 font-medium text-warning">
+            รอตรวจ {sum.awaitingReview}
+          </span>
+        ) : null}
+
+        <span className="ml-auto flex items-center gap-2.5">
+          <span className="font-mono text-12-5 tabular-nums">
+            <span className="font-semibold text-primary">{sum.passed}</span>
+            <span className="text-mut">/{sum.total} ผ่าน</span>
+          </span>
+          <Bar passed={sum.passed} total={sum.total} />
+        </span>
+      </button>
+      {action ? <div className="flex-none pr-3">{action}</div> : null}
+      </div>
+
+      {open ? (
+        <ul className="border-t border-line">
+          {groups.map((group) => (
+            <li key={group.category}>
+              {/* ฝ่ายที่มีหมวดเดียว ไม่ต้องมีหัวหมวดมาคั่น — มันไม่ได้แยกอะไรออกจากอะไร */}
+              {groups.length > 1 ? (
+                <GroupHead
+                  category={group.category}
+                  items={group.items}
+                  period={period}
+                  records={records}
+                  now={now}
+                />
+              ) : null}
+              <ul>
+          {group.items.map((item) => {
+            const record = records.get(item.id) ?? emptyRecord(item.id);
+            const late = lateDays(item, period, record, now);
+            const chase = needsChasing(item, period, record, now);
+
+            return (
+              <li
+                key={item.id}
+                /* ลิงก์ดาวน์โหลดเป็นพี่น้องกับปุ่ม ไม่ใช่ลูกของปุ่ม — <a> ซ้อนใน
+                   <button> เป็น HTML ที่ไม่ถูกต้อง และคีย์บอร์ดจะเข้าไม่ถึงลิงก์ */
+                className={`flex items-center border-b border-line/60 transition-colors last:border-b-0 ${
+                  activeId === item.id ? "bg-soft/70" : "hover:bg-base-200/40"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onPick(item)}
+                  aria-current={activeId === item.id}
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 py-2.5 pl-4 text-left"
+                >
+                  <span className="font-mono text-11-5 text-mut tabular-nums">
+                    {item.id}
+                  </span>
+
+                  <span className="min-w-0 flex-1 truncate text-13">{item.title}</span>
+
+                  <KindChip kind={kindOf(item.id)} />
+
+                  {/* ลายเซ็นสองชุด: ใครอัปโหลด และใครตรวจผ่าน — **ต้องเห็นทั้งคู่**
+                      เพราะเป็นคนละคนคนละเวลา ถ้าเหลือชุดเดียวจะตอบไม่ได้ว่าของที่
+                      ผ่านไปแล้วใครเป็นคนส่งมา หรือใครเป็นคนรับผิดชอบการผ่าน
+                      แถวที่ถูกตีกลับใช้ `updatedAt/updatedBy` เพราะ `receivedAt`
+                      ถูกล้างไปแล้วตอนตีกลับ */}
+                  {record.receivedBy ? (
+                    <Stamp
+                      verb="อัปโหลด"
+                      at={record.receivedAt}
+                      by={record.receivedBy}
+                    />
+                  ) : null}
+
+                  {record.passedBy ? (
+                    <Stamp
+                      verb="ผ่าน"
+                      at={record.passedAt}
+                      by={record.passedBy}
+                      tone="text-primary"
+                    />
+                  ) : null}
+
+                  {record.stage === "returned" && record.updatedBy ? (
+                    <Stamp
+                      verb="ตีกลับ"
+                      at={record.updatedAt}
+                      by={record.updatedBy}
+                      tone="text-sla"
+                    />
+                  ) : null}
+
+                  {/* ช้ากี่วันสำคัญกว่าวันครบกำหนด — คนอ่านตัดสินใจจากส่วนต่าง ไม่ใช่จากวันที่ */}
+                  {chase && late > 0 ? (
+                    <span className="font-mono text-12 font-medium text-sla tabular-nums">
+                      ช้า {late} วัน
+                    </span>
+                  ) : record.stage === "passed" && late > 0 ? (
+                    <span className="font-mono text-12 text-mut tabular-nums">
+                      ส่งช้า {late} วัน
+                    </span>
+                  ) : null}
+
+                  <span
+                    className={`rounded-field px-2 py-0.5 text-12 font-medium ${STAGE_TONE[record.stage]}`}
+                  >
+                    {STAGE_LABEL[record.stage]}
+                  </span>
+                </button>
+
+                <a
+                  href={templateHref(item)}
+                  title={`ดาวน์โหลดแบบฟอร์ม “${item.title}”`}
+                  className="flex flex-none items-center gap-1 px-4 py-2.5 text-12 text-mut transition-colors hover:text-primary"
+                >
+                  <Download size={13} strokeWidth={1.9} aria-hidden />
+                  <span className="sr-only sm:not-sr-only">แบบฟอร์ม</span>
+                </a>
+              </li>
+            );
+          })}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * หัวหมวดในกล่องฝ่าย — **นับของที่ต้องตามในหมวดนั้นด้วย** ไม่ใช่บอกแค่ชื่อหมวด
+ * เพราะเหตุผลเดียวที่หัวหมวดมีค่าคือทำให้ตอบได้ทันทีว่า "ค่าล่วงเวลายังค้างทั้งก้อน"
+ * หรือ "ค้างชิ้นเดียว" โดยไม่ต้องไล่นับแถวเอง
+ */
+function GroupHead({
+  category,
+  items,
+  period,
+  records,
+  now,
+}: {
+  category: IntakeCategory;
+  items: IntakeItem[];
+  period: PeriodRef;
+  records: Map<string, IntakeRecord>;
+  now: Date;
+}) {
+  const sum = tallyOwner(items, period, records, now);
+
+  return (
+    <div className="flex items-center gap-x-2.5 gap-y-1 border-b border-line/60 bg-base-200/35 px-4 py-1.5">
+      <h3 className="text-12 font-semibold text-mut">{category}</h3>
+      <span className="font-mono text-11-5 text-mut tabular-nums">{items.length} รายการ</span>
+      {sum.chasing > 0 ? (
+        <span className="font-mono text-11-5 font-medium text-sla tabular-nums">
+          ต้องตาม {sum.chasing}
+        </span>
+      ) : null}
+      {sum.awaitingReview > 0 ? (
+        <span className="font-mono text-11-5 font-medium text-warning tabular-nums">
+          รอตรวจ {sum.awaitingReview}
+        </span>
+      ) : null}
+      {sum.passed === sum.total ? (
+        <span className="font-mono text-11-5 text-primary tabular-nums">ผ่านครบ</span>
+      ) : null}
+    </div>
+  );
+}
+
+/* ป้ายทิศทางเงินของรายการ — "ผสม" กับ "รอยืนยัน" ต้องเด่น เพราะเป็นสองกลุ่มที่
+   คนตรวจต้องเปิดดูรายช่องก่อนรับเข้ารอบ ไม่ใช่ดูแค่ยอดรวม
+
+   **คำบนป้ายต้องเป็นคำนาม ไม่ใช่คำกริยา** — ป้ายเดิมเขียนว่า "เพิ่ม" / "หัก" เฉย ๆ
+   ซึ่งอยู่ในแถวที่มีปุ่มอื่นด้วย คนอ่านจึงเข้าใจว่าเป็นปุ่ม "เพิ่ม(ไฟล์)" (ผู้ใช้สะดุด
+   จริงเมื่อ 14 ต.ค. 2569) · ป้ายนี้บอกว่าเงินของรายการนี้ไปทางไหนในสลิป ไม่ใช่สิ่งที่กดได้ */
+const KIND_TONE: Record<ItemKind, string> = {
+  ฐาน: "border-line text-mut",
+  เพิ่ม: "border-primary/30 text-primary",
+  หัก: "border-alert/40 text-alert",
+  ผสม: "border-alert/40 bg-alert/8 text-alert font-medium",
+  รอยืนยัน: "border-warning/50 bg-warning/10 text-warning font-medium",
+};
+
+/** คำบนป้าย — สั้นพอจะอยู่ในแถวได้ แต่ยังเป็นคำนามที่อ่านแล้วรู้ว่าพูดถึงเงิน */
+const KIND_CHIP: Record<ItemKind, string> = {
+  ฐาน: "ไม่ใช่เงิน",
+  เพิ่ม: "เงินเพิ่ม",
+  หัก: "เงินหัก",
+  ผสม: "เพิ่ม+หัก",
+  รอยืนยัน: "รอยืนยันทิศทาง",
+};
+
+function KindChip({ kind }: { kind: ItemKind }) {
+  return (
+    <span
+      className={`hidden rounded-field border px-1.5 py-px text-11 sm:inline ${KIND_TONE[kind]}`}
+      title={KIND_LABEL[kind]}
+    >
+      {KIND_CHIP[kind]}
+    </span>
+  );
+}
+
+/** `อัปโหลด 9 ต.ค. 14:30 โดย สมหญิง` — ใครทำอะไรเมื่อไหร่ในบรรทัดเดียว */
+function Stamp({
+  verb,
+  at,
+  by,
+  tone = "text-mut",
+}: {
+  verb: string;
+  at: string | undefined;
+  by: string;
+  tone?: string;
+}) {
+  return (
+    <span className={`flex items-center gap-1.5 text-11-5 ${tone}`}>
+      <span className="font-mono tabular-nums">
+        {verb} {stamp(at ?? "")}
+      </span>
+      <span>โดย {by}</span>
+    </span>
+  );
+}
+
+/**
+ * วันเวลาแบบสั้น เช่น `9 ต.ค. 14:30`
+ *
+ * **มีเวลาด้วย ไม่ใช่แค่วันที่** — ของที่ส่งใหม่หลังถูกตีกลับมักเกิดในวันเดียวกัน
+ * ถ้าเหลือแต่วันที่จะดูไม่ออกว่ารอบไหนคือรอบล่าสุด
+ */
+function stamp(iso: string): string {
+  if (!iso) return "";
+  const at = new Date(iso);
+  return `${at.toLocaleDateString("th-TH", { day: "numeric", month: "short" })} ${at.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function Bar({ passed, total }: { passed: number; total: number }) {
+  const pct = total === 0 ? 0 : Math.round((passed / total) * 100);
+  return (
+    <span
+      aria-hidden
+      className="hidden h-1.5 w-20 flex-none overflow-hidden rounded-full bg-base-200 sm:block"
+    >
+      <span
+        className="block h-full rounded-full bg-primary transition-[width]"
+        style={{ width: `${pct}%` }}
+      />
+    </span>
+  );
+}

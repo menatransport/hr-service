@@ -46,6 +46,8 @@ next-env.d.ts
 
 # สำรองข้อมูลจาก MongoDB — มีข้อมูลส่วนบุคคล ห้าม commit
 /backups/
+# ผลการตรวจของ verify:payroll — สร้างใหม่ได้ทุกครั้ง ไม่ commit
+.verify/
 
 # agent skills ภายนอก (Vercel react-best-practices · MongoDB) — วิธีติดตั้งอยู่ใน .claude/CLAUDE.md หัวข้อ "Agent skills" · ไม่ commit
 .claude/skills/
@@ -53,5 +55,6 @@ next-env.d.ts
 # ไฟล์ของ Claude / agent และสคริปต์ seed — เก็บไว้ในเครื่อง ไม่ขึ้น git (Bew สั่ง 10 ต.ค. 2569)
 /.claude/
 /AGENTS.md
+/CLAUDE.md
 /seed_*.mjs
 /.perf/

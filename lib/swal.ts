@@ -109,6 +109,11 @@ export function toastError(title: string, text?: string) {
   return toastBase.fire({ icon: "error", title, text, timer: 5000 });
 }
 
+/** เตือน — สำเร็จแต่ไม่ครบอย่างที่ผู้ใช้คาด (ค้างนานกว่าปกติให้อ่านทัน) */
+export function toastWarn(title: string, text?: string) {
+  return toastBase.fire({ icon: "warning", title, text, timer: 6000 });
+}
+
 export function toastInfo(title: string, text?: string) {
   return toastBase.fire({ icon: "info", title, text });
 }

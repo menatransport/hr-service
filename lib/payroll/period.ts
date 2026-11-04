@@ -66,3 +66,54 @@ export function isFuture({ year, month }: PeriodRef): boolean {
 export function isSelectable(period: PeriodRef): boolean {
   return !isLocked(period) && !isFuture(period);
 }
+
+/** `2026-09` → รอบ (พ.ศ.) · รูปแบบไม่ตรงคืน `null` */
+export function periodFromCode(code: string | null | undefined): PeriodRef | null {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(code ?? "");
+  if (!match) return null;
+  return { year: Number(match[1]) + BE_OFFSET, month: Number(match[2]) - 1 };
+}
+
+/**
+ * รอบเริ่มต้นของหน้า เมื่อมี `?period=` มาจากลิงก์ในอีเมล — รูปแบบผิดหรือเลือกไม่ได้
+ * (ปิดแล้ว/ยังมาไม่ถึง) ให้ถอยกลับไปรอบปัจจุบัน ไม่ใช่พาไปเปิดรอบที่ทำอะไรไม่ได้
+ */
+export function initialPeriod(code: string | null | undefined): PeriodRef {
+  const wanted = periodFromCode(code);
+  return wanted && isSelectable(wanted) ? wanted : CURRENT_PERIOD;
+}
+
+/**
+ * รอบที่ **เขียนข้อมูลได้** — ต้องเรียกที่เซิร์ฟเวอร์ทุกเส้นที่เขียนทะเบียน
+ *
+ * `isLocked`/`isSelectable` เดิมถูกใช้แค่ในหน้าจอ ซึ่งกันได้เฉพาะคนที่กดผ่านหน้าจอ —
+ * ยิง `POST /api/payroll/parse` หรือ `PATCH /api/payroll/intake` ตรง ๆ ด้วย
+ * `2026-03` (รอบที่ปิดแล้ว) หรือ `2099-01` (รอบที่ไม่มีจริง) ก็อัปโหลดเข้าได้
+ * และได้แถวขยะในคอลเลกชันที่ไม่มีใครเห็นบนหน้าจอ
+ *
+ * ยังอ่านจาก `LOCKED_PERIODS` + `CURRENT_PERIOD` ตามเดิม **ไม่สร้างคอลเลกชัน
+ * `payroll_periods`** ซึ่งเป็นงานที่ตั้งใจพักไว้
+ */
+export type WritablePeriod =
+  | { ok: true; period: PeriodRef }
+  | { ok: false; message: string };
+
+export function writablePeriod(code: string | null | undefined): WritablePeriod {
+  const period = periodFromCode(code);
+  if (!period) {
+    return { ok: false, message: "ระบุ period เป็นรูปแบบ YYYY-MM เช่น 2026-09" };
+  }
+  if (isLocked(period)) {
+    return {
+      ok: false,
+      message: `รอบ ${periodLabel(period)} ปิดแล้ว — เปิดดูย้อนหลังได้ แต่ส่งของเข้ารอบนี้ไม่ได้อีก`,
+    };
+  }
+  if (isFuture(period)) {
+    return {
+      ok: false,
+      message: `รอบ ${periodLabel(period)} ยังมาไม่ถึง — ส่งของเข้าได้เมื่อถึงรอบนั้นแล้ว`,
+    };
+  }
+  return { ok: true, period };
+}
