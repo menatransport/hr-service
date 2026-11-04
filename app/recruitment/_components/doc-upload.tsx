@@ -61,6 +61,14 @@ export const EMPTY_ID_CARD: IdCardDraft = { nationalId: "", idCardExpiry: "", so
 /** ช่องใบขับขี่ที่อ่านข้อมูลจากรูปให้เอง */
 const LICENSE_SLOT = "license_front";
 
+/**
+ * ช่องรูปหน้าตรง — ใช้ติดใบสมัคร/ทะเบียนประวัติ ต้องเป็นรูปแบบทางการ (Bew 4 พ.ย. 2569)
+ * คำอธิบายกับกฎเป็นของโค้ด ไม่อ่าน `slot.hint` จากฐาน เพราะค่าเดิมในฐานยังบอก "ถ่ายเซลฟี่ได้เลย"
+ */
+const PORTRAIT_SLOT = "portrait";
+const PORTRAIT_HINT = "แบบรูปติดบัตร ทางการ เห็นหน้าชัด";
+const PORTRAIT_RULES = ["หน้าตรง", "ไม่สวมแว่นดำ", "ไม่สวมหมวก", "แต่งกายเรียบร้อย"];
+
 /** ชนิด · เลขที่ · วันหมดอายุ ที่อ่านจากรูปใบขับขี่ — ลง `Application.documents` เหมือนบัตร */
 export interface LicenseDraft {
   licenseType: string;
@@ -225,6 +233,7 @@ export function DocUpload({
             {onLicense && slot.id === LICENSE_SLOT && (files[slot.id] || licenseState === "reading") ? (
               <LicenseFields value={license} onChange={onLicense} readState={licenseState} step={licenseStep} />
             ) : null}
+            {slot.id === PORTRAIT_SLOT && !files[slot.id] ? <PortraitRules /> : null}
           </DocRow>
         ))}
       </div>
@@ -388,7 +397,9 @@ function DocRow({
                   ? "กำลังอัปโหลด…"
                   : done
                     ? "แนบแล้ว — แตะรูปเพื่อดู · แตะตรงนี้เพื่อถ่ายใหม่"
-                    : slot.hint}
+                    : slot.id === PORTRAIT_SLOT
+                      ? PORTRAIT_HINT
+                      : slot.hint}
             </span>
           </span>
 
@@ -437,6 +448,23 @@ function DocRow({
 
       {children}
     </div>
+  );
+}
+
+/** กฎรูปหน้าตรง — ชิปสั้น ๆ ใต้ช่อง เห็นก่อนกดถ่าย · แนบแล้วซ่อน */
+function PortraitRules() {
+  return (
+    <ul aria-label="ข้อกำหนดรูปถ่าย" className="flex flex-wrap gap-1.5">
+      {PORTRAIT_RULES.map((rule) => (
+        <li
+          key={rule}
+          className="flex items-center gap-1 rounded-selector bg-soft px-2 py-0.5 text-11-5 font-medium text-ink"
+        >
+          <Check size={11} strokeWidth={2.6} aria-hidden className="text-primary" />
+          {rule}
+        </li>
+      ))}
+    </ul>
   );
 }
 

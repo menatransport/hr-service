@@ -157,6 +157,9 @@
    * ที่เลื่อนผ่านข้างใต้จะทะลุขึ้นมา
    */
   --color-alert-soft: color-mix(in oklab, #b3261e 12%, #fff);
+  /** ย้ายไปรถร่วม (ทะเบียน พจส.) — คู่ของ `alert` ที่ใช้กับพ้นสภาพ · `-soft` ทึบสนิทเหตุผลเดียวกัน */
+  --color-transfer: #7c3aed;
+  --color-transfer-soft: color-mix(in oklab, #7c3aed 12%, #fff);
   --color-sla: #c2410c;
 
   /* neutral placeholders (avatar / thumbnail) straight from the design doc */
@@ -360,6 +363,8 @@
   --color-soft: color-mix(in oklab, #14b8a6 15%, #161c1b);
   --color-alert: #ff7a70;
   --color-alert-soft: color-mix(in oklab, #ff7a70 13%, #161c1b);
+  --color-transfer: #b794f6;
+  --color-transfer-soft: color-mix(in oklab, #b794f6 14%, #161c1b);
   --color-sla: #f0a35e;
 
   --color-ph-avatar: #2a3432;

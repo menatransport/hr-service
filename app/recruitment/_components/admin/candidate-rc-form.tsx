@@ -110,6 +110,8 @@ export function CandidateRcForm({
   const startState = trainingState(start);
   /* เลือก “ฝึกงาน” = เข้าทะเบียนประวัติทันที (Bew 3 พ.ย. 2569) — ทะเบียนผูกกับรหัส พจส. จึงต้องมีรหัสก่อน */
   const needsCode = target === "training";
+  /* รอฝึกงาน = ยังไม่ออกรหัส ไม่ต้องเห็นช่องนี้ (Bew 4 พ.ย. 2569) · ค่าเดิมยังส่งกลับไปเหมือนเดิม */
+  const showCode = target !== "interview_passed";
   const ready =
     Boolean(rqId) && (!target || Boolean(startState)) && (!needsCode || Boolean(drivercode.trim())) && !loading;
 
@@ -213,6 +215,7 @@ export function CandidateRcForm({
       ) : (
         <div className="flex flex-col gap-4 border-t border-line pt-3.5">
           <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
+            {showCode ? (
             <div className="flex flex-col gap-1">
               <TextField
                 id="rc-drivercode"
@@ -246,6 +249,7 @@ export function CandidateRcForm({
                 </a>
               </div>
             </div>
+            ) : null}
             <DateField
               id="rc-trainingStartOn"
               label="วันเริ่มฝึก"

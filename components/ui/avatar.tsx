@@ -57,6 +57,8 @@ const tones = {
   default:
     "bg-linear-to-br from-ph-thumb to-ph-avatar text-ink/75 ring-line group-hover:text-ink group-hover:ring-primary/35",
   alert: "bg-alert-soft text-alert ring-alert/35 group-hover:text-alert group-hover:ring-alert/60",
+  transfer:
+    "bg-transfer-soft text-transfer ring-transfer/35 group-hover:text-transfer group-hover:ring-transfer/60",
 };
 
 export function Avatar({

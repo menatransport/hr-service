@@ -55,6 +55,8 @@ export interface DriverDto {
     plant: string | null;
   } | null;
   resignation: {
+    /** `transfer` = ย้ายไปรถร่วม */
+    kind: "resign" | "transfer";
     date: string;
     reasonCode: string;
     reasonLabel: string;
@@ -130,6 +132,7 @@ export function toDriverDto(d: DriverProfileRecord): DriverDto {
       : null,
     resignation: d.resignation
       ? {
+          kind: d.resignation.kind,
           date: d.resignation.dateISO,
           reasonCode: d.resignation.reasonCode,
           reasonLabel: d.resignation.reasonLabel,

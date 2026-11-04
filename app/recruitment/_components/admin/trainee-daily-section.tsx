@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ClipboardCopy, Loader2 } from "lucide-react";
 
 import { DataError } from "@/components/ui/data-error";
@@ -54,7 +54,8 @@ const placeholder = (p: TraineePerson, own?: TraineeBoardDriver): TraineeBoardDr
  * — โหลดครั้งเดียวจาก `pool` เปลี่ยนเดือนที่แจ้งแล้วตารางตามทันทีโดยไม่ต้องยิงใหม่
  */
 export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; people: TraineePerson[] }) {
-  const [open, setOpen] = useState(false);
+  /* เปิดตารางรายวันไว้ตั้งแต่แรก (Bew 4 พ.ย. 2569) */
+  const [open, setOpen] = useState(true);
   const [reporting, setReporting] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +92,23 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
       setError(err instanceof Error ? err.message : "โหลดตารางรายวันไม่สำเร็จ");
     }
   }
+
+  /* โหลดตอนเปิดหน้า และโหลดใหม่เมื่อรายชื่อคนฝึกงานเปลี่ยน */
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    requestJson<Data>(`/api/recruitment/trainee-board?${new URLSearchParams({ codes })}`, {}, "โหลดตารางรายวันไม่สำเร็จ")
+      .then((d) => {
+        if (alive) setData(d);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : "โหลดตารางรายวันไม่สำเร็จ");
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codes]);
 
   function toggle() {
     const next = !open;

@@ -160,9 +160,12 @@ export function toRequisition(doc: WithId<RequisitionDoc>): Requisition {
 
 /* ---------------------------------------------------------------- เลขที่คำขอ */
 
-/** `yymm` ของเดือนนี้ตามเวลาไทย — ปี **ค.ศ.** สองหลักท้าย เหมือนเลขที่บันทึกเคส */
-function currentYymm(): string {
-  const [year, month] = todayInBangkok().split("-");
+/**
+ * `yymm` ของ**เดือนที่แจ้งสรรหา** (`requestedOn`) ไม่ใช่วันที่กดบันทึก — แจ้งย้อนหลังเดือนก่อน
+ * ก็ได้เลขของเดือนนั้นต่อจากใบล่าสุดของเดือน (Bew 4 พ.ย. 2569) · ปี **ค.ศ.** สองหลักท้าย
+ */
+function yymmOf(requestedOn: string): string {
+  const [year, month] = requestedOn.split("-");
   return `${year.slice(-2)}${month}`;
 }
 
@@ -173,8 +176,8 @@ function currentYymm(): string {
  * (นับเองด้วย `countDocuments` จะชนกันแน่นอน — เหตุผลเดียวกับ `nextCode()`
  * ใน `lib/record-cases.ts`)
  */
-async function reserveCodes(count: number): Promise<string[]> {
-  const yymm = currentYymm();
+async function reserveCodes(count: number, requestedOn: string): Promise<string[]> {
+  const yymm = yymmOf(requestedOn);
   const last = await nextSeq("recruitmentCounters", `requisitions:${yymm}`, count);
   const first = last - count + 1;
   return Array.from(
@@ -430,7 +433,10 @@ export async function createRequisitions(
   const replace =
     hireType === "replace"
       ? await (async () => {
-          const who = await person(input.replaceDrivercode, "พจส. ที่จะแทน");
+          /* ชื่อคนที่ถูกแทนยังไม่บังคับ (Bew 4 พ.ย. 2569) — ไม่เลือก = ทดแทนโดยไม่ระบุชื่อ */
+          const who = input.replaceDrivercode
+            ? await person(input.replaceDrivercode, "พจส. ที่จะแทน")
+            : { drivercode: "", name: "" };
           /* ช่อง “เหตุผลที่ต้องแทน” ถูกถอดออกจากฟอร์มตามคำสั่งเจ้าของงาน (29 ก.ย. 2026)
              — ใบใหม่เก็บ `reason` ว่าง · ใบเก่าที่มีรหัส master อยู่แล้วยังอ่านได้ตามเดิม */
           return {
@@ -467,7 +473,7 @@ export async function createRequisitions(
   };
 
   const slots = await readSlots(input, headcount);
-  const codes = await reserveCodes(headcount);
+  const codes = await reserveCodes(headcount, shared.requestedOn);
   const docs: RequisitionDoc[] = codes.map((code, i) => ({
     ...shared,
     ...slots[i],
@@ -586,7 +592,118 @@ export async function updateRequisition(
 
   if (patch.status !== undefined) return changeStatus(col, current, patch, by);
 
+  if (patch.details && typeof patch.details === "object")
+    return updateDetails(col, current, patch.details as unknown as Record<string, unknown>, by);
+
   throw new RequisitionError("ไม่มีข้อมูลที่จะแก้ไข");
+}
+
+/* ------------------------------------------------- แก้คำขอ + KA ทั้งก้อน */
+
+const same = (a: unknown, b: unknown) => (typeof a === "string" ? a.trim() : "") === (b ?? "");
+
+/**
+ * ฟอร์มขออัตราโหมดแก้ไข — ช่องเดียวกับตอนสร้าง + ครูฝึก/รถ (งานของ KA) บันทึกครั้งเดียว
+ * · ค่าที่ส่งมาเท่าเดิมเก็บตามเดิมโดยไม่ตรวจซ้ำ — ใบนำเข้าจากไฟล์ที่ลูกค้า/ตำแหน่งไม่อยู่ในรายการ
+ *   หรือครูฝึกที่ไม่มีรหัส ยังแก้ช่องอื่นได้ · **วันที่แจ้งแก้ไม่ได้** (ล็อก · Bew 4 พ.ย. 2569) เลขที่คำขอจึงคงเดิม
+ */
+async function updateDetails(
+  col: Collection<RequisitionDoc>,
+  current: WithId<RequisitionDoc>,
+  input: Record<string, unknown>,
+  by: string,
+): Promise<Requisition> {
+  if (current.status === "cancelled")
+    throw new RequisitionError("คำขอนี้ถูกยกเลิกไปแล้ว — เปิดรับอีกครั้งก่อนจึงจะแก้ไขได้");
+
+  const branchName = same(input.branch, current.branch) && current.branch ? current.branch : branch(input.branch);
+  const mixer = isMixerBranch(branchName);
+
+  const position: RequisitionPosition = !mixer
+    ? ("" as RequisitionPosition)
+    : current.position && same(input.position, current.position)
+      ? current.position
+      : oneOf<RequisitionPosition>(POSITIONS, input.position, "ตำแหน่ง");
+  const positionOther =
+    position !== OTHER
+      ? ""
+      : same(input.positionOther, current.positionOther) && current.positionOther
+        ? current.positionOther
+        : text(input.positionOther, "ชื่อตำแหน่ง");
+
+  const keepCustomer =
+    current.customer &&
+    branchName === (current.branch ?? "") &&
+    same(input.customer, current.customer) &&
+    same(input.customerOther, current.customerOther);
+  const customerSet = keepCustomer
+    ? { customer: current.customer, customerOther: current.customerOther ?? "" }
+    : mixer
+      ? customer(input.customer, input.customerOther)
+      : await branchCustomer(branchName, input.customer);
+
+  const hireType: HireType =
+    input.hireType === "replace" || input.hireType === "new_rate"
+      ? input.hireType
+      : input.hireType === "unspecified" && current.hireType === "unspecified"
+        ? "unspecified"
+        : (() => {
+            throw new RequisitionError("กรุณาเลือกประเภทการรับ");
+          })();
+
+  const replace: RequisitionDoc["replace"] =
+    hireType !== "replace"
+      ? null
+      : current.replace && same(input.replaceDrivercode, current.replace.drivercode)
+        ? current.replace
+        : {
+            ...(input.replaceDrivercode
+              ? await person(input.replaceDrivercode, "พจส. ที่จะแทน")
+              : { drivercode: "", name: "" }),
+            reason: "",
+            reasonLabel: "",
+            reasonNote: "",
+          };
+
+  const nextVehicle = same(input.vehicleCode, current.vehicle?.code) ? current.vehicle : await vehicle(input.vehicleCode);
+  /* ครูฝึกที่นำเข้าโดยไม่มีรหัส (`drivercode` ว่าง) ส่งค่าว่างกลับมา = คงชื่อเดิม */
+  const trainer = same(input.trainerDrivercode, current.trainer?.drivercode)
+    ? current.trainer
+    : input.trainerDrivercode
+      ? await person(input.trainerDrivercode, "ครูฝึก")
+      : null;
+
+  const set: Partial<RequisitionDoc> = {
+    branch: branchName,
+    position,
+    positionOther,
+    ...customerSet,
+    plant: mixer ? text(input.plant, "แพล้นท์") : "",
+    hireType,
+    replace,
+    vehicle: nextVehicle,
+    trainer,
+    note: text(input.note, "หมายเหตุ", MAX_NOTE, false),
+  };
+
+  const changed = [
+    set.branch !== (current.branch ?? "") && "สาขา",
+    (set.position !== (current.position ?? "") || set.positionOther !== (current.positionOther ?? "")) && "ตำแหน่ง",
+    (set.customer !== (current.customer ?? "") || set.customerOther !== (current.customerOther ?? "")) && "ลูกค้า",
+    set.plant !== (current.plant ?? "") && "แพล้นท์",
+    (set.hireType !== current.hireType || replace?.drivercode !== current.replace?.drivercode) &&
+      (replace ? `ทดแทน${replace.name ? ` ${replace.name}` : ""}` : "ประเภท"),
+    nextVehicle?.code !== current.vehicle?.code && (nextVehicle ? `รถ ${nextVehicle.code}` : "ถอดรถ"),
+    trainer?.drivercode !== current.trainer?.drivercode && (trainer ? `ครูฝึก ${trainer.name}` : "ถอดครูฝึก"),
+    set.note !== (current.note ?? "") && "หมายเหตุ",
+  ].filter((x): x is string => Boolean(x));
+
+  if (!changed.length) {
+    const row = toRequisition(current);
+    await attachMatchStatus([row]);
+    return row;
+  }
+  return apply(col, current, set, by, `แก้ไขคำขอ · ${changed.join(" · ")}`);
 }
 
 /* --------------------------------------------------------- ผูก/ปลด ผู้สมัคร */

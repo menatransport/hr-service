@@ -34,9 +34,11 @@ import {
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
 import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
-import { outcomeGroup, outcomeLabel, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { outcomeGroup, outcomeLabel, type OnboardingRecord, type Stage } from "@/app/recruitment/_lib/requisitions/onboarding";
 import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { OnboardingView, hubRows } from "@/app/recruitment/_components/admin/onboarding-view";
+import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
+import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
@@ -124,6 +126,8 @@ type Row = ApplicationSummary & {
   blacklistHit: BlacklistHit | null;
   /** วันเริ่มฝึกจาก RQ ที่ผูก (`Requisition.trainingStartOn`) — ว่าง = ไม่ผูก/ยังไม่กรอก */
   trainingStartOn: string;
+  /** เลขที่ JR ของคำขอที่ผูก — ว่าง = ยังไม่ผูก */
+  jrCode: string;
 };
 
 /**
@@ -149,6 +153,15 @@ const COLUMNS = [
     asc: "ก → ฮ",
     desc: "ฮ → ก",
     text: (a: Row) => a.fullName,
+  },
+  {
+    /* แยกจากใต้ชื่อมาเป็นคอลัมน์ในมุมมองรอฝึกงาน/ฝึกงาน — คัดลอกหรือกดเปิดฟอร์ม JR (Bew 4 พ.ย. 2569) */
+    id: "jr",
+    label: "เลขที่ JR",
+    width: "min-w-[130px]",
+    asc: "น้อย → มาก",
+    desc: "มาก → น้อย",
+    text: (a: Row) => a.jrCode || "—",
   },
   {
     id: "contactOwner",
@@ -278,8 +291,8 @@ const REASON_COLUMN: ColumnId = "exitReason";
 const BLACKLIST_COLUMN: ColumnId = "blacklist";
 const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
 
-/** คอลัมน์วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว */
-const TRAINING_COLUMN: ColumnId = "trainingStart";
+/** คอลัมน์ JR + วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว */
+const TRAINING_COLUMNS: ColumnId[] = ["jr", "trainingStart"];
 
 /**
  * ลำดับตั้งต้นของตาราง — **ใบล่าสุดอยู่บนสุดเสมอ** เรียงตามประทับเวลา
@@ -299,6 +312,9 @@ function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showT
   return [
     { header: "เลขที่ใบสมัคร", width: 14, kind: "code", value: (a) => a.ref },
     { header: "ชื่อ–นามสกุล", width: 28, value: (a) => a.fullName },
+    ...(showTraining
+      ? [{ header: "เลขที่ JR", width: 13, kind: "code", value: (a) => a.jrCode } satisfies XlsxColumn<Row>]
+      : []),
     { header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner },
     { header: "ประทับเวลา", width: 17, kind: "datetime", value: (a) => xlsxDate(a.createdAt) },
     { header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (a) => formatPhone(a.phone) },
@@ -413,8 +429,12 @@ function facetOf(
 type ColumnId = (typeof COLUMNS)[number]["id"];
 type Filters = Partial<Record<ColumnId, string[]>>;
 
-/** การ์ดที่ไม่ใช่สถานะใบสมัคร — แถวมาจากหน้าติดตามพนักงานใหม่ (อัตราว่าง · รับรถแล้ว) */
-export type HubView = "open" | "working";
+/** การ์ดที่ไม่ใช่สถานะใบสมัคร — แถวมาจากหน้าติดตามพนักงานใหม่ (อัตราว่าง · รอรับรถ · รับรถแล้ว) */
+export type HubView = "open" | "handover" | "working";
+
+/** การ์ด → แท็บของหน้าติดตาม · รอรับรถ = แท็บฝึกงานกรองสถานะรอรับรถ */
+const HUB_STAGE: Record<HubView, Stage> = { open: "open", handover: "training", working: "working" };
+const HUB_FILTERS: Partial<Record<HubView, Record<string, string[]>>> = { handover: { trainStatus: ["รอรับรถ"] } };
 
 export function CandidatesView({
   title,
@@ -490,18 +510,27 @@ export function CandidatesView({
     if (!hub) return [];
     const live = new Map(requisitions.map((r) => [r.id, r]));
     const appStatus = new Map(rows.map((a) => [a.id, a.status]));
-    return hub.records.map((r) => {
-      const next = { ...r, ...live.get(r.id) };
-      return next.match
-        ? { ...next, match: { ...next.match, status: appStatus.get(next.match.applicationId) ?? next.match.status } }
-        : next;
-    });
+    const known = new Set(hub.records.map((r) => r.id));
+    /* คำขอที่เพิ่งกดเพิ่มอัตราบนการ์ดรอสรรหา — ยังไม่อยู่ใน `hub` ต่อหัวรายการให้ก่อน */
+    const added = requisitions
+      .filter((r) => !known.has(r.id))
+      .map((r): OnboardingRecord => ({ ...r, onboarding: {}, atms: null }));
+    return [
+      ...added,
+      ...hub.records.map((r) => {
+        const next = { ...r, ...live.get(r.id) };
+        return next.match
+          ? { ...next, match: { ...next.match, status: appStatus.get(next.match.applicationId) ?? next.match.status } }
+          : next;
+      }),
+    ];
   }, [hub, requisitions, rows]);
   const hubCounts = useMemo(() => {
     if (!hub) return null;
     const list = hubRows(hubRecords, hub.repairs);
     return {
       open: list.filter((r) => r.stage === "open").length,
+      handover: list.filter((r) => r.waitHandover).length,
       working: list.filter((r) => r.stage === "working").length,
     };
   }, [hub, hubRecords]);
@@ -530,6 +559,7 @@ export function CandidatesView({
         blacklistHit:
           a.status === "pending_contact" ? findBlacklistHit(a, blacklistIndex) : null,
         trainingStartOn: rqByApplication.get(a.id)?.trainingStartOn ?? "",
+        jrCode: rqByApplication.get(a.id)?.code ?? "",
       })),
     [rows, blacklistIndex, rqByApplication],
   );
@@ -538,6 +568,9 @@ export function CandidatesView({
    * กล่องข้อมูล RC — ปุ่ม RC (ใบที่ผูกแล้ว) · คอลัมน์วันที่ฝึกงาน · เลือกสถานะ “รอฝึกงาน”/“ฝึกงาน”
    * (`target` — ต้องกรอกฟอร์มนี้ + เลือก RQ + วันเริ่มฝึกก่อน บันทึกแล้วค่อยเลื่อนสถานะ · Bew 22/25 ต.ค. 2569)
    */
+  /** ฟอร์มข้อมูล JR (`_id` ของคำขอ) — กดเลข JR ในคอลัมน์รอฝึกงาน/ฝึกงาน */
+  const [jrFor, setJrFor] = useState<string | null>(null);
+
   const [rcFor, setRcFor] = useState<{ application: ApplicationSummary; target: RcTarget | null } | null>(() => {
     if (!initialRc || !initialTerm) return null;
     const application = rows.find((a) => a.ref.toUpperCase() === initialTerm.trim().toUpperCase());
@@ -606,7 +639,7 @@ export function CandidatesView({
         (c) =>
           (c.id !== REASON_COLUMN || showReason) &&
           (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
-          (c.id !== TRAINING_COLUMN || showTraining),
+          (!TRAINING_COLUMNS.includes(c.id) || showTraining),
       ),
     [showReason, showBlacklist, showTraining],
   );
@@ -790,7 +823,22 @@ export function CandidatesView({
 
       {view && hub ? (
         /* รอสรรหา / รับรถแล้ว = ตารางของหน้าติดตามพนักงานใหม่ตัวเดียวกัน (ฝัง · อ่านอย่างเดียว) */
-        <OnboardingView key={view} embedded records={hubRecords} repairs={hub.repairs} initialStage={view} />
+        <OnboardingView
+          key={view}
+          embedded
+          records={hubRecords}
+          repairs={hub.repairs}
+          initialStage={HUB_STAGE[view]}
+          initialFilters={HUB_FILTERS[view]}
+          onCreated={(created) => setRequisitions?.((prev) => [...created, ...prev])}
+          onUpdated={(updated) =>
+            setRequisitions?.((prev) =>
+              prev.some((r) => r.id === updated.id)
+                ? prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r))
+                : [updated, ...prev],
+            )
+          }
+        />
       ) : (
       <>
 
@@ -907,7 +955,7 @@ export function CandidatesView({
                         </span>
                         <span className="flex items-center gap-1.5 font-mono text-10-5 tracking-wider text-primary">
                           {a.ref}
-                          {rqByApplication.get(a.id) ? (
+                          {!showTraining && rqByApplication.get(a.id) ? (
                             <Link
                               href={`${ADMIN_ROOT}/onboarding/${rqByApplication.get(a.id)!.id}`}
                               title="ดูเส้นทางพนักงานใหม่"
@@ -920,6 +968,16 @@ export function CandidatesView({
                       </div>
                     </div>
                   </td>
+
+                  {showTraining ? (
+                    <td className="px-2 py-1.5">
+                      {rqByApplication.get(a.id) ? (
+                        <JrCell code={a.jrCode} onOpen={() => setJrFor(rqByApplication.get(a.id)!.id)} />
+                      ) : (
+                        <span className="px-1 text-mut">—</span>
+                      )}
+                    </td>
+                  ) : null}
 
                   <td className="px-2 py-1.5">
                     <OwnerCell {...cell} options={contactOptions} />
@@ -1086,6 +1144,14 @@ export function CandidatesView({
             if (rcFor.target && rcFor.application.status !== rcFor.target)
               void patchCandidate(rcFor.application.id, { status: rcFor.target });
           }}
+        />
+      ) : null}
+
+      {jrFor ? (
+        <OnboardingDialog
+          id={jrFor}
+          onClose={() => setJrFor(null)}
+          onSaved={(next) => setRequisitions?.((prev) => prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)))}
         />
       ) : null}
 

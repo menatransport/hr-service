@@ -83,7 +83,7 @@ export type ReplaceReason = string;
 export type HireType = "replace" | "new_rate" | "unspecified";
 
 export const HIRE_TYPES = [
-  { value: "replace", label: "แทนคนเดิม" },
+  { value: "replace", label: "ทดแทน" },
   { value: "new_rate", label: "อัตราใหม่" },
 ] as const;
 
@@ -299,6 +299,26 @@ export interface RequisitionPatch {
   /** รหัส พจส. ที่ผู้สมัครได้รับหลังขึ้นทะเบียน — สะพานไปหน้าติดตามฝึกงาน */
   drivercode?: string;
   note?: string;
+  /**
+   * แก้คำขอ + KA (ครูฝึก · รถ) ทั้งก้อนในครั้งเดียว — ฟอร์มขออัตราโหมดแก้ไข (Bew 4 พ.ย. 2569)
+   * · ลงประวัติบรรทัดเดียวบอกว่าเปลี่ยนช่องไหน · ค่าที่ไม่เปลี่ยนไม่ถูกตรวจซ้ำ (ใบนำเข้าเก่ายังบันทึกได้)
+   */
+  details?: RequisitionDetails;
+}
+
+/** ไม่มีวันที่แจ้ง — แก้ไม่ได้หลังขอแล้ว (ล็อก) */
+export interface RequisitionDetails {
+  branch: string;
+  position: string;
+  positionOther: string;
+  customer: string;
+  customerOther: string;
+  plant: string;
+  hireType: string;
+  replaceDrivercode: string;
+  vehicleCode: string;
+  trainerDrivercode: string;
+  note: string;
 }
 
 /* ------------------------------------------------------------------ ป้ายชื่อ */

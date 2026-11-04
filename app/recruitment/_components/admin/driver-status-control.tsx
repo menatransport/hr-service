@@ -3,14 +3,19 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Popover as RPopover } from "radix-ui";
-import { Check, ChevronDown, Settings2, UserMinus, UserRound } from "lucide-react";
+import { Check, ChevronDown, Settings2, Truck, UserMinus, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { DateField, SelectField, TextareaField, useOverlayCount } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction } from "@/lib/swal";
-import { formatThaiDate, type DriverRecord } from "@/app/recruitment/_lib/drivers/types";
+import {
+  employmentLabel,
+  formatThaiDate,
+  type DriverExitKind,
+  type DriverRecord,
+} from "@/app/recruitment/_lib/drivers/types";
 import {
   reasonGroups,
   reasonOptionLabel,
@@ -23,8 +28,9 @@ import { ExitTypePicker } from "@/app/recruitment/_components/admin/exit-type-pi
 /**
  * ปุ่มปรับสถานะการจ้างของ พจส. — ใช้ทั้งในตารางและบนหน้ารายบุคคล
  *
- * กดแล้วได้เมนูสองทาง · เลือก “พ้นสภาพ” จะเปิดฟอร์มที่ **บังคับ** วันที่กับเหตุผล
- * ก่อนบันทึก เพราะระเบียนที่พ้นสภาพโดยไม่มีสองอย่างนี้เอาไปใช้ต่อไม่ได้เลย
+ * กดแล้วได้เมนูสามทาง · เลือก “พ้นสภาพ” จะเปิดฟอร์มที่ **บังคับ** วันที่กับเหตุผล
+ * ก่อนบันทึก · “ย้ายไปรถร่วม” (4 พ.ย. 2569) บังคับแค่วันที่ แล้วไปอยู่แท็บพ้นสภาพเหมือนกัน
+ * (`resignation.kind: "transfer"`) — ทั้งสองแบบต้องบันทึก เพราะระเบียนที่พ้นสภาพโดยไม่มีสองอย่างนี้เอาไปใช้ต่อไม่ได้เลย
  * (ทั้งงานเงินเดือน งานประกันสังคม และการตอบคำถามย้อนหลัง)
  *
  * **บันทึกลง `hr_service.master_driver`** — ดู `setDriverStatus()` ใน `lib/drivers/registry.ts`
@@ -44,12 +50,13 @@ export function DriverStatusControl({
 }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState<DriverExitKind | null>(null);
 
   useOverlayCount(menuOpen);
 
   const resigned = !driver.active;
-  const label = resigned ? "พ้นสภาพ" : "ปฏิบัติงาน";
+  const transferred = resigned && driver.resignation?.kind === "transfer";
+  const label = employmentLabel(driver);
 
   /** กดกลับเป็นปฏิบัติงาน = ยกเลิกการบันทึกที่ผิด จึงถามให้ชัดว่าข้อมูลจะหาย */
   async function revertToActive() {
@@ -80,11 +87,13 @@ export function DriverStatusControl({
       <button
         type="button"
         title="เปลี่ยนสถานะการจ้าง"
-        /* คนที่พ้นสภาพแล้วเป็นแดงตามโทนของทั้งแถว — ส่วนคนที่ยังทำงานอยู่คงเป็นข้อความจาง */
+        /* พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง ตามโทนของทั้งแถว — คนที่ยังทำงานอยู่คงเป็นข้อความจาง */
         className={`flex cursor-pointer items-center gap-0.5 rounded-selector px-1 py-0.5 text-11-5 transition-colors ${
-          resigned
-            ? "font-medium text-alert hover:bg-alert/10"
-            : "text-mut hover:bg-base-300/60 hover:text-ink"
+          transferred
+            ? "font-medium text-transfer hover:bg-transfer/10"
+            : resigned
+              ? "font-medium text-alert hover:bg-alert/10"
+              : "text-mut hover:bg-base-300/60 hover:text-ink"
         }`}
       >
         <span className="truncate">{label}</span>
@@ -95,7 +104,9 @@ export function DriverStatusControl({
         type="button"
         className="btn-sec flex cursor-pointer items-center gap-2 px-3 py-2 text-13 transition-colors hover:border-primary/40 hover:text-primary"
       >
-        {resigned ? (
+        {transferred ? (
+          <Truck size={15} strokeWidth={1.8} aria-hidden />
+        ) : resigned ? (
           <UserMinus size={15} strokeWidth={1.8} aria-hidden />
         ) : (
           <UserRound size={15} strokeWidth={1.8} aria-hidden />
@@ -133,20 +144,31 @@ export function DriverStatusControl({
 
             <MenuItem
               icon={UserMinus}
-              active={resigned}
+              active={resigned && !transferred}
               onClick={() => {
                 setMenuOpen(false);
-                setFormOpen(true);
+                setFormOpen("resign");
               }}
             >
-              {resigned ? "แก้ไขข้อมูลพ้นสภาพ…" : "พ้นสภาพ…"}
+              {resigned && !transferred ? "แก้ไขข้อมูลพ้นสภาพ…" : "พ้นสภาพ…"}
+            </MenuItem>
+
+            <MenuItem
+              icon={Truck}
+              active={transferred}
+              onClick={() => {
+                setMenuOpen(false);
+                setFormOpen("transfer");
+              }}
+            >
+              {transferred ? "แก้ไขข้อมูลย้ายไปรถร่วม…" : "ย้ายไปรถร่วม…"}
             </MenuItem>
           </RPopover.Content>
         </RPopover.Portal>
       </RPopover.Root>
 
       {formOpen ? (
-        <ResignForm driver={driver} onClose={() => setFormOpen(false)} />
+        <ResignForm driver={driver} kind={formOpen} onClose={() => setFormOpen(null)} />
       ) : null}
     </span>
   );
@@ -169,11 +191,12 @@ function todayInBangkok(): string {
  * ทุกแถวของตาราง ถ้าส่งมาจากหน้าจะต้องลากรายการ 62 รหัสผ่านทุกชั้นของตาราง
  * ทั้งที่คนเปิดฟอร์มนี้วันละไม่กี่ครั้ง
  */
-function useResignMaster() {
+function useResignMaster(enabled: boolean) {
   const [master, setMaster] = useState<ResignMaster | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     requestJson<ResignMaster>("/api/recruitment/resign-reasons", {}, "โหลดรหัสเหตุผลไม่สำเร็จ")
       .then((m) => alive && setMaster(m))
@@ -183,21 +206,36 @@ function useResignMaster() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [enabled]);
 
   return { master, error };
 }
 
-function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => void }) {
+/**
+ * ฟอร์มพ้นสภาพ — `kind="transfer"` = ย้ายไปรถร่วม: มีแค่วันที่กับหมายเหตุ (ไม่มีรหัสเหตุผล/ประเภทการออก)
+ * · เปลี่ยนชนิด (พ้นสภาพ ↔ ย้ายไปรถร่วม) ยกวันที่กับหมายเหตุเดิมมาให้ ส่วนรหัสเหตุผลเริ่มว่าง
+ */
+function ResignForm({
+  driver,
+  kind,
+  onClose,
+}: {
+  driver: DriverRecord;
+  kind: DriverExitKind;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const fieldId = useId();
-  const { master, error: loadError } = useResignMaster();
+  const transfer = kind === "transfer";
+  const { master, error: loadError } = useResignMaster(!transfer);
 
-  const existing = driver.resignation;
-  const [date, setDate] = useState(existing?.dateISO || todayInBangkok());
+  const held = driver.resignation;
+  const existing = held?.kind === kind ? held : null;
+  const noun = transfer ? "ย้ายไปรถร่วม" : "พ้นสภาพ";
+  const [date, setDate] = useState(held?.dateISO || todayInBangkok());
   const [reason, setReason] = useState(existing?.reasonCode ?? "");
   const [exitType, setExitType] = useState<ExitType | "">(existing?.exitType ?? "");
-  const [note, setNote] = useState(existing?.note ?? "");
+  const [note, setNote] = useState(held?.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -216,11 +254,12 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
   }
 
   /** บริษัทให้ออก = ต้องมีหมายเหตุ — ป้ายอย่างเดียวไม่พอให้คนอ่านทีหลังรู้ว่าเกิดอะไรขึ้น */
-  const noteRequired = exitType === "inv";
+  const noteRequired = !transfer && exitType === "inv";
 
   function validate(): string | null {
-    if (!date) return "เลือกวันที่พ้นสภาพก่อน";
-    if (date > todayInBangkok()) return "วันที่พ้นสภาพเป็นวันในอนาคตไม่ได้";
+    if (!date) return `เลือกวันที่${noun}ก่อน`;
+    if (date > todayInBangkok()) return `วันที่${noun}เป็นวันในอนาคตไม่ได้`;
+    if (transfer) return null;
     if (!reason) return "เลือกรหัสเหตุผลการพ้นสภาพก่อน";
     if (!exitType) return "เลือกประเภทการออกก่อน";
     if (noteRequired && !note.trim())
@@ -238,13 +277,15 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
 
     const out = await runAction({
       confirm: {
-        title: `บันทึกการพ้นสภาพของ ${driver.name || driver.drivercode}?`,
-        html: `<ul class="hrs-swal-list"><li>วันที่พ้นสภาพ · ${formatThaiDate(date, "full")}</li><li>เหตุผล · ${escapeHtml(picked ? reasonOptionLabel(picked) : reason)}</li><li>ประเภทการออก · ${escapeHtml(exitTypeLabel(exitType))}</li></ul>`,
+        title: `บันทึกการ${noun}ของ ${driver.name || driver.drivercode}?`,
+        html: transfer
+          ? `<ul class="hrs-swal-list"><li>วันที่ย้ายไปรถร่วม · ${formatThaiDate(date, "full")}</li><li>แถวนี้จะย้ายไปแท็บ “พ้นสภาพแล้ว”</li></ul>`
+          : `<ul class="hrs-swal-list"><li>วันที่พ้นสภาพ · ${formatThaiDate(date, "full")}</li><li>เหตุผล · ${escapeHtml(picked ? reasonOptionLabel(picked) : reason)}</li><li>ประเภทการออก · ${escapeHtml(exitTypeLabel(exitType))}</li></ul>`,
         confirmText: "บันทึก",
         tone: "warn",
       },
       pending: "กำลังบันทึก…",
-      success: "บันทึกการพ้นสภาพแล้ว",
+      success: `บันทึกการ${noun}แล้ว`,
       failureTitle: "บันทึกไม่สำเร็จ",
       run: async () => {
         setBusy(true);
@@ -253,7 +294,9 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
             `/api/drivers/${encodeURIComponent(driver.drivercode)}/status`,
             {
               method: "PUT",
-              body: { status: "resigned", resignDate: date, reasonCode: reason, exitType, note },
+              body: transfer
+                ? { status: "transferred", resignDate: date, note }
+                : { status: "resigned", resignDate: date, reasonCode: reason, exitType, note },
             },
             "บันทึกไม่สำเร็จ",
           );
@@ -275,7 +318,7 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
 
   return (
     <ModalShell
-      title={existing ? "แก้ไขข้อมูลการพ้นสภาพ" : "บันทึกการพ้นสภาพ"}
+      title={existing ? `แก้ไขข้อมูลการ${noun}` : `บันทึกการ${noun}`}
       subtitle={
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="font-medium text-ink">{driver.name || "—"}</span>
@@ -303,7 +346,7 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
             disabled={busy}
             className="btn-pri cursor-pointer px-4 py-2 text-13 font-medium disabled:opacity-50"
           >
-            {existing ? "บันทึกการแก้ไข" : "บันทึกการพ้นสภาพ"}
+            {existing ? "บันทึกการแก้ไข" : `บันทึกการ${noun}`}
           </button>
         </div>
       }
@@ -311,45 +354,53 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
       <div className="flex flex-col gap-4">
         <DateField
           id={`${fieldId}-date`}
-          label="วันที่พ้นสภาพ"
-          hint="วันสุดท้ายที่ถือว่ายังเป็นพนักงาน — ไม่ใช่วันที่กดบันทึก"
+          label={`วันที่${noun}`}
+          hint={
+            transfer
+              ? "วันที่เริ่มเป็นรถร่วม (พจร.) — ไม่ใช่วันที่กดบันทึก"
+              : "วันสุดท้ายที่ถือว่ายังเป็นพนักงาน — ไม่ใช่วันที่กดบันทึก"
+          }
           value={date}
           onChange={setDate}
         />
 
-        <SelectField
-          id={`${fieldId}-reason`}
-          label="รหัสเหตุผลการพ้นสภาพ"
-          hint={
-            picked?.description ||
-            "เลือกข้อที่ตรงที่สุดข้อเดียว — พิมพ์รหัส (เช่น P4) หรือคำค้นในช่องค้นหาได้"
-          }
-          placeholder={master ? "เลือกรหัสเหตุผล…" : loadError ? "โหลดรหัสไม่สำเร็จ" : "กำลังโหลดรหัส…"}
-          value={reason}
-          onChange={chooseReason}
-          groups={groups}
-          searchable
-          searchPlaceholder="ค้นรหัสหรือเหตุผล…"
-          readOnly={!master}
-          labelRight={
-            <Link
-              href="/recruitment/admin/settings/resign-reasons"
-              target="_blank"
-              className="flex items-center gap-1 text-11-5 text-mut transition-colors hover:text-primary"
-            >
-              <Settings2 size={12} strokeWidth={1.9} aria-hidden />
-              จัดการรหัส
-            </Link>
-          }
-        />
+        {transfer ? null : (
+          <>
+            <SelectField
+              id={`${fieldId}-reason`}
+              label="รหัสเหตุผลการพ้นสภาพ"
+              hint={
+                picked?.description ||
+                "เลือกข้อที่ตรงที่สุดข้อเดียว — พิมพ์รหัส (เช่น P4) หรือคำค้นในช่องค้นหาได้"
+              }
+              placeholder={master ? "เลือกรหัสเหตุผล…" : loadError ? "โหลดรหัสไม่สำเร็จ" : "กำลังโหลดรหัส…"}
+              value={reason}
+              onChange={chooseReason}
+              groups={groups}
+              searchable
+              searchPlaceholder="ค้นรหัสหรือเหตุผล…"
+              readOnly={!master}
+              labelRight={
+                <Link
+                  href="/recruitment/admin/settings/resign-reasons"
+                  target="_blank"
+                  className="flex items-center gap-1 text-11-5 text-mut transition-colors hover:text-primary"
+                >
+                  <Settings2 size={12} strokeWidth={1.9} aria-hidden />
+                  จัดการรหัส
+                </Link>
+              }
+            />
 
-        {loadError ? (
-          <p role="alert" className="-mt-2 text-11-5 text-alert">
-            {loadError}
-          </p>
-        ) : null}
+            {loadError ? (
+              <p role="alert" className="-mt-2 text-11-5 text-alert">
+                {loadError}
+              </p>
+            ) : null}
 
-        <ExitTypePicker value={exitType} onChange={setExitType} />
+            <ExitTypePicker value={exitType} onChange={setExitType} />
+          </>
+        )}
 
         <TextareaField
           id={`${fieldId}-note`}
@@ -363,7 +414,11 @@ function ResignForm({ driver, onClose }: { driver: DriverRecord; onClose: () => 
           value={note}
           onChange={setNote}
           rows={3}
-          placeholder="เช่น แจ้งล่วงหน้า 30 วัน · ส่งคืนอุปกรณ์ครบแล้ว"
+          placeholder={
+            transfer
+              ? "เช่น ซื้อรถร่วม เริ่ม 1 พ.ย. 2569 · ทะเบียนรถ"
+              : "เช่น แจ้งล่วงหน้า 30 วัน · ส่งคืนอุปกรณ์ครบแล้ว"
+          }
         />
 
         {error ? (

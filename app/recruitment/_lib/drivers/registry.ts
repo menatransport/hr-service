@@ -32,6 +32,8 @@ import {
   type DriverWorkStatus,
   type TraineeDailyEntry,
   RQ_DAILY_PREFIX,
+  TRANSFER_LABEL,
+  TRANSFER_REASON_CODE,
   requisitionDailyKey,
 } from "./types";
 
@@ -547,6 +549,7 @@ function toResignation(raw: unknown): DriverResignation | null {
 
   const recordedAt = doc.recordedAt;
   return {
+    kind: isTransferExit(doc) ? "transfer" : "resign",
     dateISO,
     reasonCode,
     reasonLabel: str(doc.reasonLabel) || reasonCode,
@@ -557,6 +560,16 @@ function toResignation(raw: unknown): DriverResignation | null {
       recordedAt instanceof Date ? recordedAt.toISOString() : str(recordedAt),
     recordedBy: str(doc.recordedBy),
   };
+}
+
+/**
+ * ย้ายไปรถร่วม — บันทึกใหม่มี `kind` · ของเก่าที่นำเข้าจาก Excel ทะเบียน (`XLS`) ดูจากป้ายสถานะในไฟล์
+ * (“ย้ายเป็นรถร่วม” / “โยกย้ายเป็นรถร่วม”) โดยไม่ต้องแก้ข้อมูลเดิม · “คืนรถร่วม” ไม่ใช่การย้าย
+ */
+function isTransferExit(doc: Record<string, unknown>): boolean {
+  if (doc.kind === "transfer") return true;
+  if (doc.kind === "resign") return false;
+  return /^(โยก)?ย้าย(ไป|เป็น)รถร่วม$/.test(str(doc.reasonLabel));
 }
 
 /* ------------------------------------------------------ เอกสารในแฟ้ม */
@@ -1058,8 +1071,9 @@ export async function getDriversForApi(range: { from: string; to: string } | nul
 }
 
 export interface DriverStatusInput {
-  status: DriverStatus;
-  /** บังคับเมื่อ `status` เป็น `resigned` — `YYYY-MM-DD` */
+  /** `transferred` = ย้ายไปรถร่วม — เก็บเป็น `resigned` + `resignation.kind: "transfer"` */
+  status: DriverStatus | "transferred";
+  /** บังคับเมื่อ `status` เป็น `resigned` / `transferred` — `YYYY-MM-DD` */
   resignDate?: string;
   reasonCode?: string;
   /** Vol / Inv / Disap — ไม่ส่งมา = ใช้ค่าตั้งต้นของรหัสที่เลือก */
@@ -1092,6 +1106,31 @@ export async function setDriverStatus(
       $set: { active: true },
       $unset: { statusOverride: "", resignation: "", mediaPurgedAt: "" },
     };
+  } else if (input.status === "transferred") {
+    /* ย้ายไปรถร่วม = พ้นสภาพจากการเป็น พจส. — `statusOverride` คง `resigned` ให้ทุกตัวอ่าน
+       (แท็บพ้นสภาพ · ลบแฟ้ม 1 เดือน · ห้องเช่า · dashboard) เห็นเหมือนกัน ต่างแค่ `kind` */
+    const dateISO = toIsoDate(input.resignDate);
+    if (!dateISO) throw new DriverRegistryError("ต้องระบุวันที่ย้ายไปรถร่วม");
+    if (dateISO > todayInBangkok())
+      throw new DriverRegistryError("วันที่ย้ายไปรถร่วมเป็นวันในอนาคตไม่ได้");
+
+    update = {
+      $set: {
+        active: false,
+        statusOverride: "resigned",
+        resignation: {
+          kind: "transfer",
+          dateISO,
+          reasonCode: TRANSFER_REASON_CODE,
+          reasonLabel: TRANSFER_LABEL,
+          categoryLabel: "",
+          exitType: "",
+          note: (input.note ?? "").trim(),
+          recordedAt: new Date(),
+          recordedBy: actor,
+        },
+      },
+    };
   } else {
     const dateISO = toIsoDate(input.resignDate);
     if (!dateISO) throw new DriverRegistryError("ต้องระบุวันที่พ้นสภาพ");
@@ -1113,6 +1152,7 @@ export async function setDriverStatus(
         active: false,
         statusOverride: "resigned",
         resignation: {
+          kind: "resign",
           dateISO,
           reasonCode: reason.code,
           reasonLabel: reason.label,

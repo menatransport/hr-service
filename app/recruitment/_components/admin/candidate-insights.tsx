@@ -56,20 +56,23 @@ const PIPELINE: (ApplicationStatus | HubView)[] = [
   "interview_scheduled",
   "interview_passed",
   "training",
+  "handover",
   "working",
   "cancelled",
 ];
 
 /**
  * การ์ดที่แถวมาจากหน้าติดตามพนักงานใหม่ (3 พ.ย. 2569 · Bew) — รอสรรหา = แท็บอัตราว่าง ·
- * รับรถแล้ว = แท็บรับรถแล้ว · ตัวเลขนับด้วย `hubRows()` ชุดเดียวกับหน้านั้น
+ * รอรับรถ = แท็บฝึกงานกรองสถานะรอรับรถ · รับรถแล้ว = แท็บรับรถแล้ว · ตัวเลขนับด้วย `hubRows()` ชุดเดียวกับหน้านั้น
  * · `working` ตรงนี้ไม่ใช่สถานะใบสมัคร “ปฏิบัติงาน” (การ์ดนั้นถอดไปแล้ว ดูหัวไฟล์)
  */
 const HUB_CARD: Record<HubView, { label: string; unit: string; dot: string }> = {
   open: { label: "รอสรรหา", unit: "อัตรา", dot: STAGE_DOT.open },
+  /* ฝึกครบ 10 วัน (เฉพาะวันฝึกงาน) + ปฐมนิเทศ + ST ผ่าน — ระบบเปลี่ยนเอง (Bew 4 พ.ย. 2569) */
+  handover: { label: "รอรับรถ", unit: "คน", dot: "bg-st-live-ink" },
   working: { label: "รับรถแล้ว", unit: "คน", dot: STAGE_DOT.working },
 };
-const isHubView = (v: string): v is HubView => v === "open" || v === "working";
+const isHubView = (v: string): v is HubView => v === "open" || v === "handover" || v === "working";
 
 /** จุดสีหน้าชื่อสถานะ — ชุดเดียวกับไอคอนคนหน้าชื่อในตาราง (`PersonMark`) */
 const DOT: Record<ApplicationStatus, string> = {
@@ -158,7 +161,7 @@ export function CandidateInsights({
 
   return (
     <SummaryPanel label="สรุปใบสมัครตามสถานะ" className="flex-none">
-      <SummaryStats className={hubCounts ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-8" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"}>
+      <SummaryStats className={hubCounts ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-9" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"}>
         {/* ยอดรวมไม่ใช่ตัวกรอง (29 ก.ย. 2026) — ไม่มีมุมมอง “ทั้งหมด” ดู `DEFAULT_FILTERS`
             · **ตอนกรองอยู่ช่องนี้กลายเป็นปุ่ม “ล้างตัวกรอง”** (14 ต.ค. 2026) แทนแถวปุ่มเหนือตาราง
             ไม่ได้กรองอยู่ = ไม่ส่ง `onClick` = กล่องเฉย ๆ */}
@@ -170,7 +173,7 @@ export function CandidateInsights({
           sub={filtering ? "↺ ล้างตัวกรอง" : undefined}
           onClick={filtering ? onClearAll : undefined}
           title={filtering ? "ล้างตัวกรองทั้งหมด กลับไปดูเฉพาะรอการติดต่อ" : undefined}
-          className={`col-span-2 ${hubCounts ? "sm:col-span-1" : "sm:col-span-3"} lg:col-span-1 ${filtering ? "hover:brightness-[0.97]" : ""}`}
+          className={`col-span-2 ${hubCounts ? "sm:col-span-4" : "sm:col-span-3"} lg:col-span-1 ${filtering ? "hover:brightness-[0.97]" : ""}`}
         />
         {PIPELINE.map((status) =>
           isHubView(status) ? (
@@ -200,8 +203,6 @@ export function CandidateInsights({
             active={!view && sameSet(pickedStatus, [STATUS_LABEL[status]])}
             onClick={() => pickStatus([STATUS_LABEL[status]])}
             title={`ดูเฉพาะ${STATUS_LABEL[status]}`}
-            /* 8 ช่อง: จอแคบ 2 คอลัมน์ ช่องท้ายเต็มแถว ไม่เหลือช่องว่าง */
-            className={hubCounts && status === "cancelled" ? "col-span-2 sm:col-span-1" : ""}
           />
           ),
         )}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { CandidatesView } from "@/app/recruitment/_components/admin/candidates-view";
+import { CandidatesView, type HubView } from "@/app/recruitment/_components/admin/candidates-view";
 import { RequisitionsView } from "@/app/recruitment/_components/admin/requisitions-view";
 import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
@@ -56,7 +56,7 @@ export function CandidatesScreen({
   /** คำขอ + ใบสมัคร + ATMS ชุดเดียวกับหน้าติดตามพนักงานใหม่ (`getHub()`) */
   hub: Hub;
   /** `?view=` — เปิดมาที่การ์ดรอสรรหา/รับรถแล้ว */
-  initialView?: "open" | "working" | null;
+  initialView?: HubView | null;
   contactOptions: string[];
   /** ช่องเอกสารพร้อมค่าแสดง/บังคับจาก Section 4 ของคลังคำถาม */
   docSlots: DocSlot[];

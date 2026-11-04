@@ -85,7 +85,8 @@ export function DriverProfile({
    * ถ้าจะเพิ่มฟิลด์ที่เป็นข้อมูลส่วนบุคคลในอนาคต **ต้องมาเพิ่มเงื่อนไขตรงนี้ด้วย**
    */
   const hidePersonal = !driver.active;
-  const statusText = driver.active ? "ปฏิบัติงานอยู่" : "พ้นสภาพแล้ว";
+  const transferred = driver.resignation?.kind === "transfer";
+  const statusText = driver.active ? "ปฏิบัติงานอยู่" : transferred ? "ย้ายไปรถร่วมแล้ว" : "พ้นสภาพแล้ว";
 
   return (
     <div className="flex flex-col gap-5 animate-rise">
@@ -181,7 +182,7 @@ export function DriverProfile({
                     value={statusText}
                     note={
                       driver.resignation
-                        ? `พ้นสภาพ ${formatThaiDate(driver.resignation.dateISO)}`
+                        ? `${transferred ? "ย้ายไปรถร่วม" : "พ้นสภาพ"} ${formatThaiDate(driver.resignation.dateISO)}`
                         : undefined
                     }
                   />
@@ -561,6 +562,8 @@ function Hidden({ icon: Icon, label }: { icon?: LucideIcon; label: string }) {
  */
 function ResignPanel({ driver }: { driver: DriverRecord }) {
   const resignation = driver.resignation;
+  /* ย้ายไปรถร่วม — ไม่มีรหัสเหตุผล/ประเภทการออก แสดงแค่วันที่กับหมายเหตุ */
+  const noun = resignation?.kind === "transfer" ? "ย้ายไปรถร่วม" : "พ้นสภาพ";
 
   if (!resignation) {
     return (
@@ -584,7 +587,7 @@ function ResignPanel({ driver }: { driver: DriverRecord }) {
     <section className="flex flex-col gap-3.5 rounded-box border border-line bg-base-200 p-5">
       <div className="flex items-center gap-2.5">
         <UserMinus size={16} strokeWidth={1.8} aria-hidden className="flex-none text-mut" />
-        <h2 className="text-14 font-semibold">ข้อมูลการพ้นสภาพ</h2>
+        <h2 className="text-14 font-semibold">ข้อมูลการ{noun}</h2>
         {/* ใบลาออก + แบบสอบถามลาออก เติมจากข้อมูลชุดนี้ */}
         <span className="ml-auto">
           <ResignDocumentsButton driver={driver} variant="label" />
@@ -594,19 +597,21 @@ function ResignPanel({ driver }: { driver: DriverRecord }) {
       <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
         <Field
           icon={CalendarDays}
-          label="วันที่พ้นสภาพ"
+          label={`วันที่${noun}`}
           value={formatThaiDate(resignation.dateISO, "full")}
         />
-        <Field
-          icon={ClipboardList}
-          label="เหตุผล"
-          value={
-            /* ระเบียนก่อนมี Reason Code Master ไม่มีหมวดและประเภทการออก — แสดงเท่าที่มี */
-            resignation.categoryLabel
-              ? `${resignation.reasonCode} · ${resignation.reasonLabel}`
-              : resignation.reasonLabel
-          }
-        />
+        {resignation.kind === "transfer" ? null : (
+          <Field
+            icon={ClipboardList}
+            label="เหตุผล"
+            value={
+              /* ระเบียนก่อนมี Reason Code Master ไม่มีหมวดและประเภทการออก — แสดงเท่าที่มี */
+              resignation.categoryLabel
+                ? `${resignation.reasonCode} · ${resignation.reasonLabel}`
+                : resignation.reasonLabel
+            }
+          />
+        )}
         {resignation.exitType ? (
           <Field
             icon={UserMinus}

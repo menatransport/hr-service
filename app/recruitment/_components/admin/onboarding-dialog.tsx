@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check, ChevronDown, Info, Link2, Pencil, Phone, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Info, Link2, Loader2, Pencil, Phone, TriangleAlert } from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { MascotLoader } from "@/components/ui/mascot";
@@ -16,6 +16,7 @@ import { formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
 import { STATUS_LABEL, type ApplicationStatus } from "@/app/recruitment/_lib/types";
 import type { Journey } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import {
+  CO_DRIVER,
   END_OUTCOMES,
   SECTION_SPECS,
   ST_CHECKPOINTS,
@@ -36,7 +37,16 @@ import {
   type Step,
   type StepState,
 } from "@/app/recruitment/_lib/requisitions/onboarding";
-import { customerLabel, hireTypeLabel, personName, positionLabel, waitingDays } from "@/app/recruitment/_lib/requisitions/types";
+import {
+  customerLabel,
+  hireTypeLabel,
+  isMixerBranch,
+  personName,
+  positionLabel,
+  waitingDays,
+} from "@/app/recruitment/_lib/requisitions/types";
+import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
+import { RequestKaEditor } from "@/app/recruitment/_components/admin/request-ka-editor";
 import { ResultChip, StageChip, STEP_STATE_LABEL } from "@/app/recruitment/_components/admin/onboarding-bits";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
 import { VehicleDetailDialog } from "@/app/recruitment/_components/admin/vehicle-detail-dialog";
@@ -46,6 +56,7 @@ import { OnboardingSectionForm } from "@/app/recruitment/_components/admin/onboa
  * พจส.ใหม่หนึ่งคน — เปิดจากไอคอนตาในตารางติดตามพนักงานใหม่ (แทนหน้า `/onboarding/[id]` · Bew 4 พ.ย. 2569)
  * · บนสุด = ผู้สมัครที่ผูกใบ DRV (ชื่อ · รหัสพนักงาน · เบอร์) + คำขอ · ถัดมาการ์ดของแต่ละฝ่าย งานของฝ่ายไหนอยู่การ์ดนั้น
  * · ยังไม่มีคนผูก (อัตราว่าง/รอสรรหา) = คำขอ + KA + ยานยนต์ เท่านั้น — KA เตรียมครูฝึก/รถไว้ก่อนได้
+ * · คำขอ + KA (ครูฝึก · รถ · Co-Driver) เป็นการ์ดเดียว กดแก้ไขแล้วช่องในการ์ดกลายเป็น input (Bew 4 พ.ย. 2569)
  * · RC ไม่อยู่ใน dialog นี้ (ข้อมูล RC ทำที่หน้าผู้สมัคร) · โหลดตอนเปิดผ่าน `GET …/[id]/journey`
  */
 
@@ -139,6 +150,23 @@ function Body({
   const { record } = journey;
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
+  /* ฟอร์มคำขอ · KA — ตัวเลือก (รถ/พจส./แพล้นท์) โหลดตอนกดแก้ไขครั้งแรก */
+  const [options, setOptions] = useState<RequisitionOptions | null>(null);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(false);
+
+  async function editRequest() {
+    if (options) return setEditingRequest(true);
+    setLoadingOptions(true);
+    try {
+      setOptions(await requestJson<RequisitionOptions>("/api/recruitment/requisitions/options", {}, "โหลดตัวเลือกไม่สำเร็จ"));
+      setEditingRequest(true);
+    } catch (err) {
+      alertError("เปิดฟอร์มแก้ไขไม่สำเร็จ", err instanceof Error ? err.message : undefined);
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
 
   /* รถปัจจุบันของ record — KA เปลี่ยนรถแล้วขั้นยานยนต์ตามทันที */
   const repair = record.vehicle?.plateNo ? (journey.repairs[record.vehicle.plateNo] ?? null) : null;
@@ -190,15 +218,23 @@ function Body({
   return (
     <>
       {person ? <ApplicantCard journey={journey} start={start} trained={trained} busy={busy} onBind={bindCode} /> : null}
-      <RequestCard record={record} person={person} />
-
-      <KaCard
+      <RequestKaCard
         record={record}
         person={person}
         state={states.ka}
-        onEdit={() =>
-          /* ยังไม่มีคน — KA ปรับได้แค่ครูฝึก + เบอร์รถ (ค่าตั้งต้นจากตอนขออัตรา) · Co-Driver รอมีผู้ฝึกงาน */
-          setEditing(person ? { section: "ka" } : { section: "ka", only: [], title: "KA · ครูฝึก · เบอร์รถ" })
+        handoverState={states.handover}
+        loading={loadingOptions}
+        onEdit={editRequest}
+        form={
+          editingRequest && options ? (
+            <RequestKaEditor
+              record={record}
+              person={person}
+              options={options}
+              onCancel={() => setEditingRequest(false)}
+              onSaved={onChange}
+            />
+          ) : null
         }
       />
       {person ? (
@@ -206,12 +242,6 @@ function Body({
           <StCard record={record} state={states.er} onEdit={setEditing} />
           <FieldsCard section="hrd" record={record} state={states.hrd} onEdit={() => setEditing({ section: "hrd" })} />
           {fleet}
-          <FieldsCard
-            section="handover"
-            record={record}
-            state={states.handover}
-            onEdit={() => setEditing({ section: "handover" })}
-          />
         </>
       ) : (
         <>
@@ -356,33 +386,6 @@ function ApplicantCard({
   );
 }
 
-/** คำขอสรรหา — ใครขอ เมื่อไหร่ ประเภทไหน · ยังไม่มีคนผูกบอกว่ารอผู้สมัคร */
-function RequestCard({ record, person }: { record: OnboardingRecord; person: boolean }) {
-  const waiting = record.status === "open" ? waitingDays(record) : null;
-  return (
-    <section className="flex flex-none flex-col gap-3 rounded-box border border-line bg-base-100 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <h3 className="flex-1 text-13 font-semibold">คำขอสรรหา</h3>
-        {person ? null : (
-          <span className="rounded-selector bg-st-wait px-2 py-0.5 text-11-5 font-medium text-st-wait-ink">ยังไม่มีผู้สมัคร</span>
-        )}
-      </div>
-      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4">
-        <Item label="วันที่แจ้ง">
-          {thaiDate(record.requestedOn)}
-          {waiting !== null ? <span className="text-mut"> · รอ {waiting} วัน</span> : null}
-        </Item>
-        <Item label="ประเภท">
-          {hireTypeLabel(record.hireType)}
-          {record.replace ? <span className="text-mut"> · แทน {record.replace.name}</span> : null}
-        </Item>
-        <Item label="สาขา">{record.branch || <Dash />}</Item>
-        <Item label="ผู้แจ้ง">{record.requester.name || <Dash />}</Item>
-      </dl>
-    </section>
-  );
-}
-
 /* ------------------------------------------------------------ การ์ดของฝ่าย */
 
 function DeptCard({
@@ -459,78 +462,173 @@ function shownFields(section: OnboardingSection, values: Record<string, string>)
 }
 
 /**
- * KA — ครูฝึก + เบอร์รถ + Co-Driver อยู่การ์ดเดียว (งานของ KA ทั้งหมด)
- * · ครูฝึก/เบอร์รถตั้งต้นจากปุ่มขออัตรา KA เปลี่ยนได้ที่นี่ · ยังไม่มีคน = ไม่มี Co-Driver
+ * คำขอสรรหา + KA (ครูฝึก · เบอร์รถ · Co-Driver) การ์ดเดียว — Bew 4 พ.ย. 2569
+ * · แก้ไข = ช่องในการ์ดกลายเป็น input (`RequestKaEditor`) ไม่เปิดโมดัลซ้อน · Co-Driver แก้ได้เมื่อมีผู้ฝึกงาน
+ * · ส่งมอบรถอยู่การ์ดนี้ด้วย (เดิมเป็นการ์ดล่างสุด · Bew 4 พ.ย. 2569) — อัปเดตที่เดียว · ผล Co-Driver ไป ST
+ * · คำขอที่ยกเลิกแล้วแก้ไม่ได้ (เปิดรับอีกครั้งก่อน)
  */
-function KaCard({
+function RequestKaCard({
   record,
   person,
   state,
+  handoverState,
+  loading,
   onEdit,
+  form,
 }: {
   record: OnboardingRecord;
   person: boolean;
   state: StepState;
+  handoverState: StepState;
+  loading: boolean;
   onEdit: () => void;
+  /** ฟอร์มแก้ไขที่กางอยู่ — มี = แทนที่เนื้อการ์ด */
+  form: React.ReactNode;
 }) {
+  const waiting = record.status === "open" ? waitingDays(record) : null;
   const data = record.onboarding.ka;
   const values = data?.values ?? {};
   const fields = person ? shownFields("ka", values) : [];
-  const empty = !record.trainer && !record.vehicle && !fields.some((f) => values[f.key]);
+  const handover = record.onboarding.handover?.values ?? {};
+  const handoverFields = person ? shownFields("handover", handover) : [];
+  const editable = record.status !== "cancelled";
+  const mixer = isMixerBranch(record.branch);
 
   return (
-    <DeptCard
-      step="ka"
-      state={state}
-      owner={values.kaName}
-      updated={data?.updatedBy ? { by: data.updatedBy, at: data.updatedAt } : undefined}
-      action={<EditButton empty={empty} label={person ? undefined : "แก้ไขครูฝึก · เบอร์รถ"} onClick={onEdit} />}
-    >
-      {/* ครูฝึก + เบอร์รถ คงที่ 2 ช่อง — ไม่มี Co-Driver = 2 คอลัมน์ ไม่เหลือช่องว่าง */}
-      <dl className={`grid gap-x-6 gap-y-3 ${fields.length ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-        <Item label="ครูฝึก" required>
-          {record.trainer ? (
-            record.trainer.drivercode ? (
-              <Link href={`${ADMIN_ROOT}/drivers/${record.trainer.drivercode}`} className="hover:text-primary">
-                {record.trainer.name}
-              </Link>
+    <section className="flex-none overflow-hidden rounded-box border border-line bg-base-100">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-2.5">
+        <span className="flex h-7 min-w-11 flex-none items-center justify-center rounded-selector bg-primary/10 px-2 text-12 font-semibold text-primary">
+          KA
+        </span>
+        <h3 className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 text-14 font-semibold">
+          คำขอสรรหา · ครูฝึก · รถ
+          {state !== "skip" ? (
+            <span className={`text-11-5 font-medium ${STATE_TEXT[state]}`}>{STEP_STATE_LABEL[state]}</span>
+          ) : null}
+        </h3>
+        {person ? null : (
+          <span className="rounded-selector bg-st-wait px-2 py-0.5 text-11-5 font-medium text-st-wait-ink">ยังไม่มีผู้สมัคร</span>
+        )}
+        {editable && !form ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={loading}
+            className={`flex flex-none cursor-pointer items-center gap-1.5 px-3 py-1.5 text-12-5 font-medium disabled:opacity-60 ${
+              record.trainer && record.vehicle ? "btn-soft" : "btn-pri"
+            }`}
+          >
+            {loading ? (
+              <Loader2 size={13} className="animate-spin" aria-hidden />
             ) : (
-              record.trainer.name
-            )
-          ) : (
-            <Dash />
-          )}
-        </Item>
-        <Item label="เบอร์รถ" required>
-          {record.vehicle ? (
-            <span className="flex flex-col leading-tight">
-              <span className="font-mono font-medium">{record.vehicle.code || record.vehicle.plateNo}</span>
-              {record.vehicle.plateNo && record.vehicle.code ? (
-                <span className="text-11-5 text-mut">{record.vehicle.plateNo}</span>
-              ) : null}
-            </span>
-          ) : (
-            <Dash />
-          )}
-        </Item>
-        {fields.map((f) => (
-          <Item key={f.key} label={f.label} required={f.required}>
-            {values[f.key] ? <Value field={f} value={values[f.key]} /> : <Dash />}
+              <Pencil size={13} strokeWidth={2} aria-hidden />
+            )}
+            แก้ไข
+          </button>
+        ) : null}
+      </header>
+
+      {form ?? (
+      <div className="flex flex-col gap-3 px-4 py-3.5">
+        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4">
+          <Item label="วันที่แจ้ง">
+            {thaiDate(record.requestedOn)}
+            {waiting !== null ? <span className="text-mut"> · รอ {waiting} วัน</span> : null}
           </Item>
-        ))}
-      </dl>
-    </DeptCard>
+          <Item label="ประเภท">
+            {hireTypeLabel(record.hireType)}
+            {record.replace?.name ? <span className="text-mut"> · แทน {record.replace.name}</span> : null}
+          </Item>
+          <Item label="สาขา">{record.branch || <Dash />}</Item>
+          <Item label="ผู้แจ้ง">{record.requester.name || <Dash />}</Item>
+          <Item label="ลูกค้า">{customerLabel(record) || <Dash />}</Item>
+          {mixer ? <Item label="แพล้นท์">{record.plant || <Dash />}</Item> : null}
+          {mixer ? <Item label="ตำแหน่ง">{positionLabel(record) || <Dash />}</Item> : null}
+        </dl>
+
+        <dl className="grid gap-x-6 gap-y-3 border-t border-line pt-3 sm:grid-cols-4">
+          <Item label="ครูฝึก" required>
+            {record.trainer ? (
+              record.trainer.drivercode ? (
+                <Link href={`${ADMIN_ROOT}/drivers/${record.trainer.drivercode}`} className="hover:text-primary">
+                  {record.trainer.name}
+                </Link>
+              ) : (
+                record.trainer.name
+              )
+            ) : (
+              <Dash />
+            )}
+          </Item>
+          <Item label="เบอร์รถ" required>
+            {record.vehicle ? (
+              <span className="flex flex-col leading-tight">
+                <span className="font-mono font-medium">{record.vehicle.code || record.vehicle.plateNo}</span>
+                {record.vehicle.plateNo && record.vehicle.code ? (
+                  <span className="text-11-5 text-mut">{record.vehicle.plateNo}</span>
+                ) : null}
+              </span>
+            ) : (
+              <Dash />
+            )}
+          </Item>
+          {fields.map((f) => (
+            <Item key={f.key} label={f.label} required={f.required}>
+              {values[f.key] ? <Value field={f} value={values[f.key]} /> : <Dash />}
+            </Item>
+          ))}
+        </dl>
+
+        {record.note ? (
+          <p className="rounded-field bg-soft/60 px-2.5 py-1.5 text-12-5 leading-relaxed whitespace-pre-line text-pretty">
+            {record.note}
+          </p>
+        ) : null}
+
+        {person ? (
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <h4 className="flex items-baseline gap-2 text-12-5 font-semibold">
+              ส่งมอบรถ
+              <span className={`text-11-5 font-medium ${STATE_TEXT[handoverState]}`}>{STEP_STATE_LABEL[handoverState]}</span>
+            </h4>
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+              {handoverFields.map((f) => (
+                <Item key={f.key} label={f.label} required={f.required} wide={f.wide || f.kind === "textarea"}>
+                  {handover[f.key] ? <Value field={f} value={handover[f.key]} /> : <Dash />}
+                </Item>
+              ))}
+            </dl>
+          </div>
+        ) : null}
+      </div>
+      )}
+
+      {values.kaName || data?.updatedBy ? (
+        <footer className="flex flex-wrap gap-x-3 border-t border-line bg-base-200/40 px-4 py-2 text-11-5 text-mut">
+          {values.kaName ? (
+            <span>
+              KA ผู้ดูแล <span className="font-medium text-ink">{values.kaName}</span>
+            </span>
+          ) : null}
+          {data?.updatedBy ? (
+            <span>
+              แก้ล่าสุด {data.updatedBy} · {thaiDate(data.updatedAt)}
+            </span>
+          ) : null}
+        </footer>
+      ) : null}
+    </section>
   );
 }
 
-/** HRD / รับรถ — ช่องตาม `SECTION_SPECS` */
+/** HRD — ช่องตาม `SECTION_SPECS` (ส่งมอบรถย้ายไปการ์ดคำขอ · KA แล้ว) */
 function FieldsCard({
   section,
   record,
   state,
   onEdit,
 }: {
-  section: "hrd" | "handover";
+  section: "hrd";
   record: OnboardingRecord;
   state: StepState;
   onEdit: () => void;
@@ -564,6 +662,8 @@ function StCard({ record, state, onEdit }: { record: OnboardingRecord; state: St
   const values = data?.values ?? {};
   const start = trainingStart(record);
   const label = (key: string) => SECTION_SPECS.er.fields.find((f) => f.key === key)?.label ?? key;
+  const coDriverOn = val(record.onboarding, "ka", "coDriverOn");
+  const coDriver = val(record.onboarding, "ka", "coDriver") === CO_DRIVER[0].value || Boolean(values.coDriverResult);
 
   return (
     <DeptCard
@@ -641,6 +741,25 @@ function StCard({ record, state, onEdit }: { record: OnboardingRecord; state: St
           );
         })}
       </ol>
+
+      {/* Co-Driver — KA เลือก “อบรม” แล้ว ST ลงผล (ย้ายจากการ์ด KA · Bew 4 พ.ย. 2569) */}
+      {coDriver ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-field border border-line p-3">
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="text-13 font-semibold">Co-Driver</span>
+            <span className="text-11-5 text-mut">
+              อบรม{coDriverOn ? ` · ${thaiDate(coDriverOn)}` : ""}
+              {values.coDriverNote ? ` · ${values.coDriverNote}` : ""}
+            </span>
+          </span>
+          {values.coDriverResult ? <ResultChip value={values.coDriverResult} /> : null}
+          <EditButton
+            empty={!values.coDriverResult}
+            label="อัปเดต"
+            onClick={() => onEdit({ section: "er", only: ["coDriverResult", "coDriverNote"], title: "ST · ผล Co-Driver" })}
+          />
+        </div>
+      ) : null}
     </DeptCard>
   );
 }

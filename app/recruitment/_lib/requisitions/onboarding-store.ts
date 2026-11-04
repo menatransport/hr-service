@@ -4,7 +4,8 @@ import { etlCol, hrCol } from "@/lib/db";
 import { uatDriverCode } from "@/lib/uat";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { findIssuedCodeByName, readDriver, readDrivers } from "@/app/recruitment/_lib/drivers/master";
-import { isExitStatus, RQ_DAILY_PREFIX, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
+import { isExitStatus, RQ_DAILY_PREFIX, requisitionDailyKey, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
+import { loadManualDays } from "@/app/recruitment/_lib/drivers/registry";
 import { listApplications, updateApplication } from "@/app/recruitment/_lib/applications";
 import {
   EXIT_REASON_NOTE_MAX,
@@ -34,6 +35,7 @@ import {
   STEP_META,
   fieldApplies,
   isOutcome,
+  trainingStart,
   isSection,
   type AtmsBrief,
   type OnboardingPatch,
@@ -67,15 +69,19 @@ interface WorkStatusDoc {
   months?: Record<string, Record<string, string>>;
 }
 
-/** ก้อนเดือน `{ "01": "ฝ" … }` → สรุปไม่กี่ค่า (ไล่ตามวันที่จริง คีย์ในก้อนไม่ได้เรียง) */
-function atmsBrief(doc: WorkStatusDoc): AtmsBrief {
+/** ก้อนเดือน `{ "01": "ฝ" … }` → `[วันที่, สถานะ]` เรียงตามวันจริง (คีย์ในก้อนไม่ได้เรียง) */
+function atmsDays(doc: WorkStatusDoc): [string, string][] {
   const days: [string, string][] = [];
   for (const [month, byDay] of Object.entries(doc.months ?? {}))
     for (const [day, value] of Object.entries(byDay ?? {})) {
       const iso = day.length > 2 ? day : `${month}-${day.padStart(2, "0")}`;
       if (typeof value === "string" && value.trim()) days.push([iso, value.trim()]);
     }
-  days.sort((a, b) => a[0].localeCompare(b[0]));
+  return days.sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+/** สรุปไม่กี่ค่าจากสถานะรายวัน */
+function atmsBrief(doc: WorkStatusDoc, days: [string, string][]): AtmsBrief {
 
   const training = days.filter(([, v]) => v === "ฝ");
   const firstTraining = training[0]?.[0] ?? "";
@@ -97,9 +103,15 @@ function atmsBrief(doc: WorkStatusDoc): AtmsBrief {
   };
 }
 
+interface AtmsRead {
+  brief: AtmsBrief;
+  /** วันที่ → สถานะ — ใช้นับวันฝึกงาน (`trainedDays`) ไม่ส่งออกไปหน้าจอ */
+  days: Map<string, string>;
+}
+
 /** ATMS ของหลายรหัสในคิวรีเดียว — พังก็แค่ไม่มีข้อมูล ATMS */
-async function readAtms(codes: string[]): Promise<Map<string, AtmsBrief>> {
-  const out = new Map<string, AtmsBrief>();
+async function readAtms(codes: string[]): Promise<Map<string, AtmsRead>> {
+  const out = new Map<string, AtmsRead>();
   if (!codes.length) return out;
   try {
     const col = await etlCol<WorkStatusDoc>("workStatus");
@@ -109,7 +121,10 @@ async function readAtms(codes: string[]): Promise<Map<string, AtmsBrief>> {
         { projection: { employee_code: 1, latest_status: 1, latest_work_date: 1, months: 1 } },
       )
       .toArray();
-    for (const doc of docs) out.set(String(doc.employee_code), atmsBrief(doc));
+    for (const doc of docs) {
+      const days = atmsDays(doc);
+      out.set(String(doc.employee_code), { brief: atmsBrief(doc, days), days: new Map(days) });
+    }
   } catch (err) {
     console.warn("[onboarding] อ่าน ATMS ไม่สำเร็จ —", err);
   }
@@ -141,15 +156,56 @@ async function readRegistryStatus(codes: string[]): Promise<Map<string, Registry
   return out;
 }
 
+/** บันทึกรายวันที่ RC กรอกเอง (รหัส พจส. + `rq:<id>` ของคนที่ยังไม่มีรหัส) — พังก็แค่นับจาก ATMS อย่างเดียว */
+async function readManualDays(keys: string[]): Promise<Map<string, Record<string, { code: string }>>> {
+  try {
+    return await loadManualDays(keys);
+  } catch (err) {
+    console.warn("[onboarding] อ่านบันทึกรายวันไม่สำเร็จ —", err);
+    return new Map();
+  }
+}
+
+/**
+ * วันฝึกงานจริง — วันที่สถานะเป็น `ฝ` ตั้งแต่วันเริ่มฝึกถึงวันนี้ · RC กรอกเองชนะ ATMS (กติกาเดียวกับรายงาน RC Alert)
+ * · บันทึกก่อนมีรหัส (`rq:<id>`) นับรวมด้วย ส่วนที่ซ้ำวันกับรหัสจริง รหัสจริงชนะ
+ */
+function countTrainedDays(
+  start: string,
+  atms: Map<string, string> | undefined,
+  manual: (Record<string, { code: string }> | undefined)[],
+): number {
+  const today = todayInBangkok();
+  const merged = new Map(atms ?? []);
+  /* ลำดับใน `manual` = ตัวท้ายชนะ */
+  for (const byDay of manual) for (const [iso, e] of Object.entries(byDay ?? {})) merged.set(iso, e.code);
+  let n = 0;
+  for (const [iso, code] of merged) if (code === "ฝ" && (!start || iso >= start) && iso <= today) n++;
+  return n;
+}
+
 async function toRecords(docs: WithId<RequisitionDoc>[]): Promise<OnboardingRecord[]> {
   const codes = [...new Set(docs.map((d) => d.drivercode).filter(Boolean))];
-  const [atms, registry] = await Promise.all([readAtms(codes), readRegistryStatus(codes)]);
-  const rows = docs.map((doc) => ({
-    ...toRequisition(doc),
-    onboarding: doc.onboarding ?? {},
-    atms: doc.drivercode ? (atms.get(doc.drivercode) ?? null) : null,
-    registry: doc.drivercode ? (registry.get(doc.drivercode) ?? null) : null,
-  }));
+  const dailyKeys = [...codes, ...docs.map((d) => requisitionDailyKey(d._id.toHexString()))];
+  const [atms, registry, manual] = await Promise.all([
+    readAtms(codes),
+    readRegistryStatus(codes),
+    readManualDays(dailyKeys),
+  ]);
+  const rows: OnboardingRecord[] = docs.map((doc) => {
+    const read = doc.drivercode ? atms.get(doc.drivercode) : undefined;
+    const row: OnboardingRecord = {
+      ...toRequisition(doc),
+      onboarding: doc.onboarding ?? {},
+      atms: read?.brief ?? null,
+      registry: doc.drivercode ? (registry.get(doc.drivercode) ?? null) : null,
+    };
+    row.trainedDays = countTrainedDays(trainingStart(row), read?.days, [
+      manual.get(requisitionDailyKey(doc._id.toHexString())),
+      doc.drivercode ? manual.get(doc.drivercode) : undefined,
+    ]);
+    return row;
+  });
   await attachMatchStatus(rows);
   return rows;
 }

@@ -160,8 +160,7 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
       { key: "kaName", label: "KA ที่ดูแล", kind: "text", byUser: true },
       { key: "coDriver", label: "อบรม Co-Driver", kind: "select", options: CO_DRIVER },
       { key: "coDriverOn", label: "วันอบรม Co-Driver", kind: "date", when: CO_DRIVER_TRAIN },
-      { key: "coDriverResult", label: "ผล Co-Driver", kind: "select", options: PASS_FAIL, when: CO_DRIVER_TRAIN },
-      { key: "coDriverNote", label: "วิทยากร / หมายเหตุ Co-Driver", kind: "text", when: CO_DRIVER_TRAIN },
+      /* ผล + วิทยากร/หมายเหตุ Co-Driver ย้ายไป ST กรอก (Bew 4 พ.ย. 2569 · ฐานจริงยังไม่มีค่าในส่วน KA) */
     ],
   },
   er: {
@@ -180,6 +179,9 @@ export const SECTION_SPECS: Record<OnboardingSection, SectionSpec> = {
       { key: "day8", label: "ประเมินก่อนรับรถ", kind: "select", options: DAY8_RESULTS, after: "day4", required: true },
       { key: "day8On", label: "วันที่ประเมินก่อนรับรถ", kind: "date", day: 8, past: true, after: "day4" },
       { key: "day8Note", label: "ข้อเสนอแนะ ก่อนรับรถ", kind: "textarea", after: "day4" },
+      /* Co-Driver — KA ระบุว่าอบรม/วันอบรม · ST ลงผล (การ์ด ST โชว์เมื่อ KA เลือก “อบรม”) */
+      { key: "coDriverResult", label: "ผล Co-Driver", kind: "select", options: PASS_FAIL },
+      { key: "coDriverNote", label: "วิทยากร / หมายเหตุ Co-Driver", kind: "text" },
       /* ช่องเดิมจากไฟล์ — ซ้ำกับผลครั้งสุดท้าย (36/45 แถว) · โชว์ค่าเดิมอย่างเดียว ไม่มีในฟอร์ม */
       { key: "readiness", label: "สรุปความพร้อม (เดิม)", kind: "select", options: READINESS, readOnly: true },
       { key: "assessedOn", label: "วันที่สรุป (เดิม)", kind: "date", readOnly: true },
@@ -276,6 +278,11 @@ export type OnboardingRecord = Requisition & {
   /** ไม่มีรหัส/ยังไม่เข้าทะเบียน = ไม่มีค่า */
   registry?: RegistryStatus | null;
   applicant?: CancelledApplicant;
+  /**
+   * วันที่สถานะเป็น `ฝ` (ฝึกงาน) จริงตั้งแต่วันเริ่มฝึก — ที่ RC กรอกในตารางรายวันชนะ ATMS · วันลา/ขาดไม่นับ
+   * · เซิร์ฟเวอร์คิดให้ใน `toRecords()` · ไม่มีค่า = ยังไม่ได้คิด (แถวที่เพิ่งสร้างบนจอ)
+   */
+  trainedDays?: number;
 };
 
 export type Suggestions = Partial<Record<SuggestKey, string[]>>;
@@ -304,7 +311,8 @@ export type Stage = (typeof STAGES)[number];
 
 export const STAGE_LABEL: Record<Stage, string> = {
   open: "อัตราว่าง",
-  recruiting: "ผู้สมัคร",
+  /* คนที่ผูกคำขอแล้วแต่ยังไม่ถึงวันเริ่มฝึก = ชุดเดียวกับ “รอฝึกงาน” ของหน้าผู้สมัคร (Bew 4 พ.ย. 2569) */
+  recruiting: "รอฝึกงาน",
   training: "ฝึกงาน",
   working: "รับรถแล้ว",
   ended: "จบ / ยกเลิก",
@@ -360,6 +368,67 @@ export function stageOf(r: OnboardingRecord): Stage {
   const start = trainingStart(r);
   if (start) return start <= todayInBangkok() ? "training" : "recruiting";
   return r.match?.status === "training" ? "training" : "recruiting";
+}
+
+/* ------------------------------------------------------------ รอรับรถ */
+
+/** ฝึกงานครบกี่วันถึงรอรับรถได้ — นับเฉพาะวัน `ฝ` (Bew 4 พ.ย. 2569) */
+export const HANDOVER_MIN_TRAINING_DAYS = 10;
+
+/** ผล ST ที่ถือว่าผ่านการประเมิน — ประเมินก่อนรับรถ / ติดตามกลางฝึกที่ให้พร้อมรับรถเลย / สรุปเดิมจากไฟล์ */
+const ST_READY: { key: string; value: string }[] = [
+  { key: "day8", value: "ผ่านฝึกงาน พร้อมรับรถ" },
+  { key: "day4", value: "ผ่าน พร้อมรับรถ" },
+  { key: "readiness", value: "พร้อมรับรถ" },
+];
+
+export interface HandoverCheck {
+  trainedDays: number;
+  days: boolean;
+  orientation: boolean;
+  st: boolean;
+}
+
+/** 3 เงื่อนไขรอรับรถ: ฝึกครบ 10 วัน (เฉพาะวันฝึกงาน) · ปฐมนิเทศแล้ว · ST ประเมินผ่าน */
+export function handoverCheck(r: OnboardingRecord): HandoverCheck {
+  const trainedDays = r.trainedDays ?? r.atms?.trainingDays ?? 0;
+  return {
+    trainedDays,
+    days: trainedDays >= HANDOVER_MIN_TRAINING_DAYS,
+    orientation: Boolean(val(r.onboarding, "hrd", "orientationOn")),
+    st: ST_READY.some((s) => val(r.onboarding, "er", s.key) === s.value),
+  };
+}
+
+/**
+ * รอรับรถ = ขั้นฝึกงานที่ครบ 3 เงื่อนไข (ระบบเปลี่ยนเอง ไม่มีใครกด) · หรือผลที่นำเข้าจากไฟล์เป็น “รอรับรถ”
+ * · ใช้ชุดเดียวทั้งแท็บฝึกงาน การ์ดหน้าผู้สมัคร แดชบอร์ด รายงาน RC Alert และ `GET /api/recruitment/pipeline`
+ */
+export function awaitingHandover(r: OnboardingRecord): boolean {
+  if (stageOf(r) !== "training") return false;
+  if (r.outcome === "waiting_handover") return true;
+  const c = handoverCheck(r);
+  return c.days && c.orientation && c.st;
+}
+
+/** 4 ช่วงก่อนรับรถ — ชื่อเดียวกับแดชบอร์ดกำลังคนและ `GET /api/recruitment/pipeline` */
+export const PIPELINE = ["open", "waitTraining", "training", "waitHandover"] as const;
+export type Pipeline = (typeof PIPELINE)[number];
+
+export const PIPELINE_LABEL: Record<Pipeline, string> = {
+  open: "รอสรรหา",
+  waitTraining: "รอฝึกงาน",
+  training: "ฝึกงาน",
+  waitHandover: "รอรับรถ",
+};
+
+/** ช่วงของแถว · รับรถแล้ว/จบ = `null` */
+export function pipelineOf(r: OnboardingRecord): Pipeline | null {
+  const stage = stageOf(r);
+  if (stage === "open") return "open";
+  if (stage === "recruiting") return "waitTraining";
+  if (stage !== "training") return null;
+  return awaitingHandover(r) ? "waitHandover" : "training";
 }
 
 /** ป้ายผลของคนที่จบ — ยกเลิกใบสมัคร → ผลที่กรอก → ATMS → ยกเลิกคำขอ */

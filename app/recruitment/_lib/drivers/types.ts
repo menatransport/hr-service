@@ -293,6 +293,19 @@ export const THAI_WEEKDAYS_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "�
  */
 export type DriverStatus = "active" | "resigned";
 
+/** ชนิดของการพ้นสภาพ — `transfer` = ย้ายไปรถร่วม (พจส. → พจร.) */
+export type DriverExitKind = "resign" | "transfer";
+
+/** รหัสเหตุผลที่ใส่ให้การย้ายไปรถร่วม — ไม่ได้อยู่ใน Reason Code Master (ท่าเดียวกับ `XLS` `ONB`) */
+export const TRANSFER_REASON_CODE = "TRF";
+export const TRANSFER_LABEL = "ย้ายไปรถร่วม";
+
+/** ป้ายสถานะการจ้างบนตาราง/ไฟล์ส่งออก — ปฏิบัติงาน · พ้นสภาพ · ย้ายไปรถร่วม */
+export function employmentLabel(d: { active: boolean; resignation: DriverResignation | null }): string {
+  if (d.active) return "ปฏิบัติงาน";
+  return d.resignation?.kind === "transfer" ? TRANSFER_LABEL : "พ้นสภาพ";
+}
+
 /**
  * เหตุผลการพ้นสภาพมาจาก **Reason Code Master** ใน MongoDB (ก.ย. 2026) — แก้ได้ที่
  * หน้า `/recruitment/admin/settings/resign-reasons` ดู `_lib/resign-reasons/`
@@ -302,6 +315,11 @@ export type DriverStatus = "active" | "resigned";
  * รายการเก่าจะยังอ่านได้ว่าตอนนั้นเลือกคำว่าอะไร
  */
 export interface DriverResignation {
+  /**
+   * `transfer` = ย้ายไปรถร่วม (4 พ.ย. 2569) — นับเป็นพ้นสภาพทุกที่ (แท็บ · dashboard · ห้องเช่า)
+   * ต่างแค่ป้ายสถานะ · ไม่มีรหัสเหตุผลจาก master (`reasonCode` = `TRF`)
+   */
+  kind: DriverExitKind;
   /** วันที่พ้นสภาพ `YYYY-MM-DD` (ค.ศ.) */
   dateISO: string;
   reasonCode: string;

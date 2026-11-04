@@ -13,6 +13,12 @@ import { STAGES, type Stage } from "@/app/recruitment/_lib/requisitions/onboardi
 export const metadata: Metadata = { title: "ติดตามพนักงานใหม่" };
 export const dynamic = "force-dynamic";
 
+/** ส่งเฉพาะใบที่ผูกคำขอ — คอลัมน์แท็บรอฝึกงานอ่านจากนี่ ไม่ต้องลากใบทั้งหมดลงจอ */
+function linkedApplications(hub: Hub) {
+  const ids = new Set(hub.records.map((r) => r.match?.applicationId).filter(Boolean));
+  return hub.applications.filter((a) => ids.has(a.id));
+}
+
 export default async function OnboardingPage({ searchParams }: PageProps<"/recruitment/admin/onboarding">) {
   const { tab, open } = await searchParams;
   const stage = (STAGES as readonly string[]).includes(String(tab)) ? (tab as Stage) : "training";
@@ -32,6 +38,7 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/recru
         <OnboardingView
           records={hub.records}
           repairs={hub.repairs}
+          applications={linkedApplications(hub)}
           options={options}
           initialStage={stage}
           initialOpen={typeof open === "string" ? open : ""}

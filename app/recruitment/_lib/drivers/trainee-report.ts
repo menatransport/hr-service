@@ -5,7 +5,7 @@ import { displayAnswer } from "@/app/recruitment/_lib/form";
 import { listActiveQuestions } from "@/app/recruitment/_lib/questions";
 import type { AnswerMap } from "@/app/recruitment/_lib/types";
 import { getOnboardingRecords } from "@/app/recruitment/_lib/requisitions/onboarding-store";
-import { stageOf, val, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { awaitingHandover, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { customerLabel, positionLabel } from "@/app/recruitment/_lib/requisitions/types";
 import { IN_REGISTRY } from "./master";
 import { loadManualDay } from "./registry";
@@ -21,13 +21,11 @@ import { REPORT_ISSUES, issueOf, type ReportIssue } from "./trainees";
  *    เหตุผลมาจากช่องเหตุผลตอนกรอก) · คนในรายงาน = ใบสมัครที่ “ฝึกงาน” อยู่ + ทุกคนที่มีบันทึกเองวันนั้น
  *    (คนที่เพิ่งลาออก/ถูกปลด ใบสมัครย้ายไปยกเลิกแล้วแต่ยังต้องขึ้นรายงานวันนั้น)
  * 2. **พนักงานใหม่มาเริ่มงาน** — วันเริ่มฝึก (`onboarding.rc.trainingStartOn`) ตรงกับวันที่รายงาน
- * 3. **รอรับรถ** — ขั้นฝึกงานที่ RC ตั้งผลเป็นรอรับรถ หรือ ST วันที่ 8 “ผ่านฝึกงาน พร้อมรับรถ” (กติกาเดียวกับแดชบอร์ด)
+ * 3. **รอรับรถ** — `awaitingHandover()`: ฝึกครบ 10 วัน (เฉพาะวันฝึกงาน) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน (กติกาเดียวกับแดชบอร์ด)
  *
  * ข้อมูลคน: ทะเบียน พจส. ก่อน (คำนำหน้า · ตำแหน่ง · ลูกค้า · แพล้นท์ ตามที่ฝ่ายบุคคลเขียน) ไม่มีค่อยใช้คำขอสรรหา
  * + คำตอบ “คำนำหน้า” ในใบสมัคร
  */
-
-const READY = "ผ่านฝึกงาน พร้อมรับรถ";
 
 /** ตำแหน่งในคำขอสรรหาเป็นรหัสสั้น — รายงานเขียนแบบทะเบียน พจส. */
 const POSITION_TEXT: Partial<Record<string, string>> = { ML: "Mixer L", MS: "Mixer S" };
@@ -96,9 +94,7 @@ export async function buildTraineeReport(dateISO: string): Promise<string> {
   const starters = active.filter(
     (r) => (r.match?.status === "training" || r.match?.status === "interview_passed") && r.trainingStartOn === dateISO,
   );
-  const waiting = active.filter(
-    (r) => stageOf(r) === "training" && (r.outcome === "waiting_handover" || val(r.onboarding, "er", "day8") === READY),
-  );
+  const waiting = active.filter(awaitingHandover);
   const allCodes = [...new Set([...codes, ...starters.map((r) => r.drivercode), ...waiting.map((r) => r.drivercode)])].filter(Boolean);
   const people = await peopleOf(allCodes, [...training, ...starters, ...waiting], questions);
   const personOf = (r: OnboardingRecord): Person =>

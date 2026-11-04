@@ -52,11 +52,21 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.3.0";
-export const API_DOCS_UPDATED = "2026-11-03";
+export const API_DOCS_VERSION = "4.4.0";
+export const API_DOCS_UPDATED = "2026-11-04";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-04",
+    version: "4.4.0",
+    changes: [
+      "`PATCH /api/recruitment/requisitions/{id}` รับ `details` — แก้คำขอ + ครูฝึก/รถ ทั้งก้อนในครั้งเดียว (ช่องเดียวกับตอนขออัตรา ยกเว้นวันที่แจ้งซึ่งแก้ไม่ได้) · ใบที่ยกเลิกแล้วแก้ไม่ได้",
+      "เพิ่ม `GET /api/recruitment/requisitions/options` — ตัวเลือกฟอร์มขออัตรา (พจส. · รถ · แพล้นท์ · ผู้สมัคร) โหลดเมื่อกดเพิ่มอัตรา",
+      "เพิ่ม `GET /api/recruitment/pipeline` —รอสรรหา · รอฝึกงาน · ฝึกงาน · รอรับรถ (รอรับรถ = ฝึกครบ 10 วันเฉพาะวันฝึกงาน + ปฐมนิเทศ + ST ผ่าน)",
+      "`PUT /api/drivers/{drivercode}/status` รับ `status: \"transferred\"` (ย้ายไปรถร่วม · วันที่ + หมายเหตุ) — เก็บเป็นพ้นสภาพ · `resignation.kind` = `resign` | `transfer`",
+    ],
+  },
   {
     date: "2026-11-03",
     version: "4.3.0",
@@ -292,7 +302,7 @@ export const API_GROUPS: ApiGroup[] = [
         access: "login",
         params: [P("drivercode", "รหัส พจส.")],
         response:
-          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
+          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { kind: \"resign\"|\"transfer\", date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
         errors: [{ status: 404, when: "ไม่พบรหัส พจส. ในทะเบียน" }],
       },
       {
@@ -340,11 +350,11 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/drivers/{drivercode}/status",
         summary: "บันทึกสถานะการจ้าง / การพ้นสภาพ",
         description:
-          "`resigned` ต้องมีวันที่และรหัสเหตุผลจาก Reason Code Master ที่เปิดใช้อยู่ · `active` = ล้างข้อมูลพ้นสภาพ (ใช้เมื่อบันทึกผิด)",
+          "`resigned` ต้องมีวันที่และรหัสเหตุผลจาก Reason Code Master ที่เปิดใช้อยู่ · `transferred` = ย้ายไปรถร่วม (วันที่ + หมายเหตุ · นับเป็นพ้นสภาพ) · `active` = ล้างข้อมูลพ้นสภาพ (ใช้เมื่อบันทึกผิด)",
         access: "login",
         params: [
           P("drivercode", "รหัส พจส."),
-          { name: "status", in: "body", type: '"active" | "resigned"', required: true, desc: "สถานะการจ้าง" },
+          { name: "status", in: "body", type: '"active" | "resigned" | "transferred"', required: true, desc: "สถานะการจ้าง" },
           { name: "resignDate", in: "body", type: "YYYY-MM-DD", desc: "วันที่พ้นสภาพ (บังคับเมื่อ resigned · ห้ามเป็นวันในอนาคต)" },
           { name: "reasonCode", in: "body", type: "string", desc: "รหัสเหตุผล เช่น `P4` (บังคับเมื่อ resigned)" },
           { name: "exitType", in: "body", type: '"vol" | "inv" | "disap"', desc: "ไม่ส่ง = ใช้ค่าตั้งต้นของรหัส" },
@@ -536,7 +546,7 @@ export const API_GROUPS: ApiGroup[] = [
           { name: "position / positionOther", in: "body", type: "string", required: true, desc: "ตำแหน่ง" },
           { name: "customer / customerOther / plant", in: "body", type: "string", required: true, desc: "ลูกค้า / แพล้นท์" },
           { name: "headcount", in: "body", type: "number", required: true, desc: "จำนวนอัตรา" },
-          { name: "hireType", in: "body", type: '"replace" | "new_rate"', required: true, desc: "แทนคนเดิม / อัตราใหม่" },
+          { name: "hireType", in: "body", type: '"replace" | "new_rate"', required: true, desc: "ทดแทน / อัตราใหม่ · ทดแทนไม่ระบุ replaceDrivercode ได้" },
           { name: "replaceDrivercode", in: "body", type: "string", desc: "พจส. ที่จะแทน (บังคับเมื่อ replace)" },
           { name: "replaceReasonNote", in: "body", type: "string", desc: "รายละเอียดเพิ่มเติม" },
           { name: "slots", in: "body", type: "{ vehicleCode, trainerDrivercode }[]", desc: "รถ / ครูฝึกรายอัตรา — ช่องที่ i ลงใบที่ i (ไม่ส่ง = ใช้สองช่องข้างล่างทุกใบ)" },
@@ -556,6 +566,7 @@ export const API_GROUPS: ApiGroup[] = [
           { name: "status", in: "body", type: '"cancelled" | "open"', desc: "ยกเลิก / เปิดรับอีกครั้ง" },
           { name: "cancelReason", in: "body", type: "string", desc: "บังคับเมื่อยกเลิก" },
           { name: "drivercode / note", in: "body", type: "string", desc: "รหัส พจส. ที่ได้ / หมายเหตุ" },
+          { name: "details", in: "body", type: "RequisitionDetails", desc: "แก้คำขอ + ครูฝึก/รถ ทั้งก้อน (ช่องเดียวกับตอนขออัตรา ยกเว้นวันที่แจ้ง) · ใบที่ยกเลิกแล้วแก้ไม่ได้" },
         ],
         response: "Requisition",
         errors: [
@@ -564,6 +575,31 @@ export const API_GROUPS: ApiGroup[] = [
             when: "ผูก `applicationId` ที่ใบสมัครถูกยกเลิกแล้ว · ใบสมัครผูกกับคำขออื่นอยู่แล้ว · คำขอถูกยกเลิก",
           },
         ],
+      },
+      {
+        method: "GET",
+        path: "/api/recruitment/pipeline",
+        summary: "คนตามช่วงก่อนรับรถ — รอสรรหา · รอฝึกงาน · ฝึกงาน · รอรับรถ",
+        description:
+          "ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร · **รอรับรถ = ฝึกงานครบ 10 วัน (นับเฉพาะวันที่สถานะเป็น `ฝ` · ที่ RC กรอกเองชนะ ATMS) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน** ระบบเปลี่ยนให้เอง · รอสรรหา = อัตราว่าง `name` / `drivercode` ว่าง · `counts` นับทุกช่วงเสมอไม่ขึ้นกับ `status` · `total` = ผลรวม 4 ช่วง · เรียงตามช่วง → เลขที่ JR",
+        access: "login",
+        params: [
+          { name: "status", in: "query", type: '"open" | "waitTraining" | "training" | "waitHandover" (คั่นด้วย ,)', desc: "ไม่ส่ง = ทั้ง 4 ช่วง" },
+        ],
+        response:
+          "{ asOf, counts: { open, waitTraining, training, waitHandover, total }, rows: [{ status, statusLabel, requisitionId, jr, requestedOn, branch, position, customer, plant, vehicle: { code, plateNo } | null, trainer: { drivercode, name } | null, drivercode, name, applicationRef, trainingStartOn, trainedDays, orientationOn, stResult, handoverReady: { days, orientation, st } }] }",
+        errors: [{ status: 400, when: "`status` ไม่อยู่ใน 4 ค่านี้" }],
+      },
+      {
+        method: "GET",
+        path: "/api/recruitment/requisitions/options",
+        summary: "ตัวเลือกของฟอร์มขออัตรา — พจส. · รถ · แพล้นท์ · ผู้สมัคร",
+        description:
+          "หน้าผู้สมัครโหลดตอนกดเพิ่มอัตราบนการ์ดรอสรรหาเท่านั้น (อ่าน ATMS หนัก) · แหล่งไหนอ่านไม่ได้จะส่งรายการว่างของแหล่งนั้น + ชื่อแหล่งใน `failed` แทนการล้มทั้งคำขอ",
+        access: "login",
+        params: [],
+        response:
+          "{ drivers: [{ value, label, vehicle?, branch? }], vehicles: [{ value, label, plate?, brand?, type?, plant?, branch?, customer?, position? }], plants: [{ value, label }], candidates: [{ value, label }], repairs: { [vehicleCode]: RepairStatus }, failed: string[], branchCustomers: { [branch]: string[] } }",
       },
       {
         method: "GET",

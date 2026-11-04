@@ -82,7 +82,7 @@ export const DEFAULT_DOC_SLOTS: DocSlot[] = [
   {
     id: "portrait",
     label: "รูปถ่ายหน้าตรง",
-    hint: "ถ่ายเซลฟี่ได้เลย ขอให้เห็นหน้าชัดและไม่สวมแว่นดำ",
+    hint: "แบบรูปติดบัตร หน้าตรง ไม่สวมแว่นดำ ไม่สวมหมวก แต่งกายเรียบร้อย",
     required: true,
     visible: true,
   },

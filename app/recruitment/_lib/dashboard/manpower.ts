@@ -3,7 +3,7 @@ import { driversSyncedAt, readDrivers } from "@/app/recruitment/_lib/drivers/mas
 import { toIsoDate } from "@/app/recruitment/_lib/drivers/registry";
 import { isUatDriverCode } from "@/lib/uat";
 import { getOnboardingRecords } from "@/app/recruitment/_lib/requisitions/onboarding-store";
-import { hasPerson, stageOf, trainingStart, val, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { hasPerson, pipelineOf, stageOf, trainingStart, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { customerLabel } from "@/app/recruitment/_lib/requisitions/types";
 
 /**
@@ -12,8 +12,8 @@ import { customerLabel } from "@/app/recruitment/_lib/requisitions/types";
  * หนึ่งแถว = ลูกค้า × แพล้นท์ · สองแหล่ง:
  * - **ทะเบียน พจส.** (`master_driver` ที่มี `registry`) → ปฏิบัติงาน · เข้า/ออกปีนี้
  * - **คำขอสรรหา** (`recruitment_requests` + ATMS) → อัตราว่าง · รอฝึกงาน · กำลังฝึกงาน · รอรับรถ
- *   ขั้นคิดด้วย `stageOf()` ชุดเดียวกับหน้าติดตามพนักงานใหม่ — รอรับรถ = ขั้นฝึกงานที่ ST ประเมินผ่านแล้ว
- *   หรือสถานะ พจส. “รอรับรถ”
+ *   ขั้นคิดด้วย `pipelineOf()` ชุดเดียวกับหน้าติดตามพนักงานใหม่ — รอรับรถ = ฝึกครบ 10 วัน (เฉพาะวันฝึกงาน)
+ *   + ปฐมนิเทศแล้ว + ST ประเมินผ่าน (`awaitingHandover()`) หรือสถานะ พจส. “รอรับรถ”
  *
  * **จับคู่สองแหล่ง:** ทะเบียนแยกลูกค้า Mixer S เป็น `<ลูกค้า> MS` (เช่น `Scco MS`) ส่วนคำขอเก็บลูกค้ากับ
  * ตำแหน่งแยกกัน → คำขอตำแหน่ง MS ต่อ ` MS` ให้ · ชื่อเทียบแบบไม่สนตัวพิมพ์/ช่องว่าง (`SCCO` = `Scco`,
@@ -87,19 +87,6 @@ interface RegistryDoc {
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
 const NONE = "ไม่ระบุ";
-
-/** ผ่านฝึกแล้ว รอรถ — ผล ST ครั้งสุดท้าย หรือสถานะ พจส. จากไฟล์ */
-const READY = "ผ่านฝึกงาน พร้อมรับรถ";
-
-function pipelineOf(r: OnboardingRecord): "open" | "waitTraining" | "training" | "waitHandover" | null {
-  const stage = stageOf(r);
-  if (stage === "open") return "open";
-  if (stage === "recruiting") return "waitTraining";
-  if (stage !== "training") return null;
-  return r.outcome === "waiting_handover" || val(r.onboarding, "er", "day8") === READY
-    ? "waitHandover"
-    : "training";
-}
 
 const EXIT_OUTCOME: Partial<Record<string, OnboardStatus>> = {
   cancelled_training: "cancelled",

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Eye, FileText, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Eye, FileText, Loader2, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
 
 import { ColumnMenu, type ColumnFilterOption, type SortDir } from "@/components/ui/column-menu";
 import { SearchField, Select, THAI_MONTHS_FULL } from "@/components/ui/field";
@@ -20,22 +20,26 @@ import { requestJson } from "@/lib/http";
 import { xlsxDate, type XlsxColumn } from "@/lib/xlsx-table";
 import { alertError } from "@/lib/swal";
 import { todayInBangkok } from "@/lib/record-case-flow";
-import { thaiDate } from "@/app/recruitment/_lib/form";
+import { formatPhone, thaiDate } from "@/app/recruitment/_lib/form";
 import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
-import { STATUS_LABEL, type ApplicationStatus } from "@/app/recruitment/_lib/types";
+import { STATUS_LABEL, type ApplicationStatus, type ApplicationSummary } from "@/app/recruitment/_lib/types";
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import type { RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
 import {
+  HANDOVER_MIN_TRAINING_DAYS,
   STAGES,
   STAGE_DOT,
   STAGE_LABEL,
+  awaitingHandover,
   daysBetween,
+  handoverCheck,
   daysToHandover,
   endLabel,
   stageOf,
   stepStates,
   trainingStart,
   val,
+  type HandoverCheck,
   type OnboardingRecord,
   type Stage,
   type Step,
@@ -53,6 +57,7 @@ import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
 import { RequisitionForm } from "@/app/recruitment/_components/admin/requisition-form";
 import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requisition-cancel";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
+import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
 
 /**
  * ติดตามพนักงานใหม่ — **หน้าเดียวแทน** ขออัตราสรรหา + Onboarding + ติดตามฝึกงาน (14 ต.ค. 2026)
@@ -69,10 +74,29 @@ type Row = OnboardingRecord & {
   states: Record<Step, StepState>;
   start: string;
   repair: RepairStatus | null;
+  /** ใบสมัครที่ผูก — แท็บรอฝึกงานโชว์คอลัมน์ชุดเดียวกับหน้าผู้สมัคร · ไม่ได้ส่งใบมา/ไม่ผูก = null */
+  app: ApplicationSummary | null;
+  /** เงื่อนไขรอรับรถ 3 ข้อ (วันฝึก · ปฐมนิเทศ · ST) */
+  ready: HandoverCheck;
+  /** ขั้นฝึกงานที่ครบเงื่อนไขแล้ว = สถานะ “รอรับรถ” ในแท็บฝึกงาน */
+  waitHandover: boolean;
 };
+
+const TRAINING_LABEL = "ฝึกงาน";
+const WAIT_HANDOVER_LABEL = "รอรับรถ";
 
 const DASH = "—";
 const date = (v: string) => (v ? thaiDate(v) : DASH);
+
+/** ประทับเวลาแบบหน้าผู้สมัคร — `15 ก.ย. 69 09:41` */
+const stamp = new Intl.DateTimeFormat("th-TH", {
+  day: "numeric",
+  month: "short",
+  year: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Asia/Bangkok",
+});
 
 type Col = {
   id: string;
@@ -88,7 +112,7 @@ const C = {
   name: { id: "name", label: "ชื่อ - นามสกุล", width: "min-w-[180px]", noFilter: true, text: (r) => r.name },
   /** คนที่รับรถแล้ว — ชื่อพาไปทะเบียนประวัติ (ข้อมูลหลักของคน) ไม่ใช่หน้าเส้นทาง */
   driver: { id: "driver", label: "ชื่อ - นามสกุล", width: "min-w-[180px]", noFilter: true, text: (r) => r.name },
-  applicant: { id: "applicant", label: "ผู้สมัคร", width: "min-w-[200px]", noFilter: true, text: (r) => r.name },
+  applicant: { id: "applicant", label: "ชื่อ–นามสกุล", width: "min-w-[200px]", noFilter: true, text: (r) => r.name },
   trainee: { id: "trainee", label: "ผู้ฝึกงาน", width: "min-w-[200px]", noFilter: true, text: (r) => r.name },
   waiting: {
     id: "waiting",
@@ -118,18 +142,68 @@ const C = {
     width: "min-w-[130px]",
     text: (r) => (r.match?.status ? STATUS_LABEL[r.match.status] : r.match ? "ผูกแล้ว" : "ไม่มีใบสมัคร"),
   },
-  drivercode: { id: "drivercode", label: "รหัส", width: "min-w-[80px]", text: (r) => r.drivercode || DASH },
+  /* คอลัมน์ชุดหน้าผู้สมัคร (กรองรอฝึกงาน) — อ่านจากใบสมัครที่ผูก · คนที่ไม่มีใบ = — */
+  contactOwner: {
+    id: "contactOwner",
+    label: "ผู้ติดต่อกลับ",
+    width: "min-w-[160px]",
+    text: (r) => (r.app ? r.app.contactOwner || "ยังไม่มีผู้รับผิดชอบ" : DASH),
+  },
+  createdAt: {
+    id: "createdAt",
+    label: "ประทับเวลา",
+    width: "min-w-[130px]",
+    noFilter: true,
+    text: (r) => (r.app ? stamp.format(new Date(r.app.createdAt)) : DASH),
+    key: (r) => r.app?.createdAt ?? "",
+  },
+  phone: { id: "phone", label: "เบอร์โทรศัพท์", width: "min-w-[130px]", noFilter: true, text: (r) => (r.app?.phone ? formatPhone(r.app.phone) : DASH) },
+  workZone: { id: "workZone", label: "สนใจงานเขต", width: "min-w-[130px]", text: (r) => r.app?.workZone || DASH },
+  readyToStart: {
+    id: "readyToStart",
+    label: "ความพร้อมเริ่มงาน",
+    width: "min-w-[150px]",
+    text: (r) => (r.app?.readyToStart ? thaiDate(r.app.readyToStart) : DASH),
+    key: (r) => r.app?.readyToStart || "9999-12-31",
+  },
+  interview: {
+    id: "interview",
+    label: "นัดสัมภาษณ์",
+    width: "min-w-[150px]",
+    text: (r) => (r.app ? (r.app.interview.date ? thaiDate(r.app.interview.date) : "ยังไม่ได้นัด") : DASH),
+    key: (r) => r.app?.interview.date || "9999-12-31",
+  },
+  appStatus: {
+    id: "appStatus",
+    label: "สถานะการสมัคร",
+    width: "min-w-[150px]",
+    text: (r) => (r.app ? STATUS_LABEL[r.app.status] : r.match ? "ผูกแล้ว" : "ไม่มีใบสมัคร"),
+  },
+  trainingOn: {
+    id: "trainingOn",
+    label: "วันที่ฝึกงาน",
+    width: "min-w-[130px]",
+    text: (r) => (r.start ? thaiDate(r.start) : "ยังไม่กำหนด"),
+    key: (r) => r.start || "9999-12-31",
+  },
+  /* เลขที่ JR — กดเปิดฟอร์ม JR / คัดลอก (ตัวเดียวกับหน้าผู้สมัคร · Bew 4 พ.ย. 2569) */
+  jr: { id: "jr", label: "เลขที่ JR", width: "min-w-[130px]", text: (r) => r.code || DASH },
   start: { id: "start", label: "เริ่มฝึก", width: "min-w-[110px]", text: (r) => date(r.start), key: (r) => r.start },
+  /* สถานะในแท็บฝึกงาน — ครบ 3 เงื่อนไข (`awaitingHandover`) ขึ้นรอรับรถเอง (Bew 4 พ.ย. 2569) */
+  trainStatus: {
+    id: "trainStatus",
+    label: "สถานะ",
+    width: "min-w-[100px]",
+    text: (r) => (r.waitHandover ? WAIT_HANDOVER_LABEL : TRAINING_LABEL),
+  },
+  /* นับเฉพาะวันฝึกงานจริง (`ฝ`) ไม่ใช่วันตามปฏิทิน — วันลา/ขาดไม่นับ */
   trainDays: {
     id: "trainDays",
     label: "ฝึกมา",
     width: "min-w-[70px]",
     noFilter: true,
-    text: (r) => {
-      const d = daysBetween(r.start, todayInBangkok());
-      return d === null ? DASH : `${d + 1} วัน`;
-    },
-    key: (r) => String(daysBetween(r.start, todayInBangkok()) ?? -1).padStart(5, "0"),
+    text: (r) => `${r.ready.trainedDays} วัน`,
+    key: (r) => String(r.ready.trainedDays).padStart(5, "0"),
   },
   handover: {
     id: "handover",
@@ -174,9 +248,14 @@ const C = {
 
 const COLUMNS: Record<Stage, Col[]> = {
   open: [C.code, C.waiting, C.requested, C.customer, C.plant, C.position, C.hireType, C.vehicle, C.repair, C.trainer],
-  recruiting: [C.applicant, C.code, C.application, C.start, C.waiting, C.customer, C.plant, C.position, C.trainer, C.vehicle, C.repair],
+  /* รอฝึกงาน = คอลัมน์ชุดเดียวกับหน้าผู้สมัครตอนกรอง “รอฝึกงาน” + เลขที่ JR (Bew 4 พ.ย. 2569)
+     · รอฝึกงาน/ฝึกงาน: รหัสพนักงานอยู่ใต้ชื่อ ไม่แยกคอลัมน์ */
+  recruiting: [
+    C.applicant, C.jr, C.contactOwner, C.createdAt, C.phone, C.workZone,
+    C.readyToStart, C.interview, C.appStatus, C.trainingOn,
+  ],
   training: [
-    C.trainee, C.drivercode, C.customer, C.plant, C.start, C.trainDays,
+    C.trainee, C.jr, C.trainStatus, C.customer, C.plant, C.start, C.trainDays,
     C.trainer, C.vehicle, C.repair,
   ],
   /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding */
@@ -185,8 +264,8 @@ const COLUMNS: Record<Stage, Col[]> = {
 };
 
 const DEFAULT_SORT: Record<Stage, { column: string; dir: SortDir }> = {
-  open: { column: "waiting", dir: "desc" },
-  recruiting: { column: "waiting", dir: "desc" },
+  open: { column: "code", dir: "asc" },
+  recruiting: { column: "createdAt", dir: "desc" },
   training: { column: "start", dir: "desc" },
   working: { column: "handover", dir: "desc" },
   ended: { column: "start", dir: "desc" },
@@ -201,8 +280,33 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   code: [{ header: "เลขที่", width: 14, kind: "code", value: C.code.text }],
   name: [{ header: "ชื่อ - นามสกุล", width: 28, value: (r) => r.name }],
   driver: [{ header: "ชื่อ - นามสกุล", width: 28, value: (r) => r.name }],
-  applicant: [{ header: "ผู้สมัคร", width: 28, value: (r) => r.name }],
-  trainee: [{ header: "ผู้ฝึกงาน", width: 28, value: (r) => r.name }],
+  applicant: [
+    { header: "ชื่อ–นามสกุล", width: 28, value: (r) => r.name },
+    { header: "รหัส", width: 10, kind: "code", value: (r) => r.drivercode },
+  ],
+  jr: [{ header: "เลขที่ JR", width: 14, kind: "code", value: (r) => r.code }],
+  contactOwner: [{ header: "ผู้ติดต่อกลับ", width: 20, value: (r) => r.app?.contactOwner ?? "" }],
+  createdAt: [{ header: "ประทับเวลา", width: 17, kind: "datetime", value: (r) => xlsxDate(r.app?.createdAt ?? "") }],
+  phone: [{ header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (r) => (r.app?.phone ? formatPhone(r.app.phone) : "") }],
+  workZone: [{ header: "สนใจงานเขต", width: 18, value: (r) => r.app?.workZone ?? "" }],
+  readyToStart: [
+    {
+      header: "ความพร้อมเริ่มงาน",
+      width: 16,
+      kind: "date",
+      value: (r) => {
+        const v = r.app?.readyToStart ?? "";
+        return xlsxDate(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "") ?? v;
+      },
+    },
+  ],
+  interview: [{ header: "นัดสัมภาษณ์", width: 13, kind: "date", value: (r) => xlsxDate(r.app?.interview.date ?? "") }],
+  appStatus: [{ header: "สถานะการสมัคร", width: 16, kind: "status", value: C.appStatus.text }],
+  trainingOn: [{ header: "วันที่ฝึกงาน", width: 13, kind: "date", value: (r) => xlsxDate(r.start) }],
+  trainee: [
+    { header: "ผู้ฝึกงาน", width: 28, value: (r) => r.name },
+    { header: "รหัส", width: 10, kind: "code", value: (r) => r.drivercode },
+  ],
   waiting: [{ header: "รอมาแล้ว (วัน)", width: 11, kind: "int", value: (r) => waitingDays(r) ?? 0 }],
   requested: [{ header: "วันที่แจ้ง", width: 13, kind: "date", value: (r) => xlsxDate(r.requestedOn) }],
   customer: [{ header: "ลูกค้า", width: 14, value: C.customer.text }],
@@ -216,19 +320,13 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   repair: [{ header: "สถานะรถ", width: 16, kind: "status", value: C.repair.text, tone: (r) => (r.repair ? "warn" : r.vehicle ? "ok" : null) }],
   trainer: [{ header: "ครูฝึก", width: 22, value: C.trainer.text }],
   application: [{ header: "ใบสมัคร", width: 18, kind: "status", value: C.application.text }],
-  drivercode: [{ header: "รหัส", width: 10, kind: "code", value: (r) => r.drivercode }],
   start: [{ header: "เริ่มฝึก", width: 13, kind: "date", value: (r) => xlsxDate(r.start) }],
-  trainDays: [
-    {
-      header: "ฝึกมา (วัน)",
-      width: 10,
-      kind: "int",
-      value: (r) => {
-        const d = daysBetween(r.start, todayInBangkok());
-        return d === null ? null : d + 1;
-      },
-    },
+  trainStatus: [
+    { header: "สถานะ", width: 12, kind: "status", value: C.trainStatus.text, tone: (r) => (r.waitHandover ? "ok" : null) },
+    { header: "ปฐมนิเทศ", width: 13, kind: "date", value: (r) => xlsxDate(val(r.onboarding, "hrd", "orientationOn")) },
+    { header: "ผล ST", width: 22, value: (r) => val(r.onboarding, "er", "day8") || val(r.onboarding, "er", "day4") || val(r.onboarding, "er", "day1") },
   ],
+  trainDays: [{ header: "ฝึกมา (วัน)", width: 10, kind: "int", value: (r) => r.ready.trainedDays }],
   handover: [{ header: "รับรถ", width: 13, kind: "date", value: (r) => xlsxDate(C.handover.key(r)) }],
   days: [{ header: "ฝึก→รับรถ (วัน)", width: 12, kind: "int", value: (r) => num(daysToHandover(r)) }],
   atms: [{ header: "ATMS ล่าสุด", width: 20, value: C.atms.text, tone: (r) => (r.atms?.exited ? "alert" : null) }],
@@ -270,8 +368,13 @@ function leftForRegistry(r: Row, today: string): boolean {
  * แถวของหน้าติดตามพนักงานใหม่ — ขั้น/ความคืบหน้า/บอร์ดซ่อม + ตัดคนรับรถเกิน 7 วันออก
  * · หน้าผู้สมัคร (การ์ดรอสรรหา/รับรถแล้ว) นับจากตัวนี้ด้วย ตัวเลขสองหน้าจึงตรงกันเสมอ
  */
-export function hubRows(records: OnboardingRecord[], repairs: Record<string, RepairStatus>): Row[] {
+export function hubRows(
+  records: OnboardingRecord[],
+  repairs: Record<string, RepairStatus>,
+  applications: ApplicationSummary[] = [],
+): Row[] {
   const today = todayInBangkok();
+  const apps = new Map(applications.map((a) => [a.id, a]));
   return records
     .map((r) => {
       const repair = r.vehicle?.plateNo ? (repairs[r.vehicle.plateNo] ?? null) : null;
@@ -282,6 +385,9 @@ export function hubRows(records: OnboardingRecord[], repairs: Record<string, Rep
         states: stepStates(r, repair),
         start: trainingStart(r),
         repair,
+        app: (r.match && apps.get(r.match.applicationId)) || null,
+        ready: handoverCheck(r),
+        waitHandover: awaitingHandover(r),
       };
     })
     .filter((r) => r.stage !== "working" || !leftForRegistry(r, today));
@@ -293,16 +399,24 @@ const monthLabel = (ym: string) =>
 export function OnboardingView({
   records: initial,
   repairs,
+  applications,
   options,
   initialStage = "training",
+  initialFilters = {},
   initialOpen = "",
   embedded = false,
+  onCreated,
+  onUpdated,
 }: {
   records: OnboardingRecord[];
   repairs: Record<string, RepairStatus>;
+  /** ใบสมัครที่ผูกกับคำขอ — คอลัมน์แท็บรอฝึกงาน · ไม่ส่ง = คอลัมน์พวกนั้นขึ้น — */
+  applications?: ApplicationSummary[];
   /** ฟอร์มขออัตรา — ไม่ส่ง = ไม่มีปุ่มขออัตรา */
   options?: RequisitionOptions;
   initialStage?: Stage;
+  /** ตัวกรองคอลัมน์ตั้งต้น — การ์ดรอรับรถของหน้าผู้สมัครเปิดแท็บฝึกงานกรองสถานะรอรับรถ */
+  initialFilters?: Record<string, string[]>;
   /** `?open=<id>` — เปิด dialog ของคำขอนี้ตอนโหลด (ลิงก์เก่า `/onboarding/[id]` redirect มา) */
   initialOpen?: string;
   /**
@@ -310,6 +424,10 @@ export function OnboardingView({
    * · `records` ตามพ่อแม่สด ๆ (ผูก RQ บนหน้าผู้สมัครแล้วแถวขยับทันที)
    */
   embedded?: boolean;
+  /** ฝังอยู่ = หน้าแม่ถือแถวเอง — คำขอที่เพิ่งสร้างส่งกลับไปให้หน้าแม่ต่อเข้ารายการ */
+  onCreated?: (created: Requisition[]) => void;
+  /** ฝังอยู่ = คำขอที่เพิ่งแก้ (ฟอร์มคำขอ · KA / dialog) ส่งกลับให้หน้าแม่ทับแถวเดิม */
+  onUpdated?: (updated: Requisition) => void;
 }) {
   const [own, setRecords] = useState(initial);
   const records = embedded ? initial : own;
@@ -320,16 +438,20 @@ export function OnboardingView({
   });
   const [stage, setStage] = useState<Stage>(startStage);
   const [sort, setSort] = useState(DEFAULT_SORT[startStage]);
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [filters, setFilters] = useState<Record<string, string[]>>(initialFilters);
   const [query, setQuery] = useState("");
   const [month, setMonth] = useState("");
   const [creating, setCreating] = useState(false);
+  /* ฝังในหน้าผู้สมัครไม่ได้ส่งตัวเลือกมา — โหลดตอนกดปุ่มเพิ่มอัตราครั้งแรก */
+  const [loadedOptions, setLoadedOptions] = useState<RequisitionOptions | null>(null);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const formOptions = options ?? loadedOptions;
   const [cancelling, setCancelling] = useState<Requisition | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState(initialOpen);
   const router = useRouter();
 
-  const rows = useMemo(() => hubRows(records, repairs), [records, repairs]);
+  const rows = useMemo(() => hubRows(records, repairs, applications), [records, repairs, applications]);
 
   const months = useMemo(
     () => [...new Set(rows.map((r) => r.requestedOn.slice(0, 7)).filter(Boolean))].sort().reverse(),
@@ -347,6 +469,7 @@ export function OnboardingView({
   }, [inMonth]);
 
   const inStage = useMemo(() => inMonth.filter((r) => r.stage === stage), [inMonth, stage]);
+  const waitHandover = useMemo(() => inMonth.filter((r) => r.waitHandover).length, [inMonth]);
 
   const avgDays = useMemo(() => {
     const d = inMonth
@@ -375,7 +498,7 @@ export function OnboardingView({
     const list = inStage.filter((row) => {
       if (
         needle &&
-        ![row.name, row.code, row.applicant?.ref ?? "", row.drivercode, row.plant, row.trainer?.name ?? "", row.vehicle?.code ?? "", row.vehicle?.plateNo ?? ""].some((t) =>
+        ![row.name, row.code, row.applicant?.ref ?? "", row.app?.phone ?? "", row.drivercode, row.plant, row.trainer?.name ?? "", row.vehicle?.code ?? "", row.vehicle?.plateNo ?? ""].some((t) =>
           t.toLowerCase().includes(needle),
         )
       )
@@ -433,11 +556,31 @@ export function OnboardingView({
     }
   }
 
-  /** บันทึกใน dialog → แถวในตารางตาม · ฝังในหน้าผู้สมัคร = ให้หน้าแม่โหลดใหม่ */
+  /** บันทึกใน dialog → แถวในตารางตาม · ฝังในหน้าผู้สมัคร = ส่งคำขอให้หน้าแม่ + โหลดข้อมูลฝ่ายใหม่ */
   function saved(next: OnboardingRecord) {
-    if (embedded) router.refresh();
-    else setRecords((prev) => prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)));
+    if (embedded) {
+      onUpdated?.(next);
+      router.refresh();
+    } else setRecords((prev) => prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)));
   }
+
+  /** ตัวเลือกฟอร์มขออัตรา — ฝังในหน้าผู้สมัครไม่ได้ส่งมา โหลดครั้งแรกที่กด */
+  async function withOptions(open: () => void, failTitle: string) {
+    if (formOptions) return open();
+    setLoadingOptions(true);
+    try {
+      setLoadedOptions(
+        await requestJson<RequisitionOptions>("/api/recruitment/requisitions/options", {}, "โหลดตัวเลือกไม่สำเร็จ"),
+      );
+      open();
+    } catch (err) {
+      alertError(failTitle, err instanceof Error ? err.message : undefined);
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
+
+  const startCreate = () => withOptions(() => setCreating(true), "เปิดฟอร์มขออัตราไม่สำเร็จ");
 
   function closeDialog() {
     setViewing("");
@@ -468,7 +611,9 @@ export function OnboardingView({
               sub={
                 s === "working"
                   ? `${WORKING_DAYS} วันล่าสุด${avgDays !== null ? ` · เฉลี่ยฝึก ${avgDays} วัน` : ""}`
-                  : undefined
+                  : s === "training" && waitHandover
+                    ? `${WAIT_HANDOVER_LABEL} ${waitHandover} คน`
+                    : undefined
               }
               active={stage === s}
               onClick={() => switchStage(s)}
@@ -521,7 +666,22 @@ export function OnboardingView({
                 rows: visible,
               })}
             />
-            {stage === "open" && options ? (
+            {stage === "open" && embedded ? (
+              <button
+                type="button"
+                onClick={startCreate}
+                disabled={loadingOptions}
+                title="เพิ่มอัตรา"
+                aria-label="เพิ่มอัตรา"
+                className="btn-pri flex size-9 cursor-pointer items-center justify-center disabled:opacity-60"
+              >
+                {loadingOptions ? (
+                  <Loader2 size={16} className="animate-spin" aria-hidden />
+                ) : (
+                  <Plus size={18} strokeWidth={2.2} aria-hidden />
+                )}
+              </button>
+            ) : stage === "open" && options ? (
               <button
                 type="button"
                 onClick={() => setCreating(true)}
@@ -613,7 +773,7 @@ export function OnboardingView({
                           : "px-3 py-2 whitespace-nowrap"
                       }
                     >
-                      <Cell column={column} row={row} />
+                      <Cell column={column} row={row} onOpen={() => setViewing(journeyId(row))} />
                     </td>
                   ))}
                   <td className="sticky right-0 z-[5] bg-base-100 px-2 py-1 text-right whitespace-nowrap group-hover:bg-base-200">
@@ -656,19 +816,23 @@ export function OnboardingView({
 
       {/* ตารางฝึกงานรายวันย้ายไปอยู่ใต้ตารางผู้สมัคร (กรองฝึกงาน) ของ RC แล้ว — Bew 25 ต.ค. 2569 */}
 
-      {creating && options ? (
+      {creating && formOptions ? (
         <RequisitionForm
-          options={options}
+          options={formOptions}
           onClose={() => setCreating(false)}
           onCreated={(created) =>
-            setRecords((prev) => [...created.map((r) => ({ ...r, onboarding: {}, atms: null })), ...prev])
+            embedded
+              ? onCreated?.(created)
+              : setRecords((prev) => [...created.map((r) => ({ ...r, onboarding: {}, atms: null })), ...prev])
           }
         />
       ) : null}
       {cancelling ? (
         <RequisitionCancelModal row={cancelling} onClose={() => setCancelling(null)} onCancelled={merge} />
       ) : null}
-      {viewing ? <OnboardingDialog id={viewing} onClose={closeDialog} onSaved={saved} /> : null}
+      {viewing ? (
+        <OnboardingDialog id={viewing} onClose={closeDialog} onSaved={saved} />
+      ) : null}
     </div>
   );
 }
@@ -688,7 +852,7 @@ const APPLICANT_TONE: Record<ApplicationStatus, string> = {
   cancelled: "bg-alert/12 text-alert",
 };
 
-function Cell({ column, row }: { column: Col; row: Row }) {
+function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => void }) {
   const text = column.text(row);
 
   /* ผู้สมัครที่ยกเลิก — ชื่อพาไปหน้าผู้สมัคร · เลขที่ = อัตราที่เคยอยู่ หรือเลขใบสมัครถ้าไม่เคยผูก */
@@ -731,17 +895,14 @@ function Cell({ column, row }: { column: Col; row: Row }) {
           >
             <FileText size={14} strokeWidth={2} aria-hidden />
           </span>
-          {row.name}
+          <span className="flex flex-col leading-tight">
+            {row.name}
+            {row.drivercode ? <span className="font-mono text-11 font-normal text-mut">{row.drivercode}</span> : null}
+          </span>
         </span>
       );
-    case "drivercode":
-      return row.drivercode ? (
-        <Link href={`${ADMIN_ROOT}/drivers/${row.drivercode}`} className="font-mono text-12 hover:text-primary">
-          {row.drivercode}
-        </Link>
-      ) : (
-        <span className="text-mut">{DASH}</span>
-      );
+    case "jr":
+      return row.code && journeyId(row) ? <JrCell code={row.code} onOpen={onOpen} /> : <span className="text-mut">{DASH}</span>;
     case "vehicle":
       return row.vehicle ? (
         <span className="flex flex-col leading-tight">
@@ -759,6 +920,23 @@ function Cell({ column, row }: { column: Col; row: Row }) {
         <span className="rounded-full bg-st-live px-2 py-0.5 text-12 font-medium text-st-live-ink">{text}</span>
       ) : (
         <span className="text-mut">{DASH}</span>
+      );
+    case "appStatus":
+      return row.app ? (
+        <span className={`rounded-full px-2 py-0.5 text-12 font-medium ${APPLICANT_TONE[row.app.status]}`}>{text}</span>
+      ) : (
+        <span className="text-mut">{text}</span>
+      );
+    case "trainStatus":
+      return (
+        <span
+          title={`ฝึกงาน ${row.ready.trainedDays}/${HANDOVER_MIN_TRAINING_DAYS} วัน ${row.ready.days ? "✓" : "✗"} · ปฐมนิเทศ ${row.ready.orientation ? "✓" : "✗"} · ST ประเมินผ่าน ${row.ready.st ? "✓" : "✗"}`}
+          className={`rounded-full px-2 py-0.5 text-12 font-medium ${
+            row.waitHandover ? "bg-st-live text-st-live-ink" : "bg-primary/12 text-primary"
+          }`}
+        >
+          {text}
+        </span>
       );
     case "driverStatus":
       if (!row.registry) return <span className="text-mut">{DASH}</span>;

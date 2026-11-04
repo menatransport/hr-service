@@ -1,9 +1,11 @@
 import { ObjectId, type Collection, type Document, type WithId } from "mongodb";
+import { after } from "next/server";
 
 import { hrCol } from "@/lib/db";
 import { nextSeq } from "@/lib/db/counters";
 import { DRAFT_PREFIX, mediaKeyOf, mediaUrl } from "@/lib/media";
 import { copyMedia, deleteMedia, deleteMediaFolder, keyPart, mediaKeys } from "@/lib/s3";
+import { notifyNewApplication } from "./chat-notify";
 import { CONSENT_ITEMS, CONSENT_VERSION, hasRequiredConsent } from "./consent";
 import {
   KEY_FULL_NAME,
@@ -142,6 +144,14 @@ function roleAnswer(
   const question = findByRole(doc.questionSnapshot ?? [], role);
   if (!question) return "";
   const value = displayAnswer(doc.answers?.[question.key], question.options);
+  return value === "—" ? "" : value;
+}
+
+/** คำนำหน้าที่ผู้สมัครเลือก — ข้อที่ป้ายมีคำว่า “คำนำหน้า” (แบบเดียวกับ `trainee-report.ts`) */
+function titleAnswer(doc: Pick<ApplicationDoc, "questionSnapshot" | "answers">): string {
+  const question = doc.questionSnapshot.find((q) => q.label.includes("คำนำหน้า"));
+  if (!question) return "";
+  const value = displayAnswer(doc.answers[question.key], question.options);
   return value === "—" ? "" : value;
 }
 
@@ -514,6 +524,26 @@ export async function createApplication(
   }
   /* ไฟล์ร่างไม่ต้องใช้แล้ว — ลบเลยไม่ต้องรอ lifecycle */
   await dropMedia(promoted.drafts.map(mediaUrl));
+
+  /* แจ้ง Google Chat หลังตอบผู้สมัครไปแล้ว — Chat ช้า/ล่มไม่หน่วงหรือทำให้การส่งพัง */
+  const requiredSlots = docSlots.filter((s) => s.visible && s.required).map((s) => s.id);
+  const attached = new Set(doc.files.map((f) => f.slot));
+  after(() =>
+    notifyNewApplication({
+      ref: doc.ref,
+      title: titleAnswer(doc),
+      fullName: fullNameOf(doc),
+      phone: doc.phone,
+      contact: declaredContact(doc),
+      portraitKey: mediaKeyOf(doc.files.find((f) => f.slot === "portrait")?.url),
+      workZone: roleAnswer(doc, "work_zone"),
+      readyToStart: roleAnswer(doc, "ready_date"),
+      requiredDocs: { done: requiredSlots.filter((id) => attached.has(id)).length, total: requiredSlots.length },
+      fileCount: doc.files.length,
+      rating: summarizeRating({ questionSnapshot: doc.questionSnapshot, answers: doc.answers, rating: EMPTY_RATING }),
+      createdAt: doc.createdAt,
+    }),
+  );
   return { ref: doc.ref, createdAt: doc.createdAt };
 }
 

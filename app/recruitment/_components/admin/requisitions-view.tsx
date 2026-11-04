@@ -240,7 +240,7 @@ type ColumnId = (typeof COLUMNS)[number]["id"];
 type Filters = Partial<Record<ColumnId, string[]>>;
 
 /** ลำดับตั้งต้น — คำขอใหม่สุดอยู่บนสุด · เลขที่เรียงตามเดือนอยู่แล้วจึงใช้แทนวันที่ได้ */
-const DEFAULT_SORT: { column: ColumnId; dir: SortDir } = { column: "code", dir: "desc" };
+const DEFAULT_SORT: { column: ColumnId; dir: SortDir } = { column: "code", dir: "asc" };
 
 function facetOf(column: (typeof COLUMNS)[number], row: Requisition): string {
   return column.text(row);
@@ -661,9 +661,9 @@ export function RequisitionsView({
                     {/* เหตุผลที่ต้องแทนคนเดิมอยู่ใน tooltip ไม่ใช่บรรทัดสอง —
                         hover ที่ชิปเพื่อดู ไม่ใช่ข้อมูลที่ต้องเห็นตลอดเวลา */}
                     <span
-                      title={row.replace ? `แทน ${replaceSummary(row)}` : undefined}
+                      title={replaceSummary(row) ? `แทน ${replaceSummary(row)}` : undefined}
                       className={`w-fit rounded-selector px-1.5 py-0.5 text-11-5 font-medium whitespace-nowrap ${HIRE_TYPE_TONE[row.hireType]} ${
-                        row.replace ? "cursor-help" : ""
+                        replaceSummary(row) ? "cursor-help" : ""
                       }`}
                     >
                       {hireTypeLabel(row.hireType)}

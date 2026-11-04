@@ -41,6 +41,7 @@ import {
   OWNER_TYPE_KEYS,
   OWNER_TYPE_LABELS,
   PROBATION_MONTHS,
+  employmentLabel,
   formatLicenseGap,
   formatTenure,
   formatThaiDate,
@@ -316,7 +317,7 @@ async function driverSheet(
         header: "สถานะการจ้าง",
         width: 13,
         kind: "status",
-        value: (d) => (d.active ? "ปฏิบัติงาน" : "พ้นสภาพ"),
+        value: (d) => employmentLabel(d),
         tone: (d) => (d.active ? "ok" : "alert"),
       },
       ...(resigned ? resignColumns : []),
@@ -963,12 +964,13 @@ function Row({
 
   /**
    * แถวของคนที่พ้นสภาพแล้วเป็น **โทนแดงทั้งแถว** — รูป รหัส พื้นตอนชี้ ลูกศรท้ายแถว
+   * (ย้ายไปรถร่วม = โทนม่วง `EXIT_TONE.transfer` · 4 พ.ย. 2569)
    *
    * ดูจาก `driver.active` ไม่ใช่จากแท็บที่เปิดอยู่ — สีจึงติดไปกับภาพที่แคปส่งต่อ
    * และกับกระดาษที่พิมพ์ออกมา ซึ่งไม่มีแท็บติดไปด้วย · ถ้าวันหนึ่งแท็บ “ปัจจุบัน”
    * มีคนที่เพิ่งกดพ้นสภาพปนอยู่ แถวนั้นก็แดงทันทีโดยไม่ต้องรอสลับแท็บ
    */
-  const resigned = !driver.active;
+  const exit = exitToneOf(driver);
 
   return (
     /*
@@ -982,14 +984,14 @@ function Row({
       onClick={() => router.push(href)}
       style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
       className={`group animate-fade-in cursor-pointer border-b transition-colors last:border-b-0 ${
-        resigned ? "border-alert/15 hover:bg-alert-soft" : "border-line hover:bg-base-200/50"
+        exit ? exit.row : "border-line hover:bg-base-200/50"
       }`}
     >
       {/* ชื่อยึดขอบซ้ายไว้ตอนตารางเลื่อนแนวนอน — กติกาเดียวกับตารางผู้สมัคร
           พื้นต้องทึบ (ไม่ใช่ `/50` ของแถว) ไม่งั้นตัวหนังสือคอลัมน์ที่เลื่อนผ่านจะทะลุขึ้นมา */}
       <td
         className={`sticky left-0 z-[5] bg-base-100 px-3 py-2 after:absolute after:inset-y-0 after:right-0 after:w-px ${
-          resigned ? "after:bg-alert/20 group-hover:bg-alert-soft" : "after:bg-line group-hover:bg-base-200"
+          exit ? exit.sticky : "after:bg-line group-hover:bg-base-200"
         }`}
       >
         <span className="flex items-center gap-2.5">
@@ -1007,7 +1009,7 @@ function Row({
         <Link
           href={href}
           onClick={(e) => e.stopPropagation()}
-          className={`transition-colors hover:text-ink ${resigned ? "text-alert" : "text-primary"}`}
+          className={`transition-colors hover:text-ink ${exit ? exit.text : "text-primary"}`}
         >
           {driver.drivercode}
         </Link>
@@ -1063,12 +1065,35 @@ function Row({
           strokeWidth={1.8}
           aria-hidden
           className={`inline-block text-mut/60 transition-transform duration-200 group-hover:translate-x-0.5 ${
-            resigned ? "group-hover:text-alert" : "group-hover:text-primary"
+            exit ? exit.hoverText : "group-hover:text-primary"
           }`}
         />
       </td>
     </tr>
   );
+}
+
+/** โทนของแถวคนที่ไม่ได้ทำงานแล้ว — พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง · ยังทำงาน = `null` */
+const EXIT_TONE = {
+  resign: {
+    row: "border-alert/15 hover:bg-alert-soft",
+    sticky: "after:bg-alert/20 group-hover:bg-alert-soft",
+    text: "text-alert",
+    hoverText: "group-hover:text-alert",
+    cardHover: "hover:bg-alert-soft",
+  },
+  transfer: {
+    row: "border-transfer/15 hover:bg-transfer-soft",
+    sticky: "after:bg-transfer/20 group-hover:bg-transfer-soft",
+    text: "text-transfer",
+    hoverText: "group-hover:text-transfer",
+    cardHover: "hover:bg-transfer-soft",
+  },
+} as const;
+
+function exitToneOf(driver: DriverRecord) {
+  if (driver.active) return null;
+  return EXIT_TONE[driver.resignation?.kind === "transfer" ? "transfer" : "resign"];
 }
 
 function DriverCard({
@@ -1082,14 +1107,14 @@ function DriverCard({
   hideVehicle: boolean;
 }) {
   /* กติกาเดียวกับ `Row` — คนที่พ้นสภาพแล้วอ่านออกจากสีได้ก่อนอ่านตัวหนังสือ */
-  const resigned = !driver.active;
+  const exit = exitToneOf(driver);
 
   return (
     <Link
       href={`/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
       className={`group flex animate-fade-in flex-col gap-2.5 px-(--sheet-px) py-3.5 transition-colors ${
-        resigned ? "hover:bg-alert-soft" : "hover:bg-soft/35"
+        exit ? exit.cardHover : "hover:bg-soft/35"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -1100,7 +1125,7 @@ function DriverCard({
             {driver.isNew ? <NewBadge /> : null}
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-11-5 text-mut">
-            <span className={resigned ? "text-alert" : "text-primary"}>{driver.drivercode}</span>
+            <span className={exit ? exit.text : "text-primary"}>{driver.drivercode}</span>
             {driver.phone ? <span>{primaryPhone(driver.phone)}</span> : null}
           </span>
         </div>
