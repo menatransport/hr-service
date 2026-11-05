@@ -7,6 +7,7 @@ import type { NextRequest } from "next/server";
 import { badRequest, fail, ok, unauthorized } from "@/app/api/_lib/respond";
 import { readSessionUser } from "@/lib/auth/session";
 import { fetchGoogleSheetXlsx, googleSheetId } from "@/lib/google-sheet";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `POST /api/drivers/excel-sync` — **เฉพาะ `next dev`** · ชี้ path ไฟล์ทะเบียนฝ่ายบุคคล (.xlsx ชีต “ทะเบียน 2026”)
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await readSessionUser();
     if (!user) return unauthorized("หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
 
     const body = (await request.json().catch(() => null)) as { path?: unknown; apply?: unknown } | null;
     // วาง path จาก “Copy as path” ของ Windows มาจะติดเครื่องหมายคำพูด

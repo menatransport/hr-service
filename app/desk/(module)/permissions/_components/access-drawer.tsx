@@ -147,13 +147,19 @@ export function AccessDrawer({
                     <div key={m.id} className="contents">
                       <div className="flex min-w-0 items-center gap-2 border-t border-line py-1.5">
                         <VisCell visible={effective} />
-                        <span className="min-w-0 truncate" title={m.item.desc}>
-                          {m.parentLabel ? <span className="text-mut">{m.parentLabel} · </span> : null}
-                          {m.label}
-                          {m.action ? (
-                            <span className="ml-1.5 rounded-full border border-line px-1.5 py-px text-10-5 text-mut">
-                              สิทธิ์ในหน้า
-                            </span>
+                        <span className="flex min-w-0 flex-col">
+                          <span className="min-w-0 truncate" title={m.item.desc}>
+                            {m.parentLabel ? <span className="text-mut">{m.parentLabel} · </span> : null}
+                            {m.label}
+                            {m.action ? (
+                              <span className="ml-1.5 rounded-full border border-line px-1.5 py-px text-10-5 text-mut">
+                                สิทธิ์ในหน้า
+                              </span>
+                            ) : null}
+                          </span>
+                          {/* สิทธิ์ในหน้าอ่านจากชื่ออย่างเดียวไม่ออกว่า “ไม่เห็น” แล้วเกิดอะไร — โชว์คำอธิบายไว้ใต้ชื่อ */}
+                          {m.action && m.item.desc ? (
+                            <span className="text-11 leading-snug text-mut text-pretty">{m.item.desc}</span>
                           ) : null}
                         </span>
                       </div>

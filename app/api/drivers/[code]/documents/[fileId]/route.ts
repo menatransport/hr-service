@@ -9,6 +9,7 @@ import {
   getDriverDocument,
 } from "@/app/recruitment/_lib/drivers/registry";
 import { presignMedia, StorageError } from "@/lib/s3";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * เอกสารใบเดียวในแฟ้มประวัติ พจส.
@@ -70,6 +71,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/drivers/[code]/documents/[fileId]">,
 ) {
   try {
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
     const { code, fileId } = await ctx.params;
     const drivercode = decodeURIComponent(code);
 

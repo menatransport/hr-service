@@ -24,6 +24,7 @@ import {
   type ResignMaster,
 } from "@/app/recruitment/_lib/resign-reasons/types";
 import { ExitTypePicker } from "@/app/recruitment/_components/admin/exit-type-picker";
+import { useCanSee } from "@/components/auth/menu-access-provider";
 
 /**
  * ปุ่มปรับสถานะการจ้างของ พจส. — ใช้ทั้งในตารางและบนหน้ารายบุคคล
@@ -57,6 +58,8 @@ export function DriverStatusControl({
   const resigned = !driver.active;
   const transferred = resigned && driver.resignation?.kind === "transfer";
   const label = employmentLabel(driver);
+  /* สิทธิ์ย่อย “↳ ประวัติ” ไม่เห็น = ทะเบียนอ่านอย่างเดียว — เหลือแค่ป้ายสถานะ กดไม่ได้ */
+  const canEdit = useCanSee("registry-profile");
 
   /** กดกลับเป็นปฏิบัติงาน = ยกเลิกการบันทึกที่ผิด จึงถามให้ชัดว่าข้อมูลจะหาย */
   async function revertToActive() {
@@ -81,6 +84,17 @@ export function DriverStatusControl({
     // อ่านค่าจริงกลับมาจากเซิร์ฟเวอร์ ไม่เดาสถานะเองในหน้าจอ
     if (out.status === "done") router.refresh();
   }
+
+  if (!canEdit)
+    return (
+      <span
+        className={`truncate px-1 py-0.5 ${variant === "cell" ? "text-11-5" : "text-13"} ${
+          transferred ? "font-medium text-transfer" : resigned ? "font-medium text-alert" : "text-mut"
+        }`}
+      >
+        {label}
+      </span>
+    );
 
   const trigger =
     variant === "cell" ? (

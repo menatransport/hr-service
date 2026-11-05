@@ -10,6 +10,7 @@ import {
   type ManualDriverInput,
 } from "@/app/recruitment/_lib/drivers/registry";
 import { toDriverListItemDto } from "@/app/recruitment/_lib/drivers/api";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `GET /api/drivers?year=&month=` — ทะเบียน พจส. ทั้งหมด (เรียงตามรหัส) · กรองตามวันเริ่มงานได้
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await readSessionUser();
     if (!user) return unauthorized("หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
 
     const body = (await request.json().catch(() => null)) as unknown;
     if (!body || typeof body !== "object" || Array.isArray(body)) return badRequest("อ่านข้อมูลที่ส่งมาไม่ได้");

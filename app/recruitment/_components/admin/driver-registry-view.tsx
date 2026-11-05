@@ -5,22 +5,19 @@ import Link from "next/link";
 import {
   Eye,
   ListFilter,
-  Plus,
   SearchX,
   X,
 } from "lucide-react";
 
-import { DriverAddDialog } from "@/app/recruitment/_components/admin/driver-add-dialog";
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
 import { DriverExcelSyncDialog } from "@/app/recruitment/_components/admin/driver-excel-sync";
 import { DriverPasteDialog } from "@/app/recruitment/_components/admin/driver-paste-import";
-import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
 import { useCanSee } from "@/components/auth/menu-access-provider";
 import { ColumnMenu, type ColumnFilterOption } from "@/components/ui/column-menu";
 import { Pager } from "@/components/ui/pager";
 import { SearchField } from "@/components/ui/field";
-import { XlsxMenuButton } from "@/components/ui/xlsx-export-button";
+import { XlsxExportButton, XlsxMenuButton, type XlsxExportProps } from "@/components/ui/xlsx-export-button";
 import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
 import { requestJson } from "@/lib/http";
 import { MascotLoader } from "@/components/ui/mascot";
@@ -344,6 +341,12 @@ function vehicleLead(driver: DriverListRecord): string {
 }
 
 export function DriverRegistryView({ registry }: { registry: DriverListRegistry }) {
+  /**
+   * สิทธิ์ย่อย “↳ ประวัติ” (/desk/permissions) — ไม่เห็น = ทะเบียน**อ่านอย่างเดียว**: ไม่มีปุ่มตา
+   * นำเข้า/Sync เปลี่ยนรูป (Bew 5 พ.ย. 2569) · ส่งออก Excel ยังได้ · API กันซ้ำฝั่งเซิร์ฟเวอร์
+   * · ปุ่มเพิ่มพนักงาน/เปลี่ยนสถานะเอาออกจากทะเบียนแล้วสำหรับทุกคน
+   */
+  const canEdit = useCanSee("registry-profile");
   const [site, setSite] = useState<SiteFilter>("all");
   const [employment, setEmployment] = useState<EmploymentTab>("current");
 
@@ -381,7 +384,6 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const deferred = useDeferredValue(query);
 
@@ -662,6 +664,28 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
     />
   );
 
+  /** ส่งออก Excel — เหมือนกันทั้งเมนูเต็ม (แก้ได้) และปุ่มส่งออกอย่างเดียว (อ่านอย่างเดียว) */
+  const exportProps: XlsxExportProps<DriverExportRow> = {
+    name: `ทะเบียน-พจส-${resignedTab ? "พ้นสภาพ" : "ปัจจุบัน"}`,
+    count: results.length,
+    build: async () => ({
+      sheet: resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน",
+      title: `ทะเบียนประวัติ พจส. · ${resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน"}`,
+      filter: [
+        site !== "all" ? `สาขา: ${siteFilterLabel(site)}` : "",
+        deferred.trim() ? `คำค้น: “${deferred.trim()}”` : "",
+        ...activeFilters.map(
+          ({ key, values }) =>
+            `${FILTER_LABELS[key]}: ${values.map((v) => options[key].find((o) => o.value === v)?.label ?? v).join(", ")}`,
+        ),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      total: scope.length,
+      ...(await driverSheet(results, resignedTab)),
+    }),
+  };
+
   return (
     <div className="flex flex-col gap-4">
       
@@ -728,37 +752,15 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
           <SiteTabs value={site} counts={siteCounts} onChange={(v) => setSite(v)} />
 
           <div className="flex items-center gap-2 lg:ml-auto">
-            <XlsxMenuButton
-              onImport={() => setImporting(true)}
-              onSync={process.env.NODE_ENV === "development" ? () => setSyncing(true) : undefined}
-              name={`ทะเบียน-พจส-${resignedTab ? "พ้นสภาพ" : "ปัจจุบัน"}`}
-              count={results.length}
-              build={async () => ({
-                sheet: resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน",
-                title: `ทะเบียนประวัติ พจส. · ${resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน"}`,
-                filter: [
-                  site !== "all" ? `สาขา: ${siteFilterLabel(site)}` : "",
-                  deferred.trim() ? `คำค้น: “${deferred.trim()}”` : "",
-                  ...activeFilters.map(
-                    ({ key, values }) =>
-                      `${FILTER_LABELS[key]}: ${values.map((v) => options[key].find((o) => o.value === v)?.label ?? v).join(", ")}`,
-                  ),
-                ]
-                  .filter(Boolean)
-                  .join(" · "),
-                total: scope.length,
-                ...(await driverSheet(results, resignedTab)),
-              })}
-            />
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="btn-pri flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium"
-            >
-              <Plus size={16} strokeWidth={2.2} aria-hidden />
-              เพิ่มพนักงาน
-            </button>
-            {adding ? <DriverAddDialog drivers={drivers} onClose={() => setAdding(false)} /> : null}
+            {canEdit ? (
+              <XlsxMenuButton
+                onImport={() => setImporting(true)}
+                onSync={process.env.NODE_ENV === "development" ? () => setSyncing(true) : undefined}
+                {...exportProps}
+              />
+            ) : (
+              <XlsxExportButton {...exportProps} />
+            )}
             {importing ? <DriverPasteDialog onClose={() => setImporting(false)} /> : null}
             {syncing ? <DriverExcelSyncDialog onClose={() => setSyncing(false)} /> : null}
           </div>
@@ -997,6 +999,7 @@ function Row({
    */
   hideVehicle: boolean;
 }) {
+  const canEdit = useCanSee("registry-profile");
   const href = driverHref(driver);
 
   /**
@@ -1033,7 +1036,7 @@ function Row({
       >
         <span className="flex items-center gap-2.5">
           <span className="flex-none transition-transform duration-300 group-hover:scale-108">
-            <DriverAvatar driver={driver} />
+            <DriverAvatar driver={driver} editable={canEdit} />
           </span>
           <span className="truncate font-medium text-ink">{driver.name || "—"}</span>
           {driver.isNew ? <NewBadge /> : null}
@@ -1158,6 +1161,7 @@ function DriverCard({
   /** ซ่อนชุดเดียวกับตาราง — การ์ดจอแคบคือตารางเดียวกันในอีกรูปแบบ */
   hideVehicle: boolean;
 }) {
+  const canEdit = useCanSee("registry-profile");
   /* กติกาเดียวกับ `Row` — คนที่พ้นสภาพแล้วอ่านออกจากสีได้ก่อนอ่านตัวหนังสือ */
   const exit = exitToneOf(driver);
 
@@ -1169,7 +1173,7 @@ function DriverCard({
       }`}
     >
       <div className="flex items-start gap-3">
-        <DriverAvatar driver={driver} size="md" />
+        <DriverAvatar driver={driver} size="md" editable={canEdit} />
         <div className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-13-5 font-medium text-pretty">
             {driver.name || "—"}
@@ -1307,7 +1311,7 @@ const WORK_TONE = {
  * - **สถานะการจ้างเป็นปุ่มข้อความสีจาง** ไม่ใช่ชิป เพราะในแท็บหนึ่ง ๆ ทุกแถวมีค่า
  *   เท่ากันหมด (แท็บกรองด้วยค่านี้อยู่แล้ว) การให้สีมันคือการตะโกนคำเดิม 50 รอบ
  *   แต่ยังต้องมีอยู่ ไว้ยืนยันตอนพิมพ์ออกมาหรือแคปหน้าจอส่งต่อ ซึ่งไม่มีแท็บติดไปด้วย
- *   · กดแล้วเปลี่ยนเป็นพ้นสภาพได้ตรงนั้นเลย (`DriverStatusControl`)
+ *   · **อ่านอย่างเดียว** — ไม่มีปุ่มเปลี่ยนสถานะในทะเบียนแล้ว (Bew 5 พ.ย. 2569) เปลี่ยนได้ที่หน้าประวัติรายคน
  *
  * ป้ายรหัสกว้างขั้นต่ำเท่ากันทุกแถว (`min-w-7`) ตัวอักษร 1–3 ตัวจึงเรียงเป็นแนวเดียว
  * และข้อความข้างหลังไม่ขยับเข้าออกตามความยาวรหัส
@@ -1335,7 +1339,13 @@ function StatusCell({ driver }: { driver: DriverListRecord }) {
         </span>
       )}
 
-      <DriverStatusControl driver={driver} />
+      <span
+        className={`truncate px-1 py-0.5 text-11-5 ${
+          driver.active ? "text-mut" : driver.resignation?.kind === "transfer" ? "font-medium text-transfer" : "font-medium text-alert"
+        }`}
+      >
+        {employmentLabel(driver)}
+      </span>
     </span>
   );
 }

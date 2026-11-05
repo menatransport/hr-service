@@ -6,6 +6,7 @@ import { getActorEmployeeId } from "@/lib/auth/session";
 import { getDriver, setDriverPhoto } from "@/app/recruitment/_lib/drivers/registry";
 import { mediaUrl } from "@/lib/media";
 import { mediaKeys, putMedia, StorageError } from "@/lib/s3";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `PUT /api/drivers/{drivercode}/photo` — ตั้งรูปประจำตัว พจส. ในทะเบียนประวัติ
@@ -35,6 +36,9 @@ export async function PUT(
   ctx: RouteContext<"/api/drivers/[code]/photo">,
 ) {
   try {
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
     const { code } = await ctx.params;
     const drivercode = decodeURIComponent(code);
 

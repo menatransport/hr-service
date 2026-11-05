@@ -9,6 +9,7 @@ import {
   updateDriverProfile,
 } from "@/app/recruitment/_lib/drivers/registry";
 import { toDriverDto } from "@/app/recruitment/_lib/drivers/api";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `GET /api/drivers/{drivercode}` — ประวัติ พจส. หนึ่งคน (เส้นเดียวของทะเบียนรายคน)
@@ -68,6 +69,9 @@ export async function PATCH(
   ctx: { params: Promise<{ code: string }> },
 ) {
   try {
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
     const { code } = await ctx.params;
     const drivercode = decodeURIComponent(code);
 

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { badRequest, fail, ok } from "@/app/api/_lib/respond";
 import { getActorEmployeeId } from "@/lib/auth/session";
 import { DriverRegistryError, setDriverStatus } from "@/app/recruitment/_lib/drivers/registry";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `PUT /api/drivers/{drivercode}/status` — บันทึกสถานะการจ้างของ พจส.
@@ -30,6 +31,9 @@ export async function PUT(
   ctx: RouteContext<"/api/drivers/[code]/status">,
 ) {
   try {
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
     const { code } = await ctx.params;
     const drivercode = decodeURIComponent(code);
 

@@ -17,6 +17,7 @@ import {
 } from "@/app/recruitment/_lib/drivers/documents";
 import { isDriverDocType } from "@/app/recruitment/_lib/drivers/types";
 import { StorageError } from "@/lib/s3";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `POST /api/drivers/{drivercode}/documents` — แนบเอกสารเข้าแฟ้มประวัติ พจส.
@@ -43,6 +44,9 @@ export async function POST(
   ctx: RouteContext<"/api/drivers/[code]/documents">,
 ) {
   try {
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
     const { code } = await ctx.params;
     const drivercode = decodeURIComponent(code);
 

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { badRequest, fail, ok, unauthorized } from "@/app/api/_lib/respond";
 import { readSessionUser } from "@/lib/auth/session";
 import { importPastedRows, PasteImportError } from "@/app/recruitment/_lib/drivers/paste-import";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `POST /api/drivers/paste-import` — วางแถวที่คัดลอกจากชีต “ทะเบียน 2026” แล้วนำเข้าทะเบียน พจส.
@@ -24,6 +25,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await readSessionUser();
     if (!user) return unauthorized("หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
 
     const body = (await request.json().catch(() => null)) as { text?: unknown; commit?: unknown } | null;
     const text = typeof body?.text === "string" ? body.text : "";

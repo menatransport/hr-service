@@ -28,6 +28,9 @@ type ExportProps<T> = {
   count: number;
 };
 
+/** props ของการส่งออก — หน้าที่สลับระหว่างปุ่มส่งออกอย่างเดียวกับเมนูเต็มใช้ก้อนเดียวกัน */
+export type XlsxExportProps<T> = ExportProps<T>;
+
 /** สร้างไฟล์ + toast · คืน `busy` ไว้ให้ปุ่มหมุน */
 function useXlsxDownload<T>({ name, build }: ExportProps<T>) {
   const [busy, setBusy] = useState(false);

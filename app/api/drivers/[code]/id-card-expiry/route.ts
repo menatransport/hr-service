@@ -7,6 +7,7 @@ import {
   DriverRegistryError,
   setDriverIdCardExpiry,
 } from "@/app/recruitment/_lib/drivers/registry";
+import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
  * `PUT /api/drivers/{drivercode}/id-card-expiry` — บันทึกวันหมดอายุบัตรประชาชน
@@ -28,6 +29,9 @@ export async function PUT(
   ctx: RouteContext<"/api/drivers/[code]/id-card-expiry">,
 ) {
   try {
+    const denied = await registryWriteDenied();
+    if (denied) return denied;
+
     const { code } = await ctx.params;
     const drivercode = decodeURIComponent(code);
 
