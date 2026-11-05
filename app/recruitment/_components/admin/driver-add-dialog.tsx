@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { FileUp, Loader2, TriangleAlert } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
-import { DateField, SelectField, TextField } from "@/components/ui/field";
+import { DateField, Frame, SelectField, TextareaField, TextField } from "@/components/ui/field";
+import { SegmentedControl } from "@/components/ui/summary-panel";
 import { requestJson } from "@/lib/http";
 import { toastSuccess } from "@/lib/swal";
-import { DRIVER_BRANCH_OPTIONS, type DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
+import { DRIVER_BRANCH_OPTIONS, OWNER_TYPE_LABELS, type DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
 
 /**
- * กล่อง “เพิ่ม พจร.” บนหน้าทะเบียน — กรอกเฉพาะที่จำเป็น ไม่ผ่านใบสมัคร (`POST /api/drivers`)
+ * กล่อง “เพิ่มพนักงาน” บนหน้าทะเบียน — เลือก พจส./พจร. แล้วกรอกเฉพาะที่จำเป็น ไม่ผ่านใบสมัคร (`POST /api/drivers`)
  * · บันทึกแล้วพาไปแท็บเอกสารของหน้าประวัติ อัปโหลดเอกสาร/เติมช่องที่เหลือต่อที่นั่น
  */
 
@@ -22,6 +23,9 @@ function choices(values: string[]) {
     .map((v) => ({ value: v, label: v }));
 }
 
+/** ประเภทที่เพิ่มจากกล่องนี้ได้ — ต้องเลือกเองทุกครั้ง ไม่ตั้งค่าเริ่มให้ */
+const OWNER_OPTIONS = (["1", "2"] as const).map((value) => ({ value, label: OWNER_TYPE_LABELS[value] }));
+
 const today = () => new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecord[]; onClose: () => void }) {
@@ -29,6 +33,7 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
   const customers = useMemo(() => choices(drivers.map((d) => d.customer ?? "")), [drivers]);
   const plants = useMemo(() => choices(drivers.map((d) => d.plant ?? "")), [drivers]);
   const [form, setForm] = useState({
+    ownerType: "" as "" | "1" | "2",
     drivercode: "",
     driverName: "",
     branch: DRIVER_BRANCH_OPTIONS[0].value,
@@ -37,12 +42,13 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
     vehicleCode: "",
     customer: "",
     plant: "",
+    note: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
-  const ready = form.drivercode.trim() && form.driverName.trim() && form.branch && form.startDate;
+  const ready = form.ownerType && form.drivercode.trim() && form.driverName.trim() && form.branch && form.startDate;
 
   async function save() {
     if (!ready || saving) return;
@@ -52,19 +58,19 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
       const { drivercode } = await requestJson<{ drivercode: string }>(
         "/api/drivers",
         { method: "POST", body: form },
-        "เพิ่ม พจร. ไม่สำเร็จ",
+        "เพิ่มพนักงานไม่สำเร็จ",
       );
-      void toastSuccess(`เพิ่ม พจร. ${drivercode} แล้ว`, "อัปโหลดเอกสารต่อได้เลย");
+      void toastSuccess(`เพิ่ม ${OWNER_TYPE_LABELS[form.ownerType as "1" | "2"]} ${drivercode} แล้ว`, "อัปโหลดเอกสารต่อได้เลย");
       router.push(`/recruitment/admin/drivers/${encodeURIComponent(drivercode)}?tab=docs`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เพิ่ม พจร. ไม่สำเร็จ");
+      setError(err instanceof Error ? err.message : "เพิ่มพนักงานไม่สำเร็จ");
       setSaving(false);
     }
   }
 
   return (
     <ModalShell
-      title="เพิ่ม พจร."
+      title="เพิ่มพนักงาน"
       subtitle="กรอกเฉพาะที่จำเป็น — เอกสารอัปโหลดต่อในหน้าประวัติ"
       onClose={onClose}
       width="560px"
@@ -93,8 +99,18 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
           void save();
         }}
       >
+        <Frame id="add-ownerType" label="ประเภทพนักงาน">
+          <SegmentedControl
+            label="ประเภทพนักงาน"
+            value={form.ownerType}
+            options={OWNER_OPTIONS}
+            onChange={(v) => !saving && set("ownerType")(v)}
+            className="self-start"
+          />
+        </Frame>
+
         <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
-          <TextField id="add-drivercode" label="รหัส พจร." value={form.drivercode} onChange={set("drivercode")} readOnly={saving} />
+          <TextField id="add-drivercode" label="รหัสพนักงาน" value={form.drivercode} onChange={set("drivercode")} readOnly={saving} />
           <TextField id="add-driverName" label="ชื่อ – สกุล" value={form.driverName} onChange={set("driverName")} readOnly={saving} />
           <SelectField
             id="add-branch"
@@ -142,6 +158,16 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
             readOnly={saving}
           />
         </div>
+
+        <TextareaField
+          id="add-note"
+          label="หมายเหตุ (ถ้ามี)"
+          value={form.note}
+          onChange={set("note")}
+          rows={2}
+          optional
+          readOnly={saving}
+        />
 
         <p className="flex items-center gap-1.5 text-12 text-mut">
           <FileUp size={13} aria-hidden className="flex-none" />

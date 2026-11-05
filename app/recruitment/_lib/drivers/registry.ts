@@ -1332,19 +1332,24 @@ export async function enrollDriver(input: EnrollInput, actor: string): Promise<b
   return true;
 }
 
-/** ช่องของฟอร์ม “เพิ่ม พจร.” — กติกาค่าเดียวกับ `DRIVER_EDIT_FIELDS` · ช่องที่เหลือเติมทีหลังบนหน้าประวัติ */
+/** ช่องของฟอร์ม “เพิ่มพนักงาน” — กติกาค่าเดียวกับ `DRIVER_EDIT_FIELDS` · ช่องที่เหลือเติมทีหลังบนหน้าประวัติ */
 export const MANUAL_DRIVER_FIELDS = ["driverName", "branch", "startDate", "phone", "vehicleCode", "customer", "plant"] as const;
 
-export type ManualDriverInput = { drivercode: string } & Partial<Record<(typeof MANUAL_DRIVER_FIELDS)[number], string>>;
+export type ManualDriverInput = { drivercode: string; ownerType?: string; note?: string } & Partial<Record<(typeof MANUAL_DRIVER_FIELDS)[number], string>>;
 
 /**
- * เพิ่ม พจร. เข้าทะเบียนตรง ๆ ไม่ผ่านใบสมัคร/คำขอสรรหา — ประเภทพนักงาน = `2` เสมอ
+ * เพิ่ม พจส./พจร. เข้าทะเบียนตรง ๆ ไม่ผ่านใบสมัคร/คำขอสรรหา — ประเภทพนักงาน `1` (พจส.) หรือ `2` (พจร.) ต้องส่งมา
+ * · หมายเหตุ (ถ้ามี) เก็บที่ `registry.note` คู่กับที่มาของการเพิ่ม
  * · รหัสที่อยู่ในทะเบียนแล้ว = `DriverRegistryError` (ไม่ทับคนเดิม) · แถวเก่าจาก ETL ที่ไม่มี `registry` ถูกเขียนทับ
  * · ช่องที่กรอกลง `editedFields` → ตัวนำเข้า Excel ไม่ทับ (ค่าบนเว็บชนะไฟล์ เหมือนแก้บนหน้าประวัติ)
  */
 export async function addDriverManually(input: ManualDriverInput, actor: string): Promise<string> {
   const drivercode = String(input.drivercode ?? "").replace(/\s+/g, "").trim();
-  if (!/^[A-Za-z0-9-]{3,20}$/.test(drivercode)) throw new DriverRegistryError("รหัส พจร. ต้องเป็นตัวเลข/ตัวอักษร 3–20 ตัว");
+  if (!/^[A-Za-z0-9-]{3,20}$/.test(drivercode)) throw new DriverRegistryError("รหัสพนักงานต้องเป็นตัวเลข/ตัวอักษร 3–20 ตัว");
+  const ownerType = String(input.ownerType ?? "").trim();
+  if (ownerType !== "1" && ownerType !== "2") throw new DriverRegistryError("ต้องเลือกประเภทพนักงาน (พจส. หรือ พจร.)");
+  const note = String(input.note ?? "").trim();
+  if (note.length > 500) throw new DriverRegistryError("หมายเหตุยาวเกิน 500 ตัวอักษร");
 
   const $set: Record<string, string> = {};
   for (const key of MANUAL_DRIVER_FIELDS) {
@@ -1367,12 +1372,12 @@ export async function addDriverManually(input: ManualDriverInput, actor: string)
       $set: {
         ...$set,
         drivercode,
-        ownerType: "2",
+        ownerType,
         active: true,
         syncedAt: now,
         registeredAt: now,
-        editedFields: Object.keys($set),
-        registry: { source: "manual", at: now, by: actor },
+        editedFields: [...Object.keys($set), "ownerType"],
+        registry: { source: "manual", at: now, by: actor, ...(note ? { note } : {}) },
       },
       $unset: { statusOverride: "", resignation: "" },
     } as Record<string, unknown>,

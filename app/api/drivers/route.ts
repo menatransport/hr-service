@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * `POST /api/drivers` — เพิ่ม พจร. เข้าทะเบียน (ปุ่ม “เพิ่ม พจร.” บนหน้าทะเบียน)
+ * `POST /api/drivers` — เพิ่ม พจส./พจร. เข้าทะเบียน (ปุ่ม “เพิ่มพนักงาน” บนหน้าทะเบียน)
  *
  * ```
- * { "drivercode": "690800", "driverName": "สมชาย ใจดี", "branch": "2", "startDate": "2026-11-03", "phone": "0812345678" }
+ * { "ownerType": "1", "drivercode": "690800", "driverName": "สมชาย ใจดี", "branch": "2", "startDate": "2026-11-03", "phone": "0812345678", "note": "ย้ายมาจากสาขาบางปะกง" }
  * ```
  *
  * ช่องและกติกาอยู่ที่ `addDriverManually()` · เอกสารอัปโหลดทีหลังบนหน้าประวัติ · ตอบ `{ drivercode }`

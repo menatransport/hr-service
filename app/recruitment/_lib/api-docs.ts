@@ -290,11 +290,13 @@ export const API_GROUPS: ApiGroup[] = [
       {
         method: "POST",
         path: "/api/drivers",
-        summary: "เพิ่ม พจร. เข้าทะเบียน",
-        description: "ปุ่ม “เพิ่ม พจร.” บนหน้าทะเบียน · เอกสารอัปโหลดทีหลังบนหน้าประวัติ",
+        summary: "เพิ่ม พจส./พจร. เข้าทะเบียน",
+        description: "ปุ่ม “เพิ่มพนักงาน” บนหน้าทะเบียน · เอกสารอัปโหลดทีหลังบนหน้าประวัติ",
         access: "login",
         params: [
-          { name: "drivercode", in: "body", type: "string", required: true, desc: "รหัส พจส." },
+          { name: "ownerType", in: "body", type: "\"1\" | \"2\"", required: true, desc: "1 = พจส. · 2 = พจร." },
+          { name: "drivercode", in: "body", type: "string", required: true, desc: "รหัสพนักงาน" },
+          { name: "note", in: "body", type: "string", desc: "หมายเหตุ (ถ้ามี) ไม่เกิน 500 ตัวอักษร — เก็บที่ registry.note" },
           { name: "driverName · branch · startDate · phone · vehicleCode · customer · plant", in: "body", type: "string", desc: "ข้อมูลทะเบียน · วันที่เป็น YYYY-MM-DD" },
         ],
         response: "{ drivercode }",

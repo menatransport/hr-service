@@ -756,7 +756,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
               className="btn-pri flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium"
             >
               <Plus size={16} strokeWidth={2.2} aria-hidden />
-              เพิ่ม พจร.
+              เพิ่มพนักงาน
             </button>
             {adding ? <DriverAddDialog drivers={drivers} onClose={() => setAdding(false)} /> : null}
             {importing ? <DriverPasteDialog onClose={() => setImporting(false)} /> : null}
