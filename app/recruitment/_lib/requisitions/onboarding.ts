@@ -350,7 +350,7 @@ export function hasPerson(r: OnboardingRecord): boolean {
 
 /**
  * ขั้นของแถว — คิดจากทุกแหล่ง ข้อเท็จจริงที่ชัดที่สุดชนะ:
- * ผลสิ้นสุด/ยกเลิก → รับรถ (วันรับรถ · ใบสมัคร “ปฏิบัติงาน” · ATMS ออกงาน) → เริ่มฝึก → ผู้สมัคร → ว่าง
+ * ผลสิ้นสุด/ยกเลิก → รับรถ (วันรับรถ · ใบสมัคร “ปฏิบัติงาน”) → เริ่มฝึก → ผู้สมัคร → ว่าง
  * · ATMS พ้นสภาพ**ก่อน**รับรถ = จบ · พ้นสภาพหลังรับรถแล้วยังนับเป็นรับรถแล้ว (onboarding สำเร็จ)
  */
 export function stageOf(r: OnboardingRecord): Stage {
@@ -361,11 +361,11 @@ export function stageOf(r: OnboardingRecord): Stage {
   if (!hasPerson(r)) return r.status === "cancelled" ? "ended" : "open";
   if (r.status === "cancelled") return "ended";
 
+  /* ATMS ลงทำงานแล้วไม่นับ — รับรถแล้วต้องให้ KA อัปเดต (`WORKING_NOTE` · Bew 5 พ.ย. 2569) */
   const worked =
     Boolean(val(r.onboarding, "handover", "handoverOn")) ||
     r.outcome === "handed_over" ||
-    r.match?.status === "working" ||
-    Boolean(r.atms?.firstWork);
+    r.match?.status === "working";
   if (worked) return "working";
   if (r.atms?.exited) return "ended";
   /* ผูกใบสมัครแล้ว = ตามสถานะบนหน้าผู้สมัครเท่านั้น — ถึงวันเริ่มฝึกแล้วก็ยังรอฝึกงานจนกว่า RC
