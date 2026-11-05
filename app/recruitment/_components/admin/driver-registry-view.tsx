@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Eye,
@@ -16,12 +16,14 @@ import { DriverExcelSyncDialog } from "@/app/recruitment/_components/admin/drive
 import { DriverPasteDialog } from "@/app/recruitment/_components/admin/driver-paste-import";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
+import { useCanSee } from "@/components/auth/menu-access-provider";
 import { ColumnMenu, type ColumnFilterOption } from "@/components/ui/column-menu";
 import { Pager } from "@/components/ui/pager";
 import { SearchField } from "@/components/ui/field";
 import { XlsxMenuButton } from "@/components/ui/xlsx-export-button";
 import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
 import { requestJson } from "@/lib/http";
+import { MascotLoader } from "@/components/ui/mascot";
 import type { DriverExportRow } from "@/app/recruitment/_lib/drivers/registry";
 import {
   SegmentedControl,
@@ -49,11 +51,12 @@ import {
   primaryPhone,
   workStatusFullLabel,
   workStatusTone,
-  type DriverRecord,
-  type DriverRegistry,
+  type DriverListRecord,
+  type DriverListRegistry,
   type DriverSiteKey,
   type LicenseState,
 } from "@/app/recruitment/_lib/drivers/types";
+import { thaiCompare } from "@/lib/thai-order";
 
 /**
  * ทะเบียนประวัติ พจส. — ตารางข้อมูลแบบมาตรฐาน (เรียง + กรองที่หัวคอลัมน์)
@@ -240,7 +243,7 @@ const RESIGNED_HIDDEN = new Set<string>(["vehicle", "fleet", "plant"]);
  * ข้อมูลส่วนบุคคลว่างตามกติกาหน้าประวัติ · แท็บพ้นสภาพตัดรถ/ลูกค้า/แพล้นท์ (`RESIGNED_HIDDEN`)
  */
 async function driverSheet(
-  rows: DriverRecord[],
+  rows: DriverListRecord[],
   resigned: boolean,
 ): Promise<Pick<XlsxSheet<DriverExportRow>, "columns" | "rows">> {
   const full = await requestJson<DriverExportRow[]>(
@@ -329,22 +332,49 @@ async function driverSheet(
 }
 
 /** แท็บที่คนนี้อยู่ — ทุกคนอยู่แท็บเดียวเสมอ */
-function employmentOf(driver: DriverRecord): EmploymentTab {
+function employmentOf(driver: DriverListRecord): EmploymentTab {
   return driver.active ? "current" : "resigned";
 }
 
 /** ข้อความในคอลัมน์รถ — ลาดกระบังนำด้วยเลขรถ สาขาอื่นนำด้วยทะเบียน */
-function vehicleLead(driver: DriverRecord): string {
+function vehicleLead(driver: DriverListRecord): string {
   const code = driver.vehicle?.code || "";
   const plate = driver.vehicle?.plateNo || driver.vehicleRef;
   return driver.siteKey === "latkrabang" ? code || plate : plate || code;
 }
 
-export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
-  const { drivers } = registry;
-
+export function DriverRegistryView({ registry }: { registry: DriverListRegistry }) {
   const [site, setSite] = useState<SiteFilter>("all");
   const [employment, setEmployment] = useState<EmploymentTab>("current");
+
+  /* คนพ้นสภาพไม่มากับหน้า — โหลดตอนเปิดแท็บครั้งแรก · `of` = ชุดของหน้าที่โหลดไว้ (refresh แล้วโหลดใหม่) */
+  const [resigned, setResigned] = useState<{ of: DriverListRegistry; rows?: DriverListRecord[]; error?: string } | null>(
+    null,
+  );
+  const resignedLoad = resigned?.of === registry ? resigned : null;
+  const resignedRows = resignedLoad?.rows;
+  const drivers = useMemo(
+    () => (resignedRows ? [...registry.drivers, ...resignedRows] : registry.drivers),
+    [registry.drivers, resignedRows],
+  );
+  const loadingResigned = employment === "resigned" && !resignedLoad;
+
+  useEffect(() => {
+    if (employment !== "resigned" || resignedLoad) return;
+    let alive = true;
+    requestJson<DriverListRecord[]>("/api/drivers/resigned", {}, "โหลดรายชื่อพ้นสภาพไม่สำเร็จ")
+      .then((rows) => {
+        if (alive) setResigned({ of: registry, rows });
+      })
+      .catch((err) => {
+        if (alive)
+          setResigned({ of: registry, error: err instanceof Error ? err.message : "โหลดรายชื่อพ้นสภาพไม่สำเร็จ" });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [employment, resignedLoad, registry]);
+
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -365,16 +395,11 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
     [resignedTab],
   );
 
-  /** ทุกแท็บนับจำนวนของตัวเองเสมอ ไม่ว่าตัวกรองอื่นจะเลือกอะไรอยู่ */
-  const siteCounts = useMemo(() => {
-    const counts = new Map<SiteFilter, number>();
-    for (const d of drivers) {
-      const key: SiteFilter = d.siteKey ?? "other";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    counts.set("all", drivers.length);
-    return counts;
-  }, [drivers]);
+  /** ทุกแท็บนับจำนวนของตัวเองเสมอ ไม่ว่าตัวกรองอื่นจะเลือกอะไรอยู่ — นับฝั่งเซิร์ฟเวอร์ รวมคนพ้นสภาพที่ยังไม่ได้โหลด */
+  const siteCounts = useMemo(
+    () => new Map(Object.entries(registry.siteTotals) as [SiteFilter, number][]),
+    [registry.siteTotals],
+  );
 
   /** รายชื่อในขอบเขตสาขา + สถานะการจ้างที่เลือกอยู่ — ฐานของทั้งไทล์และตัวเลือกตัวกรอง */
   const scope = useMemo(
@@ -440,7 +465,7 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
         .sort((a, b) => {
           if (a[0] === NONE) return 1;
           if (b[0] === NONE) return -1;
-          return a[0].localeCompare(b[0], "th");
+          return thaiCompare(a[0], b[0]);
         })
         .map(([value, count]) => ({
           value,
@@ -797,7 +822,21 @@ export function DriverRegistryView({ registry }: { registry: DriverRegistry }) {
           </p>
         </SummaryStrip>
 
-      {results.length === 0 ? (
+      {loadingResigned ? (
+        <SummaryBody pad>
+          <MascotLoader text="กำลังโหลดรายชื่อพ้นสภาพ" className="py-10" />
+        </SummaryBody>
+      ) : resignedTab && resignedLoad?.error ? (
+        <SummaryBody pad>
+          <div className="flex flex-col items-center gap-2.5 py-10 text-center">
+            <p className="text-sm font-semibold text-sla">โหลดรายชื่อพ้นสภาพไม่สำเร็จ</p>
+            <p className="max-w-[46ch] text-12-5 text-mut text-pretty">{resignedLoad.error}</p>
+            <button type="button" onClick={() => setResigned(null)} className="btn-sec cursor-pointer px-4 py-2 text-12-5">
+              ลองอีกครั้ง
+            </button>
+          </div>
+        </SummaryBody>
+      ) : results.length === 0 ? (
         <SummaryBody pad>
           <EmptyResult query={query.trim()} onClear={clearFilters} />
         </SummaryBody>
@@ -900,7 +939,7 @@ function byNumber(a: number | null, b: number | null): number {
   return a - b;
 }
 
-const byText = (a: string, b: string) => (a || LAST).localeCompare(b || LAST, "th");
+const byText = (a: string, b: string) => thaiCompare(a || LAST, b || LAST);
 
 /** ป้าย “ใหม่” — เข้าทะเบียนไม่เกิน `NEW_DRIVER_HOURS` ชั่วโมง (คิดที่เซิร์ฟเวอร์ `isNew`) */
 function NewBadge() {
@@ -918,7 +957,7 @@ function NewBadge() {
   );
 }
 
-function compare(a: DriverRecord, b: DriverRecord, key: SortKey): number {
+function compare(a: DriverListRecord, b: DriverListRecord, key: SortKey): number {
   switch (key) {
     case "name":
       return byText(a.name, b.name);
@@ -950,7 +989,7 @@ function Row({
   index,
   hideVehicle,
 }: {
-  driver: DriverRecord;
+  driver: DriverListRecord;
   index: number;
   /**
    * แท็บ “พ้นสภาพแล้ว” — ตัดช่องรถ/ลูกค้า/แพล้นท์ออก (ดู `RESIGNED_HIDDEN`)
@@ -1074,16 +1113,16 @@ const EXIT_TONE = {
   },
 } as const;
 
-function exitToneOf(driver: DriverRecord) {
+function exitToneOf(driver: DriverListRecord) {
   if (driver.active) return null;
   return EXIT_TONE[driver.resignation?.kind === "transfer" ? "transfer" : "resign"];
 }
 
-function driverHref(driver: DriverRecord) {
+function driverHref(driver: DriverListRecord) {
   return `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`;
 }
 
-/** ทางเข้าหน้ารายละเอียดทางเดียวของแถว/การ์ด — ปุ่มรูปตา */
+/** ทางเข้าหน้ารายละเอียดทางเดียวของแถว/การ์ด — ปุ่มรูปตา · ซ่อนเมื่อไม่มีสิทธิ์ `registry-profile` (/desk/permissions) */
 function ViewDetailLink({
   href,
   name,
@@ -1093,6 +1132,8 @@ function ViewDetailLink({
   name: string;
   exit: ReturnType<typeof exitToneOf>;
 }) {
+  const allowed = useCanSee("registry-profile");
+  if (!allowed) return null;
   return (
     <Link
       href={href}
@@ -1112,7 +1153,7 @@ function DriverCard({
   index,
   hideVehicle,
 }: {
-  driver: DriverRecord;
+  driver: DriverListRecord;
   index: number;
   /** ซ่อนชุดเดียวกับตาราง — การ์ดจอแคบคือตารางเดียวกันในอีกรูปแบบ */
   hideVehicle: boolean;
@@ -1184,7 +1225,7 @@ function CardField({ label, children }: { label: string; children: React.ReactNo
  * ตัวที่สาขานั้นใช้เป็นหลักจึงอยู่บรรทัดบนตัวหนา อีกตัวเป็นบรรทัดรอง
  * (กติกาเดียวกับ `VehicleDrivenCell` ของระบบเดิม)
  */
-function VehicleCell({ driver }: { driver: DriverRecord }) {
+function VehicleCell({ driver }: { driver: DriverListRecord }) {
   const lead = vehicleLead(driver);
   if (!lead) return <span className="text-12-5 text-mut">ยังไม่มีรถ</span>;
 
@@ -1202,7 +1243,7 @@ function VehicleCell({ driver }: { driver: DriverRecord }) {
   );
 }
 
-function TenureCell({ driver }: { driver: DriverRecord }) {
+function TenureCell({ driver }: { driver: DriverListRecord }) {
   const probation = isProbation(driver.tenureMonths);
 
   return (
@@ -1224,7 +1265,7 @@ const LICENSE_NOTE_TONE: Record<LicenseState, string> = {
   unknown: "text-mut",
 };
 
-function LicenseCell({ driver }: { driver: DriverRecord }) {
+function LicenseCell({ driver }: { driver: DriverListRecord }) {
   const state = licenseState(driver.licenseDaysLeft);
 
   if (state === "unknown") return <Dash>ไม่มีวันหมดอายุ</Dash>;
@@ -1271,7 +1312,7 @@ const WORK_TONE = {
  * ป้ายรหัสกว้างขั้นต่ำเท่ากันทุกแถว (`min-w-7`) ตัวอักษร 1–3 ตัวจึงเรียงเป็นแนวเดียว
  * และข้อความข้างหลังไม่ขยับเข้าออกตามความยาวรหัส
  */
-function StatusCell({ driver }: { driver: DriverRecord }) {
+function StatusCell({ driver }: { driver: DriverListRecord }) {
   const code = driver.work?.latestStatus ?? "";
 
   return (
@@ -1299,7 +1340,7 @@ function StatusCell({ driver }: { driver: DriverRecord }) {
   );
 }
 
-function OwnerTypeBadge({ driver }: { driver: DriverRecord }) {
+function OwnerTypeBadge({ driver }: { driver: DriverListRecord }) {
   if (!driver.ownerTypeLabel) return <Dash />;
 
   return (

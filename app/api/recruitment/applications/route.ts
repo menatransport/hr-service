@@ -8,7 +8,7 @@ import { listApplicationsForApi } from "@/app/recruitment/_lib/applications";
 /**
  * `GET /api/recruitment/applications?year=&month=` — ใบสมัคร (ใหม่สุดก่อน) พร้อมคำตอบในฟอร์ม
  *
- * ไม่ส่งช่วง = 500 ใบล่าสุด · `?year=2026` / `?year=2569&month=10` / `?month=2026-10`
+ * ไม่ส่งช่วง = ทุกใบ · `?year=2026` / `?year=2569&month=10` / `?month=2026-10`
  * = **ทุกใบ** ที่ส่งเข้ามาในช่วงนั้นตามเวลาไทย (ดู `readPeriod()`)
  * · แต่ละแถว = `ApplicationSummary` + ข้อมูลชุดเดียวกับไฟล์ Excel หน้าผู้สมัคร (`listApplicationsForApi()`)
  */

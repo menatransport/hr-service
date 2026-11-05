@@ -8,7 +8,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { DateField, SelectField, TextField } from "@/components/ui/field";
 import { requestJson } from "@/lib/http";
 import { toastSuccess } from "@/lib/swal";
-import { DRIVER_BRANCH_OPTIONS, type DriverRecord } from "@/app/recruitment/_lib/drivers/types";
+import { DRIVER_BRANCH_OPTIONS, type DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
 
 /**
  * กล่อง “เพิ่ม พจร.” บนหน้าทะเบียน — กรอกเฉพาะที่จำเป็น ไม่ผ่านใบสมัคร (`POST /api/drivers`)
@@ -24,7 +24,7 @@ function choices(values: string[]) {
 
 const today = () => new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-export function DriverAddDialog({ drivers, onClose }: { drivers: DriverRecord[]; onClose: () => void }) {
+export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecord[]; onClose: () => void }) {
   const router = useRouter();
   const customers = useMemo(() => choices(drivers.map((d) => d.customer ?? "")), [drivers]);
   const plants = useMemo(() => choices(drivers.map((d) => d.plant ?? "")), [drivers]);

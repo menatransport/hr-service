@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Loader2, Minus, Plus, TriangleAlert } from "lucide-react";
 
 import { RangeField } from "@/components/ui/field";
+import { pageZoom } from "@/lib/page-zoom";
 
 /**
  * กล่องครอปรูปโปรไฟล์เป็น **วงกลม** แบบเดียวกับตอนเปลี่ยนรูปบัญชี Google
@@ -179,14 +180,17 @@ export function AvatarCropper({
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (busy || !image) return;
     const current = place(zoom, offset);
-    drag.current = { id: e.pointerId, x: e.clientX - current.x, y: e.clientY - current.y };
+    // พิกัดเมาส์เป็นพิกเซลบนจอ แต่ translate เป็นหน่วย CSS ของหน้าที่ถูกย่อ (ดู `lib/page-zoom.ts`)
+    const z = pageZoom();
+    drag.current = { id: e.pointerId, x: e.clientX / z - current.x, y: e.clientY / z - current.y };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const start = drag.current;
     if (!start || start.id !== e.pointerId) return;
-    setOffset({ x: e.clientX - start.x, y: e.clientY - start.y });
+    const z = pageZoom();
+    setOffset({ x: e.clientX / z - start.x, y: e.clientY / z - start.y });
   }
 
   function endDrag(e: React.PointerEvent<HTMLDivElement>) {

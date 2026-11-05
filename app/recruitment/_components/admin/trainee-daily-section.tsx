@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, ChevronDown, Loader2 } from "lucide-react";
+import { BellRing, Loader2 } from "lucide-react";
 
 import { DataError } from "@/components/ui/data-error";
 import type { SelectOption } from "@/components/ui/field";
@@ -48,16 +48,27 @@ const placeholder = (p: TraineePerson, own?: TraineeBoardDriver): TraineeBoardDr
 });
 
 /**
- * ตารางฝึกงานรายวัน ใต้รายการแท็บ training — **ซ่อนไว้ก่อน** และยิงข้อมูลตอนกดเปิดครั้งแรก
- * (ทั้งเดือนหลายร้อยช่อง ไม่ควรโหลดทุกครั้งที่เข้าหน้า) · เปลี่ยนเดือนโหลดใหม่ในที่เดิม
- */
-/**
+ * แท็บ “สถานะฝึกงาน” ของหน้าผู้สมัคร (Bew 5 พ.ย. 2569 — เดิมเป็นตารางรายวันต่อท้ายรายการ
+ * พร้อมปุ่มซ่อน/แสดง) · หน้าผู้สมัครเมานต์ค้างไว้แม้อยู่แท็บตาราง — สลับแท็บไม่โหลดใหม่
+ * และป้าย Issue วันนี้ขึ้นบนแท็บได้ทันที (`onAlerts`) · เปลี่ยนเดือนโหลดใหม่ในที่เดิม
+ *
  * `pool` = ทุกคนในขั้นฝึกงาน (ตัวโหลด) · `people` = คนที่แท็บแสดงอยู่ (กรองเดือนที่แจ้งแล้ว)
  * — โหลดครั้งเดียวจาก `pool` เปลี่ยนเดือนที่แจ้งแล้วตารางตามทันทีโดยไม่ต้องยิงใหม่
  */
-export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; people: TraineePerson[] }) {
-  /* เปิดตารางรายวันไว้ตั้งแต่แรก (Bew 4 พ.ย. 2569) */
-  const [open, setOpen] = useState(true);
+export function TraineeDailySection({
+  pool,
+  people,
+  onAlerts,
+  toolbarSlot,
+}: {
+  pool: TraineePerson[];
+  /** แถบของหน้าผู้สมัครที่ให้เครื่องมือของตาราง (เดือน · ค้นหา · สาขา · RC Alert · Excel) ไปอยู่ —
+      ดู `toolbarSlot` ของ `TraineeMatrix` */
+  toolbarSlot?: HTMLElement | null;
+  people: TraineePerson[];
+  /** จำนวนคนที่วันนี้ขึ้นหัวข้อ Issue — ให้แท็บข้างบนขึ้นป้าย */
+  onAlerts?: (count: number) => void;
+}) {
   const [reporting, setReporting] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +105,10 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
     }).length;
   }, [data]);
 
+  useEffect(() => {
+    onAlerts?.(alerts);
+  }, [alerts, onAlerts]);
+
   async function load(month = "") {
     setError(null);
     try {
@@ -107,7 +122,6 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
 
   /* โหลดตอนเปิดหน้า และโหลดใหม่เมื่อรายชื่อคนฝึกงานเปลี่ยน */
   useEffect(() => {
-    if (!open) return;
     let alive = true;
     requestJson<Data>(`/api/recruitment/trainee-board?${new URLSearchParams({ codes })}`, {}, "โหลดตารางรายวันไม่สำเร็จ")
       .then((d) => {
@@ -119,64 +133,55 @@ export function TraineeDailySection({ pool, people }: { pool: TraineePerson[]; p
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codes]);
 
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && !data) void load();
-  }
+  /* แจ้ง RC Alert ส่งไลน์ (Bew 25 ต.ค. → ไอคอนแจ้งเตือน 4 พ.ย. 2569) · ป้ายแดง = Issue วันนี้
+     อยู่ท้ายแถบเครื่องมือของตารางรายวัน (5 พ.ย. 2569) */
+  const alertButton = (
+    <button
+      type="button"
+      onClick={() => setReporting(true)}
+      title={alerts ? `RC Alert ส่งไลน์ · วันนี้มี Issue ${alerts} คน` : "RC Alert ส่งไลน์"}
+      className="group relative inline-flex h-9 cursor-pointer items-center gap-2 rounded-full bg-chat pr-4 pl-3 text-12-5 font-semibold text-white shadow-[0_4px_12px_-4px] shadow-chat/60 ring-1 ring-chat/30 transition hover:-translate-y-px hover:shadow-[0_6px_16px_-4px] hover:shadow-chat/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chat"
+    >
+      <BellRing
+        size={16}
+        strokeWidth={2}
+        aria-hidden
+        className={`origin-top ${alerts ? "animate-bell-ring" : "group-hover:animate-bell-ring"}`}
+      />
+      RC Alert
+      {alerts ? (
+        <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-alert px-1 text-10-5 font-semibold leading-none text-white ring-2 ring-base-100">
+          {alerts > 99 ? "99+" : alerts}
+        </span>
+      ) : null}
+      <span className="sr-only">{alerts ? ` ส่งไลน์ · Issue วันนี้ ${alerts} คน` : " ส่งไลน์"}</span>
+    </button>
+  );
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={open}
-          className="btn-sec flex w-fit cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium hover:text-primary"
-        >
-          <ChevronDown size={16} strokeWidth={2} aria-hidden className={`transition-transform ${open ? "rotate-180" : ""}`} />
-          {open ? "ซ่อนตารางรายวัน" : "แสดงตารางรายวัน"}
-        </button>
-        {/* แจ้ง RC Alert ส่งไลน์ (Bew 25 ต.ค. → ไอคอนแจ้งเตือน 4 พ.ย. 2569) · ป้ายแดง = Issue วันนี้ */}
-        <button
-          type="button"
-          onClick={() => setReporting(true)}
-          title={alerts ? `RC Alert ส่งไลน์ · วันนี้มี Issue ${alerts} คน` : "RC Alert ส่งไลน์"}
-          className="group relative grid size-9 cursor-pointer place-items-center rounded-full bg-chat text-white shadow-[0_4px_12px_-4px] shadow-chat/60 ring-1 ring-chat/30 transition hover:-translate-y-px hover:shadow-[0_6px_16px_-4px] hover:shadow-chat/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chat"
-        >
-          <BellRing
-            size={17}
-            strokeWidth={2}
-            aria-hidden
-            className={`origin-top ${alerts ? "animate-bell-ring" : "group-hover:animate-bell-ring"}`}
-          />
-          {alerts ? (
-            <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-alert px-1 text-10-5 font-semibold leading-none text-white ring-2 ring-base-100">
-              {alerts > 99 ? "99+" : alerts}
-            </span>
-          ) : null}
-          <span className="sr-only">{alerts ? `RC Alert ส่งไลน์ · Issue วันนี้ ${alerts} คน` : "RC Alert ส่งไลน์"}</span>
-        </button>
-      </div>
+    <section aria-label="สถานะฝึกงานรายวัน" className="flex flex-col gap-3">
       {reporting ? <TraineeReportDialog onClose={() => setReporting(false)} /> : null}
 
-      {open ? (
-        error ? (
-          <div className="mx-auto max-w-xl py-2">
-            <DataError title="โหลดตารางรายวันไม่สำเร็จ" envKey="MONGO_URI" message={error} />
-          </div>
-        ) : data && board ? (
-          <TraineeMatrix board={board} vehicles={data.vehicles} onMonth={load} />
-        ) : (
-          <p role="status" className="flex items-center gap-2 py-6 text-13 text-mut">
-            <Loader2 size={16} strokeWidth={2} aria-hidden className="animate-spin" />
-            กำลังโหลด…
-          </p>
-        )
-      ) : null}
+      {error ? (
+        <div className="mx-auto max-w-xl py-2">
+          <DataError title="โหลดตารางรายวันไม่สำเร็จ" envKey="MONGO_URI" message={error} />
+        </div>
+      ) : data && board ? (
+        <TraineeMatrix
+          board={board}
+          vehicles={data.vehicles}
+          onMonth={load}
+          actions={alertButton}
+          toolbarSlot={toolbarSlot}
+        />
+      ) : (
+        <p role="status" className="flex items-center gap-2 py-6 text-13 text-mut">
+          <Loader2 size={16} strokeWidth={2} aria-hidden className="animate-spin" />
+          กำลังโหลด…
+        </p>
+      )}
     </section>
   );
 }

@@ -65,6 +65,17 @@ export interface ModuleItem {
    * เป็นชื่อ view transition เหมือนเมนูปกติ จึงห้ามซ้ำกับใครเช่นกัน · ซ้อนได้ชั้นเดียว
    */
   children?: ModuleItem[];
+  /**
+   * สิทธิ์ย่อยในหน้าของเมนูนี้ (ปุ่ม/หน้าลึก) — ตั้งได้ที่ `/desk/permissions` เหมือนเมนู แต่ไม่ขึ้นบน Home
+   * หรือแถบข้าง · `id` ห้ามซ้ำกับเมนูใดทั้งไฟล์ · หน้าที่ใช้ต้องเช็กเอง (`canSeeMenu` / `useCanSee`)
+   */
+  actions?: ModuleAction[];
+}
+
+export interface ModuleAction {
+  id: string;
+  label: string;
+  desc: string;
 }
 
 export interface ModuleMatch {
@@ -137,6 +148,13 @@ export const MODULES: ModuleGroup[] = [
         desc: "ประวัติพนักงานขับรถทุกคน",
         href: "/recruitment/admin/drivers",
         icon: BookUser,
+        actions: [
+          {
+            id: "registry-profile",
+            label: "เข้าหน้าประวัติรายคน",
+            desc: "ปุ่มตาในทะเบียน → /recruitment/admin/drivers/<รหัส> · ไม่เห็น = ไม่มีปุ่มตาและเปิดหน้าประวัติไม่ได้",
+          },
+        ],
       },
       {
         id: "trucks",

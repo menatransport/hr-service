@@ -98,7 +98,8 @@
 }
 
 @theme {
-  --font-sans: var(--font-plex-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-body-thai), var(--font-display-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display-thai), var(--font-body-thai), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* raw design tokens — use these when a daisyUI semantic slot does not fit */
@@ -534,6 +535,28 @@
  * ขยับนิดเดียว ไม่ใช่เปลี่ยนหน้าไปเลย · เพดานอยู่ที่ 1.12 เพราะเกินกว่านั้น
  * ตัวหนังสือเริ่มชนขอบคอลัมน์ที่กว้างตายตัวในตารางทะเบียน พจส.
  */
+/**
+ * ย่อทั้งหน้าบนเดสก์ท็อปเหลือ 80% (5 พ.ย. 2026 · Bew) — เหมือนกด Ctrl − ในเบราว์เซอร์ แต่เป็นค่าเริ่มต้นของทุกคน
+ * ย่อทุกอย่างพร้อมกัน (ตัวหนังสือ ระยะ ไอคอน ค่า px ดิบ) · มือถือ/แท็บเล็ตไม่ย่อ
+ *
+ * **ย่อลูกของ `body` ไม่ใช่ `html`** — กล่องลอยของ Radix (dropdown · ปฏิทิน · เมนูคอลัมน์) วางตำแหน่ง
+ * ด้วยพิกัดบนจอ ถ้า `html` ถูกย่อ พิกัดจะถูกย่อซ้ำ กล่องเลื่อนเข้าหามุมซ้ายบน จึงยกเว้นกล่องนอก
+ * (`data-radix-popper-content-wrapper` ที่ Radix ใส่ไว้ใต้ `body`) แล้วย่อแค่เนื้อในแทน
+ *
+ * หน่วยจอ (`dvh` `vw` …) และ `--radix-*-width/height` ถูก `postcss/zoom-viewport.cjs` หารกลับด้วย
+ * `--page-zoom` ตอน build · JS ที่วางป๊อปโอเวอร์เองจาก `getBoundingClientRect()` (ได้ค่าบนจอ)
+ * ต้องหารด้วย `pageZoom()` ใน `lib/page-zoom.ts` ก่อนใส่เป็น `left/top`
+ */
+@media (width >= 64rem) {
+  :root {
+    --page-zoom: 0.8;
+  }
+  body > :not([data-radix-popper-content-wrapper]),
+  [data-radix-popper-content-wrapper] > * {
+    zoom: var(--page-zoom);
+  }
+}
+
 @media (width >= 80rem) {
   :root {
     --ui-text-scale: 1.04;
@@ -826,6 +849,13 @@
     font-family: var(--font-sans);
     letter-spacing: -0.003em;
     -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
   }
 
   /* one consistent focus ring across every interactive element */

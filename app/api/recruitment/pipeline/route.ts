@@ -24,7 +24,7 @@ import { customerLabel, personName, positionLabel } from "@/app/recruitment/_lib
  *
  * ช่วงคิดด้วย `pipelineOf()` ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร/แดชบอร์ด · รอรับรถ = ฝึกครบ 10 วัน
  * (เฉพาะวันฝึกงาน `ฝ`) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน · รอสรรหายังไม่มีคน = `name` / `drivercode` ว่าง
- * · สถานะรถ = `vehicleReadiness()` จากบอร์ดซ่อม (อ่านไม่ได้ = ทุกคันพร้อมใช้งาน) · ยังไม่มีรถ = `null` / ว่าง
+ * · สถานะรถ = `vehicleReadiness()` จาก ATMS หยุดวิ่ง + ขั้นงานบอร์ดซ่อม (อ่านไม่ได้ทั้งคู่ = ทุกคันพร้อมใช้งาน) · ยังไม่มีรถ = `null` / ว่าง
  */
 export async function GET(request: NextRequest) {
   try {

@@ -181,6 +181,14 @@ export const getHiddenMenuIds = cache(async (): Promise<string[]> => {
   }
 });
 
+/**
+ * ผู้ใช้ที่ล็อกอินอยู่มีสิทธิ์เมนู/สิทธิ์ย่อยนี้ไหม — ใช้กันหน้าลึก เช่นหน้าประวัติรายคน (`registry-profile`)
+ * ล้มเหลวแล้วเปิดให้ (ตาม `getHiddenMenuIds`)
+ */
+export async function canAccessMenu(menuId: string): Promise<boolean> {
+  return !(await getHiddenMenuIds()).includes(menuId);
+}
+
 /* --------------------------------------------------------------------- บันทึก */
 
 const PERMISSIONS_MENU = "permissions";

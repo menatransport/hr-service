@@ -1,5 +1,5 @@
 import { addDays, todayIso } from "./hr-documents";
-import type { DriverRecord } from "./drivers/types";
+import type { DriverListRecord } from "./drivers/types";
 
 /**
  * เอกสารตอนพ้นสภาพ — ใบลาออกพนักงานจัดส่ง (HR0501-07) + แบบสอบถามพนักงานลาออก
@@ -185,7 +185,7 @@ export function rememberResignSigners(fill: ResignFill) {
  *   แก้ในกล่องได้
  * - ชื่อใน ETL ไม่มีคำนำหน้า ช่องคำนำหน้าจึงว่างไว้ ไม่เดาเพศให้
  */
-export function initialResignFill(driver: DriverRecord): ResignFill {
+export function initialResignFill(driver: DriverListRecord): ResignFill {
   const r = driver.resignation;
   const last = r?.dateISO ?? "";
 

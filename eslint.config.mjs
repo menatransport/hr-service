@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // สคริปต์ครั้งเดียวที่ไม่อยู่ใน git (.gitignore `/backups/`)
+    "backups/**",
   ]),
 ]);
 

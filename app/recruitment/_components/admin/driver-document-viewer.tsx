@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { useOverlayCount } from "@/components/ui/field";
+import { pageZoom } from "@/lib/page-zoom";
 
 /**
  * ตัวดูเอกสารเต็มจอของแฟ้มประวัติ พจส. — **ใหญ่ที่สุดที่จอให้ได้ แล้วซูมต่อได้**
@@ -388,8 +389,10 @@ function ImageStage({
       }}
       onPointerMove={(e) => {
         if (!drag.current || !stage.current) return;
-        stage.current.scrollLeft = drag.current.left - (e.clientX - drag.current.x);
-        stage.current.scrollTop = drag.current.top - (e.clientY - drag.current.y);
+        // ระยะลากเป็นพิกเซลบนจอ แต่ scroll เป็นหน่วย CSS ของหน้าที่ถูกย่อ (ดู `lib/page-zoom.ts`)
+        const z = pageZoom();
+        stage.current.scrollLeft = drag.current.left - (e.clientX - drag.current.x) / z;
+        stage.current.scrollTop = drag.current.top - (e.clientY - drag.current.y) / z;
       }}
       onPointerUp={() => {
         drag.current = null;

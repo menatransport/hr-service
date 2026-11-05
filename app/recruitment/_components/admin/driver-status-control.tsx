@@ -14,7 +14,7 @@ import {
   employmentLabel,
   formatThaiDate,
   type DriverExitKind,
-  type DriverRecord,
+  type DriverListRecord,
 } from "@/app/recruitment/_lib/drivers/types";
 import {
   reasonGroups,
@@ -44,7 +44,7 @@ export function DriverStatusControl({
   driver,
   variant = "cell",
 }: {
-  driver: DriverRecord;
+  driver: DriverListRecord;
   /** `cell` = ข้อความเล็กในตาราง · `panel` = ปุ่มเต็มใบบนหน้ารายบุคคล */
   variant?: "cell" | "panel";
 }) {
@@ -220,7 +220,7 @@ function ResignForm({
   kind,
   onClose,
 }: {
-  driver: DriverRecord;
+  driver: DriverListRecord;
   kind: DriverExitKind;
   onClose: () => void;
 }) {

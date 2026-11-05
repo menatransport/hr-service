@@ -460,13 +460,16 @@ export function thaiDate(value: string): string {
   if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw || "—";
   const date = new Date(`${raw.slice(0, 10)}T00:00:00+07:00`);
   if (Number.isNaN(date.getTime())) return raw;
-  return new Intl.DateTimeFormat("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Bangkok",
-  }).format(date);
+  return THAI_DATE.format(date);
 }
+
+/* สร้างครั้งเดียว — `new Intl.DateTimeFormat` ทุกครั้งที่เรียกกิน ~60 ms ต่อการวาดหน้าผู้สมัคร (วัด 5 พ.ย. 2569) */
+const THAI_DATE = new Intl.DateTimeFormat("th-TH", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Asia/Bangkok",
+});
 
 /** จำนวนวันเต็มนับจากวันนี้ — ติดลบ = ผ่านมาแล้ว · ใช้เตือนวันสัมภาษณ์ที่ใกล้ถึง */
 export function daysUntil(isoDate: string): number | null {

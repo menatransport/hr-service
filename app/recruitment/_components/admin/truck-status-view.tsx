@@ -4,6 +4,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { Clock, SearchX, Wrench, X } from "lucide-react";
 
 import { InfoTip } from "@/components/ui/info-tip";
+import { TruckLogicButton } from "@/app/recruitment/_components/admin/truck-logic-dialog";
 import { Pager } from "@/components/ui/pager";
 import { SearchField } from "@/components/ui/field";
 import {
@@ -205,6 +206,7 @@ export function TruckStatusView({ board }: { board: TruckBoard }) {
             className="w-full sm:w-auto"
           />
           <div className="flex items-center gap-3 self-end lg:ml-auto lg:self-auto">
+            <TruckLogicButton board={board} />
             <InfoTip label="หน้านี้ดึงข้อมูลจากไหน อัปเดตอย่างไร">
               <span className="mb-1 block font-semibold text-ink">ดึงจากไหน</span>
               <span className="block">

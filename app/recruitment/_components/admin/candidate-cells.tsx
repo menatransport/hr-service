@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleSlash,
+  Copy,
   Loader2,
   UserRound,
   UserRoundX,
@@ -25,7 +26,7 @@ import {
   TextField,
 } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { daysUntil, thaiDate } from "@/app/recruitment/_lib/form";
+import { daysUntil, formatPhone, thaiDate } from "@/app/recruitment/_lib/form";
 import {
   EXIT_REASONS,
   EXIT_REASON_NOTE_MAX,
@@ -862,3 +863,62 @@ function TimeSlot({
   );
 }
 
+/**
+ * ช่องติ๊กของมุมมองฝึกงาน (ปฐมนิเทศ · ST ประเมิน) — อ่านอย่างเดียว ค่ามาจากฝ่าย HRD/ST
+ * · กด = เปิดฟอร์ม JR ไปลงผลที่นั่น ตารางติ๊กตามเองหลังบันทึก
+ */
+export function CheckMark({ on, title, onOpen }: { on: boolean; title: string; onOpen?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!onOpen}
+      title={title}
+      aria-label={title}
+      className={`flex size-[18px] items-center justify-center rounded-[5px] border transition-colors disabled:cursor-default ${
+        on ? "border-primary bg-primary text-primary-content" : "border-line-strong bg-base-100 hover:border-primary/60"
+      }`}
+    >
+      {on ? <Check size={12} strokeWidth={3} aria-hidden /> : null}
+    </button>
+  );
+}
+
+export function PhoneCell({ phone }: { phone: string }) {
+  const [copied, setCopied] = useState(false);
+  const text = formatPhone(phone);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* เบราว์เซอร์ไม่ให้สิทธิ์คลิปบอร์ด — ตัวเลขยังลากเลือกเองได้อยู่ดี */
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="คลิกเพื่อคัดลอกเบอร์"
+      className="group flex items-center gap-1.5 rounded-selector px-1 py-0.5 transition-colors hover:bg-base-200"
+    >
+      <span className="font-mono whitespace-nowrap tabular-nums select-all">
+        {text}
+      </span>
+      {copied ? (
+        <Check size={12} strokeWidth={2.5} aria-hidden className="flex-none text-primary" />
+      ) : (
+        <Copy
+          size={11}
+          strokeWidth={2}
+          aria-hidden
+          className="flex-none text-mut opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      )}
+      <span className="sr-only">{copied ? "คัดลอกแล้ว" : "คัดลอกเบอร์"}</span>
+    </button>
+  );
+}

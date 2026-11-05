@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { Fragment, useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import {
-  Check,
   ClipboardList,
-  Copy,
   FilePenLine,
   Loader2,
   Search,
@@ -17,8 +15,10 @@ import { ColumnMenu, type ColumnFilterOption } from "@/components/ui/column-menu
 import {
   BlacklistCell,
   BlacklistHitBadge,
+  CheckMark,
   InterviewCell,
   OwnerCell,
+  PhoneCell,
   ReasonCell,
   StatusCell,
   type CellPatch,
@@ -34,11 +34,16 @@ import {
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
 import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
 import { SearchField } from "@/components/ui/field";
+import { SegmentedControl } from "@/components/ui/summary-panel";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
 import {
   TAB_NOTE,
+  HANDOVER_MIN_TRAINING_DAYS,
   TRAINING_NOTE,
+  ST_CHECKPOINTS,
   outcomeGroup,
+  val,
+  vehicleReadiness,
   type Tab,
   outcomeLabel,
   type OnboardingRecord,
@@ -47,6 +52,8 @@ import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { OnboardingView, hubRows } from "@/app/recruitment/_components/admin/onboarding-view";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
 import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
+import { VehicleStatusCell } from "@/app/recruitment/_components/admin/repair-badge";
+import type { RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
 import { RATING_TONE } from "@/app/recruitment/_components/admin/hr-document-rating";
 import { formatScore, levelOf, summarizeRating } from "@/app/recruitment/_lib/driver-rating";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
@@ -79,8 +86,14 @@ import {
   type QuestionKind,
   findBlacklistHit,
 } from "@/app/recruitment/_lib/types";
-import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
+import {
+  customerLabel,
+  positionLabel,
+  type Requisition,
+  type RequisitionVehicle,
+} from "@/app/recruitment/_lib/requisitions/types";
 import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
+import { thaiNumericCompare } from "@/lib/thai-order";
 
 /**
  * หน้า “ผู้สมัคร” — ตารางแบบสเปรดชีตที่ฝ่ายบุคคลทำงานได้จบในตารางเดียว
@@ -103,7 +116,7 @@ import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
  *   ตามด้วยสัญญาจ้าง · สัญญาค้ำ · ยินยอมคืนเงินค้ำ (ดู `hr-document-maker.tsx`) ·
  *   ปุ่มรายงานแยกเดิมถูกรวมเข้าไปตามคำสั่งเจ้าของงาน 29 ก.ย. 2026
  *
- * กรองและเรียงทำฝั่ง client บนชุดที่โหลดมาแล้ว (สูงสุด 500 ใบ ดู `LIST_LIMIT`)
+ * กรองและเรียงทำฝั่ง client บนชุดที่โหลดมาแล้ว (ทุกใบ ดู `listApplications()`)
  */
 
 /* วันที่ล้วนของคอลัมน์ประทับเวลา (`stampDay`) อยู่ที่ `candidate-insights.tsx`
@@ -116,6 +129,14 @@ import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
  * ไม่ได้อ่านทีละตัว · ปีเต็มกับหน่วยเวลากินความกว้างไปสองสามตัวอักษรต่อแถว
  * โดยไม่ได้บอกอะไรที่บริบทของตารางไม่ได้บอกอยู่แล้ว
  */
+/** วันที่ล้วนแบบกระชับ — `23 ต.ค. 69` (มุมมองฝึกงาน) */
+const shortDay = new Intl.DateTimeFormat("th-TH", {
+  day: "numeric",
+  month: "short",
+  year: "2-digit",
+  timeZone: "Asia/Bangkok",
+});
+
 const stamp = new Intl.DateTimeFormat("th-TH", {
   day: "numeric",
   month: "short",
@@ -136,7 +157,52 @@ type Row = ApplicationSummary & {
   trainingStartOn: string;
   /** เลขที่ JR ของคำขอที่ผูก — ว่าง = ยังไม่ผูก */
   jrCode: string;
+  /** ข้อมูลผู้ฝึกงานของมุมมองฝึกงาน (`traineeOf`) — ไม่ผูก RQ = `null` */
+  trainee: Trainee | null;
 };
+
+/**
+ * คอลัมน์ผู้ฝึกงาน (Bew 5 พ.ย. 2569) — RQ ที่ผูก (รหัส ตำแหน่ง ลูกค้า แพล้นท์ ครูฝึก รถ)
+ * + แถวหน้าติดตาม (`hubRows` · วันฝึก ปฐมนิเทศ ST) + บอร์ดซ่อม (สถานะรถ)
+ */
+interface Trainee {
+  drivercode: string;
+  position: string;
+  customer: string;
+  plant: string;
+  trainer: string;
+  /** วันฝึกงานจริง (นับเฉพาะ `ฝ` · `handoverCheck`) — ไม่มีแถวหน้าติดตาม = `null` */
+  trainedDays: number | null;
+  orientationOn: string;
+  /** ST ประเมินผ่าน = เงื่อนไขรอรับรถ · `stResult` = ผลรอบล่าสุดที่ลงไว้ */
+  stPassed: boolean;
+  stResult: string;
+  vehicle: RequisitionVehicle | null;
+  repair: RepairStatus | null;
+}
+
+type HubRow = ReturnType<typeof hubRows>[number];
+
+function traineeOf(
+  rq: Requisition | undefined,
+  row: HubRow | undefined,
+  repairs: Record<string, RepairStatus> | undefined,
+): Trainee | null {
+  if (!rq) return null;
+  return {
+    drivercode: rq.drivercode,
+    position: positionLabel(rq),
+    customer: customerLabel(rq),
+    plant: rq.plant,
+    trainer: rq.trainer?.name ?? "",
+    trainedDays: row ? row.ready.trainedDays : null,
+    orientationOn: row ? val(row.onboarding, "hrd", "orientationOn") : "",
+    stPassed: row?.ready.st ?? false,
+    stResult: row ? (ST_CHECKPOINTS.map((c) => val(row.onboarding, "er", c.result)).filter(Boolean).at(-1) ?? "") : "",
+    vehicle: rq.vehicle,
+    repair: rq.vehicle?.plateNo ? (repairs?.[rq.vehicle.plateNo] ?? null) : null,
+  };
+}
 
 /**
  * นิยามคอลัมน์ที่เดียวของทั้งตาราง
@@ -163,6 +229,16 @@ const COLUMNS = [
     text: (a: Row) => a.fullName,
   },
   {
+    /* มุมมองฝึกงาน — เรียงตั้งต้นตามคอลัมน์นี้ น้อย → มาก (`TRAINEE_SORT`) · ไม่มีรหัสไปท้าย */
+    id: "drivercode",
+    label: "รหัสพนักงาน",
+    width: "min-w-[100px]",
+    asc: "น้อย → มาก",
+    desc: "มาก → น้อย",
+    text: (a: Row) => a.trainee?.drivercode || "—",
+    key: (a: Row) => a.trainee?.drivercode || "zzzz",
+  },
+  {
     /* แยกจากใต้ชื่อมาเป็นคอลัมน์ในมุมมองรอฝึกงาน/ฝึกงาน — คัดลอกหรือกดเปิดฟอร์ม JR (Bew 4 พ.ย. 2569) */
     id: "jr",
     label: "เลขที่ JR",
@@ -170,6 +246,56 @@ const COLUMNS = [
     asc: "น้อย → มาก",
     desc: "มาก → น้อย",
     text: (a: Row) => a.jrCode || "—",
+  },
+  { id: "position", label: "ตำแหน่ง", width: "min-w-[80px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.position || "—" },
+  { id: "customer", label: "ลูกค้า", width: "min-w-[80px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.customer || "—" },
+  { id: "plant", label: "แพล้นท์", width: "min-w-[100px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.plant || "—" },
+  { id: "trainer", label: "ครูฝึก", width: "min-w-[140px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.trainer || "—" },
+  {
+    /* โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว · รอฝึกงานเป็นสถานะจริงแล้ว
+       (25 ต.ค. 2569) ป้ายฝึกงาน/รอฝึกงานตามวันที่เดิมจึงถอดออก */
+    id: "trainingStart",
+    label: "วันที่ฝึกงาน",
+    width: "min-w-[120px]",
+    asc: "เก่า → ใหม่",
+    desc: "ใหม่ → เก่า",
+    text: (a: Row) => (a.trainingStartOn ? thaiDate(a.trainingStartOn) : "ยังไม่กำหนด"),
+    key: (a: Row) => a.trainingStartOn || "9999-12-31",
+  },
+  {
+    /* นับเฉพาะวันฝึกงานจริง (`ฝ`) ชุดเดียวกับเงื่อนไขรอรับรถ */
+    id: "trainDays",
+    label: "จำนวนวันฝึก",
+    width: "min-w-[96px]",
+    asc: "น้อย → มาก",
+    desc: "มาก → น้อย",
+    text: (a: Row) => (a.trainee?.trainedDays == null ? "—" : `${a.trainee.trainedDays} วัน`),
+    key: (a: Row) => String(a.trainee?.trainedDays ?? -1).padStart(5, "0"),
+  },
+  {
+    id: "orientation",
+    label: "ปฐมนิเทศ",
+    width: "min-w-[84px]",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+    text: (a: Row) => (a.trainee?.orientationOn ? "ปฐมนิเทศแล้ว" : "ยังไม่ปฐมนิเทศ"),
+  },
+  {
+    id: "st",
+    label: "ST ประเมิน",
+    width: "min-w-[90px]",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+    text: (a: Row) => (a.trainee?.stPassed ? "ประเมินผ่าน" : a.trainee?.stResult || "ยังไม่ประเมิน"),
+  },
+  {
+    /* ทะเบียน · เบอร์รถ · สถานะจากบอร์ดซ่อม ในช่องเดียว — กรอง/เรียงตามสถานะ */
+    id: "vehicle",
+    label: "สถานะรถ",
+    width: "min-w-[150px]",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+    text: (a: Row) => (a.trainee ? vehicleReadiness(a.trainee, a.trainee.repair)?.label : undefined) ?? "ยังไม่มีรถ",
   },
   {
     id: "contactOwner",
@@ -233,17 +359,6 @@ const COLUMNS = [
     text: (a: Row) => STATUS_LABEL[a.status],
   },
   {
-    /* โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว · รอฝึกงานเป็นสถานะจริงแล้ว
-       (25 ต.ค. 2569) ป้ายฝึกงาน/รอฝึกงานตามวันที่เดิมจึงถอดออก */
-    id: "trainingStart",
-    label: "วันที่ฝึกงาน",
-    width: "min-w-[150px]",
-    asc: "เก่า → ใหม่",
-    desc: "ใหม่ → เก่า",
-    text: (a: Row) => (a.trainingStartOn ? thaiDate(a.trainingStartOn) : "ยังไม่กำหนด"),
-    key: (a: Row) => a.trainingStartOn || "9999-12-31",
-  },
-  {
     id: "exitReason",
     label: "เหตุผลที่ยกเลิก",
     width: "min-w-[170px]",
@@ -302,6 +417,50 @@ const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
 /** คอลัมน์ JR + วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว */
 const TRAINING_COLUMNS: ColumnId[] = ["jr", "trainingStart"];
 
+/** คอลัมน์ผู้ฝึกงาน — โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว (Bew 5 พ.ย. 2569) */
+const TRAINEE_COLUMNS: ColumnId[] = ["drivercode", "position", "customer", "plant", "trainer", "trainDays", "orientation", "st", "vehicle"];
+
+/**
+ * มุมมองฝึกงานมีลำดับคอลัมน์ของตัวเอง (Bew 5 พ.ย. 2569) — รหัสพนักงานย้ายไปอยู่ใต้ชื่อ · JR ตำแหน่ง ลูกค้า แพล้นท์ ต่อจากชื่อ
+ * · ถอดช่วงสมัคร (สนใจงานเขต · ความพร้อมเริ่มงาน · นัดสัมภาษณ์) และประทับเวลาออก ให้ตารางแคบลง (Excel ยังมีประทับเวลา)
+ */
+const TRAINEE_ORDER: ColumnId[] = [
+  "fullName",
+  "jr",
+  "position",
+  "customer",
+  "plant",
+  "contactOwner",
+  "phone",
+  "trainer",
+  "trainingStart",
+  "trainDays",
+  "orientation",
+  "st",
+  "vehicle",
+  "status",
+];
+
+/** มุมมองรอฝึกงาน = ชุดเดียวกับฝึกงาน ไม่มี ฝึกมา/ปฐมนิเทศ/ST — ตรงกับแท็บรอฝึกงานของหน้าติดตาม (Bew 5 พ.ย. 2569) */
+const WAITING_HIDDEN: ColumnId[] = ["trainDays", "orientation", "st"];
+const WAITING_ORDER: ColumnId[] = TRAINEE_ORDER.filter((id) => !WAITING_HIDDEN.includes(id));
+
+/** ป้าย/ความกว้างที่แคบลงในมุมมองฝึกงาน — ไม่ใส่ = ใช้ของ `COLUMNS` */
+const TRAINEE_HEAD: Partial<Record<ColumnId, { label?: string; width?: string }>> = {
+  fullName: { width: "min-w-[170px]" },
+  drivercode: { width: "min-w-[96px]" },
+  contactOwner: { width: "min-w-[104px]" },
+  phone: { label: "เบอร์โทร", width: "min-w-[112px]" },
+  jr: { width: "min-w-[118px]" },
+  trainer: { width: "min-w-[120px]" },
+  trainingStart: { label: "วันที่ฝึก", width: "min-w-[96px]" },
+  trainDays: { label: "ฝึกมา", width: "min-w-[72px]" },
+  orientation: { width: "min-w-[80px]" },
+  st: { label: "ST", width: "min-w-[56px]" },
+  vehicle: { width: "min-w-[140px]" },
+  status: { label: "สถานะ", width: "min-w-[108px]" },
+};
+
 /**
  * ลำดับตั้งต้นของตาราง — **ใบล่าสุดอยู่บนสุดเสมอ** เรียงตามประทับเวลา
  *
@@ -311,31 +470,88 @@ const TRAINING_COLUMNS: ColumnId[] = ["jr", "trainingStart"];
  */
 const DEFAULT_SORT: TableSort = { column: "createdAt", dir: "desc" };
 
+/** ลำดับตั้งต้นของมุมมองฝึกงาน — รหัสพนักงาน น้อย → มาก (Bew 5 พ.ย. 2569) */
+const TRAINEE_SORT: TableSort = { column: "drivercode", dir: "asc" };
+
 /**
  * คอลัมน์ Excel — ตามคอลัมน์บนจอ (เหตุผล/Blacklist โผล่ตามมุมมองเดียวกัน) + ของที่จอซ่อนไว้ใน
  * tooltip/ปุ่ม: เลขที่ใบสมัคร · เวลานัด · ผลสัมภาษณ์ · Driver Rating
  */
-function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showTraining: boolean): XlsxColumn<Row>[] {
+function candidateXlsxColumns(
+  showReason: boolean,
+  showBlacklist: boolean,
+  showTraining: boolean,
+  showTrainee: boolean,
+  /** มุมมองรอฝึกงาน — ไม่มีจำนวนวันฝึก/ปฐมนิเทศ/ST */
+  waiting = false,
+): XlsxColumn<Row>[] {
   const text = (id: ColumnId) => COLUMNS.find((c) => c.id === id)!.text;
+  const progress: XlsxColumn<Row>[] = [
+    { header: "จำนวนวันฝึก", width: 11, kind: "int", value: (a) => a.trainee?.trainedDays ?? null },
+    { header: "ปฐมนิเทศ", width: 13, kind: "date", value: (a) => xlsxDate(a.trainee?.orientationOn ?? "") },
+    { header: "ST ประเมิน", width: 22, kind: "status", value: text("st"), tone: (a) => (a.trainee?.stPassed ? "ok" : "mut") },
+  ];
+  const trainee: XlsxColumn<Row>[] = [
+    ...(waiting ? [] : progress),
+    { header: "ทะเบียนรถ", width: 14, value: (a) => a.trainee?.vehicle?.plateNo },
+    { header: "เบอร์รถ", width: 10, kind: "code", value: (a) => a.trainee?.vehicle?.code },
+    {
+      header: "สถานะรถ",
+      width: 18,
+      kind: "status",
+      value: (a) => (a.trainee?.vehicle ? text("vehicle")(a) : ""),
+      tone: (a) => (a.trainee?.repair ? "alert" : a.trainee?.vehicle ? "ok" : null),
+    },
+    { header: "เหตุผล (รถ)", width: 22, value: (a) => a.trainee?.repair?.label },
+  ];
   return [
     { header: "เลขที่ใบสมัคร", width: 14, kind: "code", value: (a) => a.ref },
     { header: "ชื่อ–นามสกุล", width: 28, value: (a) => a.fullName },
+    ...(showTrainee
+      ? [{ header: "รหัสพนักงาน", width: 12, kind: "code", value: (a) => a.trainee?.drivercode } satisfies XlsxColumn<Row>]
+      : []),
     ...(showTraining
       ? [{ header: "เลขที่ JR", width: 13, kind: "code", value: (a) => a.jrCode } satisfies XlsxColumn<Row>]
       : []),
-    { header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner },
+    ...(showTrainee
+      ? ([
+          { header: "ตำแหน่ง", width: 10, value: (a) => a.trainee?.position },
+          { header: "ลูกค้า", width: 12, value: (a) => a.trainee?.customer },
+          { header: "แพล้นท์", width: 16, value: (a) => a.trainee?.plant },
+          { header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner },
+          { header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (a) => formatPhone(a.phone) },
+          { header: "ครูฝึก", width: 22, value: (a) => a.trainee?.trainer },
+        ] satisfies XlsxColumn<Row>[])
+      : []),
+    ...(showTraining
+      ? [
+          { header: "วันที่ฝึกงาน", width: 13, kind: "date", value: (a) => xlsxDate(a.trainingStartOn) } satisfies XlsxColumn<Row>,
+        ]
+      : []),
+    ...(showTrainee ? trainee : []),
+    ...(showTrainee
+      ? []
+      : ([{ header: "ผู้ติดต่อกลับ", width: 20, value: (a) => a.contactOwner }] satisfies XlsxColumn<Row>[])),
     { header: "ประทับเวลา", width: 17, kind: "datetime", value: (a) => xlsxDate(a.createdAt) },
-    { header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (a) => formatPhone(a.phone) },
-    { header: "สนใจงานเขต", width: 18, value: (a) => a.workZone },
-    {
-      header: "ความพร้อมเริ่มงาน",
-      width: 16,
-      kind: "date",
-      /* ตอบเป็นวันที่ = วันที่จริง · ตอบเป็นข้อความ (“พร้อมทันที”) = ข้อความตามที่ตอบ */
-      value: (a) => xlsxDate(/^\d{4}-\d{2}-\d{2}$/.test(a.readyToStart) ? a.readyToStart : "") ?? a.readyToStart,
-    },
-    { header: "นัดสัมภาษณ์", width: 13, kind: "date", value: (a) => xlsxDate(a.interview.date) },
-    { header: "เวลานัด", width: 9, kind: "code", value: (a) => a.interview.time },
+    ...(showTrainee
+      ? []
+      : ([
+          { header: "เบอร์โทรศัพท์", width: 15, kind: "code", value: (a) => formatPhone(a.phone) },
+        ] satisfies XlsxColumn<Row>[])),
+    ...(showTrainee
+      ? []
+      : ([
+          { header: "สนใจงานเขต", width: 18, value: (a) => a.workZone },
+          {
+            header: "ความพร้อมเริ่มงาน",
+            width: 16,
+            kind: "date",
+            /* ตอบเป็นวันที่ = วันที่จริง · ตอบเป็นข้อความ (“พร้อมทันที”) = ข้อความตามที่ตอบ */
+            value: (a) => xlsxDate(/^\d{4}-\d{2}-\d{2}$/.test(a.readyToStart) ? a.readyToStart : "") ?? a.readyToStart,
+          },
+          { header: "นัดสัมภาษณ์", width: 13, kind: "date", value: (a) => xlsxDate(a.interview.date) },
+          { header: "เวลานัด", width: 9, kind: "code", value: (a) => a.interview.time },
+        ] satisfies XlsxColumn<Row>[])),
     {
       header: "สถานะการสมัคร",
       width: 20,
@@ -343,11 +559,6 @@ function candidateXlsxColumns(showReason: boolean, showBlacklist: boolean, showT
       value: (a) => STATUS_LABEL[a.status],
       tone: (a) => (a.status === "cancelled" ? "alert" : a.status === "working" || a.status === "training" ? "ok" : null),
     },
-    ...(showTraining
-      ? [
-          { header: "วันที่ฝึกงาน", width: 13, kind: "date", value: (a) => xlsxDate(a.trainingStartOn) } satisfies XlsxColumn<Row>,
-        ]
-      : []),
     ...(showReason
       ? [{ header: "เหตุผลที่ยกเลิก", width: 26, value: text("exitReason") } satisfies XlsxColumn<Row>]
       : []),
@@ -396,6 +607,8 @@ async function candidateSheet(
   showReason: boolean,
   showBlacklist: boolean,
   showTraining: boolean,
+  showTrainee: boolean,
+  waiting = false,
 ): Promise<Pick<XlsxSheet<FormRow>, "columns" | "rows">> {
   const form = await requestJson<ApplicationFormExport>(
     "/api/recruitment/applications/export",
@@ -407,7 +620,7 @@ async function candidateSheet(
   return {
     rows: visible.map((a) => ({ ...a, form: byId.get(a.id) ?? {} })),
     columns: [
-      ...candidateXlsxColumns(showReason, showBlacklist, showTraining),
+      ...candidateXlsxColumns(showReason, showBlacklist, showTraining, showTrainee, waiting),
       ...form.columns.map(
         (q): XlsxColumn<FormRow> => ({
           header: q.label,
@@ -479,13 +692,14 @@ export function CandidatesView({
    */
   requisitions?: Requisition[];
   setRequisitions?: Dispatch<SetStateAction<Requisition[]>>;
-  /** ทุกใบที่ติด Blacklist จากฐาน (ไม่จำกัด 500 ใบ) — ดู `listBlacklist()` */
+  /** ทุกใบที่ติด Blacklist จากฐาน — ดู `listBlacklist()` */
   blacklist?: BlacklistEntry[];
   /** ข้อมูลหน้าติดตามพนักงานใหม่ (`getHub()`) — การ์ดรอสรรหา/รับรถแล้ว */
   hub?: Hub;
   initialView?: HubView | null;
 }) {
-  const [sort, setSort] = useState(DEFAULT_SORT);
+  /** ลำดับที่ผู้ใช้เลือกจากหัวคอลัมน์ · `null` = ลำดับตั้งต้นของมุมมอง (ดู `sort` ข้างล่าง) */
+  const [pickedSort, setSort] = useState<TableSort | null>(null);
   const [filters, setFilters] = useState<Filters>(() => {
     const ref = initialTerm.trim().toUpperCase();
     const match = ref ? rows.find((a) => a.ref.toUpperCase() === ref) : undefined;
@@ -532,15 +746,17 @@ export function CandidatesView({
       }),
     ];
   }, [hub, requisitions, rows]);
+  const hubList = useMemo(() => (hub ? hubRows(hubRecords, hub.repairs) : []), [hub, hubRecords]);
+  const hubById = useMemo(() => new Map(hubList.map((r) => [r.id, r])), [hubList]);
   const hubCounts = useMemo(() => {
     if (!hub) return null;
-    const list = hubRows(hubRecords, hub.repairs);
+    const list = hubList;
     return {
       open: list.filter((r) => r.stage === "open").length,
       handover: list.filter((r) => r.waitHandover).length,
       working: list.filter((r) => r.stage === "working").length,
     };
-  }, [hub, hubRecords]);
+  }, [hub, hubList]);
 
   function pickView(next: HubView | null) {
     setView(next);
@@ -567,8 +783,13 @@ export function CandidatesView({
           a.status === "pending_contact" ? findBlacklistHit(a, blacklistIndex) : null,
         trainingStartOn: rqByApplication.get(a.id)?.trainingStartOn ?? "",
         jrCode: rqByApplication.get(a.id)?.code ?? "",
+        trainee: traineeOf(
+          rqByApplication.get(a.id),
+          hubById.get(rqByApplication.get(a.id)?.id ?? ""),
+          hub?.repairs,
+        ),
       })),
-    [rows, blacklistIndex, rqByApplication],
+    [rows, blacklistIndex, rqByApplication, hubById, hub],
   );
 
   /**
@@ -621,7 +842,7 @@ export function CandidatesView({
       }
       map[column.id] = [...tally.entries()]
         .map(([value, count]) => ({ value, label: value, count }))
-        .sort((a, b) => a.label.localeCompare(b.label, "th", { numeric: true }));
+        .sort((a, b) => thaiNumericCompare(a.label, b.label));
     }
     return map;
   }, [enriched]);
@@ -637,23 +858,56 @@ export function CandidatesView({
 
   const showTraining = onlyStatus(STATUS_LABEL.training) || onlyStatus(STATUS_LABEL.interview_passed);
 
+  /** กรองรอฝึกงาน = คอลัมน์ผู้ฝึกงานแบบเดียวกัน แต่ไม่มี ฝึกมา/ปฐมนิเทศ/ST (Bew 5 พ.ย. 2569) */
+  const showWaiting = onlyStatus(STATUS_LABEL.interview_passed);
+
+  /** กรองฝึกงาน/รอฝึกงานอย่างเดียว = คอลัมน์ผู้ฝึกงาน แทนคอลัมน์ช่วงสมัคร (Bew 5 พ.ย. 2569) */
+  const showTrainee = onlyStatus(STATUS_LABEL.training) || showWaiting;
+
   /** กรองฝึกงานอย่างเดียว = ตารางฝึกงานรายวัน + ปุ่มคัดลอกสรุปใต้ตาราง (ย้ายมาจากหน้าติดตามพนักงานใหม่ 25 ต.ค. 2569) */
   const showDaily = !view && onlyStatus(STATUS_LABEL.training);
 
-  /** ช่องค้นหา — มีเฉพาะตอนกรองฝึกงานอย่างเดียว (Bew 5 พ.ย. 2569) · ช่องซ่อน = ไม่กรองต่อเบื้องหลัง */
+  /**
+   * แท็บเหนือตารางของมุมมองฝึกงาน: ตาราง | สถานะฝึกงาน (Bew 5 พ.ย. 2569 — เดิมตารางรายวันต่อท้าย)
+   * · `dailyAlerts` = Issue วันนี้ ขึ้นจุดแดงบนแท็บแม้อยู่แท็บตาราง
+   */
+  const [traineeTab, setTraineeTab] = useState<"table" | "daily">("table");
+  /** กล่องในแถบมุมมองที่เครื่องมือของตารางสถานะฝึกงานถูกส่งมาวาง (portal — ดู `TraineeMatrix`) */
+  const [dailyToolbar, setDailyToolbar] = useState<HTMLDivElement | null>(null);
+  const [dailyAlerts, setDailyAlerts] = useState(0);
+  const onDailyAlerts = useCallback((n: number) => setDailyAlerts(n), []);
+  const dailyTab = showDaily && traineeTab === "daily";
+
+  /** ช่องค้นหา — มีเฉพาะแท็บตารางของมุมมองฝึกงาน (Bew 5 พ.ย. 2569) · ช่องซ่อน = ไม่กรองต่อเบื้องหลัง
+   *  (แท็บสถานะฝึกงานมีช่องค้นหาของตัวเอง) */
   const [query, setQuery] = useState("");
-  const needle = showDaily ? query.trim().toLowerCase() : "";
+  const needle = showDaily && !dailyTab ? query.trim().toLowerCase() : "";
 
   const columns = useMemo(
     () =>
-      COLUMNS.filter(
-        (c) =>
-          (c.id !== REASON_COLUMN || showReason) &&
-          (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
-          (!TRAINING_COLUMNS.includes(c.id) || showTraining),
-      ),
-    [showReason, showBlacklist, showTraining],
+      showTrainee
+        ? (showWaiting ? WAITING_ORDER : TRAINEE_ORDER).map((id) => COLUMNS.find((c) => c.id === id)!)
+        : COLUMNS.filter(
+            (c) =>
+              (c.id !== REASON_COLUMN || showReason) &&
+              (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
+              (!TRAINING_COLUMNS.includes(c.id) || showTraining) &&
+              !TRAINEE_COLUMNS.includes(c.id),
+          ),
+    [showReason, showBlacklist, showTraining, showTrainee, showWaiting],
   );
+  const head = (c: (typeof COLUMNS)[number]) => ({
+    label: (showTrainee && TRAINEE_HEAD[c.id]?.label) || c.label,
+    width: (showTrainee && TRAINEE_HEAD[c.id]?.width) || c.width,
+  });
+
+  /* ลำดับที่เลือกไว้ใช้ต่อเมื่อคอลัมน์นั้นยังอยู่ในมุมมอง — นอกนั้นถอยไปลำดับตั้งต้นของมุมมอง */
+  const sort =
+    pickedSort && columns.some((c) => c.id === pickedSort.column)
+      ? pickedSort
+      : showTrainee
+        ? TRAINEE_SORT
+        : DEFAULT_SORT;
 
   const visible = useMemo(() => {
     /* กรองด้วยคอลัมน์ที่เห็นอยู่จริงเท่านั้น — ตัวกรองของคอลัมน์เหตุผลที่ถูกซ่อนไป
@@ -676,7 +930,7 @@ export function CandidatesView({
       "key" in column ? column.key(a) : column.text(a);
 
     return [...matched].sort((a, b) => {
-      const order = read(a).localeCompare(read(b), "th", { numeric: true });
+      const order = thaiNumericCompare(read(a), read(b));
       return sort.dir === "asc" ? order : -order;
     });
   }, [enriched, columns, filters, sort, needle, rqByApplication]);
@@ -813,7 +1067,7 @@ export function CandidatesView({
 
   return (
     /* มุมมองฝึกงานมีตารางรายวันต่อท้าย — หน้าเลื่อนยาวตามปกติแทนการล็อกสูงเท่าจอ */
-    <div className={showDaily ? "flex flex-col gap-4" : view ? "flex flex-col" : "flex flex-col lg:h-[calc(100dvh-4rem)]"}>
+    <div className={dailyTab ? "flex flex-col gap-4" : view ? "flex flex-col" : "flex flex-col lg:h-[calc(100dvh-4rem)]"}>
       {/* หัวเรื่องซ่อนไว้ให้โปรแกรมอ่านจอเท่านั้น — ถอดหัวที่มองเห็นออกตามคำขอ 23 ก.ย. 2026
           (`sr-only` เป็น absolute จึงไม่กิน `gap` ของกล่องนอก) */}
       <h1 className="sr-only">{title}</h1>
@@ -863,28 +1117,64 @@ export function CandidatesView({
           ตำแหน่งกับเอกสารทั้งหน้าแทนกล่องนี้ ดันความสูงจริงของหน้าให้ยาวเกินของจริง
           (เห็นผลเป็นแถบข้างที่ดูเหมือนเลื่อนตามเพราะ container คำนวณความสูงผิด) */}
       {showDaily ? (
-        <div className="flex flex-col gap-2 pb-3 lg:flex-row lg:items-center lg:gap-4">
-          <SearchField
-            value={query}
-            onChange={setQuery}
-            label="ค้นหา"
-            placeholder="ชื่อ เลขที่ รหัส แพล้นท์ ครูฝึก รถ…"
-            tone="filled"
-            className="lg:max-w-sm lg:flex-1"
+        <div className="flex flex-none flex-col gap-2 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
+          <SegmentedControl
+            label="มุมมองฝึกงาน"
+            value={traineeTab}
+            onChange={setTraineeTab}
+            options={[
+              { value: "table", label: "ตาราง", count: visible.length },
+              { value: "daily", label: "สถานะฝึกงาน", dot: dailyAlerts ? "bg-alert" : undefined },
+            ]}
+            /* ชิดขวาของแถบ (Bew 5 พ.ย. 2569) — `order-last` ให้อยู่ท้ายแม้ประกาศก่อนช่องค้นหา
+               · แท็บสถานะฝึกงาน: RC Alert + Excel ใน `dailyToolbar` เป็นตัวดันชิดขวาแทน */
+            className={`w-full sm:w-auto sm:self-end lg:order-last lg:self-auto ${dailyTab ? "" : "lg:ml-auto"}`}
           />
-          <p className="text-12 leading-relaxed text-ink">
-            <span className="font-medium">เงื่อนไข: </span>
-            <span className="text-alert">{TRAINING_NOTE.join(", ")}</span>
-          </p>
+          {/* เดือน · ค้นหา · สาขา · RC Alert · Excel ของตารางรายวัน — `contents` ให้ลูกเป็นช่องของแถวนี้ตรง ๆ */}
+          <div ref={setDailyToolbar} className={dailyTab ? "contents" : "hidden"} />
+          {dailyTab ? null : (
+            <>
+              <SearchField
+                value={query}
+                onChange={setQuery}
+                label="ค้นหา"
+                placeholder="ชื่อ เลขที่ รหัส แพล้นท์ ครูฝึก รถ…"
+                tone="filled"
+                className="lg:max-w-sm lg:flex-1"
+              />
+              <p className="text-12 leading-relaxed text-ink">
+                <span className="font-medium">เงื่อนไข: </span>
+                <span className="text-alert">{TRAINING_NOTE.join(", ")}</span>
+              </p>
+            </>
+          )}
         </div>
       ) : null}
+
+      {/* แท็บสถานะฝึกงาน — เมานต์ค้างไว้ (ซ่อนด้วย `hidden`) สลับแท็บไม่ต้องโหลดตารางรายวันใหม่ */}
+      {showDaily ? (
+        <div hidden={!dailyTab}>
+          <TraineeDailySection
+            pool={dailyPool}
+            people={dailyPeople}
+            onAlerts={onDailyAlerts}
+            toolbarSlot={dailyToolbar}
+          />
+        </div>
+      ) : null}
+
+      {dailyTab ? null : (
+      <>
       <div
         ref={pagedScroll}
         className={`sheet-bleed relative overflow-auto border-y border-line ${
-          showDaily ? "max-h-[60dvh]" : "max-h-[calc(100dvh-13.5rem)] lg:max-h-none lg:min-h-0 lg:flex-1"
+          "max-h-[calc(100dvh-13.5rem)] lg:max-h-none lg:min-h-0 lg:flex-1"
         }`}
       >
-        <table className="sheet-table w-full border-collapse text-13">
+        {/* มุมมองฝึกงานคอลัมน์เยอะ — ระยะข้างช่องแคบลงทั้งตาราง ลดการเลื่อนแนวนอน */}
+        <table
+          className={`sheet-table w-full border-collapse text-13 ${showTrainee ? "[&_td]:px-2 [&_th]:px-2" : ""}`}
+        >
           <thead>
             <tr>
               {columns.map((column, i) => (
@@ -899,14 +1189,14 @@ export function CandidatesView({
                   }
                   /* `py-0` — ปุ่มข้างในกินพื้นที่เต็มช่องเอง กดตรงไหนก็เปิดเมนูได้
                      · คอลัมน์แรกปักทั้งบนและซ้าย จึงต้องซ้อนสูงกว่าหัวที่เลื่อนผ่านใต้มัน */
-                  className={`${column.width} sticky top-0 border-b border-line-strong bg-head px-3 py-0 text-left whitespace-nowrap ${
+                  className={`${head(column).width} sticky top-0 border-b border-line-strong bg-head px-3 py-0 text-left whitespace-nowrap ${
                     i === 0
                       ? "left-0 z-20 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line"
                       : "z-10"
                   }`}
                 >
                   <ColumnMenu
-                    label={column.label}
+                    label={head(column).label}
                     sort={{
                       dir: sort.column === column.id ? sort.dir : null,
                       ascLabel: column.asc,
@@ -914,7 +1204,7 @@ export function CandidatesView({
                       /* กดปุ่มเรียงที่กำลังทำงานอยู่ซ้ำ = ถอยกลับไปลำดับตั้งต้น
                          ไม่ใช่ “ไม่เรียงอะไรเลย” — หัวคอลัมน์จึงบอกลำดับจริงเสมอ */
                       onSort: (dir) =>
-                        setSort(dir ? { column: column.id, dir } : DEFAULT_SORT),
+                        setSort(dir ? { column: column.id, dir } : null),
                     }}
                     filter={{
                       options: choices[column.id],
@@ -948,10 +1238,10 @@ export function CandidatesView({
                     title: "ผู้สมัคร",
                     filter: columns
                       .filter((c) => filters[c.id]?.length)
-                      .map((c) => `${c.label}: ${filters[c.id]!.join(", ")}`)
+                      .map((c) => `${head(c).label}: ${filters[c.id]!.join(", ")}`)
                       .join(" · "),
                     total: rows.length,
-                    ...(await candidateSheet(visible, showReason, showBlacklist, showTraining)),
+                    ...(await candidateSheet(visible, showReason, showBlacklist, showTraining, showTrainee, showWaiting)),
                   })}
                 />
                 {syncMode ? (
@@ -970,103 +1260,206 @@ export function CandidatesView({
                 onPatch: (patch: CellPatch) => patchCandidate(a.id, patch),
               };
 
+              const t = a.trainee;
+              const rq = rqByApplication.get(a.id);
+              const openJr = rq ? () => setJrFor(rq.id) : undefined;
+              const dash = <span className="text-mut">—</span>;
+
+              /* ช่องตามคอลัมน์ที่เห็นอยู่ (`columns`) — หัวตารางกับแถวเดินลำดับเดียวกันเสมอ */
+              const td = (id: ColumnId) => {
+                switch (id) {
+                  /* ชื่อยึดขอบซ้ายไว้ตอนตารางเลื่อนแนวนอน — แก้สถานะผิดคนคือ
+                     ความเสียหายจริง ไม่ใช่แค่ความรำคาญ · พื้นต้องทึบ (ไม่ใช่
+                     `/50` ของแถว) ไม่งั้นตัวหนังสือคอลัมน์ที่เลื่อนผ่านจะทะลุขึ้นมา */
+                  case "fullName":
+                    return (
+                      <td className="sticky left-0 z-[5] bg-base-100 px-3 py-2 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line group-hover:bg-base-200">
+                        <div className="flex items-center gap-2.5">
+                          <PersonMark status={a.status} />
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium whitespace-nowrap text-ink">
+                              {a.fullName}
+                            </span>
+                            <span className="flex items-center gap-1.5 font-mono text-10-5 tracking-wider text-primary">
+                              {/* มุมมองฝึกงาน — รหัสพนักงานอยู่ใต้ชื่อแทนคอลัมน์แยก (Bew 5 พ.ย. 2569) */}
+                              {showTrainee ? (
+                                <>
+                                  <span className="text-11 font-semibold tabular-nums text-ink" title="รหัสพนักงาน">
+                                    {t?.drivercode || "ยังไม่มีรหัส"}
+                                  </span>
+                                  <span aria-hidden className="text-mut">·</span>
+                                </>
+                              ) : null}
+                              {a.ref}
+                              {!showTraining && rqByApplication.get(a.id) ? (
+                                <Link
+                                  href={`${ADMIN_ROOT}/onboarding/${rqByApplication.get(a.id)!.id}`}
+                                  title="ดูเส้นทางพนักงานใหม่"
+                                  className="rounded-selector bg-soft px-1 hover:bg-primary/15"
+                                >
+                                  {rqByApplication.get(a.id)!.code} ↗
+                                </Link>
+                              ) : null}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                    );
+                  case "drivercode":
+                    return (
+                      <td className="px-3 py-2 font-mono text-12 whitespace-nowrap tabular-nums">
+                        {t?.drivercode || dash}
+                      </td>
+                    );
+                  case "jr":
+                    return (
+                      <td className="px-2 py-1.5">
+                        {rqByApplication.get(a.id) ? (
+                          <JrCell code={a.jrCode} onOpen={() => setJrFor(rqByApplication.get(a.id)!.id)} />
+                        ) : (
+                          <span className="px-1 text-mut">—</span>
+                        )}
+                      </td>
+                    );
+                  case "position":
+                  case "customer":
+                  case "plant":
+                  case "trainer":
+                    return <td className="px-3 py-2 whitespace-nowrap">{t?.[id] || dash}</td>;
+                  case "trainingStart":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <TrainingDateCell
+                          start={a.trainingStartOn}
+                          due={a.status === "interview_passed"}
+                          short={showTrainee}
+                          locked={locked}
+                          onEdit={() => setRcFor({ application: a, target: null })}
+                        />
+                      </td>
+                    );
+                  case "trainDays":
+                    return (
+                      <td
+                        className="px-3 py-2 whitespace-nowrap tabular-nums"
+                        title={t?.trainedDays == null ? undefined : `ฝึกงาน ${t.trainedDays}/${HANDOVER_MIN_TRAINING_DAYS} วัน (นับเฉพาะวันฝึกงาน)`}
+                      >
+                        {t?.trainedDays == null ? (
+                          dash
+                        ) : (
+                          <span className={t.trainedDays >= HANDOVER_MIN_TRAINING_DAYS ? "font-medium text-st-live-ink" : ""}>
+                            {t.trainedDays} <span className="text-mut">วัน</span>
+                          </span>
+                        )}
+                      </td>
+                    );
+                  case "orientation":
+                    return (
+                      <td className="px-3 py-2">
+                        <CheckMark
+                          on={Boolean(t?.orientationOn)}
+                          title={t?.orientationOn ? `ปฐมนิเทศแล้ว ${thaiDate(t.orientationOn)}` : "ยังไม่ปฐมนิเทศ"}
+                          onOpen={openJr}
+                        />
+                      </td>
+                    );
+                  case "st":
+                    return (
+                      <td className="px-3 py-2">
+                        <CheckMark
+                          on={Boolean(t?.stPassed)}
+                          title={`ST ประเมิน: ${t?.stResult || "ยังไม่ประเมิน"}`}
+                          onOpen={openJr}
+                        />
+                      </td>
+                    );
+                  case "vehicle":
+                    return (
+                      <td className="px-3 py-1.5">
+                        {t?.vehicle ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="leading-tight whitespace-nowrap">
+                              {t.vehicle.plateNo || t.vehicle.code}
+                              {t.vehicle.plateNo && t.vehicle.code ? (
+                                <span className="ml-1.5 font-mono text-11 text-mut">{t.vehicle.code}</span>
+                              ) : null}
+                            </span>
+                            <VehicleStatusCell repair={t.repair} />
+                          </div>
+                        ) : (
+                          <span className="text-mut">ยังไม่มีรถ</span>
+                        )}
+                      </td>
+                    );
+                  case "contactOwner":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <OwnerCell {...cell} options={contactOptions} />
+                      </td>
+                    );
+                  case "createdAt":
+                    return (
+                      <td className="px-3 py-2 font-mono text-11 whitespace-nowrap text-mut tabular-nums">
+                        {stamp.format(new Date(a.createdAt))}
+                      </td>
+                    );
+                  case "phone":
+                    return (
+                      <td className="px-3 py-2">
+                        <PhoneCell phone={a.phone} />
+                      </td>
+                    );
+                  case "workZone":
+                    return <td className="px-3 py-2 whitespace-nowrap">{a.workZone || "—"}</td>;
+                  case "readyToStart":
+                    return (
+                      <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                        {a.readyToStart ? thaiDate(a.readyToStart) : "—"}
+                      </td>
+                    );
+                  case "interview":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <InterviewCell {...cell} />
+                      </td>
+                    );
+                  case "status":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <StatusCell
+                          {...cell}
+                          /* เป็นรอฝึกงาน/ฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
+                          onStage={(to) => toStage(a, to)}
+                        />
+                      </td>
+                    );
+                  case "exitReason":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <ReasonCell {...cell} />
+                      </td>
+                    );
+                  case "blacklist":
+                    return (
+                      <td className="px-2 py-1.5">
+                        {a.status === "cancelled" ? (
+                          <BlacklistCell {...cell} />
+                        ) : (
+                          <BlacklistHitBadge hit={a.blacklistHit} />
+                        )}
+                      </td>
+                    );
+                }
+              };
+
               return (
                 <tr
                   key={a.id}
                   className="group border-b border-line transition-colors last:border-b-0 hover:bg-base-200/50"
                 >
-                  {/* ชื่อยึดขอบซ้ายไว้ตอนตารางเลื่อนแนวนอน — แก้สถานะผิดคนคือ
-                      ความเสียหายจริง ไม่ใช่แค่ความรำคาญ · พื้นต้องทึบ (ไม่ใช่
-                      `/50` ของแถว) ไม่งั้นตัวหนังสือคอลัมน์ที่เลื่อนผ่านจะทะลุขึ้นมา */}
-                  <td className="sticky left-0 z-[5] bg-base-100 px-3 py-2 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line group-hover:bg-base-200">
-                    <div className="flex items-center gap-2.5">
-                      <PersonMark status={a.status} />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium whitespace-nowrap text-ink">
-                          {a.fullName}
-                        </span>
-                        <span className="flex items-center gap-1.5 font-mono text-10-5 tracking-wider text-primary">
-                          {a.ref}
-                          {!showTraining && rqByApplication.get(a.id) ? (
-                            <Link
-                              href={`${ADMIN_ROOT}/onboarding/${rqByApplication.get(a.id)!.id}`}
-                              title="ดูเส้นทางพนักงานใหม่"
-                              className="rounded-selector bg-soft px-1 hover:bg-primary/15"
-                            >
-                              {rqByApplication.get(a.id)!.code} ↗
-                            </Link>
-                          ) : null}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-
-                  {showTraining ? (
-                    <td className="px-2 py-1.5">
-                      {rqByApplication.get(a.id) ? (
-                        <JrCell code={a.jrCode} onOpen={() => setJrFor(rqByApplication.get(a.id)!.id)} />
-                      ) : (
-                        <span className="px-1 text-mut">—</span>
-                      )}
-                    </td>
-                  ) : null}
-
-                  <td className="px-2 py-1.5">
-                    <OwnerCell {...cell} options={contactOptions} />
-                  </td>
-
-                  <td className="px-3 py-2 font-mono text-11 whitespace-nowrap text-mut tabular-nums">
-                    {stamp.format(new Date(a.createdAt))}
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <PhoneCell phone={a.phone} />
-                  </td>
-
-                  <td className="px-3 py-2 whitespace-nowrap">{a.workZone || "—"}</td>
-
-                  <td className="px-3 py-2 whitespace-nowrap tabular-nums">
-                    {a.readyToStart ? thaiDate(a.readyToStart) : "—"}
-                  </td>
-
-                  <td className="px-2 py-1.5">
-                    <InterviewCell {...cell} />
-                  </td>
-
-                  <td className="px-2 py-1.5">
-                    <StatusCell
-                      {...cell}
-                      /* เป็นรอฝึกงาน/ฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
-                      onStage={(to) => toStage(a, to)}
-                    />
-                  </td>
-
-                  {showTraining ? (
-                    <td className="px-2 py-1.5">
-                      <TrainingDateCell
-                        start={a.trainingStartOn}
-                        due={a.status === "interview_passed"}
-                        locked={locked}
-                        onEdit={() => setRcFor({ application: a, target: null })}
-                      />
-                    </td>
-                  ) : null}
-
-                  {showReason ? (
-                    <td className="px-2 py-1.5">
-                      <ReasonCell {...cell} />
-                    </td>
-                  ) : null}
-
-                  {showBlacklist ? (
-                    <td className="px-2 py-1.5">
-                      {a.status === "cancelled" ? (
-                        <BlacklistCell {...cell} />
-                      ) : (
-                        <BlacklistHitBadge hit={a.blacklistHit} />
-                      )}
-                    </td>
-                  ) : null}
+                  {columns.map((column) => (
+                    <Fragment key={column.id}>{td(column.id)}</Fragment>
+                  ))}
 
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-1.5">
@@ -1151,8 +1544,8 @@ export function CandidatesView({
       <TablePager paged={paged} unit="ใบ" className="sheet-bleed -mt-px flex-none" />
       </>
       )}
-
-      {showDaily ? <TraineeDailySection pool={dailyPool} people={dailyPeople} /> : null}
+      </>
+      )}
 
       {rcFor ? (
         <CandidateRcForm
@@ -1295,17 +1688,22 @@ function TrainingDateCell({
   start,
   due,
   locked,
+  short = false,
   onEdit,
 }: {
   start: string;
   due: boolean;
   locked: boolean;
+  /** ปี พ.ศ. 2 หลัก — มุมมองฝึกงานที่ต้องประหยัดความกว้าง */
+  short?: boolean;
   onEdit: () => void;
 }) {
   const days = daysUntil(start);
   const body = (
     <>
-      <span className="whitespace-nowrap tabular-nums">{start ? thaiDate(start) : "ยังไม่กำหนด"}</span>
+      <span className="whitespace-nowrap tabular-nums">
+        {start ? (short ? shortDay.format(new Date(`${start.slice(0, 10)}T00:00:00+07:00`)) : thaiDate(start)) : "ยังไม่กำหนด"}
+      </span>
       {due && days !== null ? (
         <span
           className={`rounded-full px-2 py-0.5 text-11 font-medium whitespace-nowrap ${
@@ -1381,41 +1779,3 @@ function PersonMark({ status }: { status: ApplicationStatus }) {
  * ทั้งที่สิ่งที่คนทำจริงคือคัดลอกเบอร์ไปวางในโทรศัพท์หรือแชท · กดครั้งเดียว
  * คัดลอกทั้งเบอร์ และตัวเลขยังเป็น `select-all` ให้ลากเลือกเองได้ตามปกติ
  */
-function PhoneCell({ phone }: { phone: string }) {
-  const [copied, setCopied] = useState(false);
-  const text = formatPhone(phone);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* เบราว์เซอร์ไม่ให้สิทธิ์คลิปบอร์ด — ตัวเลขยังลากเลือกเองได้อยู่ดี */
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      title="คลิกเพื่อคัดลอกเบอร์"
-      className="group flex items-center gap-1.5 rounded-selector px-1 py-0.5 transition-colors hover:bg-base-200"
-    >
-      <span className="font-mono whitespace-nowrap tabular-nums select-all">
-        {text}
-      </span>
-      {copied ? (
-        <Check size={12} strokeWidth={2.5} aria-hidden className="flex-none text-primary" />
-      ) : (
-        <Copy
-          size={11}
-          strokeWidth={2}
-          aria-hidden
-          className="flex-none text-mut opacity-0 transition-opacity group-hover:opacity-100"
-        />
-      )}
-      <span className="sr-only">{copied ? "คัดลอกแล้ว" : "คัดลอกเบอร์"}</span>
-    </button>
-  );
-}

@@ -23,6 +23,9 @@ import {
   type DocExpiry,
   type DriverDocument,
   type DriverPick,
+  DRIVER_DETAIL_FIELDS,
+  type DriverListRecord,
+  type DriverListRegistry,
   type DriverRecord,
   type DriverRegistry,
   type DriverResignation,
@@ -799,8 +802,20 @@ const LIST_FIELDS: DriverField[] = [
   "registeredAt",
 ];
 
+/** ตัดฟิลด์ที่ตารางไม่ใช้ทิ้งก่อนส่งลง browser (`DriverListRecord`) — เหลือแค่ที่ตาราง/ตัวกรอง/ปุ่มในแถวอ่าน */
+function toListRecord(record: DriverRecord): DriverListRecord {
+  const row: Partial<DriverRecord> = { ...record };
+  for (const key of DRIVER_DETAIL_FIELDS) delete row[key];
+  const { work } = record;
+  return {
+    ...(row as Omit<DriverRecord, (typeof DRIVER_DETAIL_FIELDS)[number]>),
+    work: work ? { latestStatus: work.latestStatus, latestWorkDateISO: work.latestWorkDateISO } : null,
+  };
+}
+
 /**
- * ทะเบียนสำหรับ **ตารางรายชื่อ** `/recruitment/admin/drivers` — ทุกคน แต่ไม่มีปฏิทิน
+ * ทะเบียนสำหรับ **ตารางรายชื่อ** `/recruitment/admin/drivers` — คนที่ยังปฏิบัติงาน ไม่มีปฏิทิน
+ * (คนพ้นสภาพ = `getResignedDriverList()` ตอนกดแท็บ · ฟิลด์รายละเอียดตัดตาม `toListRecord()`)
  *
  * ตารางใช้แค่ `work.latestStatus` · เดิมหน้านั้นเรียก `getDriverRegistry()` แล้วค่อยตัด
  * `days`/`months`/`manualDays`/`documents` ทิ้งก่อนส่งลง client — ตัดหลังอ่านไม่ช่วยฝั่ง
@@ -812,7 +827,20 @@ const LIST_FIELDS: DriverField[] = [
  * **ไม่มี `manualDays` → `manualFailed` เป็น `false` เสมอ** — ตารางนี้ไม่มีช่องกรอกรายวัน
  * ห้ามเอาไปใช้กับหน้าที่ให้กรอก (หน้าติดตามฝึกงานมี `getTraineeBoard()` ของตัวเอง)
  */
-export async function getDriverList(): Promise<DriverRegistry> {
+export async function getDriverList(): Promise<DriverListRegistry> {
+  const { rows, ...rest } = await readDriverListRows();
+  const siteTotals: Record<string, number> = { all: rows.length };
+  for (const d of rows) siteTotals[d.siteKey ?? "other"] = (siteTotals[d.siteKey ?? "other"] ?? 0) + 1;
+  /* คนพ้นสภาพ (~45% ของทะเบียน + ก้อน `resignation`) ไม่ส่งมากับหน้า — แท็บพ้นสภาพโหลดเองตอนกด (5 พ.ย. 2569) */
+  return { ...rest, drivers: rows.filter((d) => d.active), siteTotals };
+}
+
+/** แท็บ “พ้นสภาพแล้ว” ของตารางทะเบียน (`GET /api/drivers/resigned`) — รูปแถวเดียวกับ `getDriverList()` */
+export async function getResignedDriverList(): Promise<DriverListRecord[]> {
+  return (await readDriverListRows()).rows.filter((d) => !d.active);
+}
+
+async function readDriverListRows() {
   /* เริ่มอ่าน ETL ก่อนแล้วค่อยรอ — `.catch` ติดไว้ตั้งแต่ตอนสร้าง ถ้ารายชื่อหลักพังแล้วโยนออกไป
      promise นี้จะไม่กลายเป็น unhandled rejection · ข้อมูลเสริมพังไม่ล้มทั้งทะเบียน */
   const enrichment = loadLatestEnrichmentAll().catch(() => null);
@@ -825,9 +853,9 @@ export async function getDriverList(): Promise<DriverRegistry> {
   const work = enriched?.work ?? new Map<string, DriverWorkStatus>();
 
   return {
-    drivers: docs
+    rows: docs
       .filter((doc) => str(doc.drivercode))
-      .map((doc) => toRecord(doc, today, vehicles, work, new Map())),
+      .map((doc) => toListRecord(toRecord(doc, today, vehicles, work, new Map()))),
     syncedAt: latestSyncedAt(docs),
     enrichmentFailed,
     manualFailed: false,

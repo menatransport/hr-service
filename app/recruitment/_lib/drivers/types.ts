@@ -599,6 +599,41 @@ export interface DriverRegistry {
   manualFailed: boolean;
 }
 
+/**
+ * ฟิลด์ที่ **ตารางทะเบียนไม่ใช้** — `getDriverList()` ไม่ส่งลง browser (~30% ของก้อน · 5 พ.ย. 2569)
+ * · หน้าประวัติรายคนอ่าน `getDriverProfile()` เอง · Excel ดึงทะเบียนเต็มตอนกด (`POST /api/drivers/export`)
+ */
+export const DRIVER_DETAIL_FIELDS = [
+  "phoneAlt",
+  "licenseNo",
+  "licenseType",
+  "nationalId",
+  "idCardExpiryISO",
+  "idCardDaysLeft",
+  "emergencyContactName",
+  "emergencyContactRelation",
+  "emergencyContactPhone",
+  "bankAccountNo",
+  "bankBranch",
+  "profileEditedAt",
+  "profileEditedBy",
+  "mediaPurgedAt",
+  "documents",
+  "manualDays",
+] as const satisfies readonly (keyof DriverRecord)[];
+
+/** แถวของตารางทะเบียน — `DriverRecord` เต็มใส่แทนได้เสมอ (หน้าประวัติส่งตัวเต็มให้คอมโพเนนต์เดียวกัน) */
+export type DriverListRecord = Omit<DriverRecord, (typeof DRIVER_DETAIL_FIELDS)[number] | "work"> & {
+  work: Pick<DriverWorkStatus, "latestStatus" | "latestWorkDateISO"> | null;
+};
+
+export interface DriverListRegistry extends Omit<DriverRegistry, "drivers"> {
+  /** เฉพาะ “พนักงานปัจจุบัน” — คนพ้นสภาพโหลดตอนกดแท็บ (`GET /api/drivers/resigned`) */
+  drivers: DriverListRecord[];
+  /** จำนวนคนทั้งทะเบียน (ปัจจุบัน + พ้นสภาพ) ต่อสาขา (`siteKey` · `other` · `all`) — ตัวเลขบนแท็บสาขา */
+  siteTotals: Record<string, number>;
+}
+
 /* ------------------------------------------------- แก้ประวัติบนหน้าทะเบียน */
 
 /** ทะเบียนใช้บัญชีกสิกรไทยอย่างเดียว (หัวคอลัมน์ในไฟล์ฝ่ายบุคคล “เลขที่บัญชี กสิกรไทยเท่านั้น”) */

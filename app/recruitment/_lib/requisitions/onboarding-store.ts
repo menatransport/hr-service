@@ -187,15 +187,18 @@ function countTrainedDays(
 async function toRecords(docs: WithId<RequisitionDoc>[]): Promise<OnboardingRecord[]> {
   const codes = [...new Set(docs.map((d) => d.drivercode).filter(Boolean))];
   const dailyKeys = [...codes, ...docs.map((d) => requisitionDailyKey(d._id.toHexString()))];
+  /* สถานะใบสมัครที่ผูกไม่ขึ้นกับ ATMS/ทะเบียน — อ่านพร้อมกันบน `toRequisition()` ชุดเดียวกับที่กางลงแถว */
+  const base = docs.map(toRequisition);
   const [atms, registry, manual] = await Promise.all([
     readAtms(codes),
     readRegistryStatus(codes),
     readManualDays(dailyKeys),
+    attachMatchStatus(base),
   ]);
-  const rows: OnboardingRecord[] = docs.map((doc) => {
+  return docs.map((doc, i) => {
     const read = doc.drivercode ? atms.get(doc.drivercode) : undefined;
     const row: OnboardingRecord = {
-      ...toRequisition(doc),
+      ...base[i],
       onboarding: doc.onboarding ?? {},
       atms: read?.brief ?? null,
       registry: doc.drivercode ? (registry.get(doc.drivercode) ?? null) : null,
@@ -206,8 +209,6 @@ async function toRecords(docs: WithId<RequisitionDoc>[]): Promise<OnboardingReco
     ]);
     return row;
   });
-  await attachMatchStatus(rows);
-  return rows;
 }
 
 /* --------------------------------------------------------------------- อ่าน */
@@ -297,13 +298,18 @@ function cancelledRows(apps: ApplicationSummary[], docs: WithId<RequisitionDoc>[
 
 /** ทุกคำขอ (อัตราว่างจนจบ) + ผู้สมัครที่ยกเลิก + ATMS + บอร์ดซ่อม — ขั้นของแต่ละแถวคิดฝั่ง client (`stageOf()`) */
 export async function getHub(): Promise<Hub> {
-  const col = await requisitions();
-  const [docs, repairs, apps] = await Promise.all([
+  /* คำขอ → ATMS/ทะเบียน/ใบที่ผูก วิ่งคู่กับบอร์ดซ่อม + ใบสมัคร ไม่ต้องรอกันเป็นทอด (~530 → ~250 ms · 5 พ.ย. 2569) */
+  const docsP = requisitions().then((col) =>
     col.find({}, { sort: { requestedOn: -1, code: -1 }, limit: LIST_LIMIT }).toArray(),
+  );
+  const [[docs, records], repairs, apps] = await Promise.all([
+    docsP.then(async (docs) => [docs, await toRecords(docs)] as const),
     getRepairStatuses(),
     listApplications(),
   ]);
-  return { records: [...(await toRecords(docs)), ...cancelledRows(apps, docs)], repairs, applications: apps };
+  /* ประวัติการแก้คำขอโชว์แค่ใน dialog ซึ่งโหลด journey เอง — ไม่ต้องลากของทุกแถวลงตาราง */
+  const lean = records.map((r) => ({ ...r, history: [] }));
+  return { records: [...lean, ...cancelledRows(apps, docs)], repairs, applications: apps };
 }
 
 /** คำขอที่ไม่ได้ยกเลิก + ATMS — ตัวเลขกำลังคนของแดชบอร์ด (ไม่ต้องใช้บอร์ดซ่อม/ใบสมัครที่ยกเลิก) */

@@ -9,7 +9,7 @@ import { AvatarCropper } from "@/components/ui/avatar-cropper";
 import { requestJson } from "@/lib/http";
 import { ACCEPT_ATTR, ACCEPTED_LABEL, isAcceptedImage } from "@/lib/image-resize";
 import { runAction } from "@/lib/swal";
-import type { DriverRecord } from "@/app/recruitment/_lib/drivers/types";
+import type { DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
 
 /**
  * รูปประจำตัว พจส. — กดที่วงรูปเพื่อเพิ่ม/เปลี่ยนรูป
@@ -32,7 +32,7 @@ export function DriverAvatar({
   size = "sm",
   editable = true,
 }: {
-  driver: DriverRecord;
+  driver: DriverListRecord;
   size?: "sm" | "md" | "xl";
   editable?: boolean;
 }) {

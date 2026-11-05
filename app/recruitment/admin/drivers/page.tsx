@@ -6,7 +6,7 @@ import { DriverRegistryView } from "@/app/recruitment/_components/admin/driver-r
 import { DataError } from "@/components/ui/data-error";
 import { getDriverList } from "@/app/recruitment/_lib/drivers/registry";
 import { formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
-import type { DriverRegistry } from "@/app/recruitment/_lib/drivers/types";
+import type { DriverListRegistry } from "@/app/recruitment/_lib/drivers/types";
 
 /**
  * ทะเบียนประวัติ พจส. — รายชื่อพนักงานขับรถทั้งหมด
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function DriversRegistryPage() {
-  let registry: DriverRegistry | null = null;
+  let registry: DriverListRegistry | null = null;
   let error: string | null = null;
 
   try {

@@ -38,7 +38,8 @@ export async function AppShell({
   children: React.ReactNode;
 }) {
   const [jar, hidden] = await Promise.all([cookies(), getHiddenMenuIds()]);
-  const rail = jar.get(SIDEBAR_COOKIE)?.value === "rail";
+  // ค่าเริ่มต้นย่อเป็นไอคอน (5 พ.ย. 2026 · Bew) — กางเต็มเฉพาะคนที่กดขยายเอง (คุกกี้ "full")
+  const rail = jar.get(SIDEBAR_COOKIE)?.value !== "full";
 
   return (
     // เมนูที่หน้า “กำหนดสิทธิ์” ซ่อนจากผู้ใช้คนนี้ — แถบข้างทั้งเดสก์ท็อปและลิ้นชักมือถืออ่านจากตัวนี้

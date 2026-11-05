@@ -1,12 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans_Thai } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans_Thai_Looped, Prompt } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
-const plexThai = IBM_Plex_Sans_Thai({
-  variable: "--font-plex-thai",
+/** ชุดฟอนต์เดียวกับ vibecodingthailand.com — IBM Plex Sans Thai Looped (มีหัว) เป็นเนื้อหา, Prompt เป็นหัวข้อ */
+const bodyThai = IBM_Plex_Sans_Thai_Looped({
+  variable: "--font-body-thai",
   subsets: ["latin", "thai"],
   weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+});
+
+const displayThai = Prompt({
+  variable: "--font-display-thai",
+  subsets: ["latin", "thai"],
+  weight: ["500", "600", "700"],
   display: "swap",
 });
 
@@ -57,7 +65,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="th"
       data-theme="hrs"
       suppressHydrationWarning
-      className={`${plexThai.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${bodyThai.variable} ${displayThai.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

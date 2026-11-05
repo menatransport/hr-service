@@ -462,7 +462,7 @@ export const VEHICLE_READINESS_LABEL: Record<VehicleReadiness, string> = {
 };
 
 /**
- * สถานะรถ 2 กลุ่ม (Bew 4 พ.ย. 2569) — อยู่บนบอร์ดซ่อม = ยังไม่พร้อมใช้งาน · เหตุผล = ขั้นซ่อมล่าสุด
+ * สถานะรถ 2 กลุ่ม (Bew 4 พ.ย. 2569) — ATMS หยุดวิ่ง (`getRepairBoard`, กติกาเดียวกับหน้ารถ) = ยังไม่พร้อมใช้งาน · เหตุผล = ขั้นซ่อมล่าสุด
  * · กำหนดเสร็จ `YYYY-MM-DD` ว่างได้ · ยังไม่มีรถ = `null` · ใช้ทั้งตาราง/Excel และ `GET /api/recruitment/pipeline`
  */
 export function vehicleReadiness(

@@ -37,3 +37,8 @@ export function useFilterGroup(): (group: ModuleGroup) => ModuleGroup {
   const hidden = useContext(HiddenMenusContext);
   return (group) => filterModules([group], hidden)[0] ?? { ...group, items: [] };
 }
+
+/** ผู้ใช้คนนี้มีสิทธิ์เมนู/สิทธิ์ย่อยนี้ไหม (เช่น `registry-profile` = ปุ่มตาเข้าหน้าประวัติ) */
+export function useCanSee(menuId: string): boolean {
+  return !useContext(HiddenMenusContext).has(menuId);
+}

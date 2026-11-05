@@ -14,6 +14,7 @@ import { MODULES, type ModuleGroup, type ModuleItem } from "./modules";
  * - สิทธิ์ผูกกับ **เมนูปลายทาง** (`leafMenus()`) — เมนูที่มี `children` เห็นได้เมื่อลูกอย่างน้อยหนึ่งตัวเห็น
  * - เก็บเฉพาะ **ข้อยกเว้น** — ค่าที่เท่ากับชั้นบนถูกตัดทิ้งตอนบันทึก (`stripInherited`)
  * - ตอนนี้คุมแค่ “มองเห็นบน Home และแถบข้าง” — พิมพ์ URL ตรง ๆ ยังเข้าได้
+ * - ยกเว้นสิทธิ์ย่อย (`ModuleItem.actions`) ที่หน้าปลายทางเช็กเองและกันจริง เช่น `registry-profile`
  */
 
 /** menuId → เห็น/ไม่เห็น · ไม่มีคีย์ = ตามชั้นบน */
@@ -44,21 +45,31 @@ export interface LeafMenu {
   parentLabel?: string;
   item: ModuleItem;
   group: ModuleGroup;
+  /** สิทธิ์ย่อยในหน้า (ปุ่ม/หน้าลึก) ไม่ใช่เมนู */
+  action?: boolean;
 }
 
-/** เมนูทุกตัวที่กำหนดสิทธิ์ได้ เรียงตาม `lib/modules.ts` — รวมกลุ่มที่ `hidden` ไว้ด้วย */
+/** เมนูทุกตัวที่กำหนดสิทธิ์ได้ เรียงตาม `lib/modules.ts` — รวมกลุ่มที่ `hidden` ไว้ด้วย
+ *  · สิทธิ์ย่อย (`actions`) ต่อท้ายเมนูเจ้าของ โดยมี `action: true` และ `parentLabel` = ชื่อเมนูนั้น */
 export function leafMenus(): LeafMenu[] {
+  const withActions = (leaf: LeafMenu): LeafMenu[] => [
+    leaf,
+    ...(leaf.item.actions ?? []).map((a) => ({
+      id: a.id,
+      label: a.label,
+      parentLabel: leaf.label,
+      item: { ...leaf.item, id: a.id, label: a.label, desc: a.desc, actions: undefined },
+      group: leaf.group,
+      action: true,
+    })),
+  ];
   return MODULES.flatMap((group) =>
     group.items.flatMap((item): LeafMenu[] =>
       item.children
-        ? item.children.map((child) => ({
-            id: child.id,
-            label: child.label,
-            parentLabel: item.label,
-            item: child,
-            group,
-          }))
-        : [{ id: item.id, label: item.label, item, group }],
+        ? item.children.flatMap((child) =>
+            withActions({ id: child.id, label: child.label, parentLabel: item.label, item: child, group }),
+          )
+        : withActions({ id: item.id, label: item.label, item, group }),
     ),
   );
 }

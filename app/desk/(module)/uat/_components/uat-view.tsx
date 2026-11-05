@@ -23,6 +23,7 @@ import { PageHead } from "@/components/desk/page-head";
 import { Avatar } from "@/components/ui/avatar";
 import { SummaryPanel, SummaryStat, SummaryStats } from "@/components/ui/summary-panel";
 import { requestJson } from "@/lib/http";
+import { pageZoom } from "@/lib/page-zoom";
 import { confirm, toastError, toastSuccess } from "@/lib/swal";
 import type { UatClearPlan } from "@/lib/uat-store";
 import {
@@ -537,17 +538,22 @@ function TesterPicker({
 
   const toggle = () => {
     if (open || !btn.current) return setPos(null);
-    const r = btn.current.getBoundingClientRect();
+    // ค่าที่วัดเป็นพิกเซลบนจอ → หน่วย CSS ของหน้าที่ถูกย่อ (ดู `lib/page-zoom.ts`)
+    const z = pageZoom();
+    const b = btn.current.getBoundingClientRect();
+    const r = { top: b.top / z, bottom: b.bottom / z, left: b.left / z };
+    const vw = window.innerWidth / z;
+    const vh = window.innerHeight / z;
     const gap = 6;
-    const below = window.innerHeight - r.bottom - gap - 8;
+    const below = vh - r.bottom - gap - 8;
     const above = r.top - gap - 8;
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - PICKER_W - 8));
+    const left = Math.max(8, Math.min(r.left, vw - PICKER_W - 8));
     setPos(
       below >= Math.min(PICKER_H, above)
         ? { left, top: r.bottom + gap, maxH: Math.min(PICKER_H, below) }
         : {
             left,
-            bottom: window.innerHeight - r.top + gap,
+            bottom: vh - r.top + gap,
             maxH: Math.min(PICKER_H, above),
           },
     );

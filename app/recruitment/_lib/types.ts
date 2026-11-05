@@ -300,7 +300,7 @@ export function exitReasonText(a: { exitReason: ExitReason; exitReasonNote: stri
 
 /**
  * ใบที่ติด Blacklist หนึ่งใบ — ชุดเท่าที่ต้องใช้จับคู่กับใบที่เข้ามาใหม่
- * (`listBlacklist()` ส่งมาทั้งหมด ไม่จำกัดแค่ 500 ใบล่าสุดของตาราง)
+ * (`listBlacklist()` ส่งมาทั้งหมด)
  */
 export interface BlacklistEntry {
   ref: string;

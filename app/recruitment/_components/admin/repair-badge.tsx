@@ -88,14 +88,11 @@ export function VehicleStatusCell({ repair }: { repair: RepairStatus | null }) {
   );
 }
 
+const SHORT_DAY = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" });
+
 /** `2026-10-31` → `31 ต.ค. 69` */
 function thaiDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return ymd;
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  });
+  return SHORT_DAY.format(new Date(Date.UTC(y, m - 1, d)));
 }

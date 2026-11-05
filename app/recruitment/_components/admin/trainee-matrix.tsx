@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useDeferredValue, useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,8 +16,9 @@ import {
 import { TraineeCell } from "@/app/recruitment/_components/admin/trainee-cell";
 import { TraineeVehicleModal } from "@/app/recruitment/_components/admin/trainee-vehicle-modal";
 import { Avatar } from "@/components/ui/avatar";
-import { Pager } from "@/components/ui/pager";
 import { SearchField, type SelectOption } from "@/components/ui/field";
+import { XlsxExportButton } from "@/components/ui/xlsx-export-button";
+import { xlsxDate, type XlsxColumn, type XlsxExport, type XlsxTone } from "@/lib/xlsx-table";
 import {
   SegmentedControl,
   SummaryBody,
@@ -27,6 +29,7 @@ import {
 } from "@/components/ui/summary-panel";
 import {
   DRIVER_SITES,
+  THAI_MONTHS_FULL,
   THAI_MONTHS_SHORT,
   THAI_WEEKDAYS_SHORT,
   formatTenure,
@@ -40,8 +43,10 @@ import {
   TONE_LABEL,
   TONES,
   buildTraineeRows,
+  cellTone,
   dailyKeyOf,
   isoOf,
+  type CellTone,
   type ManualEdits,
   type TraineeRow,
 } from "@/app/recruitment/_lib/drivers/trainees";
@@ -64,24 +69,29 @@ import {
  * **ของที่กรอกเก็บเป็น `edits` ทับของจากเซิร์ฟเวอร์** ไม่ใช่ `router.refresh()`
  * ทุกครั้งที่เลือก — refresh หนึ่งครั้งคืออ่านทั้งเดือนใหม่และหน้าจอเด้งกลับไปบนสุด
  *
- * **แบ่งหน้าเพราะจำนวนช่อง ไม่ใช่เพราะจำนวนแถว** — หนึ่งแถวคือ 31 ช่องที่แต่ละช่อง
- * มีสามเหลี่ยม `clip-path` ของตัวเอง · 155 แถวจึงเท่ากับเกือบห้าพันช่อง
- * (~25,000 DOM node) ซึ่งหนักพอจะทำให้เบราว์เซอร์หยุดตอบสนองตอนวาด ·
- * หน้าละ {@link DEFAULT_PAGE_SIZE} แถวเหลือราวแปดร้อยช่อง · ตัวเลขสรุปข้างบนกับ
- * ตัวกรองยัง **นับจากทั้งเดือน ไม่ใช่เฉพาะหน้าที่เปิดอยู่** — การแบ่งหน้าเป็นเรื่อง
- * ของการวาด ไม่ใช่การเปลี่ยนคำตอบว่าเดือนนี้มีใครบ้าง
+ * **แสดงทุกแถวในหน้าเดียว ไม่มีกล่องเลื่อนแนวตั้ง ไม่แบ่งหน้า** (Bew 5 พ.ย. 2569) —
+ * RC แคปรูปตารางส่งไลน์ทุกวัน ภาพเดียวต้องได้ครบทุกคน · เดิมแบ่งหน้าละ 25 แถว
+ * ตอนตารางนี้ยังรวม พจส. ทั้งทะเบียน (~155 แถว) แต่ตอนนี้เหลือเฉพาะคนในขั้นฝึกงาน
+ * (ไม่กี่สิบคน) จำนวนช่องจึงไม่หนักแล้ว · หัวแถบบนตาราง (เดือน · สาขา · จำนวนคน ·
+ * ข้อมูล ณ วันที่) อยู่ในกรอบที่แคปด้วย ภาพที่ส่งออกไปจึงอ่านรู้เรื่องโดยไม่ต้องมีหน้าจอประกอบ
+ * · แนวนอนยังเลื่อนได้บนจอแคบ โดยคอลัมน์ชื่อ + ทะเบียนรถปักซ้าย
  */
-
-/** ตัวเลือกจำนวนแถวต่อหน้า — 25 คือค่าที่เปิดมาเจอ */
-const PAGE_SIZES = [25, 50, 100];
-const DEFAULT_PAGE_SIZE = 25;
 
 export function TraineeMatrix({
   board,
   vehicles,
   onMonth,
+  actions,
+  toolbarSlot,
 }: {
   board: TraineeBoard;
+  /**
+   * ที่วางแถบเครื่องมือนอกตาราง — ส่งมา = เครื่องมือย้ายไปอยู่ในกล่องนั้น (portal) ·
+   * `null` = กล่องยังไม่เมานต์ (ยังไม่วาด) · ไม่ส่ง = แถบเครื่องมือของตารางเองเหมือนเดิม
+   */
+  toolbarSlot?: HTMLElement | null;
+  /** ปุ่มเพิ่มท้ายแถบเครื่องมือ (ชิดขวา) — เช่น RC Alert ของหน้าผู้สมัคร */
+  actions?: React.ReactNode;
   /** ฝังในหน้าอื่น = โหลดเดือนใหม่เอง แทนการเปลี่ยน `?m=` ของ URL */
   onMonth?: (month: string) => Promise<void>;
   /** รายชื่อรถให้เลือกตอนผูกทะเบียนรถ — ว่าง = อ่านทะเบียนรถไม่สำเร็จตอนโหลดหน้า */
@@ -100,8 +110,6 @@ export function TraineeMatrix({
     () => new Map(),
   );
   const [editingVehicle, setEditingVehicle] = useState<TraineeBoardDriver | null>(null);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [page, setPage] = useState(1);
 
   const [year, monthNo] = board.month.split("-").map(Number);
 
@@ -132,30 +140,18 @@ export function TraineeMatrix({
   );
 
   /*
-   * ตัดเป็นหน้า ๆ หลังกรองเสร็จแล้ว — `current` ถูกหนีบด้วย `pageCount` แทนที่จะ
-   * `setPage` ตอนตัวกรองเปลี่ยน เพราะการ `setState` ระหว่าง render คือการวาดสองรอบ
-   * และ effect ที่ตามมาทีหลังจะทำให้เห็นหน้าเปล่าแวบหนึ่งก่อนเด้งกลับหน้า 1
-   */
-  /*
    * **คนที่พ้นสภาพในเดือนนี้แยกเป็นกลุ่มท้ายตาราง พับไว้ก่อน** (ตามคำสั่งเจ้าของงาน
    * 29 ก.ย. 2026) — คนที่ยังฝึกอยู่คือคนที่ต้องดูทุกเช้า ส่วนคนที่ออกไปแล้วดูเฉพาะตอน
-   * ต้องการ · แบ่งหน้าเฉพาะคนที่ยังอยู่ กลุ่มพ้นสภาพต่อท้ายทุกหน้า (มีไม่กี่คนต่อเดือน)
-   * · พิมพ์ค้นหาอยู่ = กางกลุ่มให้เอง ไม่งั้นคนที่ค้นเจอจะซ่อนอยู่ในกลุ่มที่พับไว้
+   * ต้องการ · พิมพ์ค้นหาอยู่ = กางกลุ่มให้เอง ไม่งั้นคนที่ค้นเจอจะซ่อนอยู่ในกลุ่มที่พับไว้
    */
   const [showExited, setShowExited] = useState(false);
   const activeRows = rows.filter((row) => !row.driver.exitedOn);
   const exitedRows = rows.filter((row) => row.driver.exitedOn);
   const exitedOpen = showExited || Boolean(deferred.trim());
 
-  const pageCount = Math.max(1, Math.ceil(activeRows.length / pageSize));
-  const current = Math.min(page, pageCount);
-  const sliceFrom = (current - 1) * pageSize;
-  const pageRows = activeRows.slice(sliceFrom, sliceFrom + pageSize);
-
   function clearFilters() {
     setQuery("");
     setSite("all");
-    setPage(1);
   }
 
   /** มีคนที่ไม่อยู่สาขาหลักไหม — แท็บ “อื่น ๆ” ขึ้นเฉพาะตอนนั้น (ท่าเดียวกับทะเบียนประวัติ) */
@@ -180,7 +176,6 @@ export function TraineeMatrix({
   );
 
   function goToMonth(month: string) {
-    setPage(1);
     if (onMonth) startTransition(() => onMonth(month));
     else startTransition(() => router.push(`?m=${month}`, { scroll: false }));
   }
@@ -188,78 +183,102 @@ export function TraineeMatrix({
   const index = board.months.indexOf(board.month);
   const filtering = Boolean(deferred.trim()) || site !== "all";
 
+  /*
+   * เครื่องมือของตาราง — เดือน · ค้นหา · สาขา · RC Alert · Excel
+   * ฝังในหน้าผู้สมัคร (`toolbarSlot`) = ส่งข้ามไปอยู่แถวเดียวกับปุ่มสลับ “ตาราง | สถานะฝึกงาน”
+   * (Bew 5 พ.ย. 2569) ไม่เปลืองอีกแถวเหนือตาราง · state ยังอยู่ที่นี่ที่เดียว ผ่าน portal
+   */
+  const slotted = toolbarSlot !== undefined;
+  const tools = (
+    <>
+      <div className="flex items-center gap-1">
+        <Step
+          label="เดือนก่อนหน้า"
+          disabled={pending || index >= board.months.length - 1}
+          onClick={() => goToMonth(board.months[index + 1])}
+        >
+          <ChevronLeft size={15} strokeWidth={1.9} aria-hidden />
+        </Step>
+        <span
+          aria-live="polite"
+          className={`min-w-28 text-center text-13-5 font-semibold transition-opacity ${
+            pending ? "opacity-40" : ""
+          }`}
+        >
+          {THAI_MONTHS_SHORT[monthNo - 1]} {year + 543}
+        </span>
+        <Step
+          label="เดือนถัดไป"
+          disabled={pending || index <= 0}
+          onClick={() => goToMonth(board.months[index - 1])}
+        >
+          <ChevronRight size={15} strokeWidth={1.9} aria-hidden />
+        </Step>
+      </div>
+
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        label="ค้นหาในตารางติดตามฝึกงาน"
+        placeholder="ค้นหาชื่อ รหัส หรือแพล้นท์…"
+        tone="filled"
+        className={`w-full lg:flex-1 ${slotted ? "lg:max-w-64" : "lg:max-w-80"}`}
+      />
+
+      <SegmentedControl
+        label="เลือกสาขา"
+        value={site}
+        onChange={setSite}
+        options={[
+          "all" as const,
+          ...DRIVER_SITES.map((s) => s.key),
+          ...(hasOtherSite ? (["other"] as const) : []),
+        ].map((value) => ({ value, label: siteFilterLabel(value) }))}
+        className="w-full sm:w-auto sm:self-start lg:self-auto"
+      />
+
+      {/* RC Alert + Excel ชิดขวา · ในแถบของหน้าผู้สมัครจะอยู่ก่อนปุ่มสลับมุมมองที่ท้ายแถว */}
+      <div className="flex items-center gap-2 lg:ml-auto">
+        {actions}
+        <XlsxExportButton
+          name={`สถานะฝึกงาน-${THAI_MONTHS_SHORT[monthNo - 1]}${year + 543}`}
+          count={rows.length}
+          build={() => traineeXlsx(rows, days, { year, monthNo, site, query: deferred.trim(), total: board.drivers.length })}
+          className="h-9 px-3.5 text-12-5"
+        />
+      </div>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      {toolbarSlot ? createPortal(tools, toolbarSlot) : null}
       {/* ── เครื่องมือ + ตาราง — ไม่มีการ์ดตัวเลขแล้ว (Bew: เข้ามาเห็นตารางเลย) · สีอธิบายที่ `Legend` */}
       <SummaryPanel label="สรุปติดตามฝึกงาน">
-        <SummaryToolbar className="lg:flex-wrap">
-          <div className="flex items-center gap-1">
-            <Step
-              label="เดือนก่อนหน้า"
-              disabled={pending || index >= board.months.length - 1}
-              onClick={() => goToMonth(board.months[index + 1])}
-            >
-              <ChevronLeft size={15} strokeWidth={1.9} aria-hidden />
-            </Step>
-            <span
-              aria-live="polite"
-              className={`min-w-28 text-center text-13-5 font-semibold transition-opacity ${
-                pending ? "opacity-40" : ""
-              }`}
-            >
-              {THAI_MONTHS_SHORT[monthNo - 1]} {year + 543}
-            </span>
-            <Step
-              label="เดือนถัดไป"
-              disabled={pending || index <= 0}
-              onClick={() => goToMonth(board.months[index - 1])}
-            >
-              <ChevronRight size={15} strokeWidth={1.9} aria-hidden />
-            </Step>
+        {slotted ? null : <SummaryToolbar className="lg:flex-wrap">{tools}</SummaryToolbar>}
+
+        {/* หัวของภาพที่แคป — บอกว่าเป็นตารางอะไร เดือนไหน สาขาไหน กี่คน ข้อมูล ณ วันไหน */}
+        <SummaryStrip className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 py-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <h3 className="text-14 font-semibold text-ink">
+              สถานะฝึกงานรายวัน · {THAI_MONTHS_FULL[monthNo - 1]} {year + 543}
+            </h3>
+            <p role="status" aria-live="polite" className="text-12-5 text-mut tabular-nums">
+              {siteFilterLabel(site)} ·{" "}
+              {filtering ? (
+                <>
+                  พบ <span className="font-semibold text-primary">{rows.length}</span> จาก{" "}
+                  {board.drivers.length} คน
+                </>
+              ) : (
+                <>
+                  ฝึกงาน <span className="font-semibold text-ink">{activeRows.length}</span> คน
+                  {exitedRows.length ? ` · พ้นสภาพ ${exitedRows.length} คน` : ""}
+                </>
+              )}
+            </p>
           </div>
-
-          <SearchField
-            value={query}
-            onChange={(next) => {
-              setQuery(next);
-              setPage(1);
-            }}
-            label="ค้นหาในตารางติดตามฝึกงาน"
-            placeholder="ค้นหาชื่อ รหัส หรือแพล้นท์…"
-            tone="filled"
-            className="w-full lg:max-w-80 lg:flex-1"
-          />
-
-          <SegmentedControl
-            label="เลือกสาขา"
-            value={site}
-            onChange={(next) => {
-              setSite(next);
-              setPage(1);
-            }}
-            options={[
-              "all" as const,
-              ...DRIVER_SITES.map((s) => s.key),
-              ...(hasOtherSite ? (["other"] as const) : []),
-            ].map((value) => ({ value, label: siteFilterLabel(value) }))}
-            className="w-full sm:w-auto sm:self-start lg:self-auto"
-          />
-        </SummaryToolbar>
-
-        <SummaryStrip className="flex min-h-10 flex-wrap items-center justify-between gap-2 py-1.5 text-12 text-mut">
-          <p role="status" aria-live="polite" className="tabular-nums">
-            {filtering ? (
-              <>
-                พบ <span className="font-semibold text-primary">{rows.length}</span> จาก{" "}
-                {board.drivers.length} คน
-              </>
-            ) : (
-              <>
-                กำลังฝึก <span className="font-semibold text-ink">{activeRows.length}</span> คน
-                {exitedRows.length ? ` · พ้นสภาพ ${exitedRows.length} คน` : ""}
-              </>
-            )}
-          </p>
+          <span className="text-12 text-mut">ข้อมูล ณ {formatThaiDate(board.todayISO)}</span>
           {filtering ? (
             <button
               type="button"
@@ -288,63 +307,75 @@ export function TraineeMatrix({
       ) : (
         <>
           {/*
-            กล่องเลื่อนสองแกนของตัวเอง — หัววันที่ปักหมุดบน คอลัมน์ชื่อปักหมุดซ้าย
-            เหมือนตารางทะเบียนประวัติ · เลื่อนไปวันที่ 28 แล้วยังต้องรู้ว่ากำลังดูของใคร
+            ไม่มีกล่องเลื่อนแนวตั้ง — ตารางยาวเท่าจำนวนคน แคปทีเดียวได้ครบ (ดูหัวไฟล์)
+            · แนวนอนเลื่อนได้เฉพาะจอแคบ คอลัมน์ชื่อ + ทะเบียนรถปักซ้าย
+            เลื่อนไปวันที่ 28 แล้วยังต้องรู้ว่ากำลังดูของใคร รถคันไหน
           */}
           <div
-            className={`relative max-h-[calc(100dvh-17.5rem)] overflow-auto border-t border-line bg-base-100 transition-opacity ${
+            className={`relative overflow-x-auto border-t border-line bg-base-100 transition-opacity ${
               pending ? "opacity-50" : ""
             }`}
           >
-            <table className="border-collapse text-13">
+            <table className="w-full border-collapse text-13">
               <thead>
-                <tr>
-                  <th className="sticky top-0 left-0 z-40 min-w-60 bg-head px-3 py-2 text-left align-bottom text-11-5 font-medium text-mut shadow-[inset_0_-1px_0_var(--color-line-strong)] after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
+                <tr className="bg-head">
+                  <th className="sticky left-0 z-30 w-56 min-w-56 bg-head px-3 py-2 text-left align-bottom text-11-5 font-medium text-mut">
                     พนักงาน ({activeRows.length.toLocaleString("th-TH")})
                   </th>
+                  <th className="sticky left-56 z-30 w-28 min-w-28 bg-head px-2 py-2 text-left align-bottom text-11-5 font-medium text-mut after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
+                    ทะเบียนรถ
+                  </th>
 
-                  {days.map(({ day, weekday }) => (
-                    <th
-                      key={day}
-                      scope="col"
-                      /* ต้องกว้างพอให้รหัสสามตัว (`A75`) อยู่ในสามเหลี่ยมได้โดยไม่ล้ำอีกครึ่ง
-                         · ไม่ย้อมพื้นเสาร์–อาทิตย์แล้ว (23 ก.ย. 2026) — วันอาทิตย์บอกด้วย
-                         ตัวหนังสือสี rose อย่างเดียว */
-                      className="sticky top-0 z-30 min-w-12 bg-head px-0.5 py-1.5 text-center font-medium shadow-[inset_0_-1px_0_var(--color-line)]"
-                    >
-                      <span
-                        className={`block text-10 leading-tight ${
-                          weekday === 0 ? "text-rose" : "text-mut"
-                        }`}
+                  {days.map(({ day, weekday }) => {
+                    const today = isoOf(year, monthNo, day) === board.todayISO;
+                    return (
+                      <th
+                        key={day}
+                        scope="col"
+                        /* ไม่ย้อมพื้นเสาร์–อาทิตย์แล้ว (23 ก.ย. 2026) — วันอาทิตย์บอกด้วย
+                           ตัวหนังสือสี rose อย่างเดียว · วันนี้ = เลขวันในเม็ดขาว */
+                        className="min-w-9 bg-head px-0.5 py-1.5 text-center font-medium"
                       >
-                        {THAI_WEEKDAYS_SHORT[weekday]}
-                      </span>
-                      <span
-                        className={`block font-mono text-12 leading-tight tabular-nums ${
-                          weekday === 0 ? "text-rose" : ""
-                        }`}
-                      >
-                        {day}
-                      </span>
-                    </th>
-                  ))}
+                        <span
+                          className={`block text-10 leading-tight ${
+                            weekday === 0 ? "text-rose" : "text-mut"
+                          }`}
+                        >
+                          {THAI_WEEKDAYS_SHORT[weekday]}
+                        </span>
+                        <span
+                          className={`mx-auto mt-0.5 block w-fit rounded-full px-1.5 font-mono text-12 leading-[1.4] tabular-nums ${
+                            today
+                              ? "bg-white font-bold text-head"
+                              : weekday === 0
+                                ? "text-rose"
+                                : ""
+                          }`}
+                        >
+                          {day}
+                        </span>
+                      </th>
+                    );
+                  })}
 
-                  {TONES.map((tone) => (
+                  {TONES.map((tone, i) => (
                     <th
                       key={tone}
                       scope="col"
                       title={`รวมวัน${TONE_LABEL[tone]}`}
-                      className="sticky top-0 z-30 min-w-11 bg-head px-1 py-1.5 text-center text-10-5 font-medium text-mut shadow-[inset_0_-1px_0_var(--color-line-strong)]"
+                      className={`min-w-12 bg-head px-1 py-1.5 text-center text-10-5 font-medium text-mut ${
+                        i === 0 ? "border-l border-line" : ""
+                      }`}
                     >
                       <span aria-hidden className={`mx-auto block size-2 rounded-full ${TONE_DOT[tone]}`} />
-                      <span className="mt-0.5 block leading-tight">{TONE_LABEL[tone].split(" ")[0]}</span>
+                      <span className="mt-0.5 block leading-tight">{TONE_LABEL[tone]}</span>
                     </th>
                   ))}
                 </tr>
               </thead>
 
               <tbody>
-                {pageRows.map((row) => (
+                {activeRows.map((row) => (
                   <MatrixRow
                     key={row.driver.drivercode || `req-${row.driver.requisitionId}`}
                     row={row}
@@ -365,6 +396,7 @@ export function TraineeMatrix({
                     {/* ป้ายกลุ่มปักซ้ายเหมือนคอลัมน์ชื่อ — เลื่อนไปวันที่ 28 ก็ยังกดได้ */}
                     <th
                       scope="rowgroup"
+                      colSpan={2}
                       className="sticky left-0 z-20 bg-alert-soft p-0 text-left after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line"
                     >
                       <button
@@ -406,22 +438,8 @@ export function TraineeMatrix({
             </table>
           </div>
 
-          <SummaryFooter className="flex flex-col gap-3">
-          <PageBar
-            from={activeRows.length ? sliceFrom + 1 : 0}
-            to={sliceFrom + pageRows.length}
-            total={activeRows.length}
-            current={current}
-            count={pageCount}
-            pageSize={pageSize}
-            onGo={setPage}
-            onPageSize={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
-          />
-
-          <Legend />
+          <SummaryFooter>
+            <Legend />
           </SummaryFooter>
         </>
       )}
@@ -492,7 +510,7 @@ const MatrixRow = memo(function MatrixRow({
          * (แก้ 29 ก.ย. 2026) · `z-20` ให้สูงกว่าทุกอย่างในช่องวัน แต่ต่ำกว่าหัวตาราง
          * ที่ปักบน (`z-30`/`z-40`) ตอนเลื่อนแนวตั้ง
          */
-        className={`sticky left-0 z-20 min-w-60 px-3 py-1.5 text-left font-normal after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line ${
+        className={`sticky left-0 z-20 w-56 max-w-56 min-w-56 px-3 py-1.5 text-left font-normal ${
           driver.exitedOn ? "bg-alert-soft" : "bg-base-100 group-hover:bg-base-200"
         }`}
       >
@@ -543,30 +561,24 @@ const MatrixRow = memo(function MatrixRow({
             )}
           </span>
 
-          {/* ทะเบียนรถ — ไม่มีบรรทัดที่สาม ไม่มีคอลัมน์ใหม่ ใส่เป็นไอคอนท้ายชื่อแทน
-              ขึ้นเฉพาะคนที่มีคำขอสรรหาผูกอยู่ — ไม่งั้นไม่มีปลายทางให้ `PATCH` ไปแก้
-              สีบอกว่ามีทะเบียนแล้วหรือยัง (ครูฝึกแก้ที่หน้าขอสรรหาแทน — ดู
-              `.claude/docs/requisitions.md` หัวข้อ “ครูฝึกไหลไปหน้าฝึกงานยังไง”) */}
-          {driver.requisitionId && driver.drivercode ? (
-            <button
-              type="button"
-              onClick={() => onEditVehicle(driver)}
-              title={
-                driver.vehicle
-                  ? `ทะเบียนรถ ${driver.vehicle.plateNo || driver.vehicle.code} — กดเพื่อแก้`
-                  : "ยังไม่ระบุทะเบียนรถ — กดเพื่อผูก"
-              }
-              className={`flex size-6 flex-none cursor-pointer items-center justify-center rounded-selector transition-colors ${
-                driver.vehicle
-                  ? "text-primary hover:bg-primary/10"
-                  : "text-mut hover:bg-base-200 hover:text-ink"
-              }`}
-            >
-              <Car size={14} strokeWidth={1.8} aria-hidden />
-            </button>
-          ) : null}
         </span>
       </th>
+
+      {/* ทะเบียนรถ — คอลัมน์ของตัวเอง ปักซ้ายต่อจากชื่อ (Bew 5 พ.ย. 2569: เดิมเป็นไอคอนรถ
+          ท้ายชื่อ ต้องชี้ถึงเห็นเลข แคปรูปส่งแล้วไม่มีทะเบียนติดไป) · แก้ได้เฉพาะคนที่มี
+          คำขอสรรหาผูกอยู่ — ไม่งั้นไม่มีปลายทางให้ `PATCH` ไปแก้ (ครูฝึกแก้ที่หน้าขอสรรหา —
+          ดู `.claude/docs/requisitions.md` หัวข้อ “ครูฝึกไหลไปหน้าฝึกงานยังไง”) */}
+      <td
+        className={`sticky left-56 z-20 w-28 min-w-28 px-2 py-1.5 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line ${
+          driver.exitedOn ? "bg-alert-soft" : "bg-base-100 group-hover:bg-base-200"
+        }`}
+      >
+        <PlateCell
+          vehicle={driver.vehicle}
+          editable={Boolean(driver.requisitionId && driver.drivercode)}
+          onEdit={() => onEditVehicle(driver)}
+        />
+      </td>
 
       {days.map(({ day }) => {
         const iso = isoOf(year, month, day);
@@ -593,10 +605,10 @@ const MatrixRow = memo(function MatrixRow({
         );
       })}
 
-      {TONES.map((tone) => {
+      {TONES.map((tone, i) => {
         const value = row[tone];
         return (
-          <td key={tone} className="px-1 py-1.5 text-center">
+          <td key={tone} className={`px-1 py-1.5 text-center ${i === 0 ? "border-l border-line" : ""}`}>
             <span
               className={`font-mono text-12-5 tabular-nums ${
                 value ? "font-semibold" : "text-mut/50"
@@ -614,82 +626,53 @@ const MatrixRow = memo(function MatrixRow({
 /* ------------------------------------------------------------ ชิ้นย่อย */
 
 /**
- * แถบใต้ตาราง — ช่วงที่แสดงอยู่ (ซ้าย) + จำนวนต่อหน้า และเลขหน้า (ขวา)
- *
- * โครงเดียวกับ `PageBar` ของหน้าทะเบียนประวัติ แต่ที่นี่ **เลือกจำนวนต่อหน้าได้**
- * เพราะต้นทุนต่อแถวต่างกันคนละเรื่อง — แถวของทะเบียนคือไม่กี่ช่อง ส่วนแถวของ
- * ตารางนี้คือ 31 ช่องที่มีสามเหลี่ยม `clip-path` ของตัวเอง · เครื่องแรงเปิด 100
- * ได้สบาย เครื่องที่ฝ่ายบุคคลใช้จริงบางเครื่องแค่ 25 ก็พอแล้ว ให้เลือกเองดีกว่า
- * ตั้งค่าตายตัวแล้วผิดกับใครสักกลุ่มแน่ ๆ
- *
- * `Pager` คืน `null` เองเมื่อมีหน้าเดียว — เดือนที่มีคนไม่ถึง 25 จึงเหลือแต่
- * บรรทัด “แสดง 1–18 จาก 18 คน” ไม่มีปุ่มค้างไว้ให้กดไม่ได้
+ * ทะเบียนรถในแถว — ป้ายกรอบแบบแผ่นป้ายทะเบียน อ่านออกในรูปที่แคป · กดได้ = เปิดหน้าผูก/แก้
+ * · ยังไม่มีทะเบียนแต่แก้ได้ = ปุ่มเส้นประ “ผูกทะเบียน” · แก้ไม่ได้และไม่มี = ขีด
  */
-function PageBar({
-  from,
-  to,
-  total,
-  current,
-  count,
-  pageSize,
-  onGo,
-  onPageSize,
+function PlateCell({
+  vehicle,
+  editable,
+  onEdit,
 }: {
-  from: number;
-  to: number;
-  total: number;
-  current: number;
-  count: number;
-  pageSize: number;
-  onGo: (page: number) => void;
-  onPageSize: (size: number) => void;
+  vehicle: TraineeBoardDriver["vehicle"];
+  editable: boolean;
+  onEdit: () => void;
 }) {
-  const th = (n: number) => n.toLocaleString("th-TH");
+  const plate = vehicle ? vehicle.plateNo || vehicle.code : "";
 
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-      <p role="status" aria-live="polite" className="text-12 text-mut">
-        แสดง{" "}
-        <span className="font-medium text-ink tabular-nums">
-          {th(from)}–{th(to)}
-        </span>{" "}
-        จาก {th(total)} คน
-      </p>
+  if (!plate) {
+    return editable ? (
+      <button
+        type="button"
+        onClick={onEdit}
+        title="ยังไม่ระบุทะเบียนรถ — กดเพื่อผูก"
+        className="inline-flex cursor-pointer items-center gap-1 rounded-selector border border-dashed border-line-strong px-1.5 py-0.5 text-11-5 whitespace-nowrap text-mut transition-colors hover:border-primary/50 hover:text-primary"
+      >
+        <Car size={12} strokeWidth={1.8} aria-hidden />
+        ผูกทะเบียน
+      </button>
+    ) : (
+      <span className="text-12-5 text-mut/50">–</span>
+    );
+  }
 
-      <div className="ms-auto flex items-center gap-2.5">
-        <div
-          role="group"
-          aria-label="จำนวนแถวต่อหน้า"
-          className="flex items-center gap-1 text-12 text-mut"
-        >
-          <span className="hidden sm:inline">ต่อหน้า</span>
-          <span className="flex gap-1 rounded-full border border-line bg-base-100 p-1">
-            {PAGE_SIZES.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => onPageSize(size)}
-                aria-pressed={size === pageSize}
-                className={`cursor-pointer rounded-full px-2.5 py-1 text-12 tabular-nums transition-colors ${
-                  size === pageSize
-                    ? "bg-ink font-medium text-ink-content"
-                    : "text-mut hover:text-ink"
-                }`}
-              >
-                {size}
-              </button>
-            ))}
-          </span>
-        </div>
+  const chip = (
+    <span className="inline-flex items-center rounded-[4px] border border-ink/25 bg-base-100 px-1.5 py-0.5 text-12-5 font-semibold whitespace-nowrap text-ink tabular-nums shadow-[inset_0_-1px_0_var(--color-line)]">
+      {plate}
+    </span>
+  );
 
-        {count > 1 ? (
-          <span className="hidden text-12 text-mut tabular-nums sm:inline">
-            หน้า {th(current)} จาก {th(count)}
-          </span>
-        ) : null}
-        <Pager current={current} count={count} onGo={onGo} />
-      </div>
-    </div>
+  return editable ? (
+    <button
+      type="button"
+      onClick={onEdit}
+      title={`ทะเบียนรถ ${plate}${vehicle?.brand ? ` · ${vehicle.brand}` : ""} — กดเพื่อแก้`}
+      className="cursor-pointer rounded-[5px] transition-shadow hover:ring-2 hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+    >
+      {chip}
+    </button>
+  ) : (
+    chip
   );
 }
 
@@ -798,6 +781,93 @@ function Empty({ query }: { query: string }) {
       </p>
     </div>
   );
+}
+
+/* ------------------------------------------------------------ Excel */
+
+const XLSX_TONE: Record<CellTone, XlsxTone> = { work: "ok", leave: "warn", exit: "alert" };
+
+/**
+ * ไฟล์ Excel ของตารางสถานะฝึกงาน — **หนึ่งแถวต่อคน หนึ่งคอลัมน์ต่อวัน** หน้าตาเดียวกับจอ
+ *
+ * ช่องวัน = รหัสของวันนั้น · ATMS กับที่กรอกเองไม่ตรงกัน = `ATMS / กรอกเอง` (เช่น `ฝ / ก`)
+ * ไม่ทิ้งค่าใดค่าหนึ่ง เหตุผลเดียวกับช่องผ่าทแยงบนจอ · สีตัวหนังสือตามรหัสที่ใช้นับ
+ * (ATMS ก่อน — `effectiveCode`) · เหตุผลที่ RC กรอกรวมในคอลัมน์ “หมายเหตุ” ท้ายแถว
+ * · ส่งออกตามตัวกรองที่ใช้อยู่ รวมคนที่พ้นสภาพในเดือนนี้ (แม้กลุ่มนั้นพับไว้บนจอ)
+ */
+function traineeXlsx(
+  rows: TraineeRow[],
+  days: { day: number; weekday: number }[],
+  ctx: { year: number; monthNo: number; site: SiteFilter; query: string; total: number },
+): XlsxExport<TraineeRow> {
+  const monthLabel = `${THAI_MONTHS_FULL[ctx.monthNo - 1]} ${ctx.year + 543}`;
+  const codeOf = (row: TraineeRow, day: number) => {
+    const cell = row.byDay.get(day);
+    if (!cell) return "";
+    const { atms, manual } = cell;
+    return atms && manual && atms !== manual ? `${atms} / ${manual}` : atms || manual;
+  };
+
+  const columns: XlsxColumn<TraineeRow>[] = [
+    { header: "ชื่อ-สกุล", width: 24, value: (r) => r.driver.name || r.driver.drivercode },
+    { header: "รหัส พจส.", width: 11, kind: "code", value: (r) => r.driver.drivercode },
+    {
+      header: "ทะเบียนรถ",
+      width: 13,
+      kind: "code",
+      value: (r) => (r.driver.vehicle ? r.driver.vehicle.plateNo || r.driver.vehicle.code : ""),
+    },
+    { header: "แพล้นท์", width: 14, value: (r) => r.driver.plant },
+    { header: "วันเริ่มงาน", width: 12, kind: "date", value: (r) => xlsxDate(r.driver.startDateISO) },
+    ...days.map<XlsxColumn<TraineeRow>>(({ day, weekday }) => ({
+      header: `${THAI_WEEKDAYS_SHORT[weekday]}\n${day}`,
+      width: 6,
+      kind: "status",
+      value: (r) => codeOf(r, day),
+      tone: (r) => {
+        const cell = r.byDay.get(day);
+        const code = cell ? cell.atms || cell.manual : "";
+        return code ? XLSX_TONE[cellTone(code)] : null;
+      },
+    })),
+    ...TONES.map<XlsxColumn<TraineeRow>>((tone) => ({
+      header: `รวม${TONE_LABEL[tone]}`,
+      width: 9,
+      kind: "int",
+      value: (r) => r[tone],
+    })),
+    {
+      header: "สถานะ",
+      width: 18,
+      kind: "status",
+      value: (r) => (r.driver.exitedOn ? `พ้นสภาพ ${formatThaiDate(r.driver.exitedOn)}` : "ฝึกงาน"),
+      tone: (r) => (r.driver.exitedOn ? "alert" : "ok"),
+    },
+    {
+      header: "หมายเหตุ",
+      width: 40,
+      value: (r) =>
+        days
+          .flatMap(({ day }) => {
+            const note = r.byDay.get(day)?.note?.trim();
+            return note ? [`${day}: ${note}`] : [];
+          })
+          .join(" · "),
+    },
+  ];
+
+  const filter = [ctx.site === "all" ? "" : siteFilterLabel(ctx.site), ctx.query ? `ค้นหา “${ctx.query}”` : ""]
+    .filter(Boolean)
+    .join(" · ");
+
+  return {
+    title: `สถานะฝึกงานรายวัน · ${monthLabel}`,
+    sheet: `สถานะฝึกงาน ${THAI_MONTHS_SHORT[ctx.monthNo - 1]} ${ctx.year + 543}`,
+    filter,
+    total: ctx.total,
+    columns,
+    rows: [...rows.filter((r) => !r.driver.exitedOn), ...rows.filter((r) => r.driver.exitedOn)],
+  };
 }
 
 type SiteFilter = DriverSiteKey | "all" | "other";

@@ -150,6 +150,11 @@ export function AccessDrawer({
                         <span className="min-w-0 truncate" title={m.item.desc}>
                           {m.parentLabel ? <span className="text-mut">{m.parentLabel} · </span> : null}
                           {m.label}
+                          {m.action ? (
+                            <span className="ml-1.5 rounded-full border border-line px-1.5 py-px text-10-5 text-mut">
+                              สิทธิ์ในหน้า
+                            </span>
+                          ) : null}
                         </span>
                       </div>
                       <div

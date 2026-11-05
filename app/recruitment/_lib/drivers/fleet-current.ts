@@ -14,6 +14,8 @@ const STOPPED_STATUS_IDS = [2, 4, 5];
 const TIMEOUT_MS = 10_000;
 
 export interface FleetStop {
+  /** ทะเบียนตาม ATMS เช่น `สบ.71-4451` */
+  plate: string;
   /** สถานะหลัก เช่น “รถซ่อม” “รถจอดอุบัติเหตุ” */
   label: string;
   /** วันที่ค้างสถานะนี้ (ATMS คิดให้) · `null` = ไม่มีข้อมูล */
@@ -36,11 +38,25 @@ function baseUrl(): string {
   return (process.env.ATMS_FLEET_API_URL || DEFAULT_FLEET_API_URL).replace(/\/+$/, "");
 }
 
+/** หลายหน้า/หลาย API อ่านพร้อมกัน — จำผลไว้สั้น ๆ ไม่ยิง ATMS ซ้ำทุกคำขอ (ผลที่อ่านไม่ได้ไม่จำ) */
+const CACHE_MS = 60_000;
+let cached: { at: number; value: Promise<Map<string, FleetStop> | null> } | null = null;
+
 /**
  * ทะเบียน **และ** เลขรถ → สถานะหยุดวิ่ง (คันที่วิ่งอยู่ไม่อยู่ในผลลัพธ์)
  * อ่านไม่ได้ → `null` ให้หน้าเลือกทางสำรองเอง ไม่ล้มทั้งหน้า
  */
-export async function getFleetStops(): Promise<Map<string, FleetStop> | null> {
+export function getFleetStops(): Promise<Map<string, FleetStop> | null> {
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
+  const value = readFleetStops();
+  cached = { at: Date.now(), value };
+  void value.then((v) => {
+    if (!v && cached?.value === value) cached = null;
+  });
+  return value;
+}
+
+async function readFleetStops(): Promise<Map<string, FleetStop> | null> {
   const qs = STOPPED_STATUS_IDS.map((id) => `status_id=${id}`).join("&");
   try {
     const res = await fetch(`${baseUrl()}/fleet/current?${qs}&minimal=true`, {
@@ -58,7 +74,11 @@ export async function getFleetStops(): Promise<Map<string, FleetStop> | null> {
           for (const vt of c.vehicle_types ?? [])
             for (const o of vt.owner_types ?? [])
               for (const t of o.trucks ?? []) {
-                const stop = { label: status.status_name?.trim() || "รถซ่อม", days: t.duration_days ?? null };
+                const stop = {
+                  plate: t.truckplate?.trim() ?? "",
+                  label: status.status_name?.trim() || "รถซ่อม",
+                  days: t.duration_days ?? null,
+                };
                 for (const key of [t.truckplate, t.trucknum]) if (key?.trim()) out.set(key.trim(), stop);
               }
     return out;

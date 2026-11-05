@@ -36,6 +36,7 @@ const SHORT: Record<string, string> = {
   onboarding: "พนง.ใหม่",
   candidates: "ผู้สมัคร",
   registry: "ทะเบียน",
+  "registry-profile": "↳ ประวัติ",
   trucks: "สถานะรถ",
   dashboard: "แดชบอร์ด",
   employee: "ข้อมูลพนง.",

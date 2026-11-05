@@ -1,7 +1,7 @@
 import { etlCol } from "@/lib/db";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
-import { getRepairBoard, type RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
+import { readRepairBoard, type RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
 import { getFleetStops, type FleetStop } from "@/app/recruitment/_lib/drivers/fleet-current";
 import {
   isExitStatus,
@@ -143,7 +143,7 @@ export async function getTruckBoard(): Promise<TruckBoard> {
         )
         .toArray(),
     ),
-    getRepairBoard(),
+    readRepairBoard(),
     getFleetStops(),
   ]);
   const repairs = repairBoard.statuses;

@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 
 import { DataError } from "@/components/ui/data-error";
 import { getHub, type Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
-import { getRequisitionOptions, type RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import { OnboardingView } from "@/app/recruitment/_components/admin/onboarding-view";
 import { TABS, type Tab } from "@/app/recruitment/_lib/requisitions/onboarding";
 
 /**
  * ติดตามพนักงานใหม่ — หน้าเดียวของ ขออัตรา → ฝึกงาน → รับรถ (`?tab=` = ขั้นที่เปิด)
- * · คำขอ/ATMS/บอร์ดซ่อม และตัวเลือกของฟอร์มขออัตรา ยิงพร้อมกัน · อ่านไม่ได้ = `DataError`
+ * · คำขอ/ATMS/บอร์ดซ่อม ยิงพร้อมกัน · อ่านไม่ได้ = `DataError`
+ * · ตัวเลือกของฟอร์มขออัตรา (ทะเบียน พจส./รถ/ผู้สมัคร ~360 KB) โหลดตอนกด “ขออัตรา” ครั้งแรก ไม่ลากมาทุกครั้งที่เปิดหน้า
  */
 export const metadata: Metadata = { title: "ติดตามพนักงานใหม่" };
 export const dynamic = "force-dynamic";
@@ -24,22 +24,20 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/recru
   const stage = (TABS as readonly string[]).includes(String(tab)) ? (tab as Tab) : "training";
 
   let hub: Hub | null = null;
-  let options: RequisitionOptions | null = null;
   let error: string | null = null;
   try {
-    [hub, options] = await Promise.all([getHub(), getRequisitionOptions()]);
+    hub = await getHub();
   } catch (err) {
     error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
   }
 
   return (
     <div className="animate-rise">
-      {hub && options ? (
+      {hub ? (
         <OnboardingView
           records={hub.records}
           repairs={hub.repairs}
           applications={linkedApplications(hub)}
-          options={options}
           initialStage={stage}
           initialOpen={typeof open === "string" ? open : ""}
         />

@@ -74,9 +74,6 @@ import {
  * (ท่าเดียวกับ `lib/record-cases.ts`)
  */
 
-/** จำนวนที่ดึงมาแสดงบนหน้าแอดมิน — ค้นหา/กรองทำฝั่ง client บนชุดนี้ */
-const LIST_LIMIT = 500;
-
 /** ใบสมัครซ้ำจากเบอร์เดิมภายในกี่วันถึงจะถูกปัดกลับ */
 const DUPLICATE_WINDOW_DAYS = 30;
 
@@ -1257,7 +1254,7 @@ const SUMMARY_FIELDS = {
 /**
  * ทุกใบที่ติด Blacklist — **ไม่จำกัดจำนวน** ต่างจาก `listApplications()` เพราะคนที่
  * ติดไว้เมื่อปีก่อนก็ต้องถูกจับได้ตอนสมัครเข้ามาใหม่วันนี้ ถึงใบเดิมจะหลุดจาก
- * 500 ใบล่าสุดของตารางไปแล้ว · ตารางผู้สมัครเอาไปเทียบชื่อ/เบอร์เอง (`findBlacklistHit()`)
+ * ตารางไปแล้ว · ตารางผู้สมัครเอาไปเทียบชื่อ/เบอร์เอง (`findBlacklistHit()`)
  */
 export async function listBlacklist(): Promise<BlacklistEntry[]> {
   const docs = await readApplicationsWithSnapshot<
@@ -1277,8 +1274,12 @@ export async function listBlacklist(): Promise<BlacklistEntry[]> {
 }
 
 /**
- * ใบสมัครใหม่สุดก่อน — ไม่ส่ง `range` = 500 ใบล่าสุด (ตารางแอดมิน) · ส่ง `range` = **ทุกใบ**
- * ที่ส่งเข้ามา (`createdAt`) ในช่วง `gte` ≤ t < `lt` ไม่จำกัดจำนวน (`GET /api/recruitment/applications?year=&month=`)
+ * ใบสมัครใหม่สุดก่อน — ไม่ส่ง `range` = **ทุกใบ** (ตารางแอดมิน) · ส่ง `range` = ทุกใบที่ส่งเข้ามา
+ * (`createdAt`) ในช่วง `gte` ≤ t < `lt` (`GET /api/recruitment/applications?year=&month=`)
+ *
+ * **ไม่จำกัดจำนวนแล้ว** (5 พ.ย. 2569) — เดิมตัดที่ 500 ใบล่าสุด ใบเก่ากว่านั้นหายจากหน้าผู้สมัคร/การนับของ
+ * หน้าติดตามเงียบ ๆ (ตอนนั้นมี 426 ใบ) · ใบละ ~0.5 KB ในตาราง ถ้าวันหนึ่งหนักจริงให้แบ่งโหลดตามสถานะ
+ * ไม่ใช่ตัดท้ายทิ้ง
  */
 export async function listApplications(range?: { gte: string; lt: string }): Promise<ApplicationSummary[]> {
   const docs = await readApplicationsWithSnapshot<
@@ -1289,7 +1290,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
   >(
     range
       ? [{ $match: { createdAt: { $gte: range.gte, $lt: range.lt } } }, { $sort: { createdAt: -1 } }]
-      : [{ $sort: { createdAt: -1 } }, { $limit: LIST_LIMIT }],
+      : [{ $sort: { createdAt: -1 } }],
     // นับไฟล์ในฐานข้อมูล ไม่ต้องส่งรายการไฟล์ทั้งชุดมานับเองที่นี่
     { ...SUMMARY_FIELDS, fileCount: { $size: { $ifNull: ["$files", []] } } },
   );

@@ -12,7 +12,7 @@ import { Mascot } from "@/components/ui/mascot";
 import { UserMenu, type ShellUser } from "@/components/shell/user-menu";
 import { type ModuleGroup, type ModuleId, type ModuleItem } from "@/lib/modules";
 
-/** ทางลัดใต้ช่องค้นหา (ชิปกระจก) — เมนูที่ใช้บ่อยที่สุด อ้างด้วย id ใน `lib/modules.ts` */
+/** ทางลัดใต้คำทักทาย (ชิปกระจก) — เมนูที่ใช้บ่อยที่สุด อ้างด้วย id ใน `lib/modules.ts` */
 const QUICK_IDS = ["cases", "requisitions", "trainees", "registry"];
 
 /** ทุกเมนูที่เปิดได้จริง — เมนูที่มี subgroup แตกเป็นลูกแต่ละตัว (`parent` = หัวข้อ) */
@@ -34,8 +34,8 @@ function useEntries() {
 /**
  * หน้าหลัก — โครงเดียวกับหน้า Home ของ menaIT V.2 ในโทน teal ของ HR
  *
- * - **เดสก์ท็อป “Assistant-first”**: ฮีโร่ไล่สี + น้องมีนากลางจอ + คำทักทาย + ช่องค้นหาใหญ่ + ชิปทางลัด
- *   แล้วการ์ดกลุ่มงานสามคอลัมน์เต็มความกว้าง (ขอบข้าง `clamp(24px,5vw,72px)` เท่า menaIT) · หน้าเดียวจบ ไม่มี scroll ของหน้า
+ * - **เดสก์ท็อป “Assistant-first”**: ฮีโร่ไล่สี + น้องมีนากลางจอ + คำทักทาย + ชิปทางลัด (ไม่มีช่องค้นหา)
+ *   แล้วการ์ดกลุ่มงานสามคอลัมน์กว้าง 80% ของจอ (หัวเว็บกับการ์ดชิดแนวเดียวกัน) · หน้าเดียวจบ ไม่มี scroll ของหน้า
  * - **มือถือ “App Launcher”**: แท็บกลุ่ม + ไอคอนแอปสี่คอลัมน์
  *
  * แถวเมนูบนเดสก์ท็อปห่อด้วย `<ViewTransition name="menu-<id>">` ชื่อเดียวกับแถวในแถบข้าง
@@ -51,16 +51,14 @@ export function HomeView({
   firstName: string;
   initialGroup: ModuleId;
 }) {
-  const desktopSearch = useRef<HTMLInputElement>(null);
   const mobileSearch = useRef<HTMLInputElement>(null);
 
-  // Ctrl/⌘ + K โฟกัสช่องค้นหาของรูปแบบที่กำลังแสดงอยู่
+  // Ctrl/⌘ + K โฟกัสช่องค้นหา — มีเฉพาะบนมือถือ (เดสก์ท็อปเอาช่องค้นหาออกแล้ว 5 พ.ย. 2026 · Bew)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && mobileSearch.current?.offsetParent) {
         e.preventDefault();
-        const wide = window.matchMedia("(width >= 64rem)").matches;
-        (wide ? desktopSearch : mobileSearch).current?.focus();
+        mobileSearch.current.focus();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -69,7 +67,7 @@ export function HomeView({
 
   return (
     <div className="h-dvh overflow-hidden">
-      <DesktopHome user={user} firstName={firstName} searchRef={desktopSearch} />
+      <DesktopHome user={user} firstName={firstName} />
       <MobileHome user={user} firstName={firstName} initialGroup={initialGroup} searchRef={mobileSearch} />
     </div>
   );
@@ -88,7 +86,7 @@ interface LayoutProps {
  * (`clamp(…vh…)`) · ถ้าจอเตี้ยจนเมนูของกลุ่มไหนล้น การ์ดนั้นเลื่อนในตัวเอง ไม่ดันทั้งหน้า
  * · จอเตี้ยมาก (`max-height`) ซ่อนบรรทัดรองทีละชั้น: คำอธิบายใต้หัว → คำอธิบายเมนู
  */
-function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
+function DesktopHome({ user, firstName }: Omit<LayoutProps, "searchRef">) {
   const { modules, all } = useEntries();
   const quick = QUICK_IDS.map((id) => all.find((e) => e.item.id === id)).filter((e): e is Entry =>
     Boolean(e),
@@ -97,7 +95,7 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
   return (
     <div className="home-canvas hidden h-dvh flex-col overflow-hidden lg:flex">
       {/* ฮีโร่ — ไม่ใส่ overflow-hidden และไม่ตั้ง z-index ที่ตัวนี้: การ์ดด้านล่าง (z-10) ต้องทับขอบล่าง
-          ของฮีโร่ได้ ส่วนเมนูผู้ใช้กับผลค้นหา (z-30/40) ยังกางทับการ์ดได้ */}
+          ของฮีโร่ได้ ส่วนเมนูผู้ใช้ (z-40) ยังกางทับการ์ดได้ */}
       <section className="app-shell relative shrink-0 rounded-b-[48px] pb-[clamp(36px,6vh,96px)] text-white">
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-b-[48px]">
           <span className="shell-orb shell-orb-float absolute -bottom-[260px] -left-[170px] size-[420px] opacity-90" />
@@ -106,7 +104,7 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
 
         <HomeHeader user={user} />
 
-        {/* กลางจอ: น้องมีนา → คำทักทาย → ค้นหา → ทางลัด (ท่าเดียวกับ Home ของ menaIT) */}
+        {/* กลางจอ: น้องมีนา → คำทักทาย → ทางลัด */}
         <div className="relative flex animate-lift-in flex-col items-center gap-[clamp(4px,1vh,10px)] px-[clamp(24px,5vw,72px)] text-center">
           <Mascot size={150} label="น้องมีนา" className="home-mascot -mt-[clamp(8px,3vh,28px)]" />
           <h1 className="text-[clamp(24px,4vh,42px)] leading-tight font-bold text-pretty">
@@ -117,18 +115,11 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
             ให้น้องมีนาช่วยอะไรดี?
           </h1>
           <p className="text-[clamp(13px,1.9vh,17px)] text-white/90 [@media(max-height:700px)]:hidden">
-            พิมพ์สิ่งที่ต้องการ หรือเลือกจากเมนูด้านล่าง
+            เลือกเมนูที่ต้องการจากด้านล่างได้เลย
           </p>
         </div>
 
-        <MenuSearch
-          inputRef={searchRef}
-          className="mx-auto mt-[clamp(10px,2.2vh,24px)] w-[820px] max-w-[calc(100%-3rem)]"
-          inputClassName="h-[clamp(44px,6.4vh,62px)] bg-white/95 shadow-[0_24px_48px_-20px_rgba(4,30,27,0.6)]"
-          placeholder="พิมพ์สิ่งที่ต้องการ เช่น “ข้อร้องเรียน” “ฝึกงาน” “ทะเบียนประวัติ”"
-        />
-
-        <div className="relative mt-[clamp(8px,1.8vh,18px)] flex flex-wrap justify-center gap-2.5 px-6">
+        <div className="relative mt-[clamp(10px,2.2vh,24px)] flex flex-wrap justify-center gap-2.5 px-6">
           {quick.map(({ group, item }) => (
             <Link
               key={item.id}
@@ -145,10 +136,10 @@ function DesktopHome({ user, firstName, searchRef }: LayoutProps) {
         </div>
       </section>
 
-      {/* การ์ดกลุ่มจัดกลางจอ — คอลัมน์ละไม่เกิน 560px ตามจำนวนกลุ่มที่แสดง (กลุ่ม `hidden` ไม่นับ) */}
+      {/* การ์ดกลุ่มกว้าง 80% ของจอ แบ่งคอลัมน์เท่ากันตามจำนวนกลุ่มที่แสดง (กลุ่ม `hidden` ไม่นับ) */}
       <main
-        className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-full flex-1 items-start justify-center gap-[clamp(14px,1.8vw,28px)] px-[clamp(24px,5vw,72px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2"
-        style={{ gridTemplateColumns: `repeat(${modules.length}, minmax(0, 560px))` }}
+        className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-[80%] flex-1 items-start justify-center gap-[clamp(14px,1.4vw,24px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2"
+        style={{ gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))` }}
       >
         {modules.map((group, i) => (
           <GroupColumn key={group.id} group={group} index={i} />
@@ -559,7 +550,7 @@ function SubGroupApp({
 
 function HomeHeader({ user }: { user: ShellUser }) {
   return (
-    <header className="relative z-40 flex w-full animate-fade-in items-center justify-between gap-3 px-4 pt-[clamp(8px,1.6vh,24px)] sm:px-8 lg:px-[clamp(24px,5vw,72px)]">
+    <header className="relative z-40 flex w-full animate-fade-in items-center justify-between gap-3 px-4 pt-[clamp(8px,1.6vh,24px)] sm:px-8 lg:mx-auto lg:w-[80%] lg:px-0">
       <Link href="/home" className="my-3 flex items-center gap-3">
         <span className="grid h-12 w-14 place-items-center rounded-2xl bg-white/90 shadow-lg">
           <Image

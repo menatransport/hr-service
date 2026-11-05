@@ -30,7 +30,7 @@ import {
   type ResignDocId,
   type ResignFill,
 } from "@/app/recruitment/_lib/resign-documents";
-import type { DriverRecord } from "@/app/recruitment/_lib/drivers/types";
+import type { DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
 
 /**
  * “ทำเอกสาร” ของคนที่พ้นสภาพ — ใบลาออกพนักงานจัดส่ง + แบบสอบถามพนักงานลาออก
@@ -51,7 +51,7 @@ export function ResignDocumentsButton({
   driver,
   variant = "icon",
 }: {
-  driver: DriverRecord;
+  driver: DriverListRecord;
   /** `icon` = ปุ่มสี่เหลี่ยมในแถวตาราง · `label` = ปุ่มมีข้อความ (หน้าประวัติ / การ์ดจอแคบ) */
   variant?: "icon" | "label";
 }) {
@@ -88,7 +88,7 @@ const DOC_NO = Object.fromEntries(RESIGN_DOCUMENTS.map((d, i) => [d.id, `${i + 1
   string
 >;
 
-function ResignDocumentMaker({ driver, onClose }: { driver: DriverRecord; onClose: () => void }) {
+function ResignDocumentMaker({ driver, onClose }: { driver: DriverListRecord; onClose: () => void }) {
   const [fill, setFill] = useState<ResignFill>(() => initialResignFill(driver));
   const [current, setCurrent] = useState<ResignDocId>(RESIGN_DOCUMENTS[0].id);
   const doc = RESIGN_DOCUMENTS.find((d) => d.id === current) ?? RESIGN_DOCUMENTS[0];

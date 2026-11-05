@@ -16,6 +16,7 @@ import {
   type SurveyFilters,
 } from "@/lib/survey-filter";
 import { SURVEY_QUESTIONS, type SurveyResponse } from "@/lib/survey-forms";
+import { pageZoom } from "@/lib/page-zoom";
 
 /**
  * ตารางผลแบบสอบถามทรงสเปรดชีต — หัวตารางค้างไว้ทั้งแนวตั้งและแนวนอน
@@ -214,10 +215,12 @@ export function SurveyTable({
    * ออกไปจากคอลัมน์ที่กด
    */
   function openMenu(key: string, rect: DOMRect) {
+    // ค่าที่วัดเป็นพิกเซลบนจอ → หน่วย CSS ของหน้าที่ถูกย่อ (ดู `lib/page-zoom.ts`)
+    const z = pageZoom();
     setOpenFilter({
       key,
-      top: rect.bottom + 4,
-      left: Math.min(Math.max(8, rect.left), window.innerWidth - POPOVER_WIDTH - 8),
+      top: rect.bottom / z + 4,
+      left: Math.min(Math.max(8, rect.left / z), window.innerWidth / z - POPOVER_WIDTH - 8),
     });
   }
 

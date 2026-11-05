@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, FileText, X, ZoomIn } from "lucide-react";
 
 import { useOverlayCount } from "@/components/ui/field";
+import { pageZoom } from "@/lib/page-zoom";
 
 /**
  * ไฟล์แนบของเคส — รูปย่อ + ดูภาพขยาย
@@ -38,9 +39,13 @@ interface Peek {
  * เกณฑ์: ถ้าเมาส์อยู่ครึ่งล่างของจอให้ขึ้นข้างบน ครึ่งบนให้ลงข้างล่าง และถ้าฝั่งที่เลือก
  * ไม่พอก็พลิกไปอีกฝั่ง — ทั้งสองแกนถูกหนีบไว้ในจออีกชั้นจึงไม่มีทางล้นขอบ
  */
-function place(x: number, y: number, index: number): Peek {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+function place(screenX: number, screenY: number, index: number): Peek {
+  // ค่าที่วัดเป็นพิกเซลบนจอ → หน่วย CSS ของหน้าที่ถูกย่อ (ดู `lib/page-zoom.ts`)
+  const z = pageZoom();
+  const x = screenX / z;
+  const y = screenY / z;
+  const vw = window.innerWidth / z;
+  const vh = window.innerHeight / z;
   const w = Math.min(PEEK_W, vw - GAP * 2);
   const h = Math.min(PEEK_H, vh - GAP * 2);
 

@@ -73,11 +73,24 @@ function norm(text: string): string {
     .trim();
 }
 
+/**
+ * ป้ายที่ norm แล้ว → คำตอบ ของแต่ละข้อ master — คิดครั้งเดียว ไม่ norm ป้ายทุกตัวซ้ำทุกใบ
+ * (หน้าผู้สมัครสรุปคะแนน 400+ ใบทุกครั้งที่เปิด · 5 พ.ย. 2569) · ป้ายซ้ำ = ตัวแรกชนะ เหมือน `find` เดิม
+ */
+const ANSWER_INDEX = new Map(
+  RATING_QUESTIONS.map((q) => {
+    const index = new Map<string, RatingAnswer>();
+    for (const a of q.answers)
+      for (const text of [a.label, ...(a.aliases ?? [])]) {
+        const key = norm(text);
+        if (!index.has(key)) index.set(key, a);
+      }
+    return [q, index] as const;
+  }),
+);
+
 function answerFor(question: RatingQuestion, label: string): RatingAnswer | undefined {
-  const target = norm(label);
-  return question.answers.find(
-    (a) => norm(a.label) === target || a.aliases?.some((alias) => norm(alias) === target),
-  );
+  return ANSWER_INDEX.get(question)?.get(norm(label));
 }
 
 /** ข้อในใบสมัครที่ตรงกับข้อ master นี้ — หาจากสำเนาคำถามของใบนั้นเอง */

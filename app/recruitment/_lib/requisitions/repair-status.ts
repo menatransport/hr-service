@@ -1,4 +1,5 @@
 import { etlCol } from "@/lib/db";
+import { getFleetStops, type FleetStop } from "@/app/recruitment/_lib/drivers/fleet-current";
 
 /**
  * สถานะซ่อมปัจจุบันของรถ — **ฝั่งเซิร์ฟเวอร์เท่านั้น · อ่านอย่างเดียว ไม่บันทึกลงคำขอ**
@@ -8,8 +9,13 @@ import { etlCol } from "@/lib/db";
  * `Boom_ETL.maintenance_request.timeline_job` → ขั้นล่าสุดของงานที่ยังไม่ปิด
  *
  * **ไม่อยู่บนบอร์ด / งานปิดแล้ว / ขั้น 15 “รถซ่อมเสร็จสิ้น” = ปกติ** ไม่ต้องขึ้นอะไร
- * (เจ้าของงานกำหนด 14 ต.ค. 2026) · เลือกเส้นนี้แทน `MAIN_API_URL/fleet/current`
- * เพราะเส้นนั้นตอบ 503 อยู่ และ hr-service อ่าน `Boom_ETL` ได้อยู่แล้ว
+ * (เจ้าของงานกำหนด 14 ต.ค. 2026)
+ *
+ * **ATMS ตัดสินว่าซ่อมไหม** (`getRepairBoard` / `getRepairDetail`) — ใช้กติกาเดียวกับหน้า
+ * `/recruitment/admin/trucks` และ dashboard-op3 “รถค้างซ่อม”: ATMS `fleet/current` B/อ/PM สด
+ * = ยังไม่พร้อม · บอร์ดซ่อมบอกแค่ขั้นงาน/กำหนดเสร็จ (บอร์ดมีใบที่ไม่ปิดทั้งที่รถออกแล้ว เช่น ME059
+ * LBMR26100408 ขั้น “รถซ่อม” หมายเหตุ “เสร็จสิ้น” แต่ ATMS = รถว่าง · ตรวจ 5 พ.ย. 2569)
+ * อ่าน ATMS ไม่ได้ → ใช้บอร์ดซ่อมอย่างเดียวแบบเดิม
  */
 
 /** ป้ายขั้นงานซ่อม — ลอกจาก `maintenance-status-steps.ts` ของ mena-next-lb ห้ามตั้งคำเอง */
@@ -109,7 +115,7 @@ const boardMrIds = (board: { mr_id?: number }[]) =>
  * **`syncedAt`** = `ingested_at` ล่าสุดของใบแจ้งซ่อมที่ค้างบนบอร์ด (ETL ดึงใบแจ้งซ่อมหลายรอบต่อวัน)
  * — `repair_board` เองไม่มีเวลา · ไม่ใช้ค่าล่าสุดของทั้งคอลเลกชันเพราะไม่มีดัชนี (sort ทั้งก้อน ~20 วิ)
  */
-export async function getRepairBoard(): Promise<{ statuses: Record<string, RepairStatus>; syncedAt: string | null }> {
+export async function readRepairBoard(): Promise<{ statuses: Record<string, RepairStatus>; syncedAt: string | null }> {
   try {
     const board = await (
       await etlCol<{ plate?: string; mr_id?: number; mr_code?: string }>("repairBoard")
@@ -154,12 +160,36 @@ export async function getRepairBoard(): Promise<{ statuses: Record<string, Repai
   }
 }
 
+/** คันที่ ATMS หยุดวิ่งแต่ไม่มีใบบนบอร์ด — ขึ้นสถานะ ATMS แทนขั้นงาน */
+const fromStop = (stop: FleetStop): RepairStatus => ({
+  label: stop.label,
+  due: "",
+  mrCode: "",
+  note: "",
+  noteBy: "",
+  noteAt: "",
+});
+
+/**
+ * ทะเบียน → สถานะซ่อม เฉพาะคันที่ **ATMS บอกว่าหยุดวิ่ง** (ขั้นงาน/กำหนดเสร็จจากบอร์ดถ้ามี)
+ * · `syncedAt` = ตอนอ่าน ATMS · อ่าน ATMS ไม่ได้ = บอร์ดซ่อมทั้งก้อน (`readRepairBoard`)
+ */
+export async function getRepairBoard(): Promise<{ statuses: Record<string, RepairStatus>; syncedAt: string | null }> {
+  const [board, stops] = await Promise.all([readRepairBoard(), getFleetStops()]);
+  if (!stops) return board;
+  const statuses: Record<string, RepairStatus> = {};
+  for (const stop of stops.values())
+    if (stop.plate) statuses[stop.plate] = board.statuses[stop.plate] ?? fromStop(stop);
+  return { statuses, syncedAt: new Date().toISOString() };
+}
+
 export async function getRepairStatuses(): Promise<Record<string, RepairStatus>> {
   return (await getRepairBoard()).statuses;
 }
 
-/** เวลาข้อมูลของบอร์ดซ่อมอย่างเดียว (นิยามเดียวกับ `getRepairBoard().syncedAt`) — ไม่อ่าน timeline */
+/** เวลาข้อมูลสถานะซ่อม (นิยามเดียวกับ `getRepairBoard().syncedAt`) — ไม่อ่าน timeline */
 export async function getRepairBoardSyncedAt(): Promise<string | null> {
+  if (await getFleetStops()) return new Date().toISOString();
   try {
     const board = await (await etlCol<{ mr_id?: number }>("repairBoard"))
       .find({}, { projection: { mr_id: 1 } })
@@ -190,6 +220,14 @@ export interface RepairDetail extends RepairStatus {
 export async function getRepairDetail(plate: string): Promise<RepairDetail | null> {
   const key = plate.trim();
   if (!key) return null;
+  const [detail, stops] = await Promise.all([readRepairDetail(key), getFleetStops()]);
+  if (!stops) return detail;
+  const stop = stops.get(key);
+  if (!stop) return null;
+  return detail ?? { ...fromStop(stop), garage: "", problems: [] };
+}
+
+async function readRepairDetail(key: string): Promise<RepairDetail | null> {
   try {
     const board = await (await etlCol<{ plate?: string; mr_id?: number; mr_code?: string }>("repairBoard")).findOne(
       { plate: key },
