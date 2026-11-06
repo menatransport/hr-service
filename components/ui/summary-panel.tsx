@@ -35,7 +35,7 @@
 
 import { ListFilter } from "lucide-react";
 
-type Tone = "ink" | "primary" | "alert" | "sla";
+type Tone = "ink" | "primary" | "alert" | "sla" | "pink";
 
 /**
  * สีของแต่ละโทน — **ตัวเลขเป็นสีหมึกเสมอ** (13 ต.ค. 2026) สีของโทนเหลือแค่จุดหน้าป้าย แถบสัดส่วน
@@ -53,6 +53,7 @@ const TONE: Record<Tone, { bar: string; on: string; badge: string }> = {
   primary: { bar: "bg-primary", on: "ring-2 ring-inset ring-primary/45", badge: "bg-primary" },
   alert: { bar: "bg-alert", on: "ring-2 ring-inset ring-alert/45", badge: "bg-alert" },
   sla: { bar: "bg-sla", on: "ring-2 ring-inset ring-sla/45", badge: "bg-sla" },
+  pink: { bar: "bg-st-pink-ink", on: "ring-2 ring-inset ring-st-pink-ink/45", badge: "bg-st-pink-ink" },
 };
 
 export function SummaryPanel({

@@ -2,7 +2,7 @@ import { GridFSBucket, type Collection, type Document } from "mongodb";
 
 import { client, getDb } from "@/lib/mongo";
 import { createDeclaredIndexes } from "./ensure.mjs";
-import { BUCKETS, DB, ETL, HR } from "./registry.mjs";
+import { ATMS, BUCKETS, DB, ETL, HR } from "./registry.mjs";
 
 /**
  * ทางเข้า MongoDB ของโค้ดแอปทั้งหมด — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
@@ -22,6 +22,7 @@ import { BUCKETS, DB, ETL, HR } from "./registry.mjs";
 
 export type HrKey = keyof typeof HR;
 export type EtlKey = keyof typeof ETL;
+export type AtmsKey = keyof typeof ATMS;
 export type BucketKey = keyof typeof BUCKETS;
 
 /** คีย์ที่ระบบอื่นเป็นเจ้าของ — ดึงจาก `external: true` ใน registry ตรง ๆ ไม่ต้องจำเอง */
@@ -100,6 +101,13 @@ export async function etlCol<T extends Document = Document>(
   key: EtlKey,
 ): Promise<ReadOnlyCollection<T>> {
   return (await client()).db(DB.etl).collection<T>(ETL[key]);
+}
+
+/** คอลเลกชันในฐาน `atms` — **อ่านอย่างเดียว** (ETL ของ ATMS เขียนทับเอง) · คลัสเตอร์เดียวกัน */
+export async function atmsCol<T extends Document = Document>(
+  key: AtmsKey,
+): Promise<ReadOnlyCollection<T>> {
+  return (await client()).db(DB.atms).collection<T>(ATMS[key]);
 }
 
 /** GridFS bucket ใน `hr_service` */
