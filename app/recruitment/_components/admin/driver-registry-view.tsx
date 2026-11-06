@@ -5,13 +5,16 @@ import Link from "next/link";
 import {
   Eye,
   ListFilter,
+  Plus,
   SearchX,
   X,
 } from "lucide-react";
 
+import { DriverAddDialog } from "@/app/recruitment/_components/admin/driver-add-dialog";
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
 import { DriverExcelSyncDialog } from "@/app/recruitment/_components/admin/driver-excel-sync";
 import { DriverPasteDialog } from "@/app/recruitment/_components/admin/driver-paste-import";
+import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
 import { useCanSee } from "@/components/auth/menu-access-provider";
 import { ColumnMenu, type ColumnFilterOption } from "@/components/ui/column-menu";
@@ -344,7 +347,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
   /**
    * สิทธิ์ย่อย “↳ ประวัติ” (/desk/permissions) — ไม่เห็น = ทะเบียน**อ่านอย่างเดียว**: ไม่มีปุ่มตา
    * นำเข้า/Sync เปลี่ยนรูป (Bew 5 พ.ย. 2569) · ส่งออก Excel ยังได้ · API กันซ้ำฝั่งเซิร์ฟเวอร์
-   * · ปุ่มเพิ่มพนักงาน/เปลี่ยนสถานะเอาออกจากทะเบียนแล้วสำหรับทุกคน
+   * · ปุ่มเพิ่มพนักงาน/เปลี่ยนสถานะกลับมา (Bew 6 พ.ย. 2569) เฉพาะคนที่มีสิทธิ์
    */
   const canEdit = useCanSee("registry-profile");
   const [site, setSite] = useState<SiteFilter>("all");
@@ -384,6 +387,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const deferred = useDeferredValue(query);
 
@@ -761,6 +765,17 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
             ) : (
               <XlsxExportButton {...exportProps} />
             )}
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => setAdding(true)}
+                className="btn-pri flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-13 font-medium"
+              >
+                <Plus size={16} strokeWidth={2.2} aria-hidden />
+                เพิ่มพนักงาน
+              </button>
+            ) : null}
+            {adding ? <DriverAddDialog drivers={drivers} onClose={() => setAdding(false)} /> : null}
             {importing ? <DriverPasteDialog onClose={() => setImporting(false)} /> : null}
             {syncing ? <DriverExcelSyncDialog onClose={() => setSyncing(false)} /> : null}
           </div>
@@ -1311,7 +1326,7 @@ const WORK_TONE = {
  * - **สถานะการจ้างเป็นปุ่มข้อความสีจาง** ไม่ใช่ชิป เพราะในแท็บหนึ่ง ๆ ทุกแถวมีค่า
  *   เท่ากันหมด (แท็บกรองด้วยค่านี้อยู่แล้ว) การให้สีมันคือการตะโกนคำเดิม 50 รอบ
  *   แต่ยังต้องมีอยู่ ไว้ยืนยันตอนพิมพ์ออกมาหรือแคปหน้าจอส่งต่อ ซึ่งไม่มีแท็บติดไปด้วย
- *   · **อ่านอย่างเดียว** — ไม่มีปุ่มเปลี่ยนสถานะในทะเบียนแล้ว (Bew 5 พ.ย. 2569) เปลี่ยนได้ที่หน้าประวัติรายคน
+ *   · กดแล้วเปลี่ยนสถานะได้ตรงนั้นเลย (`DriverStatusControl`, กลับมา Bew 6 พ.ย. 2569) · ไม่มีสิทธิ์ “↳ ประวัติ” = ป้ายอ่านอย่างเดียว
  *
  * ป้ายรหัสกว้างขั้นต่ำเท่ากันทุกแถว (`min-w-7`) ตัวอักษร 1–3 ตัวจึงเรียงเป็นแนวเดียว
  * และข้อความข้างหลังไม่ขยับเข้าออกตามความยาวรหัส
@@ -1339,13 +1354,7 @@ function StatusCell({ driver }: { driver: DriverListRecord }) {
         </span>
       )}
 
-      <span
-        className={`truncate px-1 py-0.5 text-11-5 ${
-          driver.active ? "text-mut" : driver.resignation?.kind === "transfer" ? "font-medium text-transfer" : "font-medium text-alert"
-        }`}
-      >
-        {employmentLabel(driver)}
-      </span>
+      <DriverStatusControl driver={driver} />
     </span>
   );
 }
