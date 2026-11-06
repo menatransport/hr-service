@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronDown, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronDown, Search, Sparkles, X } from "lucide-react";
 
 import { useVisibleModules } from "@/components/auth/menu-access-provider";
 import { Mascot } from "@/components/ui/mascot";
@@ -573,6 +573,16 @@ function HomeHeader({ user }: { user: ShellUser }) {
         </span>
       </Link>
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* คู่มือการใช้งาน (6 พ.ย. 2569 · Bew) — แสดงเฉพาะคู่มือของเมนูที่ผู้ใช้เห็น */}
+        <Link
+          href="/desk/manual"
+          title="คู่มือการใช้งาน"
+          className="glass-btn flex h-10 flex-none items-center gap-1.5 rounded-xl px-3 text-12-5 font-medium"
+        >
+          <BookOpen size={17} strokeWidth={1.8} aria-hidden />
+          <span className="hidden sm:inline">คู่มือ</span>
+          <span className="sr-only sm:hidden">คู่มือการใช้งาน</span>
+        </Link>
         <UserMenu user={user} />
       </div>
     </header>
