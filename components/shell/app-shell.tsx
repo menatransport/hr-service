@@ -5,7 +5,6 @@ import { MenuAccessProvider } from "@/components/auth/menu-access-provider";
 import { ShellHeader } from "@/components/shell/shell-header";
 import { SIDEBAR_COOKIE, ShellSidebar } from "@/components/shell/shell-sidebar";
 import type { ShellUser } from "@/components/shell/user-menu";
-import { UatDock } from "@/components/uat/uat-dock";
 import { getHiddenMenuIds } from "@/lib/menu-permissions";
 
 /**
@@ -69,8 +68,6 @@ export async function AppShell({
           {children}
         </main>
       </div>
-      {/* UAT ชั่วคราว — ขึ้นเฉพาะผู้ทดสอบตอนเปิด UAT */}
-      <UatDock />
     </div>
     </MenuAccessProvider>
   );

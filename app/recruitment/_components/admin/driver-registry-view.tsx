@@ -345,7 +345,7 @@ function vehicleLead(driver: DriverListRecord): string {
 
 export function DriverRegistryView({ registry }: { registry: DriverListRegistry }) {
   /**
-   * สิทธิ์ย่อย “↳ ประวัติ” (/desk/permissions) — ไม่เห็น = ทะเบียน**อ่านอย่างเดียว**: ไม่มีปุ่มตา
+   * สิทธิ์ย่อย “↳ ประวัติ” (/desk/permissions) — ไม่เห็น = ทะเบียน**อ่านอย่างเดียว**: ไม่มี
    * นำเข้า/Sync เปลี่ยนรูป (Bew 5 พ.ย. 2569) · ส่งออก Excel ยังได้ · API กันซ้ำฝั่งเซิร์ฟเวอร์
    * · ปุ่มเพิ่มพนักงาน/เปลี่ยนสถานะกลับมา (Bew 6 พ.ย. 2569) เฉพาะคนที่มีสิทธิ์
    */
@@ -1140,7 +1140,10 @@ function driverHref(driver: DriverListRecord) {
   return `/recruitment/admin/drivers/${encodeURIComponent(driver.drivercode)}`;
 }
 
-/** ทางเข้าหน้ารายละเอียดทางเดียวของแถว/การ์ด — ปุ่มรูปตา · ซ่อนเมื่อไม่มีสิทธิ์ `registry-profile` (/desk/permissions) */
+/**
+ * ทางเข้าหน้ารายละเอียดทางเดียวของแถว/การ์ด — ปุ่มรูปตา · ขึ้นให้ทุกคน (Bew 6 พ.ย. 2569)
+ * ไม่มีสิทธิ์ `registry-profile` = หน้าประวัติอ่านอย่างเดียว ไม่เห็นแท็บเอกสาร (กันที่หน้านั้นเอง)
+ */
 function ViewDetailLink({
   href,
   name,
@@ -1150,8 +1153,6 @@ function ViewDetailLink({
   name: string;
   exit: ReturnType<typeof exitToneOf>;
 }) {
-  const allowed = useCanSee("registry-profile");
-  if (!allowed) return null;
   return (
     <Link
       href={href}

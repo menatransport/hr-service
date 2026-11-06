@@ -2143,10 +2143,6 @@
 .sheet-bleed {
   margin-inline: calc(var(--sheet-px, 0px) * -1);
 }
-/* แถบเลขหน้าใต้ตาราง (`TablePager`) — เว้นขวาให้ปุ่ม UAT ที่ลอยมุมขวาล่าง เฉพาะตอนที่ปุ่มนั้นขึ้นอยู่ */
-body:has([data-uat-dock]) .table-pager {
-  padding-inline-end: 5rem;
-}
 /* แถบข้าง — พื้นทึบเรียบ ๆ สีเดียวกับแผ่นเนื้อหา ไม่มีเงา ให้สีของกลุ่ม (`--tone`) เป็นสีเดียวที่เด่นในแถบ */
 .app-shell-side {
   color: var(--color-ink);

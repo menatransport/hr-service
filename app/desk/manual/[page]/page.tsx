@@ -28,7 +28,7 @@ export async function generateMetadata(props: PageProps<"/desk/manual/[page]">) 
 }
 
 /**
- * คู่มือของหนึ่งเมนู — บน → ล่าง: ส่วนต่าง ๆ บนจอ (ภาพจำลอง + ปุ่ม) · การ์ดสรุป (ถ้ามี) · ขั้นตอน · สถานะ · ข้อควรรู้
+ * คู่มือของหนึ่งเมนู — บน → ล่าง: ส่วนต่าง ๆ บนจอ (ภาพจำลอง + ปุ่ม) · การ์ดสรุป (ถ้ามี) · ขั้นตอน · สถานะ · ตัวอย่าง · ข้อควรรู้
  * เมนูที่ผู้ใช้มองไม่เห็นก็เปิดคู่มือไม่ได้ (หาไม่เจอเหมือนเมนูเอง)
  */
 export default async function ManualPage(props: PageProps<"/desk/manual/[page]">) {
@@ -153,6 +153,22 @@ export default async function ManualPage(props: PageProps<"/desk/manual/[page]">
               <li key={label} className="flex items-center gap-2">
                 <span className={`chip ${TONE[tone]} flex-none`}>{label}</span>
                 <span className="text-mut">{meaning}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {manual.example ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-16 font-semibold">{manual.example.title}</h2>
+          <ul className="flex flex-col gap-1.5 rounded-xl border border-line bg-base-100 p-4 text-13">
+            {manual.example.items.map((t) => (
+              <li key={t} className="flex gap-2">
+                <span aria-hidden className="text-primary">•</span>
+                <span>
+                  <Rich text={t} />
+                </span>
               </li>
             ))}
           </ul>

@@ -46,7 +46,6 @@ const SHORT: Record<string, string> = {
   survey: "แบบสอบถาม",
   rentals: "ห้องเช่า",
   permissions: "สิทธิ์",
-  uat: "UAT",
   "api-docs": "API",
 };
 

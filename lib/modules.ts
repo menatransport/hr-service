@@ -8,7 +8,6 @@ import {
   Code2,
   Container,
   Database,
-  FlaskConical,
   House,
   Inbox,
   LayoutGrid,
@@ -151,8 +150,8 @@ export const MODULES: ModuleGroup[] = [
         actions: [
           {
             id: "registry-profile",
-            label: "เข้าหน้าประวัติรายคน · เพิ่ม/แก้ไขทะเบียน",
-            desc: "ไม่เห็น = ทะเบียนดูได้อย่างเดียว · ไม่มีปุ่มตา เปิดหน้าประวัติไม่ได้ · เพิ่ม/นำเข้า/แก้รูป/เปลี่ยนสถานะไม่ได้ (ส่งออก Excel ได้)",
+            label: "ดูเอกสาร · เพิ่ม/แก้ไขทะเบียน",
+            desc: "ไม่เห็น = ดูได้อย่างเดียว · เปิดหน้าประวัติรายคนได้แต่ไม่เห็นแท็บเอกสาร · เพิ่ม/นำเข้า/แก้ข้อมูล/แก้รูป/เปลี่ยนสถานะไม่ได้ (ส่งออก Excel ได้)",
           },
         ],
       },
@@ -250,14 +249,6 @@ export const MODULES: ModuleGroup[] = [
         desc: "ใครเข้าเมนูไหนได้บ้าง",
         href: "/desk/permissions",
         icon: ShieldCheck,
-      },
-      {
-        /* ระบบชั่วคราว (2 พ.ย. 2569) — ผู้ทดสอบรายฝ่าย + ผล UAT ทะเบียนประวัติ พจส. ลาดกระบัง */
-        id: "uat",
-        label: "จัดการ UAT",
-        desc: "ผู้ทดสอบรายฝ่าย · ผลทดสอบทะเบียนประวัติ",
-        href: "/desk/uat",
-        icon: FlaskConical,
       },
       {
         id: "api-docs",

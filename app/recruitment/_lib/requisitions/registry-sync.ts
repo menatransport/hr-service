@@ -2,7 +2,6 @@ import { getApplication } from "@/app/recruitment/_lib/applications";
 import { readApplicantFacts } from "@/app/recruitment/_lib/hr-documents";
 import { findIssuedDriver } from "@/app/recruitment/_lib/drivers/master";
 import { isHiredStatus } from "@/app/recruitment/_lib/types";
-import { isUatDriverCode } from "@/lib/uat";
 import {
   enrollDriver,
   moveRequisitionDaily,
@@ -25,10 +24,10 @@ import { customerLabel, positionLabel, type Requisition } from "./types";
  */
 
 /**
- * รหัสที่ยังไม่มีในทะเบียน/ATMS แต่ผูกได้ — รหัสทดสอบ UAT · หรือรหัสตัวเลขที่ HR ออกจากชีตรหัส พจส. แล้ว
+ * รหัสที่ยังไม่มีในทะเบียน/ATMS แต่ผูกได้ — รหัสตัวเลขที่ HR ออกจากชีตรหัส พจส. แล้ว
  * แต่ ATMS ยังไม่ซิงก์เข้า `main_driver` (Bew 3 พ.ย. 2569) → รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัคร
  */
-const isPendingDriverCode = (code: string): boolean => isUatDriverCode(code) || /^\d{4,8}$/.test(code.trim());
+const isPendingDriverCode = (code: string): boolean => /^\d{4,8}$/.test(code.trim());
 
 /** รหัส พจส. ที่ผูกให้คำขอได้ — มีในทะเบียน/ATMS แล้ว หรือเป็นรหัสที่รอ ATMS (`isPendingDriverCode`) */
 export async function isIssuedDriverCode(code: string): Promise<boolean> {
@@ -69,7 +68,7 @@ export async function syncRegistryFromRequisition(
       return;
   }
 
-  /* รหัสทดสอบ UAT / รหัสที่ ATMS ยังไม่ซิงก์ — รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัครอย่างเดียว */
+  /* รหัสที่ ATMS ยังไม่ซิงก์ — รับเข้าทะเบียนด้วยข้อมูลจากคำขอ/ใบสมัครอย่างเดียว */
   const issued =
     (await findIssuedDriver(drivercode)) ??
     (isPendingDriverCode(drivercode)

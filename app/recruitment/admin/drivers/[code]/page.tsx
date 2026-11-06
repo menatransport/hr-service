@@ -1,13 +1,12 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DriverProfile } from "@/app/recruitment/_components/admin/driver-profile";
 import {
   DRIVER_PROFILE_TABS,
+  withoutDocsTab,
   type DriverProfileTab,
 } from "@/app/recruitment/_lib/drivers/types";
 import { DataError } from "@/components/ui/data-error";
-import { EmptyState } from "@/components/ui/empty-state";
 import { canAccessMenu } from "@/lib/menu-permissions";
 import { getDriverProfile } from "@/app/recruitment/_lib/drivers/registry";
 
@@ -38,24 +37,9 @@ export default async function DriverProfilePage(
 ) {
   const { code } = await props.params;
 
-  // สิทธิ์ย่อย “เข้าหน้าประวัติรายคน” ตั้งที่ /desk/permissions — กันลิงก์จากหน้าอื่นและ URL ตรงด้วย
-  if (!(await canAccessMenu("registry-profile"))) {
-    return (
-      <div className="mx-auto max-w-xl py-6">
-        <EmptyState
-          title="ไม่มีสิทธิ์เข้าหน้าประวัติรายคน"
-          hint={
-            <>
-              ฝ่าย/แผนกของคุณยังไม่ได้รับสิทธิ์นี้ — ติดต่อผู้ดูแลให้เปิดที่หน้ากำหนดสิทธิ์ ·{" "}
-              <Link href="/recruitment/admin/drivers" className="text-primary hover:underline">
-                กลับทะเบียนประวัติ
-              </Link>
-            </>
-          }
-        />
-      </div>
-    );
-  }
+  /* สิทธิ์ย่อย “↳ ประวัติ” ตั้งที่ /desk/permissions — ไม่มีสิทธิ์ก็เข้าดูได้ (Bew 6 พ.ย. 2569)
+     แต่อ่านอย่างเดียว และไม่เห็นข้อมูลแท็บเอกสาร (ตัดทิ้งตั้งแต่ตรงนี้ ไม่ส่งลง browser) */
+  const canEdit = await canAccessMenu("registry-profile");
 
   let driver;
   try {
@@ -78,5 +62,11 @@ export default async function DriverProfilePage(
   const { tab } = await props.searchParams;
   const initial = DRIVER_PROFILE_TABS.find((t) => t === tab) as DriverProfileTab | undefined;
 
-  return <DriverProfile driver={driver} tab={initial} />;
+  return (
+    <DriverProfile
+      driver={canEdit ? driver : withoutDocsTab(driver)}
+      tab={initial}
+      canEdit={canEdit}
+    />
+  );
 }

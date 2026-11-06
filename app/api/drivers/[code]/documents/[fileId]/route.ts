@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { badRequest, fail, unauthorized } from "@/app/api/_lib/respond";
+import { badRequest, fail, forbidden, unauthorized } from "@/app/api/_lib/respond";
 import { readSessionUser } from "@/lib/auth/session";
+import { canAccessMenu } from "@/lib/menu-permissions";
 import {
   detachDriverDocument,
   DriverRegistryError,
@@ -36,6 +37,10 @@ export async function GET(
   try {
     if (!(await readSessionUser())) {
       return unauthorized("หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+    }
+    /* ไม่มีสิทธิ์ “↳ ประวัติ” = เปิดหน้าประวัติได้แต่ไม่เห็นเอกสาร (6 พ.ย. 2569) — ตัวไฟล์ก็เปิดไม่ได้ */
+    if (!(await canAccessMenu("registry-profile"))) {
+      return forbidden("ฝ่าย/แผนกของคุณไม่มีสิทธิ์ดูเอกสารในแฟ้มประวัติ");
     }
 
     const { code, fileId } = await ctx.params;

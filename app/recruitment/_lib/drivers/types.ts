@@ -622,6 +622,29 @@ export const DRIVER_DETAIL_FIELDS = [
   "manualDays",
 ] as const satisfies readonly (keyof DriverRecord)[];
 
+/**
+ * ตัดข้อมูลแท็บ “เอกสาร” ทิ้งทั้งชุด — คนที่ไม่มีสิทธิ์ย่อย “↳ ประวัติ” (`registry-profile`)
+ * เปิดหน้าประวัติรายคนได้แบบอ่านอย่างเดียว แต่ไม่เห็นเอกสาร (Bew 6 พ.ย. 2569)
+ *
+ * ตัดตั้งแต่ฝั่งเซิร์ฟเวอร์ ไม่ใช่แค่ซ่อนบนจอ — ก้อน `driver` ถูกส่งเป็น props ให้ client component
+ * (รูป · ป้ายสถานะ) ถ้าไม่ตัด ข้อมูลจะไปโผล่ใน payload ของหน้า
+ */
+export function withoutDocsTab(driver: DriverRecord): DriverRecord {
+  return {
+    ...driver,
+    licenseNo: "",
+    licenseType: "",
+    licenseExpiryISO: "",
+    licenseDaysLeft: null,
+    nationalId: "",
+    idCardExpiryISO: "",
+    idCardDaysLeft: null,
+    bankAccountNo: "",
+    bankBranch: "",
+    documents: [],
+  };
+}
+
 /** แถวของตารางทะเบียน — `DriverRecord` เต็มใส่แทนได้เสมอ (หน้าประวัติส่งตัวเต็มให้คอมโพเนนต์เดียวกัน) */
 export type DriverListRecord = Omit<DriverRecord, (typeof DRIVER_DETAIL_FIELDS)[number] | "work"> & {
   work: Pick<DriverWorkStatus, "latestStatus" | "latestWorkDateISO"> | null;

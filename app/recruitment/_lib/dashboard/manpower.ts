@@ -1,7 +1,6 @@
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { driversSyncedAt, readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { toIsoDate } from "@/app/recruitment/_lib/drivers/registry";
-import { isUatDriverCode } from "@/lib/uat";
 import { getOnboardingRecords } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { hasPerson, pipelineOf, stageOf, trainingStart, type OnboardingRecord } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { customerLabel } from "@/app/recruitment/_lib/requisitions/types";
@@ -147,7 +146,6 @@ export async function getManpowerBoard(): Promise<ManpowerBoard> {
 
   const positions = { mixerL: 0, mixerS: 0, other: 0 };
   for (const d of drivers) {
-    if (isUatDriverCode(str(d.drivercode))) continue; // คนทดสอบ UAT ไม่นับอัตรากำลัง
     const override = str(d.statusOverride);
     /* กติกาเดียวกับ `toRecord()` — บันทึกการพ้นสภาพชนะ `active` ของ ETL */
     const active = override ? override === "active" : Boolean(d.active);

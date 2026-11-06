@@ -4,12 +4,12 @@ import { PageHead } from "@/components/desk/page-head";
 import { getHiddenMenuIds } from "@/lib/menu-permissions";
 
 import { Rich } from "./_components/rich";
-import { CHANGELOG, MANUAL_EDITION, lastUpdated } from "./_lib/manual";
+import { CHANGELOG, GLOSSARY, MANUAL_EDITION, lastUpdated } from "./_lib/manual";
 import { manualEntries, thaiDate } from "./_lib/menu";
 
 export const metadata = { title: "คู่มือการใช้งาน" };
 
-/** หน้ารวมคู่มือ — การ์ดของเมนูที่ผู้ใช้เห็น + ประวัติการปรับปรุง (เฉพาะเมนูที่เห็นเช่นกัน) */
+/** หน้ารวมคู่มือ — การ์ดของเมนูที่ผู้ใช้เห็น + ตัวย่อที่ใช้บ่อย + ประวัติการปรับปรุง (เฉพาะเมนูที่เห็นเช่นกัน) */
 export default async function ManualIndexPage() {
   const hidden = new Set(await getHiddenMenuIds());
   const entries = manualEntries(hidden);
@@ -50,6 +50,18 @@ export default async function ManualIndexPage() {
           );
         })}
       </div>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-16 font-semibold">ตัวย่อที่ใช้บ่อย</h2>
+        <dl className="grid gap-x-6 gap-y-2 rounded-xl border border-line bg-base-100 p-4 text-13 sm:grid-cols-2">
+          {GLOSSARY.map(([term, meaning]) => (
+            <div key={term} className="flex gap-3">
+              <dt className="w-16 flex-none font-semibold text-primary">{term}</dt>
+              <dd className="text-mut">{meaning}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       {changes.length ? (
         <section className="flex flex-col gap-3">

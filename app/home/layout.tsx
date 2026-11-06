@@ -5,7 +5,6 @@ import { MenuAccessProvider } from "@/components/auth/menu-access-provider";
 import { WelcomeToast } from "@/components/auth/welcome-toast";
 import { getDeskIdentity } from "@/lib/auth/session";
 import { getHiddenMenuIds } from "@/lib/menu-permissions";
-import { UatDock } from "@/components/uat/uat-dock";
 
 /**
  * ชั้นนอกของหน้าหลัก (`/home`) — ตัวตนผู้ใช้กับ toast ต้อนรับเท่านั้น ไม่มีเชลล์
@@ -29,8 +28,6 @@ export default async function HomeLayout({ children }: LayoutProps<"/home">) {
         <WelcomeToast name={identity.firstName} />
       </Suspense>
       {children}
-      {/* UAT ชั่วคราว — ขึ้นเฉพาะผู้ทดสอบตอนเปิด UAT */}
-      <UatDock />
       </MenuAccessProvider>
     </IdentityProvider>
   );

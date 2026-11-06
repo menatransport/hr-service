@@ -46,6 +46,7 @@ import {
 } from "@/app/recruitment/_lib/drivers/types";
 import { formatNationalId } from "@/app/recruitment/_lib/form";
 import { exitTypeLabel } from "@/app/recruitment/_lib/resign-reasons/types";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * ประวัติคนขับรายคน — ประวัติมาจากการนำเข้า Excel ทะเบียน 2026 / หน้าติดตามพนักงานใหม่
@@ -64,10 +65,17 @@ import { exitTypeLabel } from "@/app/recruitment/_lib/resign-reasons/types";
 export function DriverProfile({
   driver,
   tab = "info",
+  canEdit,
 }: {
   driver: DriverRecord;
   /** แท็บที่เปิดตอนโหลด — จาก `?tab=` */
   tab?: DriverProfileTab;
+  /**
+   * สิทธิ์ย่อย “↳ ประวัติ” (`registry-profile`) — `false` = **อ่านอย่างเดียว** (Bew 6 พ.ย. 2569):
+   * ไม่มีปุ่มแก้ไข/เปลี่ยนรูป/เปลี่ยนสถานะ/ทำเอกสาร และแท็บเอกสารขึ้นแค่ว่าไม่มีสิทธิ์
+   * (หน้า page ตัดข้อมูลแท็บนั้นทิ้งด้วย `withoutDocsTab()` มาแล้ว)
+   */
+  canEdit: boolean;
 }) {
   const expiry = licenseState(driver.licenseDaysLeft);
   const idCardState = expiryState(driver.idCardDaysLeft);
@@ -108,7 +116,7 @@ export function DriverProfile({
 
         <div className="flex flex-wrap items-center gap-4">
         {/* กดที่วงรูปเพื่อเพิ่ม/เปลี่ยนรูป — บันทึกลง `master_driver` */}
-        <DriverAvatar driver={driver} size="xl" />
+        <DriverAvatar driver={driver} size="xl" editable={canEdit} />
 
         <div className="flex min-w-0 flex-col gap-1.5">
           <h1 className="text-xl font-semibold tracking-[-0.01em]">
@@ -142,19 +150,20 @@ export function DriverProfile({
         </p>
       ) : null}
 
-      {hidePersonal ? <ResignPanel driver={driver} /> : null}
+      {hidePersonal ? <ResignPanel driver={driver} canEdit={canEdit} /> : null}
 
       {/* แบ่งเป็นแท็บ (19 ต.ค. 2569) — ข้อมูลทั่วไป / เอกสาร / ปฏิทิน · แถบเตือนกับข้อมูลพ้นสภาพ
           อยู่เหนือแท็บ เพราะต้องเห็นไม่ว่าจะเปิดแท็บไหน */}
       <DriverProfileTabs
         initial={tab}
-        missingDocs={missingRequiredDocs(driver.documents).length}
+        /* ไม่มีสิทธิ์ = เอกสารถูกตัดทิ้งมาแล้ว นับ “ขาด” ไม่ได้ — ไม่ขึ้นตัวเลขแดงหลอก ๆ */
+        missingDocs={canEdit ? missingRequiredDocs(driver.documents).length : 0}
         info={
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-0">
             <div className="flex flex-col gap-6 lg:pr-6">
               <Section
                 title="ข้อมูลการจ้าง"
-                action={<DriverProfileEdit driver={driver} scope="info" />}
+                action={canEdit ? <DriverProfileEdit driver={driver} scope="info" /> : undefined}
                 note={
                   driver.profileEditedAt
                     ? `แก้ไขล่าสุด ${formatThaiDateTime(driver.profileEditedAt)}${
@@ -290,6 +299,12 @@ export function DriverProfile({
           </div>
         }
         docs={
+          !canEdit ? (
+            <EmptyState
+              title="ไม่มีสิทธิ์ดูข้อมูลเอกสาร"
+              hint="ฝ่าย/แผนกของคุณดูประวัติได้อย่างเดียว — เอกสารประจำตัว บัญชีรับเงิน และแฟ้มเอกสารเปิดได้เฉพาะผู้มีสิทธิ์ “↳ ประวัติ” ติดต่อผู้ดูแลที่หน้ากำหนดสิทธิ์"
+            />
+          ) : (
           <div className="flex flex-col gap-6">
             {/* แก้ทุกช่องรวมวันหมดอายุผ่านปุ่ม “แก้ไข” ที่เดียว · ซ่อนข้อมูลส่วนบุคคลเมื่อพ้นสภาพแล้ว */}
             <Section
@@ -360,6 +375,7 @@ export function DriverProfile({
               <DriverDocumentSlots driver={driver} hidePersonal={hidePersonal} />
             </div>
           </div>
+          )
         }
         work={
           driver.work ? (
@@ -560,7 +576,7 @@ function Hidden({ icon: Icon, label }: { icon?: LucideIcon; label: string }) {
  * วางไว้เหนือทุกกล่องโดยตั้งใจ เพราะมันคือคำตอบของคำถามแรกที่คนเปิดหน้านี้ถาม
  * (“ออกไปตั้งแต่เมื่อไร เพราะอะไร”) ส่วนข้อมูลทะเบียนที่เหลือเป็นรายละเอียดรอง
  */
-function ResignPanel({ driver }: { driver: DriverRecord }) {
+function ResignPanel({ driver, canEdit }: { driver: DriverRecord; canEdit: boolean }) {
   const resignation = driver.resignation;
   /* ย้ายไปรถร่วม — ไม่มีรหัสเหตุผล/ประเภทการออก แสดงแค่วันที่กับหมายเหตุ */
   const noun = resignation?.kind === "transfer" ? "ย้ายไปรถร่วม" : "พ้นสภาพ";
@@ -572,13 +588,15 @@ function ResignPanel({ driver }: { driver: DriverRecord }) {
         <div className="flex flex-col gap-0.5">
           <p className="text-13 font-semibold">พ้นสภาพแล้ว</p>
           <p className="text-12 text-mut text-pretty">
-            สถานะนี้มาจากระบบต้นทาง ยังไม่มีการบันทึกวันที่และเหตุผล —
-            กด “พ้นสภาพ” ที่มุมขวาบนเพื่อบันทึกให้ครบ
+            สถานะนี้มาจากระบบต้นทาง ยังไม่มีการบันทึกวันที่และเหตุผล
+            {canEdit ? " — กด “พ้นสภาพ” ที่มุมขวาบนเพื่อบันทึกให้ครบ" : ""}
           </p>
         </div>
-        <span className="ml-auto flex-none">
-          <ResignDocumentsButton driver={driver} variant="label" />
-        </span>
+        {canEdit ? (
+          <span className="ml-auto flex-none">
+            <ResignDocumentsButton driver={driver} variant="label" />
+          </span>
+        ) : null}
       </section>
     );
   }
@@ -588,10 +606,12 @@ function ResignPanel({ driver }: { driver: DriverRecord }) {
       <div className="flex items-center gap-2.5">
         <UserMinus size={16} strokeWidth={1.8} aria-hidden className="flex-none text-mut" />
         <h2 className="text-14 font-semibold">ข้อมูลการ{noun}</h2>
-        {/* ใบลาออก + แบบสอบถามลาออก เติมจากข้อมูลชุดนี้ */}
-        <span className="ml-auto">
-          <ResignDocumentsButton driver={driver} variant="label" />
-        </span>
+        {/* ใบลาออก + แบบสอบถามลาออก เติมจากข้อมูลชุดนี้ — ทำเอกสารได้เฉพาะผู้มีสิทธิ์ */}
+        {canEdit ? (
+          <span className="ml-auto">
+            <ResignDocumentsButton driver={driver} variant="label" />
+          </span>
+        ) : null}
       </div>
 
       <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">

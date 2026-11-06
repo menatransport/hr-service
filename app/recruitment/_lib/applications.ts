@@ -117,8 +117,6 @@ interface ApplicationDoc {
    * ถ้าถูกขอให้พิสูจน์ว่าทำตามคำขอจริง (ดู `cancelApplication()`)
    */
   erasedAt?: string;
-  /** ผู้สมัครทดสอบของ UAT (`createUatApplication`) — ชื่อผู้กดสร้าง · ใบจริงไม่มีคีย์นี้ */
-  uat?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -578,122 +576,6 @@ function buildApplicantDocuments(body: Record<string, unknown>): {
       source: body.documentSource === "ocr" ? "ocr" : "manual",
     },
   };
-}
-
-/* ------------------------------------------------------------- ผู้สมัครทดสอบ (UAT) */
-
-const UAT_FIRST = ["สมชาย", "ประเสริฐ", "วีระ", "สุรชัย", "อนุชา", "ธนากร", "กิตติ", "สมศักดิ์", "ณัฐพล", "อภิชาติ"];
-const UAT_LAST = ["ใจดี", "มีสุข", "รักงาน", "ขับดี", "ปลอดภัย", "ตรงเวลา", "มั่นคง", "แสงทอง"];
-
-const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
-const randInt = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
-const randDigits = (n: number) => Array.from({ length: n }, () => randInt(0, 9)).join("");
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
-
-/** เลขบัตร 13 หลักที่หลักสุดท้ายถูกตามสูตร — ขึ้นต้น 9 (ไม่ใช่เลขบัตรคนไทยที่ออกจริงในรุ่นปัจจุบัน) */
-function fakeNationalId(): string {
-  const head = `9${randDigits(11)}`;
-  let sum = 0;
-  for (let i = 0; i < 12; i += 1) sum += Number(head[i]) * (13 - i);
-  return `${head}${(11 - (sum % 11)) % 10}`;
-}
-
-function fakeAnswer(q: Question, person: { first: string; last: string; phone: string; nid: string; birth: string }): AnswerValue {
-  if (q.key === KEY_FULL_NAME) return person.first;
-  switch (q.kind) {
-    case "tel":
-      return q.key === KEY_PHONE ? person.phone : `08${randDigits(8)}`;
-    case "nid":
-      return person.nid;
-    case "number":
-      if (q.label.includes("อายุ")) return String(randInt(25, 45));
-      if (q.label.includes("ส่วนสูง")) return String(randInt(160, 185));
-      if (q.label.includes("น้ำหนัก")) return String(randInt(55, 90));
-      return String(randInt(1, 10));
-    case "date":
-      return q.label.includes("เกิด")
-        ? person.birth
-        : isoDay(new Date(Date.now() + randInt(3, 14) * 86_400_000));
-    case "single":
-      return q.options.length ? pick(q.options).value : "";
-    case "multi":
-      return q.options.length ? [pick(q.options).value] : [];
-    case "textarea":
-      return "ข้อมูลทดสอบ UAT";
-    default:
-      /* ข้อความอิสระที่หน้าที่ชัด — เดาจากคำในคำถาม (เขตงาน = ลาดกระบัง ตามขอบเขต UAT) */
-      if (q.label.includes("นามสกุล") && !q.label.includes("ฉุกเฉิน")) return person.last;
-      if (q.label.includes("เขต")) return "ลาดกระบัง";
-      if (q.label.includes("รองเท้า")) return String(randInt(40, 44));
-      if (q.label.includes("เบอร์") || q.label.includes("โทร")) return `08${randDigits(8)}`;
-      return "ทดสอบ UAT";
-  }
-}
-
-/**
- * สร้างผู้สมัครทดสอบ 1 ใบ (ปุ่ม “สุ่มผู้สมัครทดสอบ” ของฝ่าย MASS ในแผง UAT)
- *
- * ตอบทุกข้อของฟอร์มที่เปิดอยู่ตามชนิดคำถาม (เดินทีละหมวดเหมือน `buildAnswers` เงื่อนไขจึงถูก) · ไม่มีไฟล์แนบ
- * · ชื่อขึ้นต้น `UAT-` ให้เห็นทุกตาราง/Excel ว่าเป็นของทดสอบ · มีคีย์ `uat` ไว้ล้างทิ้งทีหลัง
- * · ไม่ผ่าน `guardDuplicate` (เบอร์สุ่ม) และไม่ผ่านความยินยอมของผู้สมัคร (ไม่ใช่คนจริง)
- */
-export async function createUatApplication(byName: string): Promise<SubmitResult & { fullName: string }> {
-  const questions = await listActiveQuestions();
-  if (!questions.length) throw new RecruitmentError("ยังไม่มีคำถามในฟอร์มสมัคร — สร้างผู้สมัครทดสอบไม่ได้");
-
-  const birth = new Date(randInt(1980, 2000), randInt(0, 11), randInt(1, 28));
-  const person = {
-    first: `UAT-${pick(UAT_FIRST)}`,
-    last: pick(UAT_LAST),
-    phone: `09${randDigits(8)}`,
-    nid: fakeNationalId(),
-    birth: isoDay(birth),
-  };
-
-  const answers: AnswerMap = {};
-  for (const section of QUESTION_SECTIONS) {
-    for (const q of visibleQuestions(questions, section.id, answers)) {
-      const value = fakeAnswer(q, person);
-      answers[q.key] = validateAnswer(q, value) ? emptyAnswer(q.kind) : value;
-    }
-  }
-
-  const ref = await nextRef();
-  const now = new Date().toISOString();
-  const doc: ApplicationDoc = {
-    ref,
-    status: "pending_contact",
-    fullName: person.first,
-    phone: person.phone,
-    contactOwner: "",
-    interview: { ...EMPTY_INTERVIEW },
-    exitReason: "",
-    exitReasonNote: "",
-    blacklist: false,
-    answers,
-    questionSnapshot: snapshotOf(questions),
-    files: [],
-    documents: { ...EMPTY_DOCUMENT_DATA, nationalId: person.nid, birthDate: person.birth },
-    documentMeta: { ...EMPTY_DOCUMENT_META },
-    consent: {
-      version: CONSENT_VERSION,
-      acceptedAt: now,
-      ip: "uat",
-      userAgent: "uat",
-      items: CONSENT_ITEMS.map((item) => ({ id: item.id, granted: true })),
-    },
-    timeline: [{ at: now, from: null, to: "pending_contact", by: byName, note: "ผู้สมัครทดสอบ (UAT)" }],
-    uat: byName,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await (await applications()).insertOne(doc);
-  return { ref, createdAt: now, fullName: composeName(person.first, person.last) };
-}
-
-/** จำนวนผู้สมัครทดสอบที่ยังอยู่ในระบบ — ขึ้นบนหน้า “จัดการ UAT” */
-export async function countUatApplications(): Promise<number> {
-  return (await applications()).countDocuments({ uat: { $exists: true } });
 }
 
 /**

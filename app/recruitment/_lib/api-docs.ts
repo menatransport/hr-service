@@ -52,11 +52,18 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.5.0";
-export const API_DOCS_UPDATED = "2026-11-04";
+export const API_DOCS_VERSION = "4.5.1";
+export const API_DOCS_UPDATED = "2026-11-06";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-06",
+    version: "4.5.1",
+    changes: [
+      "`GET /api/drivers/{drivercode}/documents/{fileId}` ตอบ 403 เมื่อฝ่าย/แผนกไม่มีสิทธิ์ย่อย “↳ ประวัติ” — หน้าประวัติรายคนเปิดดูได้ทุกคนแล้ว แต่เอกสารเห็นเฉพาะผู้มีสิทธิ์",
+    ],
+  },
   {
     date: "2026-11-04",
     version: "4.5.0",
@@ -430,11 +437,15 @@ export const API_GROUPS: ApiGroup[] = [
         method: "GET",
         path: "/api/drivers/{drivercode}/documents/{fileId}",
         summary: "เปิดเอกสาร",
-        description: "ตรวจซ้ำว่าไฟล์อยู่ในแฟ้มของรหัสนั้นจริง แล้วเด้งไปลิงก์ presigned ของ S3 (อายุ 10 นาที)",
+        description:
+          "ต้องมีสิทธิ์ย่อย “↳ ประวัติ” (`registry-profile`) · ตรวจซ้ำว่าไฟล์อยู่ในแฟ้มของรหัสนั้นจริง แล้วเด้งไปลิงก์ presigned ของ S3 (อายุ 10 นาที)",
         access: "login",
         params: [P("drivercode", "รหัส พจส."), P("fileId", "รหัสไฟล์")],
         response: "302 → ลิงก์ presigned (Cache-Control: private, max-age=300)",
-        errors: [{ status: 404, when: "ไฟล์ไม่อยู่ในแฟ้มของรหัสนี้" }],
+        errors: [
+          { status: 403, when: "ฝ่าย/แผนกไม่มีสิทธิ์ย่อย “↳ ประวัติ”" },
+          { status: 404, when: "ไฟล์ไม่อยู่ในแฟ้มของรหัสนี้" },
+        ],
       },
       {
         method: "DELETE",
