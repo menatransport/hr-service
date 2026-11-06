@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, Menu, X } from "lucide-react";
 
 import { ModuleNav } from "@/components/module/module-nav";
+import { ManualButton } from "@/components/shell/manual-button";
 import { UserMenu, type ShellUser } from "@/components/shell/user-menu";
 import { findModule } from "@/lib/modules";
 
@@ -78,6 +79,7 @@ export function ShellHeader({
         </nav>
 
         {actions}
+        <ManualButton compact />
         <UserMenu user={user} compact />
       </div>
 

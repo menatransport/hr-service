@@ -23,7 +23,7 @@ const TONE: Record<Tone, string> = {
 
 export async function generateMetadata(props: PageProps<"/desk/manual/[page]">) {
   const { page } = await props.params;
-  const entry = manualEntries().find((e) => e.item.id === page);
+  const entry = manualEntries(new Set(await getHiddenMenuIds())).find((e) => e.item.id === page);
   return { title: entry ? `คู่มือ · ${entry.item.label}` : "คู่มือการใช้งาน" };
 }
 
