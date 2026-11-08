@@ -194,7 +194,9 @@ export default async function ManualPage(props: PageProps<"/desk/manual/[page]">
           <ul className="flex flex-col gap-1 text-13">
             {changes.map((c) => (
               <li key={c.date + c.text} className="flex gap-3">
-                <span className="w-24 flex-none text-mut tabular-nums">{thaiDate(c.date)}</span>
+                <span className="w-36 flex-none text-mut tabular-nums">
+                  {thaiDate(c.date)} · {c.time} น.
+                </span>
                 <span>
                   <Rich text={c.text} />
                 </span>

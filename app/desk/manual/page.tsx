@@ -69,16 +69,24 @@ export default async function ManualIndexPage() {
           <ol className="flex flex-col divide-y divide-line rounded-xl border border-line bg-base-100">
             {changes.map((v) => (
               <li key={v.date} className="grid gap-1.5 px-4 py-3 sm:grid-cols-[110px_1fr]">
-                <span className="text-12-5 font-medium text-mut tabular-nums">{thaiDate(v.date)}</span>
-                <ul className="flex flex-col gap-1 text-13">
-                  {v.items.map(([id, text]) => (
-                    <li key={id + text}>
+                <span className="flex flex-col text-12-5 text-mut tabular-nums">
+                  <span className="font-medium">{thaiDate(v.date)}</span>
+                  <span>{v.time} น.</span>
+                </span>
+                <ul className="flex flex-col gap-1.5 text-13">
+                  {/* ชื่อหน้าขึ้นครั้งเดียว — หลายข้อของหน้าเดียวกันเป็น bullet ย่อยด้านล่าง */}
+                  {byMenu(v.items).map(([id, texts]) => (
+                    <li key={id}>
                       <Link href={`/desk/manual/${id}`} className="font-medium text-primary hover:underline">
                         {labelOf.get(id)}
-                      </Link>{" "}
-                      <span className="text-mut">
-                        — <Rich text={text} />
-                      </span>
+                      </Link>
+                      <ul className="mt-0.5 flex list-disc flex-col gap-0.5 pl-5 text-mut marker:text-line-strong">
+                        {texts.map((text) => (
+                          <li key={text}>
+                            <Rich text={text} />
+                          </li>
+                        ))}
+                      </ul>
                     </li>
                   ))}
                 </ul>
@@ -89,4 +97,11 @@ export default async function ManualIndexPage() {
       ) : null}
     </div>
   );
+}
+
+/** รวมข้อของฉบับเดียวกันตามหน้า — คงลำดับที่หน้านั้นขึ้นครั้งแรก */
+function byMenu(items: [string, string][]): [string, string[]][] {
+  const groups = new Map<string, string[]>();
+  for (const [id, text] of items) groups.set(id, [...(groups.get(id) ?? []), text]);
+  return [...groups];
 }
