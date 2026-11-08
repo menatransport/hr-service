@@ -11,7 +11,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import { MEDIA_ROOT } from "@/lib/media";
+import { MEDIA_ROOT, THUMB_WIDTHS, thumbKeyOf } from "@/lib/media";
 
 /**
  * ที่เก็บไฟล์บน S3 (DigitalOcean Spaces `sgp1`) — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
@@ -140,10 +140,42 @@ export async function presignMedia(key: string, seconds = 600): Promise<string> 
   );
 }
 
-/** ลบไฟล์เดียว — ไม่มีไฟล์นั้นอยู่แล้วก็ถือว่าสำเร็จ (S3 ตอบ 204 เหมือนกัน) */
+/** ลบไฟล์เดียว (พร้อมรูปย่อของมัน) — ไม่มีไฟล์นั้นอยู่แล้วก็ถือว่าสำเร็จ (S3 ตอบ 204 เหมือนกัน) */
 export async function deleteMedia(key: string): Promise<void> {
   const { s3, bucket } = config();
   await run("ลบไฟล์", () => s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })));
+  /* รูปย่อมีหรือไม่มีก็ได้ (ทำตอนมีคนเปิดครั้งแรก) · ลบไม่ติดไม่ใช่เหตุให้การลบไฟล์จริงล้ม */
+  await s3
+    .send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: THUMB_WIDTHS.map((w) => ({ Key: thumbKeyOf(key, w) })), Quiet: true },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/** อ่านไฟล์ทั้งก้อน — `null` = ไม่มีไฟล์นี้ (ใช้ทำรูปย่อ ไฟล์ใหญ่ห้ามใช้) */
+export async function readMedia(key: string): Promise<{ body: Uint8Array; type: string } | null> {
+  const { s3, bucket } = config();
+  try {
+    const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!out.Body) return null;
+    return { body: await out.Body.transformToByteArray(), type: out.ContentType ?? "" };
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new StorageError(`อ่านไฟล์ไม่สำเร็จ (${reason})`);
+  }
+}
+
+/** อัปไฟล์ที่ทำขึ้นเองฝั่งเซิร์ฟเวอร์ (รูปย่อ) — private เหมือน `putMedia()` */
+export async function putMediaBytes(key: string, body: Uint8Array, contentType: string): Promise<void> {
+  const { s3, bucket } = config();
+  await run("อัปโหลดไฟล์", () =>
+    s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType, ACL: "private" })),
+  );
 }
 
 /**

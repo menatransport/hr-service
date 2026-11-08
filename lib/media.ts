@@ -49,3 +49,28 @@ export function isMediaKey(key: string): boolean {
     !key.split("/").some((part) => part === "" || part === "." || part === "..")
   );
 }
+
+/* ------------------------------------------------------------------ รูปย่อ */
+
+/**
+ * ความกว้างรูปย่อที่ `GET /api/media/{key}?w=` ยอมทำ — ล็อกไว้แค่นี้ กันใครยิงทุกขนาดจนเต็ม bucket
+ * · `160` = วงรูปในตาราง/การ์ด (ใหญ่สุด 74 px × จอ 2x) · `640` = รูปขยายตอนชี้เมาส์
+ */
+export const THUMB_WIDTHS = [160, 640] as const;
+export type ThumbWidth = (typeof THUMB_WIDTHS)[number];
+
+/** ที่เก็บรูปย่อ — โฟลเดอร์ `_thumb/` ข้างไฟล์จริง ลบโฟลเดอร์เจ้าของเมื่อไหร่รูปย่อหายตามไปด้วย */
+export function thumbKeyOf(key: string, width: ThumbWidth): string {
+  const cut = key.lastIndexOf("/");
+  return `${key.slice(0, cut)}/_thumb/${key.slice(cut + 1)}.w${width}.webp`;
+}
+
+/**
+ * ลิงก์รูปย่อของลิงก์ในฐาน — วงรูปเล็ก ๆ ไม่ต้องโหลดรูปเต็ม (~1600 px · หลายร้อย KB) ·
+ * ลิงก์ที่ไม่ใช่ของ `mass-image/` หรือเป็นไฟล์ร่างของผู้สมัคร = คืนลิงก์เดิม
+ */
+export function mediaThumbUrl(url: string, width: ThumbWidth): string {
+  const key = mediaKeyOf(url);
+  if (!key || key.startsWith(DRAFT_PREFIX) || key.includes("/_thumb/")) return url;
+  return `${url}?w=${width}`;
+}

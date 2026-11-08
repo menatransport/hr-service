@@ -1,3 +1,5 @@
+import { mediaThumbUrl } from "@/lib/media";
+
 /**
  * วงกลมตัวอักษรย่อ — ใช้แทนรูปโปรไฟล์ที่ระบบยังไม่มี
  *
@@ -83,9 +85,9 @@ export function Avatar({
     >
       {src ? (
         /* `<img>` ธรรมดา ไม่ใช่ `next/image` — โฮสต์ของรูปยังไม่รู้ จึงประกาศ
-           `remotePatterns` ล่วงหน้าไม่ได้ และรูปโปรไฟล์เล็กเกินกว่าจะคุ้มการ optimize */
+           `remotePatterns` ล่วงหน้าไม่ได้ · ไฟล์ใน `mass-image/` ขอรูปย่อ 160 px แทนรูปเต็ม (`?w=`) */
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="size-full object-cover" loading="lazy" />
+        <img src={mediaThumbUrl(src, 160)} alt="" className="size-full object-cover" loading="lazy" decoding="async" />
       ) : (
         initialsOf(name)
       )}
