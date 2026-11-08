@@ -1,6 +1,7 @@
 import { getApplication } from "@/app/recruitment/_lib/applications";
 import { readApplicantFacts } from "@/app/recruitment/_lib/hr-documents";
 import { findIssuedDriver } from "@/app/recruitment/_lib/drivers/master";
+import { moveDocumentsToRegistry } from "@/app/recruitment/_lib/drivers/application-registry";
 import { isHiredStatus } from "@/app/recruitment/_lib/types";
 import {
   enrollDriver,
@@ -84,7 +85,11 @@ export async function syncRegistryFromRequisition(
           inRegistry: false,
         }
       : null);
-  if (!issued || issued.inRegistry) return;
+  if (!issued) return;
+  if (issued.inRegistry) {
+    if (application) await moveDocuments(application.id, by);
+    return;
+  }
 
   /* เลขบัตร/ใบขับขี่/บัญชี/ผู้ติดต่อฉุกเฉินไม่มีใน ATMS — เอาจากใบสมัครที่ผูกไว้
      (ช่องเอกสารที่ฝ่ายบุคคลกรอก/ตรวจจากรูป + คำตอบในใบสมัคร) */
@@ -122,5 +127,16 @@ export async function syncRegistryFromRequisition(
       requisitionCode: r.code,
     },
     by,
+  );
+  if (application) await moveDocuments(application.id, by);
+}
+
+/**
+ * ได้รหัส พจส. แล้ว = บัตร/ใบขับขี่/บัญชีย้ายไปอยู่ทะเบียนที่เดียว (`drivers/document-sync.ts`)
+ * · ย้ายไม่สำเร็จไม่ล้มการรับเข้าทะเบียน — ใบสมัครยังถือค่าไว้ และย้ายเองตอนบันทึกครั้งถัดไป
+ */
+async function moveDocuments(applicationId: string, by: string) {
+  await moveDocumentsToRegistry(applicationId, by).catch((err) =>
+    console.warn("[registry-sync] ย้ายข้อมูลเอกสารไปทะเบียนไม่สำเร็จ —", err),
   );
 }

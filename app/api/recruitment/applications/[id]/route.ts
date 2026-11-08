@@ -8,9 +8,9 @@ import {
   unauthorized,
 } from "@/app/api/recruitment/_lib";
 import {
-  getApplication,
-  updateApplication,
-} from "@/app/recruitment/_lib/applications";
+  getApplicationWithRegistry,
+  updateApplicationWithRegistry,
+} from "@/app/recruitment/_lib/drivers/application-registry";
 import { syncRequisitionForApplication } from "@/app/recruitment/_lib/requisitions/store";
 
 /**
@@ -20,6 +20,8 @@ import { syncRequisitionForApplication } from "@/app/recruitment/_lib/requisitio
  *
  * ผู้แก้ไขมาจาก session เสมอ ไม่รับจาก body — ไทม์ไลน์เป็นหลักฐานว่าใครตัดสินใจ
  * อะไร ถ้ารับจาก body ก็อ้างเป็นคนอื่นได้
+ *
+ * ใบที่ผูกรหัส พจส. แล้ว: บัตร/ใบขับขี่/บัญชีอ่านและเขียนที่ทะเบียน (`application-registry.ts`)
  */
 
 export async function GET(
@@ -29,7 +31,7 @@ export async function GET(
   try {
     if (!(await editor())) return unauthorized();
     const { id } = await params;
-    const application = await getApplication(id);
+    const application = await getApplicationWithRegistry(id);
     if (!application) return ok(null);
     return ok(application);
   } catch (err) {
@@ -47,7 +49,7 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await readBody(request);
-    const application = await updateApplication(id, body, who);
+    const application = await updateApplicationWithRegistry(id, body, who);
 
     /* คำขอสรรหาที่ผูกใบนี้ไว้ต้องเดินตามสถานะใบสมัคร — เริ่มฝึกงาน = อัตราปิด ·
        ยกเลิก = ปลดการผูกแล้วเปิดรับใหม่ · ทำที่นี่จุดเดียว ไม่คำนวณตอนอ่าน
