@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eraser, ImageUp, Loader2, PenLine, UserRound, X } from "lucide-react";
+import { Eraser, ImageUp, PenLine, UserRound, X } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
+import {
+  SignatureLoader,
+  SignatureLoaderOverlay,
+} from "@/app/recruitment/_components/signature-loader";
 import { SegmentedControl } from "@/components/ui/summary-panel";
 import { requestJson } from "@/lib/http";
 import { alertError, confirm, runAction } from "@/lib/swal";
@@ -111,6 +115,7 @@ export function SignaturePanel({
 }) {
   const slots = DOC_SIGN_SLOTS[doc];
   const [pad, setPad] = useState<PadTarget | null>(null);
+  const [savingMine, setSavingMine] = useState(false);
   const me = mine.state.status === "ready" ? mine.state.me : null;
 
   if (!slots.length) return null;
@@ -152,10 +157,16 @@ export function SignaturePanel({
     if (remember) {
       const out = await runAction({
         confirm: false,
-        pending: "กำลังบันทึกลายเซ็นของฉัน…",
         success: false,
         failureTitle: "บันทึกลายเซ็นของฉันไม่สำเร็จ",
-        run: () => mine.save(image),
+        run: async () => {
+          setSavingMine(true);
+          try {
+            return await mine.save(image);
+          } finally {
+            setSavingMine(false);
+          }
+        },
       });
       if (out.status !== "done") return;
     }
@@ -186,7 +197,9 @@ export function SignaturePanel({
 
       {/* ไม่มีการ์ด “ลายเซ็นของฉัน” แยก (Bew — เดี๋ยวงง) · ตั้ง/เปลี่ยนลายเซ็นของฉันทำผ่าน
           ปุ่มของช่องเจ้าหน้าที่เท่านั้น · โหลดไม่สำเร็จเท่านั้นถึงขึ้นแถบให้ลองใหม่ */}
-      {mine.state.status === "error" ? (
+      {mine.state.status === "loading" ? (
+        <SignatureLoader size="sm" label="กำลังโหลดลายเซ็นของฉัน…" />
+      ) : mine.state.status === "error" ? (
         <div className="flex items-center justify-between gap-2 rounded-field border border-alert/30 bg-alert-soft px-3 py-2 text-12 text-alert">
           <span>{mine.state.message}</span>
           <button
@@ -306,6 +319,7 @@ export function SignaturePanel({
           onClose={() => setPad(null)}
         />
       ) : null}
+      {savingMine ? <SignatureLoaderOverlay label="กำลังบันทึกลายเซ็นของฉัน…" /> : null}
     </div>
   );
 }
@@ -560,12 +574,7 @@ export function SignaturePadModal({
           <div className="flex flex-col gap-2">
             <label className="flex h-52 cursor-pointer flex-col items-center justify-center gap-2 rounded-field border border-dashed border-line bg-white p-4 text-center transition-colors hover:border-primary/50">
               {reading ? (
-                <Loader2
-                  size={20}
-                  strokeWidth={2}
-                  aria-hidden
-                  className="animate-spin text-mut"
-                />
+                <SignatureLoader label="กำลังอ่านรูปลายเซ็น…" />
               ) : uploaded ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img

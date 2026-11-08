@@ -28,6 +28,7 @@ import {
 } from "@/app/recruitment/_components/admin/driver-document-viewer";
 import { DriverDocumentScan } from "@/app/recruitment/_components/admin/driver-document-scan";
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
+import { SignatureLoaderOverlay } from "@/app/recruitment/_components/signature-loader";
 import type { DriverHrLink } from "@/app/recruitment/_lib/drivers/driver-hr";
 import type { DocSlot } from "@/app/recruitment/_lib/form";
 import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
@@ -321,6 +322,8 @@ export function DriverDocumentSlots({
           onClose={() => setMaking(null)}
         />
       ) : null}
+      {/* เปิดเอกสาร HR = โหลดใบสมัคร + ช่องเอกสาร (รวมลายเซ็น) ก่อนเปิดกล่อง */}
+      {opening ? <SignatureLoaderOverlay label="กำลังเปิดเอกสาร…" /> : null}
 
       {scanning ? (
         <DriverDocumentScan

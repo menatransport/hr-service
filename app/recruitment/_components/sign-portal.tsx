@@ -22,6 +22,7 @@ import {
   RefundConsent,
 } from "@/app/recruitment/_components/admin/hr-document-contracts";
 import { SignaturePadModal } from "@/app/recruitment/_components/admin/hr-document-signature";
+import { SignatureLoaderOverlay } from "@/app/recruitment/_components/signature-loader";
 import { requestJson } from "@/lib/http";
 import { alertError, toastSuccess } from "@/lib/swal";
 import { CONTROLLER } from "@/app/recruitment/_lib/consent";
@@ -55,6 +56,7 @@ export function SignPortal({ data }: { data: SignPortalData }) {
   const [view, setView] = useState<HrDocId | null>(null);
   const [agreed, setAgreed] = useState<Partial<Record<HrDocId, boolean>>>({});
   const [padOpen, setPadOpen] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const signedOf = (doc: HrDocId) => signatures[signKey(doc, "applicant")];
   const signedCount = docs.filter((d) => signedOf(d)).length;
@@ -66,7 +68,8 @@ export function SignPortal({ data }: { data: SignPortalData }) {
   }
 
   async function sign(image: string) {
-    if (!view) return;
+    if (!view || sending) return;
+    setSending(true);
     try {
       const signature = await requestJson<DocSignature>(
         `/api/recruitment/public/sign/${data.token}`,
@@ -82,6 +85,8 @@ export function SignPortal({ data }: { data: SignPortalData }) {
       );
     } catch (err) {
       alertError("ลงนามไม่สำเร็จ", err instanceof Error ? err.message : undefined);
+    } finally {
+      setSending(false);
     }
   }
 
@@ -234,6 +239,7 @@ export function SignPortal({ data }: { data: SignPortalData }) {
           onClose={() => setPadOpen(false)}
         />
       ) : null}
+      {sending ? <SignatureLoaderOverlay label="กำลังส่งลายเซ็น…" /> : null}
     </div>
   );
 }

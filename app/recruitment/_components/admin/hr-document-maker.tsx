@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileDown, FileStack, Link2, Loader2, Save, SquarePen } from "lucide-react";
+import { FileDown, FileStack, Link2, Save, SquarePen } from "lucide-react";
 
 import { AttachmentGallery } from "@/components/ui/attachment-gallery";
 import { DateField, NumberField, SelectField, TextField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
+import { SignatureLoaderOverlay } from "@/app/recruitment/_components/signature-loader";
 import { alertError, confirm, escapeHtml, runAction } from "@/lib/swal";
 import { CandidateDocumentsModal } from "@/app/recruitment/_components/admin/candidate-documents";
 import { CandidateEditModal } from "@/app/recruitment/_components/admin/candidate-edit";
@@ -327,7 +328,6 @@ export function HrDocumentMaker({
     rememberCompanyFill(fill);
     const out = await runAction({
       confirm: false,
-      pending: "กำลังบันทึก…",
       success: "บันทึกแล้ว",
       failureTitle: "บันทึกไม่สำเร็จ",
       run: async () => {
@@ -691,11 +691,7 @@ export function HrDocumentMaker({
               disabled={!unsaved || saving}
               className="btn-sec flex items-center gap-2 px-4 py-2.5 text-13 font-medium transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
             >
-              {saving ? (
-                <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
-              ) : (
-                <Save size={14} strokeWidth={2} aria-hidden />
-              )}
+              <Save size={14} strokeWidth={2} aria-hidden />
               บันทึกข้อมูล
             </button>
             <button
@@ -704,18 +700,18 @@ export function HrDocumentMaker({
               disabled={printing}
               className="btn-pri flex items-center gap-2 px-4 py-2.5 text-13 font-medium disabled:opacity-60"
             >
-              {printing ? (
-                <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
-              ) : (
-                <FileDown size={14} strokeWidth={2} aria-hidden />
-              )}
+              <FileDown size={14} strokeWidth={2} aria-hidden />
               ส่งออก PDF · {doc.label}
             </button>
           </div>
         </div>
       }
     >
-      <div className="flex min-h-0 flex-col lg:h-[calc(94dvh-9rem)] lg:flex-row print:block print:h-auto">
+      <div className="relative flex min-h-0 flex-col lg:h-[calc(94dvh-9rem)] lg:flex-row print:block print:h-auto">
+        {/* โหลดค่าที่บันทึกไว้ (รวมลายเซ็น) — คลุมช่องกรอกไว้ก่อน ค่าที่โหลดมาจะเทลงทับสิ่งที่พิมพ์ระหว่างรอ */}
+        {store.state.status === "loading" ? (
+          <SignatureLoaderOverlay contained label="กำลังโหลดเอกสารและลายเซ็น…" />
+        ) : null}
         {/* ─────────────────────────────── แผงซ้าย: เลือกเอกสาร + ช่องกรอก */}
         <aside
           data-print-hide
@@ -888,6 +884,8 @@ export function HrDocumentMaker({
           onClose={() => setEditing(null)}
         />
       ) : null}
+      {saving ? <SignatureLoaderOverlay label="กำลังบันทึกเอกสารและลายเซ็น…" /> : null}
+      {printing ? <SignatureLoaderOverlay label="กำลังเตรียมส่งออก PDF…" /> : null}
     </ModalShell>
   );
 }

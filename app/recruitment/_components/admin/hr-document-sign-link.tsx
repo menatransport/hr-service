@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Copy, ExternalLink, Link2, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Clock3, Copy, ExternalLink, Link2, TriangleAlert } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
+import { SignatureLoader, SignatureLoaderOverlay } from "@/app/recruitment/_components/signature-loader";
 import { alertError, runAction, toastSuccess } from "@/lib/swal";
 import { HR_DOCUMENTS, thaiShortDateTime, type DocFill, type HrDocId } from "@/app/recruitment/_lib/hr-documents";
 import type { HrDocumentState } from "@/app/recruitment/_lib/hr-document-records";
@@ -46,7 +47,8 @@ export function SignLinkModal({
   const [state, setState] = useState<SignLinkState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<HrDocId[]>([]);
-  const [busy, setBusy] = useState(false);
+  /** ข้อความของงานที่กำลังส่ง/ดึง — มีค่า = คลุมกล่องด้วยตัวรอ */
+  const [busy, setBusy] = useState<string | null>(null);
 
   const endpoint = `/api/recruitment/applications/${applicationId}/sign-link`;
 
@@ -82,6 +84,15 @@ export function SignLinkModal({
     return at && fill.signatures?.[signKey(d, "applicant")]?.signedAt !== at;
   });
 
+  async function withBusy<T>(label: string, run: () => Promise<T>): Promise<T> {
+    setBusy(label);
+    try {
+      return await run();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -104,14 +115,9 @@ export function SignLinkModal({
         : false,
       success: false,
       failureTitle: "สร้างลิงก์ไม่สำเร็จ",
-      run: async () => {
-        setBusy(true);
-        try {
-          return await requestJson<SignLinkState>(endpoint, { method: "POST", body: { docs: picked } }, "สร้างลิงก์ไม่สำเร็จ");
-        } finally {
-          setBusy(false);
-        }
-      },
+      run: () => withBusy("กำลังสร้างลิงก์…", () =>
+        requestJson<SignLinkState>(endpoint, { method: "POST", body: { docs: picked } }, "สร้างลิงก์ไม่สำเร็จ"),
+      ),
     });
     if (out.status !== "done") return;
     setState(out.data);
@@ -126,20 +132,23 @@ export function SignLinkModal({
         confirmText: "ยกเลิกลิงก์",
         tone: "danger",
       },
-      pending: "กำลังยกเลิกลิงก์…",
       success: "ยกเลิกลิงก์แล้ว",
       failureTitle: "ยกเลิกลิงก์ไม่สำเร็จ",
-      run: () => requestJson<SignLinkState>(endpoint, { method: "DELETE" }, "ยกเลิกลิงก์ไม่สำเร็จ"),
+      run: () => withBusy("กำลังยกเลิกลิงก์…", () =>
+        requestJson<SignLinkState>(endpoint, { method: "DELETE" }, "ยกเลิกลิงก์ไม่สำเร็จ"),
+      ),
     });
     if (out.status === "done") setState(out.data);
   }
 
   async function pull() {
     try {
-      const latest = await requestJson<HrDocumentState>(
-        `/api/recruitment/applications/${applicationId}/hr-documents`,
-        {},
-        "โหลดลายเซ็นไม่สำเร็จ",
+      const latest = await withBusy("กำลังดึงลายเซ็นผู้สมัคร…", () =>
+        requestJson<HrDocumentState>(
+          `/api/recruitment/applications/${applicationId}/hr-documents`,
+          {},
+          "โหลดลายเซ็นไม่สำเร็จ",
+        ),
       );
       onPull(latest);
       toastSuccess("ดึงลายเซ็นผู้สมัครแล้ว");
@@ -170,10 +179,7 @@ export function SignLinkModal({
       }
     >
       {!state && !error ? (
-        <div className="flex items-center gap-2 py-6 text-13 text-mut">
-          <Loader2 size={15} strokeWidth={2} aria-hidden className="animate-spin" />
-          กำลังโหลด…
-        </div>
+        <SignatureLoader label="กำลังโหลดลิงก์และลายเซ็น…" className="py-8" />
       ) : error ? (
         <div className="flex items-center justify-between gap-2 rounded-field border border-alert/30 bg-alert-soft px-3 py-2.5 text-12-5 text-alert">
           <span>{error}</span>
@@ -285,14 +291,10 @@ export function SignLinkModal({
             <button
               type="button"
               onClick={() => void create()}
-              disabled={blocked || busy || !picked.length}
+              disabled={blocked || Boolean(busy) || !picked.length}
               className="btn-pri flex items-center justify-center gap-2 py-2.5 text-13 font-medium disabled:bg-none disabled:opacity-60"
             >
-              {busy ? (
-                <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
-              ) : (
-                <Link2 size={14} strokeWidth={2} aria-hidden />
-              )}
+              <Link2 size={14} strokeWidth={2} aria-hidden />
               {state.link ? "สร้างลิงก์ใหม่ตามที่เลือก และคัดลอก" : "สร้างลิงก์และคัดลอก"}
             </button>
           ) : null}
@@ -316,13 +318,14 @@ export function SignLinkModal({
           ) : null}
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void withBusy("กำลังรีเฟรชสถานะการเซ็น…", load)}
             className="-mt-2 w-fit self-end text-11-5 text-mut underline-offset-2 hover:text-ink hover:underline"
           >
             รีเฟรชสถานะการเซ็น
           </button>
         </div>
       ) : null}
+      {busy ? <SignatureLoaderOverlay label={busy} /> : null}
     </ModalShell>
   );
 }
