@@ -12,7 +12,9 @@ import {
   thaiDateParts,
   thaiLongDate,
   type DocFill,
+  type HrDocId,
 } from "@/app/recruitment/_lib/hr-documents";
+import { signKey, type SignRole } from "@/app/recruitment/_lib/hr-signatures";
 
 /**
  * สัญญาสามฉบับ — บันทึกข้อตกลงการจ้างงาน · หนังสือยินยอมหักเงินประกัน ·
@@ -32,7 +34,7 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
   const end = probationEnd(fill);
 
   return (
-    <Sheet code="HR 0204-04" letterhead>
+    <Sheet code="HR0204-04" letterhead>
       <div className="relative">
         <h1 className="hrdoc-title">บันทึกข้อตกลงการจ้างงาน</h1>
         <span className="absolute top-0 right-0 font-bold">
@@ -379,10 +381,10 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
 
       <div className="hrdoc-keep mt-[8mm] ml-[18mm] flex w-[62%] flex-col gap-[5mm]">
         <p className="text-center">{COMPANY}</p>
-        <SignLine role="นายจ้าง" name={fill.employer} />
-        <SignLine role="พนักงาน / ลูกจ้าง" name={name} />
-        <SignLine role="พยาน" name={fill.witness1} />
-        <SignLine role="พยาน" name={fill.witness2} />
+        <SignLine role="นายจ้าง" {...staffSign(fill, "contract", "employer", fill.employer)} />
+        <SignLine role="พนักงาน / ลูกจ้าง" name={name} signature={sigOf(fill, "contract", "applicant")} />
+        <SignLine role="พยาน" {...staffSign(fill, "contract", "witness1", fill.witness1)} />
+        <SignLine role="พยาน" {...staffSign(fill, "contract", "witness2", fill.witness2)} />
       </div>
     </Sheet>
   );
@@ -436,7 +438,7 @@ export function DepositConsent({ fill }: { fill: DocFill }) {
         มิได้ถูกกลฉ้อฉลหรือข่มขู่ด้วยวิธีการใด ๆ จึงลงลายมือชื่อต่อหน้าพยานไว้เป็นสำคัญ
       </Clause>
 
-      <Signatures name={name} fill={fill} />
+      <Signatures doc="deposit" name={name} fill={fill} />
     </Sheet>
   );
 }
@@ -507,19 +509,27 @@ export function RefundConsent({ fill }: { fill: DocFill }) {
         จึงยินยอมลงลายมือชื่อไว้เป็นหลักฐาน
       </Clause>
 
-      <Signatures name={name} fill={fill} />
+      <Signatures doc="refund" name={name} fill={fill} />
     </Sheet>
   );
 }
 
 /** ช่องลงนามสองคอลัมน์ของหนังสือยินยอม — ลูกจ้าง/นายจ้าง แล้วพยานสองคน */
-function Signatures({ name, fill }: { name: string; fill: DocFill }) {
+function Signatures({ doc, name, fill }: { doc: "deposit" | "refund"; name: string; fill: DocFill }) {
   return (
     <div className="hrdoc-keep mt-[7mm] grid grid-cols-2 gap-x-[8mm] gap-y-[4mm]">
-      <SignLine role="ลูกจ้าง / ผู้ให้ความยินยอม" name={name} />
-      <SignLine role="นายจ้าง" name={fill.employer} />
-      <SignLine role="พยาน" name={fill.witness1} />
-      <SignLine role="พยาน" name={fill.witness2} />
+      <SignLine role="ลูกจ้าง / ผู้ให้ความยินยอม" name={name} signature={sigOf(fill, doc, "applicant")} />
+      <SignLine role="นายจ้าง" {...staffSign(fill, doc, "employer", fill.employer)} />
+      <SignLine role="พยาน" {...staffSign(fill, doc, "witness1", fill.witness1)} />
+      <SignLine role="พยาน" {...staffSign(fill, doc, "witness2", fill.witness2)} />
     </div>
   );
+}
+
+const sigOf = (fill: DocFill, doc: HrDocId, role: SignRole) => fill.signatures?.[signKey(doc, role)];
+
+/** ช่องเจ้าหน้าที่ — เซ็นแล้วชื่อในวงเล็บเป็นชื่อคนที่เซ็นจริง (session) ไม่งั้นชื่อที่พิมพ์ไว้ */
+function staffSign(fill: DocFill, doc: HrDocId, role: SignRole, typed: string) {
+  const signature = sigOf(fill, doc, role);
+  return { name: signature?.name || typed, signature };
 }

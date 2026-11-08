@@ -10,6 +10,7 @@ import {
   thaiShortDateTime,
   type DocFill,
 } from "@/app/recruitment/_lib/hr-documents";
+import { diffSignatures, sameSignatures } from "@/app/recruitment/_lib/hr-signatures";
 import type {
   HrDocumentPrint,
   HrDocumentPrintFull,
@@ -79,14 +80,13 @@ export function useHrDocumentRecord(
   }, [enabled, load]);
 
   /**
-   * บันทึกตอนสั่งพิมพ์ — โยน error ต่อ (ผู้เรียกห่อด้วย `runAction`)
+   * ปุ่มบันทึกของกล่อง — โยน error ต่อ (ผู้เรียกห่อด้วย `runAction`)
    *
-   * **ค่าบนจอตอนกดพิมพ์ชนะเสมอ** — อ่าน `revision` ล่าสุดจากฐานก่อนยิง ไม่ใช้ค่าที่จอ
-   * ถือไว้ตอนเปิด เพราะการบันทึกผูกกับการพิมพ์แล้ว สิ่งที่อยู่บนกระดาษต้องเป็นค่าล่าสุดใน
-   * ฐานด้วย · ค่าของคนก่อนหน้าไม่หาย มีสำเนาอยู่ในประวัติการพิมพ์ของเขา
-   * (ยังได้ 409 ถ้าสองคนกดพิมพ์ในเสี้ยววินาทีเดียวกัน — กดใหม่ก็ผ่าน)
+   * **ค่าบนจอตอนกดบันทึกชนะเสมอ** — อ่าน `revision` ล่าสุดจากฐานก่อนยิง ไม่ใช้ค่าที่จอ
+   * ถือไว้ตอนเปิด · ค่าของคนก่อนหน้าไม่หาย มีสำเนาอยู่ในประวัติการส่งออกของเขา
+   * (ยังได้ 409 ถ้าสองคนกดบันทึกในเสี้ยววินาทีเดียวกัน — กดใหม่ก็ผ่าน)
    */
-  async function save(fill: DocFill): Promise<HrDocumentRecord> {
+  async function save(fill: DocFill, baseline: DocFill): Promise<HrDocumentRecord> {
     const latest = await requestJson<HrDocumentState>(
       base(applicationId),
       {},
@@ -95,7 +95,15 @@ export function useHrDocumentRecord(
     const revision = latest.record?.revision ?? 0;
     const record = await requestJson<HrDocumentRecord>(
       base(applicationId),
-      { method: "PUT", body: { fill, revision } as unknown as Record<string, unknown> },
+      {
+        method: "PUT",
+        /* ลายเซ็นส่งเป็น patch เทียบค่าที่บันทึกไว้ — ไม่ลบลายเซ็นที่ผู้สมัครเพิ่งเซ็นผ่านลิงก์ */
+        body: {
+          fill,
+          revision,
+          signaturePatch: diffSignatures(baseline.signatures, fill.signatures),
+        } as unknown as Record<string, unknown>,
+      },
       "บันทึกเอกสารไม่สำเร็จ",
     );
     setState((prev) =>
@@ -138,6 +146,11 @@ export function useHrDocumentRecord(
 export function sameFill(a: DocFill, b: DocFill): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof DocFill>;
   for (const key of keys) {
+    /* ลายเซ็นเป็นก้อนอ็อบเจกต์ — เทียบค่าข้างใน ไม่ใช่ตัวอ้างอิง */
+    if (key === "signatures") {
+      if (!sameSignatures(a.signatures, b.signatures)) return false;
+      continue;
+    }
     if ((a[key] ?? null) !== (b[key] ?? null)) return false;
   }
   return true;
@@ -146,8 +159,8 @@ export function sameFill(a: DocFill, b: DocFill): boolean {
 const docLabel = (id: string) => HR_DOCUMENTS.find((d) => d.id === id)?.label ?? id;
 
 /**
- * การพิมพ์ล่าสุด ฉบับละแถว — **อย่างเดียว** (ตามคำสั่งเจ้าของงาน 29 ก.ย. 2026 ไม่มีปุ่ม
- * บันทึกแยก การบันทึกค่าอยู่ในปุ่มพิมพ์ · ไม่เก็บทุกครั้ง พิมพ์ใหม่ = เวลาอัปเดตทับ)
+ * การพิมพ์ล่าสุด ฉบับละแถว — **อย่างเดียว** (ไม่เก็บทุกครั้ง พิมพ์ใหม่ = เวลาอัปเดตทับ)
+ * · ปุ่มบันทึกกับปุ่มส่งออก PDF แยกกันแล้ว (8 พ.ย. 2569) ส่งออกลงประวัติพร้อมสำเนาค่าบนจอ
  * · กดรายการเพื่อเทค่าบนกระดาษครั้งนั้นกลับลงช่องกรอก
  */
 export function PrintHistory({
@@ -175,7 +188,7 @@ export function PrintHistory({
       <div className="flex flex-col gap-2 rounded-field border border-alert/30 bg-alert-soft px-3 py-2.5 text-12 text-alert">
         <span className="flex items-start gap-1.5">
           <TriangleAlert size={13} strokeWidth={2} aria-hidden className="mt-0.5 flex-none" />
-          <span>{state.message} — ช่องกรอกเติมจากใบสมัครให้แทน ยังพิมพ์ได้ตามปกติ</span>
+          <span>{state.message} — ช่องกรอกเติมจากใบสมัครให้แทน ยังส่งออก PDF ได้ตามปกติ</span>
         </span>
         <button
           type="button"
@@ -195,10 +208,10 @@ export function PrintHistory({
     <div className="flex flex-col gap-1 rounded-field border border-line p-3">
       <span className="flex items-center gap-1.5 text-11-5 font-medium text-mut">
         <History size={12} strokeWidth={2} aria-hidden />
-        พิมพ์ล่าสุด
+        ส่งออกล่าสุด
       </span>
       {prints.length === 0 ? (
-        <span className="text-11-5 text-mut">ยังไม่เคยพิมพ์ฉบับไหนของใบนี้</span>
+        <span className="text-11-5 text-mut">ยังไม่เคยส่งออกฉบับไหนของใบนี้</span>
       ) : (
         <ul className="flex max-h-40 flex-col overflow-y-auto">
           {prints.map((p) => (

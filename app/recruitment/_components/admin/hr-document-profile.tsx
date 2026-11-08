@@ -1,4 +1,5 @@
-import { Box, Row, Blank, Sheet } from "@/app/recruitment/_components/admin/hr-document-paper";
+import { Box, Row, Blank, Sheet, SignLine } from "@/app/recruitment/_components/admin/hr-document-paper";
+import type { DocSignatures } from "@/app/recruitment/_lib/hr-signatures";
 import { CONSENT_ITEMS } from "@/app/recruitment/_lib/consent";
 import {
   displayAnswer,
@@ -36,7 +37,10 @@ import {
  *
  * อ่านจากใบสมัคร **ตรง ๆ ทุกช่อง** ไม่ผ่าน `DocFill` — รายงานคือสิ่งที่ผู้สมัครกรอก
  * มาจริง ไม่ใช่สิ่งที่ฝ่ายบุคคลแก้ในกล่อง · ค่าที่ระบบเติมเป็นหมึกน้ำเงินเหมือน
- * เอกสารฉบับอื่น ส่วนผลพิจารณากับลายเซ็นเว้นไว้เขียนมือ
+ * เอกสารฉบับอื่น ส่วนผลพิจารณาเว้นไว้เขียนมือ
+ *
+ * ช่องลงนามมีแค่ **ผู้สมัคร + ผู้สัมภาษณ์** (ถอดผู้อนุมัติออก — Bew 8 พ.ย. 2569) · ลายเซ็น
+ * มาจาก `signatures` ของกล่อง (ดู `hr-signatures.ts`) ชื่อผู้สมัครเติมให้เสมอ
  *
  * เลขบัตรประชาชนพิมพ์เต็ม (Bew 2 พ.ย. 2569 — ใช้ตรวจตัวผู้สมัคร) ส่วนเลขบัญชียังปิดบางส่วน
  */
@@ -47,11 +51,17 @@ export function ApplicantProfile({
   application,
   docSlots,
   requisition,
+  signatures,
+  forApplicant = false,
 }: {
   application: Application;
   docSlots: DocSlot[];
   /** คำขอสรรหาที่เลือกในกล่อง (ผูกแล้วหรือเลือกไว้ใช้บนเอกสาร) — `null` ขึ้นเป็นขีด */
   requisition: Requisition | null;
+  /** ลายเซ็นที่ลงไว้ในกล่อง — อ่านเฉพาะ `profile:*` */
+  signatures?: DocSignatures;
+  /** หน้าเซ็นของผู้สมัครเอง (`/recruitment/sign`) — ซ่อนแผน/บันทึกภายในของผู้สัมภาษณ์ */
+  forApplicant?: boolean;
 }) {
   const snapshot = application.questionSnapshot;
   const { interview } = application;
@@ -98,7 +108,7 @@ export function ApplicantProfile({
     .filter((g) => g.fields.length);
 
   return (
-    <Sheet letterhead>
+    <Sheet code="HR0221-04" letterhead>
       <div className="hrdoc-keep flex items-start gap-[5mm]">
         <div className="flex min-w-0 flex-1 flex-col">
           <h1 className="hrdoc-title">แบบสรุปข้อมูลผู้สมัครงาน</h1>
@@ -197,8 +207,12 @@ export function ApplicantProfile({
             label="ผลการสัมภาษณ์"
             value={interview.result ? INTERVIEW_RESULT_LABEL[interview.result] : "ยังไม่มีผล"}
           />
-          <Kv label="แผนสัมภาษณ์" value={interview.plan} />
-          <Kv label="บันทึกของผู้สัมภาษณ์" value={interview.note} />
+          {forApplicant ? null : (
+            <>
+              <Kv label="แผนสัมภาษณ์" value={interview.plan} />
+              <Kv label="บันทึกของผู้สัมภาษณ์" value={interview.note} />
+            </>
+          )}
         </tbody>
       </table>
 
@@ -281,24 +295,18 @@ export function ApplicantProfile({
         </Row>
 
         <div className="mt-[10mm] grid grid-cols-2 gap-x-[10mm]">
-          {["ผู้สัมภาษณ์", "ผู้อนุมัติ"].map((role) => (
-            <div key={role} className="hrdoc-sign">
-              <Row>
-                <span>ลงชื่อ</span>
-                <Blank w="14em" />
-                <span>{role}</span>
-              </Row>
-              <Row>
-                <span>(</span>
-                <Blank w="14em" />
-                <span>)</span>
-              </Row>
-              <Row>
-                <span>วันที่</span>
-                <Blank w="12em" />
-              </Row>
-            </div>
-          ))}
+          <SignLine
+            role="ผู้สมัคร"
+            name={application.erased ? "" : application.fullName}
+            signature={signatures?.["profile:applicant"]}
+            dated
+          />
+          <SignLine
+            role="ผู้สัมภาษณ์"
+            name={signatures?.["profile:interviewer"]?.name}
+            signature={signatures?.["profile:interviewer"]}
+            dated
+          />
         </div>
       </div>
 

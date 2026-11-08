@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileStack, Loader2, Printer, SquarePen } from "lucide-react";
+import { FileDown, FileStack, Link2, Loader2, Save, SquarePen } from "lucide-react";
 
 import { AttachmentGallery } from "@/components/ui/attachment-gallery";
 import { DateField, NumberField, SelectField, TextField } from "@/components/ui/field";
@@ -19,11 +19,24 @@ import {
 import {
   isHrRecordDoc,
   type HrDocumentPrint,
+  type HrDocumentState,
 } from "@/app/recruitment/_lib/hr-document-records";
 import {
   RatingEditor,
   RatingSheet,
 } from "@/app/recruitment/_components/admin/hr-document-rating";
+import {
+  SignaturePanel,
+  useMySignature,
+} from "@/app/recruitment/_components/admin/hr-document-signature";
+import { SignLinkModal } from "@/app/recruitment/_components/admin/hr-document-sign-link";
+import {
+  signKey,
+  type DocSignature,
+  type DocSignatures,
+  type SignKey,
+} from "@/app/recruitment/_lib/hr-signatures";
+import { SIGNABLE_DOCS } from "@/app/recruitment/_lib/sign-links";
 import { rateApplication } from "@/app/recruitment/_lib/driver-rating";
 import {
   DepositConsent,
@@ -71,8 +84,12 @@ import type { AnswerMap, Application, DocumentData } from "@/app/recruitment/_li
  * - ช่องทั้งหมดเติมจากใบสมัคร + ค่าฝั่งบริษัทที่เครื่องนี้ใช้ครั้งก่อนให้ตั้งแต่เปิด
  *   (ดู `initialDocFill()`) · **บันทึกลงฐานแยกจากใบสมัคร** (29 ก.ย. 2026 — ดู
  *   `hr-document-records.ts`) เคยบันทึกไว้ = เปิดมาเจอค่าเดิม · แก้ในกล่องนี้ไม่ทับ
- *   คำตอบของผู้สมัคร · สั่งพิมพ์ฉบับที่เก็บลงฐาน = บันทึกค่าที่ค้างก่อน แล้วลงประวัติ
- *   การพิมพ์พร้อมสำเนาค่าบนกระดาษ
+ *   คำตอบของผู้สมัคร
+ * - **ปุ่มบันทึกกับปุ่มส่งออก PDF แยกกัน** (Bew 8 พ.ย. 2569 — เดิมปุ่มพิมพ์คือปุ่มบันทึก) ·
+ *   บันทึก = เก็บค่าในช่องกรอก + ลายเซ็น (+ คะแนน Driver Rating ที่ค้าง) · ส่งออก =
+ *   ลงประวัติการส่งออกพร้อมสำเนาค่าบนกระดาษ แล้วเปิดหน้าพิมพ์ ไม่บันทึกค่าให้
+ * - ช่องลงนามรับลายเซ็นได้ทุกฉบับ — เจ้าหน้าที่ใช้ลายเซ็นตาม session · ผู้สมัครเซ็นสด
+ *   (`hr-document-signature.tsx`)
  * - **เลือกได้ทีละฉบับ** (ตามคำสั่งเจ้าของงาน 29 ก.ย. 2026 — ยังไม่เปิดให้พิมพ์หลายฉบับ
  *   พร้อมกัน) · เลือกฉบับไหน กระดาษกับช่องกรอกก็เป็นของฉบับนั้นฉบับเดียว
  * - ค่าที่กรอกอยู่ก้อนเดียวทั้งกล่อง สลับฉบับแล้วค่าไม่หาย — ช่องที่หลายฉบับใช้ร่วมกัน
@@ -191,7 +208,10 @@ export function HrDocumentMaker({
     );
   });
   const dirty = !sameFill(fill, baseline);
+  const [saving, setSaving] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const mine = useMySignature(!application.erased);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [openingPrint, setOpeningPrint] = useState<string | null>(null);
   const [current, setCurrent] = useState<HrDocId>(initialDoc ?? HR_DOCUMENTS[0].id);
   const [editing, setEditing] = useState<"answers" | "documents" | null>(null);
@@ -288,35 +308,105 @@ export function HrDocumentMaker({
     }
   }
 
-  async function print() {
+  /** ลงหรือล้างลายเซ็นหนึ่งช่อง — ค้างอยู่ในช่องกรอกจนกว่าจะกดบันทึก */
+  function setSignature(key: SignKey, signature: DocSignature | null) {
+    setFill((prev) => {
+      const next = { ...(prev.signatures ?? {}) };
+      if (signature) next[key] = signature;
+      else delete next[key];
+      return { ...prev, signatures: next };
+    });
+  }
+
+  const fillDirty = dirty && !application.erased;
+  const unsaved = fillDirty || (canEdit && ratingDirty > 0);
+
+  /** ปุ่มบันทึก — ค่าในช่องกรอก + ลายเซ็น และคะแนน Driver Rating ที่ค้าง (ถ้ามี) */
+  async function save() {
+    if (!unsaved) return;
+    rememberCompanyFill(fill);
+    const out = await runAction({
+      confirm: false,
+      pending: "กำลังบันทึก…",
+      success: "บันทึกแล้ว",
+      failureTitle: "บันทึกไม่สำเร็จ",
+      run: async () => {
+        setSaving(true);
+        try {
+          const saved = fillDirty ? await store.save(fill, baseline) : null;
+          if (canEdit && ratingDirty && onPatch) await onPatch({ rating: ratingPatch });
+          return saved;
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+    if (out.status === "done" && out.data) {
+      setBaseline(out.data.fill);
+      setFill(out.data.fill);
+    }
+  }
+
+  /**
+   * ส่งออก PDF — **ไม่บันทึกค่าให้** (แยกจากปุ่มบันทึก) · ฉบับที่เก็บลงฐานลงประวัติ
+   * การส่งออกพร้อมสำเนาค่าบนกระดาษก่อน ล้มแล้วไม่เปิดหน้าพิมพ์ กระดาษที่ออกไปทุกแผ่น
+   * จึงมีประวัติเสมอ
+   */
+  async function exportPdf() {
     rememberCompanyFill(fill);
 
-    /* ฉบับที่เก็บลงฐาน: **ปุ่มพิมพ์คือปุ่มบันทึก** (ไม่มีปุ่มบันทึกแยก ตามคำสั่งเจ้าของงาน
-       29 ก.ย. 2026) — บันทึกค่าในช่องกรอก แล้วลงประวัติพร้อมสำเนาค่าบนกระดาษ ครบทั้งสอง
-       ขั้นถึงจะเปิดหน้าพิมพ์ · ล้มขั้นไหนไม่พิมพ์ กระดาษที่ออกไปทุกแผ่นจึงมีประวัติเสมอ */
     if (isHrRecordDoc(doc.id) && !application.erased) {
       const docId = doc.id;
       const out = await runAction({
         confirm: false,
         success: false,
-        failureTitle: "บันทึกก่อนพิมพ์ไม่สำเร็จ — ยังไม่ได้พิมพ์",
+        failureTitle: "บันทึกประวัติการส่งออกไม่สำเร็จ — ยังไม่ได้ส่งออก",
         run: async () => {
           setPrinting(true);
           try {
-            const saved = await store.save(fill);
-            await store.logPrint(docId, saved.fill);
-            return saved;
+            return await store.logPrint(docId, fill);
           } finally {
             setPrinting(false);
           }
         },
       });
       if (out.status !== "done") return;
-      setBaseline(out.data.fill);
-      setFill(out.data.fill);
     }
 
     printAs(`${application.ref} ${personName(fill)} - ${doc.label}`);
+  }
+
+  /**
+   * เทลายเซ็นที่ผู้สมัครเซ็นผ่านลิงก์ (อยู่ในฐานแล้ว) เข้ากล่อง — ค่าที่บันทึกไว้กลายเป็นของ
+   * ในฐาน ส่วนช่องอื่นที่แก้ค้างบนจอยังอยู่ครบ
+   */
+  function pullApplicantSignatures(state: HrDocumentState) {
+    const record = state.record;
+    if (!record) return;
+    const fromDb: DocSignatures = {};
+    for (const doc of SIGNABLE_DOCS) {
+      const key = signKey(doc, "applicant");
+      const sig = record.fill.signatures?.[key];
+      if (sig) fromDb[key] = sig;
+    }
+    setBaseline(record.fill);
+    setFill((prev) => ({ ...prev, signatures: { ...(prev.signatures ?? {}), ...fromDb } }));
+  }
+
+  /** ปิดกล่องทั้งที่ยังไม่บันทึก — ถามก่อน (ปุ่มส่งออกไม่บันทึกให้แล้ว) */
+  async function requestClose() {
+    if (
+      unsaved &&
+      !(await confirm({
+        title: "ปิดโดยไม่บันทึก?",
+        text: "ค่าที่แก้และลายเซ็นที่ลงไว้ยังไม่ได้บันทึก จะหายเมื่อปิดกล่อง",
+        confirmText: "ปิดเลย",
+        cancelText: "กลับไปบันทึก",
+        tone: "warn",
+      }))
+    )
+      return;
+    onClose();
   }
 
   const end = probationEnd(fill);
@@ -549,7 +639,7 @@ export function HrDocumentMaker({
           <div className="flex flex-col gap-3 rounded-field border border-line p-3">
             <p className="flex items-baseline justify-between gap-2 text-12-5 font-medium">
               ผู้ลงนามฝั่งบริษัท
-              <span className="text-11 font-normal text-mut">เครื่องนี้จำไว้เมื่อกดพิมพ์</span>
+              <span className="text-11 font-normal text-mut">เครื่องนี้จำไว้เมื่อกดบันทึก/ส่งออก</span>
             </p>
             <TextField id="doc-employer" label="นายจ้าง (ผู้รับมอบอำนาจ)" optional value={fill.employer} onChange={set("employer")} />
             <TextField id="doc-witness1" label="พยาน 1" optional value={fill.witness1} onChange={set("witness1")} />
@@ -565,34 +655,61 @@ export function HrDocumentMaker({
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-11-5 tracking-wider text-primary">{application.ref}</span>
-          <span>เติมจากใบสมัครให้แล้ว แก้ได้ทุกช่อง · กดพิมพ์แล้วค่าจะถูกบันทึกไว้ (ไม่ทับคำตอบของผู้สมัคร)</span>
+          <span>เติมจากใบสมัครให้แล้ว แก้ได้ทุกช่อง · กดบันทึกเพื่อเก็บค่าและลายเซ็น (ไม่ทับคำตอบของผู้สมัคร)</span>
         </span>
       }
-      onClose={onClose}
+      onClose={() => void requestClose()}
       width="1320px"
       tone="form"
       footer={
-        <div className="flex w-full flex-wrap items-center justify-end gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-3">
+          {/* ปิดอยู่ซ้ายสุด แยกจากกลุ่มปุ่มทำงานทางขวา (Bew 8 พ.ย. 2569) */}
+          <button
+            type="button"
+            onClick={() => void requestClose()}
+            className="btn-sec px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40"
+          >
+            ปิด
+          </button>
+          <span className={`min-w-0 flex-1 text-12 ${unsaved ? "text-warning" : "text-mut"}`}>
+            {unsaved ? "มีค่าที่ยังไม่บันทึก — ส่งออก PDF ได้ แต่ค่าจะยังไม่ถูกเก็บจนกว่าจะกดบันทึก" : ""}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {!application.erased ? (
+              <button
+                type="button"
+                onClick={() => setLinkOpen(true)}
+                className="btn-sec flex items-center gap-2 px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40 hover:text-primary"
+              >
+                <Link2 size={14} strokeWidth={2} aria-hidden />
+                ลิงก์ให้ผู้สมัครเซ็น
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={onClose}
-              className="btn-sec px-3.5 py-2.5 text-13 transition-colors hover:border-primary/40"
+              onClick={() => void save()}
+              disabled={!unsaved || saving}
+              className="btn-sec flex items-center gap-2 px-4 py-2.5 text-13 font-medium transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-60"
             >
-              ปิด
+              {saving ? (
+                <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
+              ) : (
+                <Save size={14} strokeWidth={2} aria-hidden />
+              )}
+              บันทึกข้อมูล
             </button>
             <button
               type="button"
-              onClick={() => void print()}
+              onClick={() => void exportPdf()}
               disabled={printing}
               className="btn-pri flex items-center gap-2 px-4 py-2.5 text-13 font-medium disabled:opacity-60"
             >
               {printing ? (
                 <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
               ) : (
-                <Printer size={14} strokeWidth={2} aria-hidden />
+                <FileDown size={14} strokeWidth={2} aria-hidden />
               )}
-              พิมพ์ / บันทึก PDF · {doc.label}
+              ส่งออก PDF · {doc.label}
             </button>
           </div>
         </div>
@@ -661,6 +778,19 @@ export function HrDocumentMaker({
               </div>
             ))}
 
+            {!application.erased ? (
+              <SignaturePanel
+                doc={doc.id}
+                signatures={fill.signatures}
+                applicantName={
+                  doc.id === "profile" ? application.fullName : personName(fill) || application.fullName
+                }
+                staffNames={{ employer: fill.employer, witness1: fill.witness1, witness2: fill.witness2 }}
+                mine={mine}
+                onSign={setSignature}
+              />
+            ) : null}
+
             {doc.id === "rating" ? (
               <RatingEditor
                 result={rating}
@@ -716,7 +846,12 @@ export function HrDocumentMaker({
           className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-auto bg-canvas p-6 print:block print:overflow-visible print:bg-transparent print:p-0"
         >
           {doc.id === "profile" ? (
-            <ApplicantProfile application={application} docSlots={docSlots} requisition={chosen} />
+            <ApplicantProfile
+              application={application}
+              docSlots={docSlots}
+              requisition={chosen}
+              signatures={fill.signatures}
+            />
           ) : null}
           {doc.id === "rating" ? (
             <RatingSheet application={application} result={rating} requisition={chosen} />
@@ -727,6 +862,17 @@ export function HrDocumentMaker({
         </div>
       </div>
 
+      {linkOpen ? (
+        <SignLinkModal
+          applicationId={application.id}
+          applicantName={application.fullName}
+          fill={fill}
+          unsaved={fillDirty}
+          initialDoc={doc.id}
+          onPull={pullApplicantSignatures}
+          onClose={() => setLinkOpen(false)}
+        />
+      ) : null}
       {editing === "answers" && onPatch ? (
         <CandidateEditModal
           application={application}

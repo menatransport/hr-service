@@ -52,11 +52,21 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.5.1";
-export const API_DOCS_UPDATED = "2026-11-06";
+export const API_DOCS_VERSION = "4.6.0";
+export const API_DOCS_UPDATED = "2026-11-08";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-08",
+    version: "4.6.0",
+    changes: [
+      "เพิ่ม `GET/PUT/DELETE /api/recruitment/my-signature` — ลายเซ็นประจำตัวเจ้าหน้าที่ตาม session",
+      "เพิ่ม `GET/POST/DELETE /api/recruitment/applications/{id}/sign-link` + `POST /api/recruitment/public/sign/{token}` — ลิงก์ให้ผู้สมัครเซ็นเอกสารเองโดยไม่ต้องล็อกอิน (`/recruitment/sign/{token}`)",
+      "`PUT …/hr-documents` รับ `signaturePatch` (`{ [key]: signature | null }`) — ลายเซ็นบันทึกเป็น patch ทับของในฐาน ไม่ลบลายเซ็นที่ผู้สมัครเพิ่งเซ็นผ่านลิงก์",
+      "`DocFill` เพิ่ม `signatures` (คีย์ `<ฉบับ>:<ช่อง>` เช่น `contract:employer` → `{ image, name, by, employeeId, signedAt }`) — `PUT …/hr-documents` และ `POST …/hr-documents/prints` เก็บลายเซ็นไปด้วย",
+    ],
+  },
   {
     date: "2026-11-06",
     version: "4.5.1",
@@ -410,7 +420,7 @@ export const API_GROUPS: ApiGroup[] = [
         method: "PUT",
         path: "/api/drivers/{drivercode}/photo",
         summary: "ตั้งรูปประจำตัว พจส.",
-        description: "อัปขึ้น S3 (private) ที่ `mass-image/drivers/{drivercode}/avatar/` บันทึกลิงก์ `/api/media/…` แล้วอ่านกลับมาตรวจ · รูปเดิมถูกลบ · พ้นสภาพครบ 1 เดือนรูปถูกลบอัตโนมัติ",
+        description: "รูปประจำตัว = รูปถ่ายหน้าตรงในใบสมัคร · คนที่มีใบสมัคร (ผูกผ่านคำขอสรรหา หรือเลขบัตรตรงกัน) = แทนรูปหน้าตรงในใบนั้น (`mass-image/applications/{ref}/portrait/`) หน้าผู้สมัครเห็นรูปเดียวกัน · ไม่มีใบสมัคร = อัปขึ้น S3 (private) ที่ `mass-image/drivers/{drivercode}/avatar/` บันทึกลิงก์ `/api/media/…` แล้วอ่านกลับมาตรวจ · รูปเดิมถูกลบ · พ้นสภาพครบ 1 เดือนรูปถูกลบอัตโนมัติ",
         access: "login",
         params: [P("drivercode", "รหัส พจส."), { name: "file", in: "form", type: "File (JPG/PNG)", required: true, desc: "รูปที่ครอปแล้ว" }],
         response: "{ photoUrl }",
@@ -760,6 +770,67 @@ export const API_GROUPS: ApiGroup[] = [
       },
       {
         method: "GET",
+        path: "/api/recruitment/applications/{id}/sign-link",
+        summary: "ลิงก์ให้ผู้สมัครเซ็นเอง — สถานะ",
+        description: "ลิงก์ที่ใช้ได้อยู่ (ถ้ามี) + ฉบับที่ช่องผู้สมัครในฐานเซ็นแล้ว · `hasRecord` = บันทึกเอกสารแล้วหรือยัง (ยังไม่บันทึกสร้างลิงก์ไม่ได้)",
+        access: "login",
+        params: [P("id", "รหัสใบสมัคร")],
+        response:
+          "{ link: { token, docs, createdAt, createdBy, expiresAt } | null, signed: { [docId]: signedAt }, hasRecord }",
+      },
+      {
+        method: "POST",
+        path: "/api/recruitment/applications/{id}/sign-link",
+        summary: "สร้างลิงก์ให้ผู้สมัครเซ็น",
+        description:
+          "ลิงก์ = `/recruitment/sign/{token}` (ไม่ต้องล็อกอิน) อายุ 7 วัน · ใบหนึ่งมีลิงก์เดียว สร้างใหม่ = ลิงก์เก่าใช้ไม่ได้ทันที · ต้องบันทึกเอกสารก่อน",
+        access: "login",
+        params: [
+          P("id", "รหัสใบสมัคร"),
+          { name: "docs", in: "body", type: '("profile" | "contract" | "deposit" | "refund")[]', required: true, desc: "ฉบับที่ให้ผู้สมัครเซ็น อย่างน้อย 1" },
+        ],
+        response: "เหมือน GET",
+        errors: [{ status: 400, when: "ไม่ได้เลือกฉบับ · ยังไม่บันทึกเอกสาร · ข้อมูลผู้สมัครถูกลบแล้ว" }],
+      },
+      {
+        method: "DELETE",
+        path: "/api/recruitment/applications/{id}/sign-link",
+        summary: "ยกเลิกลิงก์ให้ผู้สมัครเซ็น",
+        description: "ลายเซ็นที่ผู้สมัครเซ็นไปแล้วยังอยู่",
+        access: "login",
+        params: [P("id", "รหัสใบสมัคร")],
+        response: "เหมือน GET (link: null)",
+      },
+      {
+        method: "GET",
+        path: "/api/recruitment/my-signature",
+        summary: "ลายเซ็นของฉัน (ตาม session)",
+        description:
+          "ชื่อ/ตำแหน่งจาก session + ลายเซ็นที่บันทึกไว้ — ใช้ลงช่องเจ้าหน้าที่ (ผู้สัมภาษณ์ · นายจ้าง · พยาน) ในกล่องทำเอกสาร · `image: null` = ยังไม่เคยตั้ง",
+        access: "login",
+        response: "{ employeeId, name, position, image: string | null, updatedAt: string | null }",
+      },
+      {
+        method: "PUT",
+        path: "/api/recruitment/my-signature",
+        summary: "บันทึก/เปลี่ยนลายเซ็นของฉัน",
+        description: "เจ้าของมาจาก session เสมอ · เอกสารที่เซ็นไปแล้วเก็บสำเนารูปของตัวเอง ไม่เปลี่ยนตาม",
+        access: "login",
+        params: [
+          { name: "image", in: "body", type: "string", required: true, desc: "data URL ภาพ (`data:image/png;base64,…`) ไม่เกิน 300,000 ตัวอักษร" },
+        ],
+        response: "{ employeeId, name, position, image, updatedAt }",
+        errors: [{ status: 400, when: "รูปลายเซ็นไม่ใช่ data URL ภาพ หรือใหญ่เกินไป" }],
+      },
+      {
+        method: "DELETE",
+        path: "/api/recruitment/my-signature",
+        summary: "ลบลายเซ็นของฉัน",
+        access: "login",
+        response: "{ employeeId, name, position, image: null, updatedAt: null }",
+      },
+      {
+        method: "GET",
         path: "/api/recruitment/questions",
         summary: "คลังคำถามทั้งหมด",
         access: "open-get",
@@ -876,6 +947,21 @@ export const API_GROUPS: ApiGroup[] = [
         access: "public",
         response: "{ ref, createdAt }",
         errors: [{ status: 400, when: "คำตอบไม่ผ่าน / ความยินยอมไม่ครบ / ส่งซ้ำ" }],
+      },
+      {
+        method: "POST",
+        path: "/api/recruitment/public/sign/{token}",
+        summary: "ผู้สมัครลงลายมือชื่อผ่านลิงก์",
+        description:
+          "ไม่ต้องล็อกอิน — ด่านคือ token สุ่มที่ยังไม่หมดอายุ · เขียนได้แค่ช่องผู้สมัครของฉบับที่อยู่ในลิงก์ ครั้งเดียวต่อฉบับ (ฝ่ายบุคคลล้างให้เซ็นใหม่ได้) · ชื่อใต้ลายเซ็นมาจากเอกสาร",
+        access: "public",
+        params: [
+          P("token", "token ในลิงก์"),
+          { name: "docId", in: "body", type: '"profile" | "contract" | "deposit" | "refund"', required: true, desc: "ฉบับที่ลงนาม" },
+          { name: "image", in: "body", type: "string", required: true, desc: "data URL ภาพลายเซ็น ไม่เกิน 300,000 ตัวอักษร" },
+        ],
+        response: "{ image, name, by: \"applicant\", employeeId: \"\", signedAt }",
+        errors: [{ status: 400, when: "ลิงก์หมดอายุ/ถูกยกเลิก · ฉบับไม่อยู่ในลิงก์ · ลงนามไปแล้ว · รูปไม่ถูกต้อง" }],
       },
       {
         method: "POST",

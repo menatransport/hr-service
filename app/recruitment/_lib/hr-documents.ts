@@ -22,6 +22,7 @@
  */
 
 import { digitsOnly, displayAnswer, findByRole, formatNationalId, formatPhone } from "./form";
+import type { DocSignatures } from "./hr-signatures";
 import { customerLabel, positionLabel, type Requisition } from "./requisitions/types";
 import type { Application, QuestionSnapshot } from "./types";
 
@@ -46,7 +47,7 @@ export const HR_DOCUMENTS = [
        ตรง ๆ ไม่มีช่องให้เติม แก้ข้อมูลได้ที่ใบสมัครผ่านปุ่มในแผงซ้าย */
     id: "profile",
     label: "รายงานผู้สมัคร",
-    code: "",
+    code: "HR0221-04",
     hint: "สรุปข้อมูลที่ผู้สมัครกรอกฟอร์มเข้ามา",
   },
   {
@@ -60,7 +61,7 @@ export const HR_DOCUMENTS = [
   {
     id: "contract",
     label: "สัญญาจ้าง",
-    code: "HR 0204-04",
+    code: "HR0204-04",
     hint: "บันทึกข้อตกลงการจ้างงาน (กลุ่ม C)",
   },
   {
@@ -121,6 +122,12 @@ export interface DocFill {
   employer: string;
   witness1: string;
   witness2: string;
+
+  /**
+   * ลายเซ็นที่ลงช่องแล้ว แยกตามฉบับ+ช่อง (`contract:employer`) — ดู `hr-signatures.ts`
+   * · ค่าที่บันทึกก่อน 8 พ.ย. 2569 ไม่มีช่องนี้ อ่านเป็น `{}`
+   */
+  signatures?: DocSignatures;
 }
 
 /**
@@ -367,6 +374,7 @@ export function initialDocFill(facts: ApplicantFacts, appliedPosition: string): 
     startDate: ready && ready > today ? ready : today,
     guarantor: "",
     deductFrom: "",
+    signatures: {},
   };
 }
 

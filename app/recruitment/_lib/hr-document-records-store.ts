@@ -2,6 +2,12 @@ import { ObjectId, type Collection, type WithId } from "mongodb";
 
 import { hrCol } from "@/lib/db";
 import type { DocFill } from "./hr-documents";
+import {
+  applySignaturePatch,
+  sanitizeSignaturePatch,
+  sanitizeSignatures,
+  type SignaturePatch,
+} from "./hr-signatures";
 import { RecruitmentError } from "./questions";
 import {
   isHrRecordDoc,
@@ -118,7 +124,10 @@ const MAX_ADDRESS = 500;
 
 /** ช่องข้อความล้วน (ไม่ใช่วันที่/ตัวเลข) พร้อมเพดานความยาวของแต่ละช่อง */
 const TEXT_FIELD_CAPS: Record<
-  Exclude<keyof DocFill, "docDate" | "startDate" | "salary" | "probationDays" | "deposit" | "installment">,
+  Exclude<
+    keyof DocFill,
+    "docDate" | "startDate" | "salary" | "probationDays" | "deposit" | "installment" | "signatures"
+  >,
   number
 > = {
   title: MAX_TEXT,
@@ -188,6 +197,8 @@ export function sanitizeDocFill(input: unknown): DocFill {
   for (const key of NUMBER_FIELDS) {
     out[key] = sanitizeAmount(body[key]);
   }
+  /* รูปลายเซ็นต้องเป็น data URL ภาพเท่านั้น และมีเพดานขนาด — ดู `hr-signatures.ts` */
+  out.signatures = sanitizeSignatures(body.signatures);
   return out as unknown as DocFill;
 }
 
@@ -279,7 +290,11 @@ export async function getHrDocumentPrint(
 
 /* -------------------------------------------------------------------------- เขียน */
 
-function parseSaveInput(input: unknown): { fill: DocFill; revision: number } {
+function parseSaveInput(input: unknown): {
+  fill: DocFill;
+  revision: number;
+  signaturePatch: SignaturePatch | null;
+} {
   if (!input || typeof input !== "object") {
     throw new RecruitmentError("ข้อมูลที่ส่งมาไม่ถูกต้อง");
   }
@@ -290,7 +305,7 @@ function parseSaveInput(input: unknown): { fill: DocFill; revision: number } {
   if (!Number.isInteger(revision) || revision < 0) {
     throw new RecruitmentError("revision ไม่ถูกต้อง");
   }
-  return { fill, revision };
+  return { fill, revision, signaturePatch: sanitizeSignaturePatch(body.signaturePatch) };
 }
 
 /**
@@ -309,12 +324,13 @@ export async function saveHrDocument(
   actor: HrActor,
 ): Promise<HrDocumentRecord> {
   const { ref } = await guardApplication(applicationId, { forWrite: true });
-  const { fill, revision } = parseSaveInput(input);
+  const { fill, revision, signaturePatch } = parseSaveInput(input);
 
   const col = await records();
   const now = new Date().toISOString();
 
   if (revision === 0) {
+    if (signaturePatch) fill.signatures = applySignaturePatch({}, signaturePatch);
     const doc: HrDocumentDoc = {
       applicationId,
       ref,
@@ -337,6 +353,16 @@ export async function saveHrDocument(
       }
       throw err;
     }
+  }
+
+  /* ลายเซ็นเป็น patch ทับของในฐาน — ผู้สมัครเซ็นผ่านลิงก์ภายนอกระหว่างที่กล่องเปิดค้าง
+     ได้ ลายเซ็นนั้นต้องไม่หายเพราะจอที่ไม่รู้จักมันกดบันทึก (ไม่ส่ง patch = แบบเดิม ทั้งก้อน) */
+  if (signaturePatch) {
+    const current = await col.findOne({ applicationId, revision }, { projection: { "fill.signatures": 1 } });
+    if (!current) {
+      throw new HrDocumentError("มีคนบันทึกเอกสารนี้ไปก่อนแล้ว — โหลดค่าล่าสุดก่อนแก้ต่อ", 409);
+    }
+    fill.signatures = applySignaturePatch(current.fill?.signatures, signaturePatch);
   }
 
   const updated = await col.findOneAndUpdate(
@@ -416,5 +442,7 @@ export async function eraseHrDocuments(applicationId: string): Promise<void> {
   await Promise.all([
     (await records()).deleteMany({ applicationId }),
     (await prints()).deleteMany({ applicationId }),
+    /* ลิงก์ให้ผู้สมัครเซ็นเปิดดูเอกสารเหล่านี้ได้ — ลบไปด้วย (เขียนตรงแทน import `sign-link-store.ts` กัน import cycle) */
+    (await hrCol("signLinks")).deleteMany({ applicationId }),
   ]);
 }

@@ -1,5 +1,7 @@
 import { Sarabun } from "next/font/google";
 
+import { thaiLongDate } from "@/app/recruitment/_lib/hr-documents";
+
 /**
  * ชิ้นส่วนกระดาษของเอกสาร HR — แผ่น A4 · ช่องเส้นประ · ช่องติ๊ก · ช่องลงนาม
  *
@@ -20,26 +22,58 @@ const sarabun = Sarabun({
   display: "swap",
 });
 
-/** แผ่น A4 หนึ่งแผ่นบนจอ — ตอนพิมพ์คลี่ตามเนื้อหาและขึ้นหน้าใหม่ก่อนแผ่นถัดไป */
+/**
+ * แผ่น A4 หนึ่งแผ่นบนจอ — ตอนพิมพ์คลี่ตามเนื้อหาและขึ้นหน้าใหม่ก่อนแผ่นถัดไป
+ *
+ * `letterhead` = กระดาษบริษัทเต็มชุด: หัว (โลโก้ + ชื่อบริษัท) และท้าย (ISO + ที่อยู่
+ * สำนักงาน — `public/hr-doc-footer.jpg`, Bew 8 พ.ย. 2569) · บนจอท้ายกระดาษอยู่ล่างสุดของแผ่น
+ * ตอนพิมพ์ต้องขึ้น**ทุกหน้า** (สัญญาจ้างยาวเจ็ดหน้าในแผ่นเดียว) จึงเป็น `position: fixed`
+ * ซึ่ง Chrome วาดซ้ำทุกหน้า + ตาราง `.hrdoc-frame` ที่ `tfoot` เว้นที่ว่างเท่าท้ายกระดาษ
+ * ซ้ำทุกหน้า เนื้อหาจึงไม่ไหลทับ · บนจอตารางเป็น `display: contents` — ลูกยังเป็น
+ * flex item ของแผ่นเหมือนเดิม
+ */
 export function Sheet({
   code,
   letterhead = false,
   children,
 }: {
-  /** รหัสแบบฟอร์มมุมขวาบน เช่น `HR 0204-04` */
+  /** รหัสแบบฟอร์มมุมขวาบน เช่น `HR0204-04` */
   code?: string;
-  /** หัวกระดาษบริษัทแบบสัญญา — ใบสมัครวาดหัวของตัวเอง */
+  /** หัว + ท้ายกระดาษบริษัท — ใบสมัครวาดหัวของตัวเอง */
   letterhead?: boolean;
   children: React.ReactNode;
 }) {
+  if (!letterhead) {
+    return (
+      <section className={`hrdoc-sheet elev-card ${sarabun.className}`}>
+        {code ? <p className="hrdoc-small text-right">{code}</p> : null}
+        {children}
+      </section>
+    );
+  }
   return (
     <section className={`hrdoc-sheet elev-card ${sarabun.className}`}>
-      {letterhead ? (
-        <Letterhead code={code} />
-      ) : code ? (
-        <p className="hrdoc-small text-right">{code}</p>
-      ) : null}
-      {children}
+      <table className="hrdoc-frame">
+        <tbody>
+          <tr>
+            <td>
+              <Letterhead code={code} />
+              {children}
+            </td>
+          </tr>
+        </tbody>
+        <tfoot aria-hidden>
+          <tr>
+            <td>
+              <div className="hrdoc-footer-space" />
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+      <footer className="hrdoc-footer">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/hr-doc-footer.jpg" alt="ISO 9001 · ISO 45001 · ที่อยู่สำนักงาน" />
+      </footer>
     </section>
   );
 }
@@ -134,13 +168,33 @@ export function Fill({ v, w = "6em" }: { v?: string; w?: string }) {
   return <Blank v={v} w={v?.trim() ? "0" : w} />;
 }
 
-/** ช่องลงนาม — `ลงชื่อ.......บทบาท` แล้ววงเล็บชื่อบรรทัดล่าง */
-export function SignLine({ role, name }: { role: string; name?: string }) {
+/**
+ * ช่องลงนาม — `ลงชื่อ.......บทบาท` แล้ววงเล็บชื่อบรรทัดล่าง · มีรูปลายเซ็น (`signature`)
+ * = วางรูปทับเส้นประ ท่าเดียวกับเซ็นปากกาบนกระดาษ · `dated` = มีบรรทัดวันที่ด้วย
+ * (เติมวันที่เซ็นให้เมื่อมีลายเซ็น)
+ */
+export function SignLine({
+  role,
+  name,
+  signature,
+  dated = false,
+}: {
+  role: string;
+  name?: string;
+  signature?: { image: string; signedAt: string };
+  dated?: boolean;
+}) {
   return (
     <div className="hrdoc-sign">
       <Row>
         <span>ลงชื่อ</span>
-        <Blank w="15em" />
+        <span className="hrdoc-blank hrdoc-sig-slot" style={{ minWidth: "15em" }}>
+          {signature ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={signature.image} alt="" className="hrdoc-sig-img" />
+          ) : null}
+          {" "}
+        </span>
         <span>{role}</span>
       </Row>
       <Row className="justify-center">
@@ -148,6 +202,18 @@ export function SignLine({ role, name }: { role: string; name?: string }) {
         <Blank v={name} w="14em" />
         <span>)</span>
       </Row>
+      {dated ? (
+        <Row className="justify-center">
+          <span>วันที่</span>
+          <Blank v={signature ? thaiLongDate(bangkokDate(signature.signedAt)) : ""} w="12em" />
+        </Row>
+      ) : null}
     </div>
   );
+}
+
+/** ประทับเวลา ISO → `YYYY-MM-DD` ตามเวลาไทย */
+function bangkokDate(iso: string): string {
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? "" : new Date(ms + 7 * 3_600_000).toISOString().slice(0, 10);
 }

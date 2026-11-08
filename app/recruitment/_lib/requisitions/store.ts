@@ -340,6 +340,15 @@ export async function listRequisitions(): Promise<Requisition[]> {
   return rows;
 }
 
+/** คำขอที่ใบสมัครนี้ผูกอยู่ (ไม่นับที่ยกเลิก) — หน้าเซ็นของผู้สมัครใช้หัวรายงาน */
+export async function findRequisitionForApplication(applicationId: string): Promise<Requisition | null> {
+  const doc = await (await requisitions()).findOne({
+    "match.applicationId": applicationId,
+    status: { $ne: "cancelled" },
+  });
+  return doc ? toRequisition(doc) : null;
+}
+
 async function byId(col: Collection<RequisitionDoc>, id: string) {
   if (!ObjectId.isValid(id)) throw new RequisitionError("ไม่พบคำขอที่ระบุ");
   const doc = await col.findOne({ _id: new ObjectId(id) });

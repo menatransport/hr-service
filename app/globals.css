@@ -161,6 +161,9 @@
   /** ย้ายไปรถร่วม (ทะเบียน พจส.) — คู่ของ `alert` ที่ใช้กับพ้นสภาพ · `-soft` ทึบสนิทเหตุผลเดียวกัน */
   --color-transfer: #7c3aed;
   --color-transfer-soft: color-mix(in oklab, #7c3aed 12%, #fff);
+  /** ปุ่มดึงข้อความจากรูป (OCR) แท็บเอกสาร พจส. — ม่วงโปร่งสว่าง ใช้คู่ `bg-ocr/10` · `-ink` = ตัวหนังสือบนพื้นอ่อน */
+  --color-ocr: #8b5cf6;
+  --color-ocr-ink: #6d28d9;
   /** สีแบรนด์ LINE — ปุ่ม/กล่องส่งรายงาน RC Alert เข้ากลุ่มไลน์เท่านั้น */
   --color-chat: #06c755;
   --color-chat-ink: #058a3c;
@@ -373,6 +376,8 @@
   --color-alert-soft: color-mix(in oklab, #ff7a70 13%, #161c1b);
   --color-transfer: #b794f6;
   --color-transfer-soft: color-mix(in oklab, #b794f6 14%, #161c1b);
+  --color-ocr: #a78bfa;
+  --color-ocr-ink: #c4b5fd;
   --color-chat: #06c755;
   --color-chat-ink: #4ade80;
   --color-sla: #f0a35e;
@@ -2716,6 +2721,54 @@ a.home-row:hover .home-row-arrow {
   align-items: center;
 }
 
+/* ท้ายกระดาษบริษัท (`Sheet letterhead`) — รูป ISO + ที่อยู่ กว้างเต็มเนื้อที่ 174mm
+   (สูง ≈ 34mm ตามสัดส่วนรูป) · บนจอ: ตารางกรอบหายไป (`contents`) เซลล์เนื้อหาเป็น
+   flex column ที่ยืดเต็มแผ่น ของที่ `mt-auto` จึงยังชิดล่างเหนือท้ายกระดาษ */
+.hrdoc-frame,
+.hrdoc-frame > tbody,
+.hrdoc-frame > tbody > tr {
+  display: contents;
+}
+
+.hrdoc-frame > tbody > tr > td {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  padding: 0;
+}
+
+.hrdoc-frame > tfoot {
+  display: none;
+}
+
+.hrdoc-footer {
+  flex: none;
+  margin-top: 5mm;
+}
+
+.hrdoc-footer img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* รูปลายเซ็นวางทับเส้นประของช่อง “ลงชื่อ” — ล้นขึ้นด้านบนได้เหมือนเซ็นปากกาจริง
+   ไม่ดันบรรทัดให้สูงขึ้น (absolute) */
+.hrdoc-sig-slot {
+  position: relative;
+}
+
+.hrdoc-sig-img {
+  position: absolute;
+  bottom: 0.1em;
+  left: 50%;
+  max-width: 100%;
+  height: 13mm;
+  object-fit: contain;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 /* ช่องกรอกในแผงซ้ายของกล่องทำเอกสาร — ค่าที่พิมพ์/เลือกไว้เป็น indigo คู่กับหมึกบนกระดาษ
    · placeholder ยังเป็น `mut` (มาจาก `::placeholder`) · dropdown ที่ยังไม่ได้เลือกมี
    `data-placeholder` จึงไม่ถูกย้อมสี */
@@ -2826,6 +2879,44 @@ a.home-row:hover .home-row-arrow {
     min-height: 0;
     padding: 0 4mm 0 8mm;
     box-shadow: none !important;
+  }
+
+  /* ท้ายกระดาษซ้ำทุกหน้า — `fixed` ตอนพิมพ์ Chrome วาดซ้ำทุกหน้าที่ขอบล่างของพื้นที่
+     พิมพ์ (ซ้าย/ขวาเท่าขอบในของแผ่น) · `tfoot` ของตารางกรอบก็ซ้ำทุกหน้า ช่องว่างใน
+     `tfoot` (สูงเท่ารูป + ระยะห่าง) จึงกันเนื้อหาไม่ให้ไหลลงไปทับรูป */
+  .hrdoc-frame {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .hrdoc-frame > tbody {
+    display: table-row-group;
+  }
+
+  .hrdoc-frame > tbody > tr {
+    display: table-row;
+  }
+
+  .hrdoc-frame > tbody > tr > td {
+    display: table-cell;
+    vertical-align: top;
+  }
+
+  .hrdoc-frame > tfoot {
+    display: table-footer-group;
+  }
+
+  .hrdoc-footer-space {
+    height: 39mm;
+  }
+
+  .hrdoc-footer {
+    position: fixed;
+    right: 4mm;
+    bottom: 0;
+    left: 8mm;
+    margin: 0;
   }
 
   /* แผ่นถัดไปขึ้นหน้าใหม่เสมอ — หน้าในใบสมัครและแต่ละฉบับไม่ไหลต่อกัน */
