@@ -17,6 +17,11 @@ import {
 import { DateField, TextField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
+  ImageTextButton,
+  ImageTextPanel,
+  useImageText,
+} from "@/app/recruitment/_components/admin/doc-text-reader";
+import {
   ACCEPTED_LABEL,
   ACCEPT_ATTR,
   isAcceptedImage,
@@ -60,6 +65,7 @@ const FORM_FIELDS = DOCUMENT_FIELDS.filter((f) => !f.legacy);
 export function CandidateDocumentsModal({
   application,
   docSlots,
+  initialSlot,
   onPatch,
   onClose,
 }: {
@@ -69,6 +75,8 @@ export function CandidateDocumentsModal({
    * ที่ไม่ได้ขอตอนสมัครแต่ถือมาวันสัมภาษณ์) ช่องที่ซ่อนมีป้ายบอกไว้
    */
   docSlots: DocSlot[];
+  /** เปิดมาที่เอกสารนี้ — เช่น กดรูปของบัตรประชาชนในหน้าประวัติ พจส. */
+  initialSlot?: string;
   onPatch: (patch: {
     files: Record<string, string | null>;
     documents: DocumentData;
@@ -96,6 +104,7 @@ export function CandidateDocumentsModal({
   /* เริ่มที่เอกสารแรกที่มีรูปและมีช่องให้กรอก — คืองานที่ต้องทำก่อน */
   const [active, setActive] = useState(
     () =>
+      slots.find((s) => s.id === initialSlot)?.id ??
       slots.find((s) => files[s.id] && FORM_FIELDS.some((f) => f.slot === s.id))?.id ??
       slots[0]?.id ??
       "",
@@ -335,6 +344,7 @@ function SlotPanel({
   }
 
   const hasData = fields.length > 0;
+  const ocr = useImageText(url);
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -350,6 +360,7 @@ function SlotPanel({
           </span>
         )}
         <span className="ml-auto flex items-center gap-1">
+          {url && !busy ? <ImageTextButton state={ocr.state} onClick={() => void ocr.read()} /> : null}
           <button
             type="button"
             onClick={() => input.current?.click()}
@@ -427,6 +438,10 @@ function SlotPanel({
           </div>
         ) : null}
       </div>
+
+      {ocr.state?.status === "done" ? (
+        <ImageTextPanel label={slot.label} text={ocr.state.text} onChange={ocr.setText} onClose={ocr.clear} />
+      ) : null}
     </div>
   );
 }

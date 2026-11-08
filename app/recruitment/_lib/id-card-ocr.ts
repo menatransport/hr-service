@@ -438,7 +438,8 @@ export function enhanceForOcr(gray: ArrayLike<number>, w: number, h: number): Ui
 
 type OcrWorker = Awaited<ReturnType<typeof import("tesseract.js")["createWorker"]>>;
 
-type OcrLang = "eng" | "tha";
+/** `tha+eng` = อ่านทั้งใบแบบข้อความดิบ (`readImageText`) — ตัวแกะค่าในไฟล์นี้ใช้ทีละภาษา */
+type OcrLang = "eng" | "tha" | "tha+eng";
 
 const workers: Partial<Record<OcrLang, Promise<OcrWorker>>> = {};
 
@@ -461,7 +462,7 @@ function getWorker(lang: OcrLang): Promise<OcrWorker> {
 }
 
 /** ขยายให้ด้านยาวราว 2000px + ขาวดำ — tesseract อ่านตัวเล็กบนรูปมือถือที่ย่อแล้วได้แม่นขึ้นชัด */
-async function toCanvas(bitmap: ImageBitmap, quarterTurns: number): Promise<HTMLCanvasElement> {
+async function toCanvas(bitmap: ImageBitmap, quarterTurns: number, contrast = 1.35): Promise<HTMLCanvasElement> {
   const scale = 2000 / Math.max(bitmap.width, bitmap.height);
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);
@@ -474,7 +475,7 @@ async function toCanvas(bitmap: ImageBitmap, quarterTurns: number): Promise<HTML
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("เบราว์เซอร์นี้อ่านรูปไม่ได้");
 
-  ctx.filter = "grayscale(1) contrast(1.35)";
+  ctx.filter = `grayscale(1) contrast(${contrast})`;
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate((quarterTurns * Math.PI) / 2);
   ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
@@ -653,6 +654,115 @@ async function readDocument(
     bitmap.close();
   }
   return { reading: best, texts };
+}
+
+/* ------------------------------------------------------- ข้อความดิบทั้งใบ */
+
+/** คำที่ความมั่นใจต่ำกว่านี้ทิ้ง — ส่วนใหญ่คือลายพื้นบัตร/ตราประทับที่ถูกอ่านเป็นตัวอักษร */
+const MIN_WORD_CONFIDENCE = 50;
+/** ความมั่นใจเฉลี่ยต่ำกว่านี้ = น่าจะถือรูปผิดท่า ลองหมุนต่อ */
+const ROTATE_BELOW = 55;
+
+type TextWord = OcrWord & { confidence: number };
+type TextLine = { words: TextWord[]; bbox: Box };
+
+const THAI = /[\u0E00-\u0E7F]/;
+const THAI_END = /[\u0E00-\u0E7F]$/;
+const THAI_START = /^[\u0E00-\u0E7F]/;
+/** สระบน/ล่าง วรรณยุกต์ ไม้ไต่คู้ การันต์ — ต้องเกาะตัวหน้าเสมอ ช่องว่างหน้ามันคืออ่านผิด */
+const THAI_MARK = "\u0E31\u0E34-\u0E3A\u0E47-\u0E4E";
+
+/**
+ * ประกอบบรรทัดใหม่จากคำที่เชื่อได้ — tesseract แยกไทยเป็น “คำ” ละพยางค์/ตัวอักษร ถ้าต่อด้วยช่องว่าง
+ * จะได้ `ว า ย ก า ร` · จึงเว้นวรรคตามระยะห่างจริงในรูป (เกิน ~⅓ ความสูงบรรทัด = คนละคำ)
+ */
+function joinLine(line: TextLine): string {
+  const height = Math.max(1, line.bbox.y1 - line.bbox.y0);
+  let out = "";
+  let prev: TextWord | null = null;
+  for (const word of line.words) {
+    if (word.confidence < MIN_WORD_CONFIDENCE || !word.text.trim()) {
+      prev = null; // คำที่ทิ้งไปตรงกลาง = เว้นวรรคแทน ไม่เอาสองฝั่งมาชนกัน
+      continue;
+    }
+    /* ต่อชิดเฉพาะไทยกับไทยที่อยู่ติดกันในรูป — อังกฤษ/ตัวเลข tesseract แยกเป็นคำถูกอยู่แล้ว เว้นวรรคเสมอ */
+    const glued =
+      prev !== null &&
+      THAI_END.test(prev.text) &&
+      THAI_START.test(word.text) &&
+      word.bbox.x0 - prev.bbox.x1 < height * 0.3;
+    if (out) out += glued ? "" : " ";
+    out += word.text;
+    prev = word;
+  }
+  return out;
+}
+
+/**
+ * เกลาไทยที่ tesseract ชอบออกมาเพี้ยน — ไม่เดาคำ แก้เฉพาะรูปแบบที่ผิดแน่นอน:
+ * `ํ`+`า` → `ำ` (บัตรประจําตัว → บัตรประจำตัว) · `เเ` → `แ` · ช่องว่างหน้าสระบน/วรรณยุกต์ ·
+ * จุดย่อ `พ . ย .` → `พ.ย.` · สัญลักษณ์ขยะหัว/ท้ายบรรทัด (`—`, `|`, `==`) · บรรทัดที่ไม่มีอะไร
+ * ยาวเกิน 2 ตัวอักษรเลย (เศษลายพื้น)
+ */
+export function tidyThaiText(lines: string[]): string {
+  return lines
+    .map((line) =>
+      line
+        .normalize("NFC")
+        .replace(/\u0E4D\s*\u0E32/g, "\u0E33")
+        .replace(/\u0E40\s*\u0E40/g, "\u0E41")
+        .replace(new RegExp(`([\\u0E00-\\u0E7F])\\s+(?=[${THAI_MARK}])`, "g"), "$1")
+        .replace(/([\u0E01-\u0E2E])\s*\.\s*(?=[\u0E01-\u0E2E]\s*\.)/g, "$1.")
+        .replace(/([\u0E01-\u0E2E])\s+\./g, "$1.")
+        .replace(/^[\s\-—–=|:;_~*#•·'"“”‘’`,.«»\\/[\]()<>!?]+/, "")
+        .replace(/[\s\-—–=|:;_~*#•·'"“”‘’`,«»\\/[\]<>]+$/, "")
+        .replace(/\s{2,}/g, " ")
+        .trim(),
+    )
+    .filter((line) => /[\u0E01-\u0E2EA-Za-z0-9\u0E50-\u0E59]{3,}|[\u0E00-\u0E7F]{3,}/.test(line))
+    .join("\n");
+}
+
+function textLinesOf(data: {
+  blocks?: { paragraphs: { lines: { words: TextWord[]; bbox: Box }[] }[] }[] | null;
+}): TextLine[] {
+  return (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines));
+}
+
+/** ความมั่นใจเฉลี่ย — วัดจากคำไทยเป็นหลัก (เอกสารราชการ) · รูปที่ไม่มีไทยเลยใช้ทุกคำ */
+function confidenceOf(lines: TextLine[]): number {
+  const words = lines.flatMap((l) => l.words).filter((w) => w.text.trim());
+  const thai = words.filter((w) => THAI.test(w.text));
+  const pool = thai.length ? thai : words;
+  return pool.length ? pool.reduce((sum, w) => sum + w.confidence, 0) / pool.length : 0;
+}
+
+/**
+ * ข้อความทั้งหมดบนรูป ไทย + อังกฤษ ไม่แกะเป็นช่อง — ให้แอดมินเลือกคัดลอกเอง
+ * (ปุ่ม “ดึงข้อความ” ในกล่องเอกสารและข้อมูลจากเอกสาร)
+ *
+ * ทดสอบกับบัตร/ทะเบียนบ้านจริง 8 พ.ย. 2569: ขาวดำ contrast 1.2 ที่ 2000px ดีสุด — แต่งคม
+ * (`enhanceForOcr`) และขยายเป็น 2800px ทำให้ความมั่นใจไทย*ลดลง* (ขยายลายพื้นไปด้วย) ·
+ * ความมั่นใจไทยต่ำ = ลองหมุน 90°/270° แล้วเอาท่าที่ดีสุด
+ */
+export async function readImageText(image: Blob, onStep?: (step: ScanStep) => void): Promise<string> {
+  onStep?.("load");
+  const worker = await getWorker("tha+eng");
+  const bitmap = await createImageBitmap(image, { imageOrientation: "from-image" });
+  try {
+    let best: { lines: TextLine[]; score: number } | null = null;
+    for (const turns of [0, 1, 3]) {
+      onStep?.(turns ? "rotate" : "text");
+      const { data } = await worker.recognize(await toCanvas(bitmap, turns, 1.2), {}, { text: true, blocks: true });
+      const lines = textLinesOf(data as Parameters<typeof textLinesOf>[0]);
+      const score = confidenceOf(lines);
+      if (!best || score > best.score) best = { lines, score };
+      if (best.score >= ROTATE_BELOW) break;
+    }
+    return tidyThaiText((best?.lines ?? []).map(joinLine));
+  } finally {
+    bitmap.close();
+  }
 }
 
 export function readThaiIdCard(image: Blob): Promise<IdCardReading> {
