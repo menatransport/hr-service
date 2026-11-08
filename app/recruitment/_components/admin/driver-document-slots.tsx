@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Plus, RefreshCw, ScanText, Upload } from "lucide-react";
+import { Eye, FileText, Loader2, Plus, RefreshCw, ScanText, Upload } from "lucide-react";
 
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction, toastError } from "@/lib/swal";
@@ -27,6 +27,12 @@ import {
   type ViewerItem,
 } from "@/app/recruitment/_components/admin/driver-document-viewer";
 import { DriverDocumentScan } from "@/app/recruitment/_components/admin/driver-document-scan";
+import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
+import type { DriverHrLink } from "@/app/recruitment/_lib/drivers/driver-hr";
+import type { DocSlot } from "@/app/recruitment/_lib/form";
+import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
+import type { Requisition } from "@/app/recruitment/_lib/requisitions/types";
+import type { Application } from "@/app/recruitment/_lib/types";
 
 /**
  * ช่องแนบเอกสารของแฟ้มประวัติ พจส. — **ต่อที่เก็บจริงแล้ว** (GridFS ของ `hr_service`
@@ -42,6 +48,10 @@ import { DriverDocumentScan } from "@/app/recruitment/_components/admin/driver-d
  *
  * **แนบได้เฉพาะรูปภาพ** (1 ต.ค. 2026) — PDF/Word ที่แนบไว้ก่อนหน้านั้นยังเปิดดูได้ใน
  * ตัวดูเต็มจอ จึงยังมีไอคอนไฟล์สำหรับของเก่าอยู่
+ *
+ * **เอกสาร HR (ประเภทที่มี `hr`) แยกเป็นกลุ่มบนสุด** (Bew 8 พ.ย. 2569) — รายงานผู้สมัคร · สัญญาจ้าง ·
+ * สัญญาค้ำ · ยินยอมคืนเงินค้ำ · ค่าตั้งต้นคือ **ฉบับที่ระบบทำจากใบสมัคร** (ปุ่ม “เปิดดู” = กล่องทำเอกสาร
+ * ตัวเดียวกับหน้าผู้สมัคร โหลดใบสมัครตอนกด) · แนบฉบับเซ็นแล้วเข้าแฟ้มได้เหมือนประเภทอื่น
  *
  * ชื่อประเภทกับลำดับมาจาก `DRIVER_DOC_TYPES` ที่เดียว — อย่าก๊อปรายชื่อมาไว้ในไฟล์นี้
  */
@@ -61,10 +71,22 @@ const isImage = (type: string) => /^image\/(jpeg|png|webp)$/.test(type);
 export function DriverDocumentSlots({
   driver,
   hidePersonal,
+  application,
+  requisition,
+  showFiles = true,
 }: {
   driver: DriverRecord;
   /** พ้นสภาพแล้ว — ยังแนบได้ (แฟ้มคือประวัติการจ้าง) แต่ไม่โชว์/ไม่แก้วันหมดอายุ */
   hidePersonal: boolean;
+  /** ใบสมัครของคนนี้ — ไม่มี/ถูกลบข้อมูลแล้ว = เอกสาร HR ต้องแนบไฟล์อย่างเดียว */
+  application: DriverHrLink["application"];
+  /** คำขอสรรหาที่ผูกรหัสนี้ — ตำแหน่งที่สมัครในเอกสารยึดตามนี้ */
+  requisition: Requisition | null;
+  /**
+   * กลุ่ม “เอกสารแนบ” — ซ่อนเมื่อหน้าประวัติแสดงข้อมูลจากเอกสารของใบสมัครแล้ว (Bew 8 พ.ย. 2569:
+   * ส่วนบนมีรูปกับข้อมูลครบ ไม่ต้องมีอีกชุด) · ไฟล์ที่แนบไว้เดิมยังอยู่ในฐาน ไม่ได้ลบ
+   */
+  showFiles?: boolean;
 }) {
   const router = useRouter();
   /** ค่าที่เซิร์ฟเวอร์คืนมาหลังบันทึกเสมอ ไม่เดาเอง (กติกาเดียวกับ `driver-documents.tsx`) */
@@ -78,9 +100,50 @@ export function DriverDocumentSlots({
   const [uploading, setUploading] = useState<string | null>(null);
 
   const groups = groupDriverDocuments(documents);
-  const missing = missingRequiredDocs(documents);
+  const hrGroups = groups.filter((g) => g.type.hr);
+  const fileGroups = groups.filter((g) => !g.type.hr);
+  const fromApplication = Boolean(application && !application.erased);
+  const missing = missingRequiredDocs(documents, fromApplication);
   const have = REQUIRED_DOC_COUNT - missing.length;
   const viewingGroup = viewing ? groups.find((g) => g.type.code === viewing.code) : undefined;
+
+  /* ใบสมัครเต็มใบ + คลังช่องเอกสาร โหลดตอนกด “เปิดดู” ครั้งแรกเท่านั้น (หน้าประวัติไม่ต้องแบกทุกครั้งที่เปิด) */
+  const [source, setSource] = useState<{ application: Application; docSlots: DocSlot[] } | null>(null);
+  const [making, setMaking] = useState<HrDocId | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+
+  async function openSystem(type: DriverDocType) {
+    if (!application || !type.hr) return;
+    if (source) {
+      setMaking(type.hr);
+      return;
+    }
+    setOpening(type.code);
+    try {
+      const [app, docSlots] = await Promise.all([
+        requestJson<Application | null>(`/api/recruitment/applications/${application.id}`, {}, "โหลดใบสมัครไม่สำเร็จ"),
+        requestJson<DocSlot[]>("/api/recruitment/doc-slots", {}, "โหลดช่องเอกสารไม่สำเร็จ"),
+      ]);
+      if (!app) throw new Error("ไม่พบใบสมัครนี้แล้ว");
+      setSource({ application: app, docSlots });
+      setMaking(type.hr);
+    } catch (err) {
+      toastError("เปิดเอกสารไม่สำเร็จ", err instanceof Error ? err.message : undefined);
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  /** แก้ใบสมัคร/คะแนน Driver Rating จากในกล่อง — ยิงตัวเดียวกับหน้าผู้สมัคร โยน error ให้กล่องโชว์เอง */
+  async function patchApplication(patch: Record<string, unknown>) {
+    if (!source) return;
+    const next = await requestJson<Application>(
+      `/api/recruitment/applications/${source.application.id}`,
+      { method: "PATCH", body: patch },
+      "บันทึกไม่สำเร็จ",
+    );
+    setSource((s) => (s ? { ...s, application: next } : s));
+  }
 
   function saved(next: DriverDocument[]) {
     setDocuments(next);
@@ -160,7 +223,39 @@ export function DriverDocumentSlots({
   return (
     /* อยู่ในแท็บ “เอกสาร” ของหน้าประวัติ (19 ต.ค. 2569) — ไหลตามเนื้อหาปกติ ไม่เลื่อนในกล่อง
        รายการเป็นสองคอลัมน์บนจอกว้าง ให้เห็นครบทุกประเภทในหน้าเดียว */
-    <div>
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-14 font-semibold">เอกสาร HR</h2>
+          <p className="text-11-5 text-mut text-pretty">
+            {fromApplication
+              ? `เปิดดูได้จากใบสมัคร ${application!.ref} (ข้อมูลตามหน้าผู้สมัคร) · แนบฉบับที่เซ็นแล้วเพิ่มได้`
+              : application?.erased
+                ? "ใบสมัครของคนนี้ถูกลบข้อมูลตามคำขอแล้ว — แนบไฟล์เอกสารแทน"
+                : "ไม่มีใบสมัครในระบบ — แนบไฟล์เอกสารแทน"}
+          </p>
+        </div>
+        <ul className="grid gap-2 md:grid-cols-2">
+          {hrGroups.map((group) => (
+            <Slot
+              key={group.type.code}
+              group={group}
+              drivercode={driver.drivercode}
+              expiry={null}
+              busy={uploading === group.type.code}
+              onPick={(file) => void pick(group.type, file)}
+              onView={(index) => setViewing({ code: group.type.code, index })}
+              system={
+                fromApplication
+                  ? { busy: opening === group.type.code, onOpen: () => void openSystem(group.type) }
+                  : undefined
+              }
+            />
+          ))}
+        </ul>
+      </section>
+
+      {showFiles ? (
       <section className="flex flex-col gap-3">
         <div className="flex flex-none flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
@@ -181,7 +276,7 @@ export function DriverDocumentSlots({
         </div>
 
         <ul className="grid gap-2 md:grid-cols-2">
-          {groups.map((group) => (
+          {fileGroups.map((group) => (
             <Slot
               key={group.type.code}
               group={group}
@@ -199,6 +294,7 @@ export function DriverDocumentSlots({
           สแกนอ่านวันหมดอายุให้ตอนแนบ
         </p>
       </section>
+      ) : null}
 
       {viewing && viewingGroup?.files.length ? (
         <DriverDocumentViewer
@@ -211,6 +307,18 @@ export function DriverDocumentSlots({
             const file = viewingGroup.files.find((f) => f.fileId === item.key);
             if (file) void remove(file);
           }}
+        />
+      ) : null}
+
+      {making && source ? (
+        <HrDocumentMaker
+          application={source.application}
+          requisitions={requisition ? [requisition] : []}
+          onRequisitionsChange={() => router.refresh()}
+          docSlots={source.docSlots}
+          onPatch={patchApplication}
+          initialDoc={making}
+          onClose={() => setMaking(null)}
         />
       ) : null}
 
@@ -275,6 +383,7 @@ function Slot({
   busy,
   onPick,
   onView,
+  system,
 }: {
   group: DriverDocGroup;
   drivercode: string;
@@ -283,6 +392,8 @@ function Slot({
   busy: boolean;
   onPick: (file: File | undefined) => void;
   onView: (index: number) => void;
+  /** เอกสาร HR ที่เปิดฉบับจากใบสมัครได้ — ไม่ต้องแนบก็มีฉบับให้ดู (ค่าตั้งต้น) */
+  system?: { busy: boolean; onOpen: () => void };
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -321,7 +432,18 @@ function Slot({
             : "border-dashed border-line bg-base-100"
       }`}
     >
-      <Thumb drivercode={drivercode} file={latest} count={files.length} onOpen={() => onView(0)} onEmpty={browse} />
+      {!latest && system ? (
+        <button
+          type="button"
+          onClick={system.onOpen}
+          aria-label={`เปิด${type.label}จากใบสมัคร`}
+          className="flex size-13 flex-none cursor-pointer items-center justify-center rounded-field border border-line bg-soft text-primary transition-colors hover:border-primary/40"
+        >
+          <FileText size={20} strokeWidth={1.6} aria-hidden />
+        </button>
+      ) : (
+        <Thumb drivercode={drivercode} file={latest} count={files.length} onOpen={() => onView(0)} onEmpty={browse} />
+      )}
 
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-1.5">
@@ -335,7 +457,7 @@ function Slot({
               สแกน
             </span>
           ) : null}
-          {type.required && !latest ? (
+          {type.required && !latest && !system ? (
             <span className="flex-none text-10-5 text-alert">ต้องมี</span>
           ) : null}
         </span>
@@ -350,7 +472,9 @@ function Slot({
                 ]
                   .filter(Boolean)
                   .join(" · ")
-              : "ลากไฟล์มาวาง หรือกดปุ่มขวา"}
+              : system
+                ? "ฉบับจากใบสมัคร · แนบฉบับเซ็นแล้วได้"
+                : "ลากไฟล์มาวาง หรือกดปุ่มขวา"}
         </span>
 
         {expiry ? (
@@ -364,13 +488,30 @@ function Slot({
         ) : null}
       </div>
 
+      {system ? (
+        <button
+          type="button"
+          onClick={system.onOpen}
+          disabled={system.busy}
+          title={`เปิด${type.label}ที่ระบบทำจากใบสมัคร — พิมพ์ / ส่งออก PDF ได้`}
+          className="flex flex-none cursor-pointer items-center gap-1 rounded-field border border-primary/40 bg-soft px-2.5 py-1.5 text-11-5 font-medium text-primary transition-colors hover:bg-primary hover:text-primary-content disabled:pointer-events-none disabled:opacity-60"
+        >
+          {system.busy ? (
+            <Loader2 size={13} strokeWidth={2} aria-hidden className="animate-spin" />
+          ) : (
+            <Eye size={13} strokeWidth={2} aria-hidden />
+          )}
+          เปิดดู
+        </button>
+      ) : null}
+
       <button
         type="button"
         onClick={browse}
         disabled={busy}
         title={latest ? (scan ? `ต่ออายุ — แนบ${type.label}ฉบับใหม่` : `แนบ${type.label}เพิ่ม`) : `แนบ${type.label}`}
         className={`flex flex-none cursor-pointer items-center gap-1 rounded-field border px-2.5 py-1.5 text-11-5 font-medium transition-colors disabled:pointer-events-none disabled:opacity-60 ${
-          latest
+          latest || system
             ? "border-line text-mut hover:border-primary/40 hover:text-primary"
             : "border-primary/40 bg-soft text-primary hover:bg-primary hover:text-primary-content"
         }`}

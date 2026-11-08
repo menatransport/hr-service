@@ -441,6 +441,22 @@ export async function getJourney(id: string): Promise<Journey | null> {
   };
 }
 
+/**
+ * คำขอสรรหาของ พจส. คนนี้ (ผูกรหัสไว้ ไม่นับใบยกเลิก · แก้ล่าสุดชนะ) — แท็บ “ข้อมูลฝึกงาน”
+ * กับแถว “เอกสาร HR” บนหน้าประวัติรายคนอ่านจากนี่ · `null` = คนนี้ไม่ได้มาจากคำขอสรรหา
+ */
+export async function getDriverOnboarding(drivercode: string): Promise<OnboardingRecord | null> {
+  const code = drivercode.trim();
+  if (!code) return null;
+  const doc = await (await requisitions()).findOne(
+    { drivercode: code, status: { $ne: "cancelled" } },
+    { sort: { updatedAt: -1 } },
+  );
+  if (!doc) return null;
+  const [record] = await toRecords([doc]);
+  return record;
+}
+
 export interface RcForm {
   record: OnboardingRecord;
   codeMatch: Journey["codeMatch"];

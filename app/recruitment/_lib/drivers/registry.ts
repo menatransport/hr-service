@@ -10,6 +10,7 @@ import { isExitType } from "@/app/recruitment/_lib/resign-reasons/types";
 import {
   collectDocExpiries,
   DRIVER_EDIT_FIELDS,
+  MIXER_POSITIONS,
   isDriverDocType,
   isExitStatus,
   normalizeDriverEdit,
@@ -1333,7 +1334,7 @@ export async function enrollDriver(input: EnrollInput, actor: string): Promise<b
 }
 
 /** ช่องของฟอร์ม “เพิ่มพนักงาน” — กติกาค่าเดียวกับ `DRIVER_EDIT_FIELDS` · ช่องที่เหลือเติมทีหลังบนหน้าประวัติ */
-export const MANUAL_DRIVER_FIELDS = ["driverName", "branch", "startDate", "phone", "vehicleCode", "customer", "plant"] as const;
+export const MANUAL_DRIVER_FIELDS = ["driverName", "branch", "startDate", "phone", "vehicleCode", "customer", "plant", "position"] as const;
 
 export type ManualDriverInput = { drivercode: string; ownerType?: string; note?: string } & Partial<Record<(typeof MANUAL_DRIVER_FIELDS)[number], string>>;
 
@@ -1361,6 +1362,12 @@ export async function addDriverManually(input: ManualDriverInput, actor: string)
     if ("error" in out) throw new DriverRegistryError(`${field.label}: ${out.error}`);
     if (out.value) $set[key] = out.value;
   }
+
+  /* ลาดกระบัง (งานโม่) ต้องมีตำแหน่ง Mixer L / Mixer S / Spare driver · สาขาอื่นไม่มีตำแหน่งชุดนี้ = ไม่เก็บ */
+  if (siteOfBranch($set.branch ?? "") === "latkrabang") {
+    if (!MIXER_POSITIONS.includes($set.position ?? ""))
+      throw new DriverRegistryError(`ต้องเลือกตำแหน่ง (${MIXER_POSITIONS.join(" / ")})`);
+  } else delete $set.position;
 
   if (await driverExists(drivercode)) throw new DriverRegistryError(`รหัส ${drivercode} อยู่ในทะเบียนแล้ว`);
 

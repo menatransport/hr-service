@@ -12,20 +12,23 @@ import {
   MapPin,
   MessageSquareText,
   Phone,
-  ShieldOff,
   Siren,
   Truck,
   User,
   UserMinus,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
+import { DocGroup, Field, Hidden, Section } from "@/app/recruitment/_components/admin/driver-profile-parts";
+import { DriverDocumentData } from "@/app/recruitment/_components/admin/driver-document-data";
 import { DriverDocumentSlots } from "@/app/recruitment/_components/admin/driver-document-slots";
 import { DriverProfileEdit } from "@/app/recruitment/_components/admin/driver-profile-edit";
 import { DriverProfileTabs } from "@/app/recruitment/_components/admin/driver-profile-tabs";
 import { DriverRental } from "@/app/recruitment/_components/admin/driver-rental";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
+import { DriverTraining } from "@/app/recruitment/_components/admin/driver-training";
+import type { DriverHrLink } from "@/app/recruitment/_lib/drivers/driver-hr";
+import type { DriverDocSource } from "@/app/recruitment/_lib/drivers/document-sync";
 import { DriverWorkYear } from "@/app/recruitment/_components/admin/driver-work-year";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
 import {
@@ -66,8 +69,12 @@ export function DriverProfile({
   driver,
   tab = "info",
   canEdit,
+  hr,
+  docSource,
 }: {
   driver: DriverRecord;
+  /** ใบสมัคร + คำขอสรรหาของรหัสนี้ — เอกสาร HR (แท็บเอกสาร) กับแท็บข้อมูลฝึกงาน */
+  hr: DriverHrLink;
   /** แท็บที่เปิดตอนโหลด — จาก `?tab=` */
   tab?: DriverProfileTab;
   /**
@@ -76,6 +83,11 @@ export function DriverProfile({
    * (หน้า page ตัดข้อมูลแท็บนั้นทิ้งด้วย `withoutDocsTab()` มาแล้ว)
    */
   canEdit: boolean;
+  /**
+   * ข้อมูลเอกสาร + รูปของใบสมัครที่ผูกไว้ — มี = แท็บเอกสารแสดงชุดเดียวกับกล่องเอกสาร และปุ่มแก้ไขเปิดกล่องนั้น
+   * · `null` = ไม่มีใบสมัคร/ไม่มีสิทธิ์ ใช้กล่องแก้ทะเบียนแบบเดิม
+   */
+  docSource?: DriverDocSource | null;
 }) {
   const expiry = licenseState(driver.licenseDaysLeft);
   const idCardState = expiryState(driver.idCardDaysLeft);
@@ -93,6 +105,7 @@ export function DriverProfile({
    * ถ้าจะเพิ่มฟิลด์ที่เป็นข้อมูลส่วนบุคคลในอนาคต **ต้องมาเพิ่มเงื่อนไขตรงนี้ด้วย**
    */
   const hidePersonal = !driver.active;
+  const fromApplication = Boolean(hr.application && !hr.application.erased);
   const transferred = driver.resignation?.kind === "transfer";
   const statusText = driver.active ? "ปฏิบัติงานอยู่" : transferred ? "ย้ายไปรถร่วมแล้ว" : "พ้นสภาพแล้ว";
 
@@ -156,8 +169,9 @@ export function DriverProfile({
           อยู่เหนือแท็บ เพราะต้องเห็นไม่ว่าจะเปิดแท็บไหน */}
       <DriverProfileTabs
         initial={tab}
-        /* ไม่มีสิทธิ์ = เอกสารถูกตัดทิ้งมาแล้ว นับ “ขาด” ไม่ได้ — ไม่ขึ้นตัวเลขแดงหลอก ๆ */
-        missingDocs={canEdit ? missingRequiredDocs(driver.documents).length : 0}
+        /* ไม่มีสิทธิ์ = เอกสารถูกตัดทิ้งมาแล้ว นับ “ขาด” ไม่ได้ — ไม่ขึ้นตัวเลขแดงหลอก ๆ
+           · มีข้อมูลจากใบสมัคร = ไม่มีกลุ่ม “เอกสารแนบ” ให้นับแล้ว */
+        missingDocs={canEdit && !docSource ? missingRequiredDocs(driver.documents, fromApplication).length : 0}
         info={
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-0">
             <div className="flex flex-col gap-6 lg:pr-6">
@@ -306,77 +320,89 @@ export function DriverProfile({
             />
           ) : (
           <div className="flex flex-col gap-6">
-            {/* แก้ทุกช่องรวมวันหมดอายุผ่านปุ่ม “แก้ไข” ที่เดียว · ซ่อนข้อมูลส่วนบุคคลเมื่อพ้นสภาพแล้ว */}
-            <Section
-              title="เอกสารประจำตัว · บัญชีรับเงิน"
-              action={<DriverProfileEdit driver={driver} scope="docs" />}
-            >
-              <div className="flex flex-col divide-y divide-line">
-                <DocGroup icon={IdCard} title="บัตรประชาชน">
-                  {hidePersonal ? (
-                    <Hidden label="เลขบัตรประชาชน" />
-                  ) : (
-                    <>
-                      <Field
-                        label="เลขบัตรประชาชน"
-                        value={driver.nationalId ? formatNationalId(driver.nationalId) : ""}
-                        mono
-                      />
-                      <Field
-                        label="วันหมดอายุ"
-                        value={formatThaiDate(driver.idCardExpiryISO, "full")}
-                        note={driver.idCardExpiryISO ? formatExpiryGap(driver.idCardDaysLeft) : undefined}
-                        noteTone={idCardTone}
-                      />
-                    </>
-                  )}
-                </DocGroup>
+            {/* มีใบสมัคร = ชุดเดียวกับกล่องเอกสาร (ปุ่มแก้ไขเปิดกล่องนั้น) · ไม่มี = แก้ทะเบียนตรงผ่านปุ่ม “แก้ไข”
+                · ซ่อนข้อมูลส่วนบุคคลเมื่อพ้นสภาพแล้วทั้งสองแบบ */}
+            {docSource ? (
+              <DriverDocumentData source={docSource} hidePersonal={hidePersonal} />
+            ) : (
+              <Section
+                title="เอกสารประจำตัว · บัญชีรับเงิน"
+                action={<DriverProfileEdit driver={driver} scope="docs" />}
+              >
+                <div className="flex flex-col divide-y divide-line">
+                  <DocGroup icon={IdCard} title="บัตรประชาชน">
+                    {hidePersonal ? (
+                      <Hidden label="เลขบัตรประชาชน" />
+                    ) : (
+                      <>
+                        <Field
+                          label="เลขบัตรประชาชน"
+                          value={driver.nationalId ? formatNationalId(driver.nationalId) : ""}
+                          mono
+                        />
+                        <Field
+                          label="วันหมดอายุ"
+                          value={formatThaiDate(driver.idCardExpiryISO, "full")}
+                          note={driver.idCardExpiryISO ? formatExpiryGap(driver.idCardDaysLeft) : undefined}
+                          noteTone={idCardTone}
+                        />
+                      </>
+                    )}
+                  </DocGroup>
 
-                <DocGroup
-                  icon={CarFront}
-                  title="ใบขับขี่"
-                  badge={!hidePersonal && driver.licenseType ? `ชนิด ${driver.licenseType}` : undefined}
-                >
-                  {hidePersonal ? (
-                    <Hidden label="เลขที่ใบขับขี่" />
-                  ) : (
-                    <>
-                      <Field label="เลขที่ใบขับขี่" value={driver.licenseNo} mono />
-                      <Field
-                        label="วันหมดอายุ"
-                        value={formatThaiDate(driver.licenseExpiryISO, "full")}
-                        note={
-                          driver.licenseExpiryISO ? formatLicenseGap(driver.licenseDaysLeft) : undefined
-                        }
-                        noteTone={expiry === "expired" ? "alert" : expiry === "soon" ? "sla" : "mut"}
-                      />
-                    </>
-                  )}
-                </DocGroup>
+                  <DocGroup
+                    icon={CarFront}
+                    title="ใบขับขี่"
+                    badge={!hidePersonal && driver.licenseType ? `ชนิด ${driver.licenseType}` : undefined}
+                  >
+                    {hidePersonal ? (
+                      <Hidden label="เลขที่ใบขับขี่" />
+                    ) : (
+                      <>
+                        <Field label="เลขที่ใบขับขี่" value={driver.licenseNo} mono />
+                        <Field
+                          label="วันหมดอายุ"
+                          value={formatThaiDate(driver.licenseExpiryISO, "full")}
+                          note={
+                            driver.licenseExpiryISO ? formatLicenseGap(driver.licenseDaysLeft) : undefined
+                          }
+                          noteTone={expiry === "expired" ? "alert" : expiry === "soon" ? "sla" : "mut"}
+                        />
+                      </>
+                    )}
+                  </DocGroup>
 
-                <DocGroup icon={Landmark} title={`บัญชี${DRIVER_BANK_NAME}`}>
-                  {hidePersonal ? (
-                    <Hidden label="เลขที่บัญชี" />
-                  ) : (
-                    <>
-                      <Field
-                        label="เลขที่บัญชี"
-                        value={driver.bankAccountNo ? formatBankAccount(driver.bankAccountNo) : ""}
-                        mono
-                      />
-                      <Field label="สาขาธนาคาร" value={driver.bankBranch} />
-                    </>
-                  )}
-                </DocGroup>
-              </div>
-            </Section>
+                  <DocGroup icon={Landmark} title={`บัญชี${DRIVER_BANK_NAME}`}>
+                    {hidePersonal ? (
+                      <Hidden label="เลขที่บัญชี" />
+                    ) : (
+                      <>
+                        <Field
+                          label="เลขที่บัญชี"
+                          value={driver.bankAccountNo ? formatBankAccount(driver.bankAccountNo) : ""}
+                          mono
+                        />
+                        <Field label="สาขาธนาคาร" value={driver.bankBranch} />
+                      </>
+                    )}
+                  </DocGroup>
+                </div>
+              </Section>
+            )}
 
             <div className="border-t border-line pt-6">
-              <DriverDocumentSlots driver={driver} hidePersonal={hidePersonal} />
+              <DriverDocumentSlots
+                driver={driver}
+                hidePersonal={hidePersonal}
+                application={hr.application}
+                requisition={hr.onboarding}
+                showFiles={!docSource}
+              />
             </div>
           </div>
           )
         }
+        training={<DriverTraining record={hr.onboarding} driver={driver} canEdit={canEdit} />}
         work={
           driver.work ? (
             <DriverWorkYear driver={driver} work={driver.work} />
@@ -399,136 +425,6 @@ export function DriverProfile({
 
 /* ------------------------------------------------------------ ชิ้นย่อย */
 
-function Section({
-  title,
-  action,
-  note,
-  children,
-}: {
-  title: string;
-  /** ปุ่มท้ายหัวกล่อง เช่น “แก้ไขข้อมูล” */
-  action?: React.ReactNode;
-  /** บรรทัดเล็กใต้หัวกล่อง */
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-4 border-t border-line pt-6 first:border-t-0 first:pt-0">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-14 font-semibold">{title}</h2>
-          {action ? <div className="flex flex-none items-center gap-2">{action}</div> : null}
-        </div>
-        {note ? <p className="text-11-5 text-mut">{note}</p> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({
-  icon: Icon,
-  label,
-  value,
-  note,
-  noteTone = "mut",
-  href,
-  noteHref,
-  mono,
-}: {
-  /** ไม่ใส่ = ไม่มีไอคอนหน้าช่อง (ช่องในกลุ่มเอกสาร — หัวกลุ่มมีไอคอนแล้ว) */
-  icon?: LucideIcon;
-  label: string;
-  value: string;
-  note?: string;
-  noteTone?: "mut" | "sla" | "alert" | "primary";
-  href?: string;
-  /** ลิงก์ของบรรทัดรอง เช่น เบอร์ผู้ติดต่อฉุกเฉิน */
-  noteHref?: string;
-  mono?: boolean;
-}) {
-  const tone =
-    noteTone === "alert"
-      ? "text-alert font-medium"
-      : noteTone === "sla"
-        ? "text-sla font-medium"
-        : noteTone === "primary"
-          ? "text-primary font-medium"
-          : "text-mut";
-
-  const text = value.trim();
-  const body = text ? (
-    <span className={mono ? "font-mono text-13" : "text-13-5"}>{text}</span>
-  ) : (
-    <span className="text-13 text-mut">ยังไม่ระบุ</span>
-  );
-
-  return (
-    <div className="flex min-w-0 gap-2.5">
-      {Icon ? (
-        <Icon size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
-      ) : null}
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <dt className="text-11-5 text-mut">{label}</dt>
-        <dd className="m-0 flex flex-col gap-0.5">
-          {href && text ? (
-            <a href={href} className="w-fit transition-colors hover:text-primary">
-              {body}
-            </a>
-          ) : (
-            body
-          )}
-          {note ? (
-            noteHref ? (
-              <a
-                href={noteHref}
-                className={`w-fit font-mono text-12 transition-colors hover:text-primary ${tone}`}
-              >
-                {note}
-              </a>
-            ) : (
-              <span className={`text-11-5 ${tone}`}>{note}</span>
-            )
-          ) : null}
-        </dd>
-      </div>
-    </div>
-  );
-}
-
-/**
- * เอกสารหนึ่งใบ = หนึ่งแถว — หัวแถว (ไอคอน + ชื่อเอกสาร) ซ้าย ช่องของใบนั้นขวา
- * ช่องในแถวจึงตั้งชื่อสั้นได้ (“วันหมดอายุ”) เพราะหัวแถวบอกแล้วว่าของใบไหน
- * จอเล็ก = หัวแถวขึ้นบรรทัดบน ช่องเรียงลงมา
- */
-function DocGroup({
-  icon: Icon,
-  title,
-  badge,
-  children,
-}: {
-  icon: LucideIcon;
-  title: string;
-  /** บรรทัดเล็กใต้ชื่อเอกสาร เช่น ชนิดใบขับขี่ */
-  badge?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-6">
-      <div className="flex items-start gap-2.5">
-        <span className="flex size-8 flex-none items-center justify-center rounded-field bg-primary/10 text-primary">
-          <Icon size={15} strokeWidth={1.8} aria-hidden />
-        </span>
-        <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">
-          <h3 className="text-13 font-semibold leading-tight">{title}</h3>
-          {badge ? <span className="text-11-5 text-mut">{badge}</span> : null}
-        </div>
-      </div>
-      <dl className="grid gap-x-10 gap-y-3 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">{children}</dl>
-    </div>
-  );
-}
-
 function Chip({ tone, children }: { tone: "live" | "done"; children: React.ReactNode }) {
   return (
     <span
@@ -544,30 +440,6 @@ function Chip({ tone, children }: { tone: "live" | "done"; children: React.React
 
 function Blank({ children }: { children: React.ReactNode }) {
   return <p className="text-12-5 text-mut text-pretty">{children}</p>;
-}
-
-/**
- * ช่องที่ถูกซ่อนเพราะคนคนนี้พ้นสภาพแล้ว
- *
- * **ขึ้นเป็นช่องว่างที่บอกว่าซ่อน ไม่ใช่เอาแถวออกไปเงียบ ๆ** — แถวที่หายไปเฉย ๆ
- * อ่านได้ว่า “ระบบไม่เคยมีข้อมูลนี้” ซึ่งไม่จริง และคนที่ต้องใช้จริงจะไม่รู้ว่า
- * ต้องไปขอจากใคร
- */
-function Hidden({ icon: Icon, label }: { icon?: LucideIcon; label: string }) {
-  return (
-    <div className="flex min-w-0 gap-2.5">
-      {Icon ? (
-        <Icon size={15} strokeWidth={1.7} aria-hidden className="mt-0.5 flex-none text-mut" />
-      ) : null}
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <dt className="text-11-5 text-mut">{label}</dt>
-        <dd className="m-0 flex items-center gap-1.5">
-          <ShieldOff size={13} strokeWidth={1.8} aria-hidden className="flex-none text-mut" />
-          <span className="text-12-5 text-mut">ซ่อนไว้ — พ้นสภาพแล้ว</span>
-        </dd>
-      </div>
-    </div>
-  );
 }
 
 /**

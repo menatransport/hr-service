@@ -1,6 +1,7 @@
 import { CarFront, IdCard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ExitType } from "@/app/recruitment/_lib/resign-reasons/types";
+import { OTHER, POSITIONS } from "@/app/recruitment/_lib/requisitions/types";
 
 /**
  * ทะเบียนประวัติ พจส. — ชนิดข้อมูลและตัวช่วยแสดงผล **ใช้ได้ทั้ง server และ client**
@@ -72,6 +73,12 @@ export function siteOfBranch(branch: string): DriverSiteKey | null {
   const value = branch.trim().replace(/\.0$/, "");
   return DRIVER_SITES.find((site) => site.branches.includes(value))?.key ?? null;
 }
+
+/**
+ * ตำแหน่งของ พจส. ลาดกระบัง (งานโม่) — ป้ายชุดเดียวกับฟอร์มขออัตรา (`POSITIONS` ไม่เอา “อื่นๆ”)
+ * · กล่อง “เพิ่มพนักงาน” บังคับเลือกเมื่อสาขาเป็นลาดกระบัง (Bew 8 พ.ย. 2569)
+ */
+export const MIXER_POSITIONS: string[] = POSITIONS.filter((p) => p.value !== OTHER).map((p) => p.label);
 
 /** ชื่อสาขาที่อ่านออก — รหัสที่ไม่อยู่ในสามสาขาหลักคืนค่าดิบไป ไม่เดาชื่อให้ */
 export function siteLabel(branch: string): string {
@@ -358,6 +365,11 @@ export interface DriverDocType {
   required: boolean;
   /** บอกว่าเอกสารใบนั้นต้องเห็นอะไร — เขียนไว้ตรงจุดที่กดแนบ ไม่ใช่ในคู่มือเล่มอื่น */
   hint?: string;
+  /**
+   * เอกสาร HR ที่ระบบทำจากใบสมัครได้ (ฉบับใน `HR_DOCUMENTS`) — หน้าประวัติแยกไปกลุ่ม “เอกสาร HR”
+   * เปิดฉบับจากใบสมัครได้เป็นค่าตั้งต้น แนบฉบับเซ็นแล้วทับได้ (Bew 8 พ.ย. 2569)
+   */
+  hr?: "profile" | "contract" | "deposit" | "refund";
 }
 
 /** รหัสของกองที่รับเอกสารซึ่งไม่เข้าประเภทไหน — **ต้องมีอยู่ใน `DRIVER_DOC_TYPES` เสมอ** */
@@ -384,12 +396,17 @@ export const DRIVER_DOC_TYPES: DriverDocType[] = [
     hint: "ฉบับที่ใช้ตอนเริ่มงาน หรือฉบับล่าสุดถ้ามีการตรวจซ้ำ",
   },
   { code: "criminal-record", label: "ผลตรวจประวัติอาชญากรรม", required: true },
+  /* เอกสาร HR สี่ฉบับ — ลำดับตาม `HR_DOCUMENTS` · สัญญาจ้างเป็นรหัสเดิม ไฟล์ที่แนบไว้ก่อนแล้วยังอยู่กองเดิม */
+  { code: "hr-profile", label: "รายงานผู้สมัคร", required: false, hr: "profile" },
   {
     code: "contract",
     label: "สัญญาจ้าง",
     required: true,
     hint: "ฉบับที่ลงลายมือชื่อครบทั้งสองฝ่ายแล้ว",
+    hr: "contract",
   },
+  { code: "hr-deposit", label: "สัญญาค้ำ", required: false, hr: "deposit" },
+  { code: "hr-refund", label: "ยินยอมคืนเงินค้ำ", required: false, hr: "refund" },
   {
     code: "bank-book",
     label: "หน้าสมุดบัญชีธนาคาร",
@@ -477,10 +494,15 @@ export function groupDriverDocuments(documents: DriverDocument[]): DriverDocGrou
   }));
 }
 
-/** ประเภทที่ต้องมีแต่ยังไม่มีสักใบ */
-export function missingRequiredDocs(documents: DriverDocument[]): DriverDocType[] {
+/**
+ * ประเภทที่ต้องมีแต่ยังไม่มีสักใบ · `fromApplication` = มีใบสมัครผูกอยู่ — เอกสาร HR (สัญญาจ้าง)
+ * นับว่ามีแล้วเพราะเปิดฉบับจากใบสมัครได้ (ค่าตั้งต้น ไม่ต้องแนบ)
+ */
+export function missingRequiredDocs(documents: DriverDocument[], fromApplication = false): DriverDocType[] {
   const present = new Set(documents.map((doc) => driverDocType(doc.docType).code));
-  return DRIVER_DOC_TYPES.filter((type) => type.required && !present.has(type.code));
+  return DRIVER_DOC_TYPES.filter(
+    (type) => type.required && !present.has(type.code) && !(fromApplication && type.hr),
+  );
 }
 
 export const REQUIRED_DOC_COUNT = DRIVER_DOC_TYPES.filter((t) => t.required).length;
@@ -662,7 +684,8 @@ export interface DriverListRegistry extends Omit<DriverRegistry, "drivers"> {
 /** ทะเบียนใช้บัญชีกสิกรไทยอย่างเดียว (หัวคอลัมน์ในไฟล์ฝ่ายบุคคล “เลขที่บัญชี กสิกรไทยเท่านั้น”) */
 export const DRIVER_BANK_NAME = "กสิกรไทย";
 
-export type DriverEditKind = "text" | "phone" | "date" | "nid" | "bank" | "ownerType" | "branch";
+/** `customer` / `position` = ดรอปดาวน์ชุดเดียวกับฟอร์มขออัตรา (`CUSTOMERS` / `POSITIONS`) + “อื่นๆ ระบุเอง” — เก็บเป็นข้อความเหมือนเดิม */
+export type DriverEditKind = "text" | "phone" | "date" | "nid" | "bank" | "ownerType" | "branch" | "customer" | "position";
 
 export interface DriverEditField {
   /** ชื่อฟิลด์ใน `master_driver` */
@@ -707,9 +730,9 @@ export const DRIVER_EDIT_FIELDS: DriverEditField[] = [
     required: true,
   },
   { key: "branch", from: "branch", label: "สาขา", kind: "branch", group: "employment", required: true },
-  { key: "customer", from: "customer", label: "ลูกค้า", kind: "text", group: "employment" },
+  { key: "customer", from: "customer", label: "ลูกค้า", kind: "customer", group: "employment" },
   { key: "plant", from: "plant", label: "แพล้นท์", kind: "text", group: "employment" },
-  { key: "position", from: "position", label: "ตำแหน่ง", kind: "text", group: "employment" },
+  { key: "position", from: "position", label: "ตำแหน่ง", kind: "position", group: "employment" },
   {
     key: "vehicleCode",
     from: "vehicleRef",
@@ -812,7 +835,7 @@ export const DRIVER_EDIT_FIELDS: DriverEditField[] = [
 export const DRIVER_EDIT_GROUPS: {
   id: DriverEditField["group"];
   title: string;
-  tab: Exclude<DriverProfileTab, "work">;
+  tab: Exclude<DriverProfileTab, "work" | "training">;
 }[] = [
   { id: "employment", title: "ข้อมูลการจ้าง", tab: "info" },
   { id: "contact", title: "ช่องทางติดต่อ", tab: "info" },
@@ -1205,9 +1228,9 @@ export function formatThaiDateTime(iso: string): string {
  * แท็บของหน้าประวัติคนขับ (`?tab=`) — อยู่ที่นี่ไม่ใช่ใน `driver-profile-tabs.tsx`
  * เพราะหน้า server ต้องอ่านค่าจริง ของที่ export จากไฟล์ `"use client"` ฝั่ง server ได้แค่ตัวอ้างอิง
  */
-export type DriverProfileTab = "info" | "docs" | "work";
+export type DriverProfileTab = "info" | "docs" | "training" | "work";
 
-export const DRIVER_PROFILE_TABS: readonly DriverProfileTab[] = ["info", "docs", "work"];
+export const DRIVER_PROFILE_TABS: readonly DriverProfileTab[] = ["info", "docs", "training", "work"];
 
 /* -------------------------------------------- วางแถวจาก Excel ทะเบียน 2026 (`paste-import.ts`) */
 

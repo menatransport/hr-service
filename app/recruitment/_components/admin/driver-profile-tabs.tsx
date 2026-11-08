@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, FileText, User } from "lucide-react";
+import { CalendarDays, FileText, GraduationCap, User } from "lucide-react";
 
 import { SummaryTabs, type SummaryTab } from "@/components/ui/summary-panel";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/app/recruitment/_lib/drivers/types";
 
 /**
- * แท็บของหน้าประวัติคนขับ — ข้อมูลทั่วไป / เอกสาร / ปฏิทินการทำงาน
+ * แท็บของหน้าประวัติคนขับ — ข้อมูลทั่วไป / เอกสาร / ข้อมูลฝึกงาน / ปฏิทินการทำงาน
  *
  * เนื้อหาทุกแท็บเรนเดอร์จากเซิร์ฟเวอร์มาครบแล้ว ที่นี่แค่ซ่อน/แสดง — สลับแท็บไม่ยิงเซิร์ฟเวอร์ซ้ำ
  * และของที่กรอกค้างในแท็บอื่น (เช่น ช่องวันหมดอายุบัตร) ไม่หาย · แท็บที่เปิดอยู่จดลง `?tab=`
@@ -21,6 +21,7 @@ export function DriverProfileTabs({
   missingDocs,
   info,
   docs,
+  training,
   work,
 }: {
   initial: DriverProfileTab;
@@ -28,6 +29,7 @@ export function DriverProfileTabs({
   missingDocs: number;
   info: React.ReactNode;
   docs: React.ReactNode;
+  training: React.ReactNode;
   work: React.ReactNode;
 }) {
   const [tab, setTab] = useState<DriverProfileTab>(initial);
@@ -42,6 +44,7 @@ export function DriverProfileTabs({
       countTitle: `ยังขาดเอกสารที่ต้องมี ${missingDocs} รายการ`,
       tone: missingDocs ? "alert" : "primary",
     },
+    { id: "training", label: "ข้อมูลฝึกงาน", icon: GraduationCap },
     { id: "work", label: "ปฏิทินการทำงาน", icon: CalendarDays },
   ];
 
@@ -53,7 +56,7 @@ export function DriverProfileTabs({
     window.history.replaceState(window.history.state, "", url);
   }
 
-  const panels: Record<DriverProfileTab, React.ReactNode> = { info, docs, work };
+  const panels: Record<DriverProfileTab, React.ReactNode> = { info, docs, training, work };
 
   return (
     <div className="flex flex-col gap-6">

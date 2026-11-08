@@ -9,6 +9,8 @@ import {
 import { DataError } from "@/components/ui/data-error";
 import { canAccessMenu } from "@/lib/menu-permissions";
 import { getDriverProfile } from "@/app/recruitment/_lib/drivers/registry";
+import { getDriverHrLink } from "@/app/recruitment/_lib/drivers/driver-hr";
+import { getDriverDocSource } from "@/app/recruitment/_lib/drivers/application-registry";
 
 /**
  * ประวัติคนขับรายคน — `code` คือ `drivercode` ตรง ๆ
@@ -41,9 +43,12 @@ export default async function DriverProfilePage(
      แต่อ่านอย่างเดียว และไม่เห็นข้อมูลแท็บเอกสาร (ตัดทิ้งตั้งแต่ตรงนี้ ไม่ส่งลง browser) */
   const canEdit = await canAccessMenu("registry-profile");
 
+  const drivercode = decodeURIComponent(code);
+  /* ฝั่งสรรหา (ใบสมัคร + คำขอ JR) อ่านพร้อมกัน — พังเองไม่ล้มหน้า (`getDriverHrLink` กลืน error) */
+  const hrLink = getDriverHrLink(drivercode);
   let driver;
   try {
-    driver = await getDriverProfile(decodeURIComponent(code));
+    driver = await getDriverProfile(drivercode);
   } catch (err) {
     return (
       <div className="mx-auto max-w-xl animate-rise py-6">
@@ -62,11 +67,23 @@ export default async function DriverProfilePage(
   const { tab } = await props.searchParams;
   const initial = DRIVER_PROFILE_TABS.find((t) => t === tab) as DriverProfileTab | undefined;
 
+  const hr = await hrLink;
+  /* แท็บเอกสาร = ข้อมูลชุดเดียวกับกล่อง “เอกสารและข้อมูลจากเอกสาร” ของใบที่ผูกไว้ — อ่านไม่ได้ก็ยังขึ้นหน้า */
+  const docSource =
+    canEdit && hr.application && !hr.application.erased
+      ? await getDriverDocSource(hr.application.id).catch((err) => {
+          console.warn("[driver-profile] อ่านข้อมูลเอกสารจากใบสมัครไม่สำเร็จ —", err);
+          return null;
+        })
+      : null;
+
   return (
     <DriverProfile
       driver={canEdit ? driver : withoutDocsTab(driver)}
       tab={initial}
       canEdit={canEdit}
+      hr={hr}
+      docSource={docSource}
     />
   );
 }

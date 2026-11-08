@@ -7,6 +7,7 @@ import { Loader2, Pencil, TriangleAlert } from "lucide-react";
 import { DateField, SelectField, TextField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
+import { CUSTOMERS, OTHER, POSITIONS } from "@/app/recruitment/_lib/requisitions/types";
 import {
   DRIVER_BRANCH_OPTIONS,
   DRIVER_EDIT_FIELDS,
@@ -73,9 +74,30 @@ function fieldsFor(driver: DriverRecord, scope: EditScope): DriverEditField[] {
   return DRIVER_EDIT_FIELDS.filter((f) => ids.has(f.group) && (driver.active || !f.personal));
 }
 
+/**
+ * ตัวเลือกลูกค้า/ตำแหน่ง — **ชุดเดียวกับฟอร์มขออัตรา** (`requisition-form.tsx` · Bew 8 พ.ย. 2569)
+ * เก็บลงทะเบียนเป็นป้าย (“Mixer L”) เหมือนที่ `enrollDriver()` เขียนจากคำขอ ไม่ใช่รหัส (`ML`)
+ */
+const CHOICES: Record<"customer" | "position", string[]> = {
+  customer: [...CUSTOMERS],
+  position: POSITIONS.filter((p) => p.value !== OTHER).map((p) => p.label),
+};
+
+/** ค่าเดิมที่ตรงตัวเลือกแต่ตัวพิมพ์ต่างกัน (“Scco” · “Spare Driver” · `MS`) → ป้ายของตัวเลือก */
+function canonicalChoice(kind: "customer" | "position", raw: string): string {
+  const key = raw.trim().toLowerCase();
+  if (!key) return "";
+  const hit =
+    CHOICES[kind].find((c) => c.toLowerCase() === key) ??
+    (kind === "position" ? POSITIONS.find((p) => p.value.toLowerCase() === key)?.label : undefined);
+  return hit ?? raw.trim();
+}
+
 /** ค่าตั้งต้นของช่อง — ประเภทพนักงานใช้รหัสที่แปลแล้ว (ค่าดิบบางแถวเป็นข้อความไทย/`1.0`) */
 function initialOf(driver: DriverRecord, field: DriverEditField): string {
   if (field.kind === "ownerType") return driver.ownerTypeKey ?? driver.ownerType;
+  if (field.kind === "customer" || field.kind === "position")
+    return canonicalChoice(field.kind, String(driver[field.from] ?? ""));
   return String(driver[field.from] ?? "");
 }
 
@@ -271,6 +293,10 @@ function EditInput({
     return <SelectField {...common} value={value} onChange={onChange} options={options} />;
   }
 
+  if (field.kind === "customer" || field.kind === "position") {
+    return <ChoiceField {...common} choices={CHOICES[field.kind]} value={value} initial={initial} onChange={onChange} />;
+  }
+
   return (
     <TextField
       {...common}
@@ -278,5 +304,68 @@ function EditInput({
       value={value}
       onChange={onChange}
     />
+  );
+}
+
+/**
+ * ดรอปดาวน์ + “อื่นๆ (ระบุเอง)” แบบฟอร์มขออัตรา · ค่าเดิมที่ไม่อยู่ในรายการ (เช่น “Cpac MS” จาก Excel)
+ * ขึ้นเป็นตัวเลือก “ค่าเดิม” ให้เห็นและคงไว้ได้ ไม่ใช่ช่องว่างเหมือนไม่เคยมีค่า
+ */
+function ChoiceField({
+  id,
+  label,
+  hint,
+  optional,
+  choices,
+  value,
+  initial,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  optional?: boolean;
+  choices: string[];
+  value: string;
+  initial: string;
+  onChange: (v: string) => void;
+}) {
+  const legacy = initial && !choices.includes(initial) ? initial : "";
+  const [other, setOther] = useState(false);
+  const options = [
+    ...choices.map((c) => ({ value: c, label: c })),
+    ...(legacy ? [{ value: legacy, label: `${legacy} (ค่าเดิม)` }] : []),
+    { value: OTHER, label: "อื่นๆ (ระบุเอง)" },
+  ];
+  const selected = other ? OTHER : value;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <SelectField
+        id={id}
+        label={label}
+        hint={hint}
+        optional={optional}
+        placeholder="เลือก…"
+        value={selected}
+        onChange={(v) => {
+          setOther(v === OTHER);
+          onChange(v === OTHER ? "" : v);
+        }}
+        options={options}
+        searchable={choices.length > 6}
+        searchPlaceholder={`ค้น${label}…`}
+      />
+      {other ? (
+        <TextField
+          id={`${id}-other`}
+          label={`ระบุ${label}`}
+          srLabel
+          placeholder={`ระบุ${label}…`}
+          value={value}
+          onChange={onChange}
+        />
+      ) : null}
+    </div>
   );
 }

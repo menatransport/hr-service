@@ -9,7 +9,13 @@ import { DateField, Frame, SelectField, TextareaField, TextField } from "@/compo
 import { SegmentedControl } from "@/components/ui/summary-panel";
 import { requestJson } from "@/lib/http";
 import { toastSuccess } from "@/lib/swal";
-import { DRIVER_BRANCH_OPTIONS, OWNER_TYPE_LABELS, type DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
+import {
+  DRIVER_BRANCH_OPTIONS,
+  MIXER_POSITIONS,
+  OWNER_TYPE_LABELS,
+  siteOfBranch,
+  type DriverListRecord,
+} from "@/app/recruitment/_lib/drivers/types";
 
 /**
  * กล่อง “เพิ่มพนักงาน” บนหน้าทะเบียน — เลือก พจส./พจร. แล้วกรอกเฉพาะที่จำเป็น ไม่ผ่านใบสมัคร (`POST /api/drivers`)
@@ -25,6 +31,9 @@ function choices(values: string[]) {
 
 /** ประเภทที่เพิ่มจากกล่องนี้ได้ — ต้องเลือกเองทุกครั้ง ไม่ตั้งค่าเริ่มให้ */
 const OWNER_OPTIONS = (["1", "2"] as const).map((value) => ({ value, label: OWNER_TYPE_LABELS[value] }));
+
+/** ตำแหน่งงานโม่ — ชิปกดครั้งเดียวแบบฟอร์มขออัตรา ไม่ตั้งค่าเริ่มให้ */
+const POSITION_OPTIONS = MIXER_POSITIONS.map((value) => ({ value, label: value }));
 
 const today = () => new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -42,13 +51,24 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
     vehicleCode: "",
     customer: "",
     plant: "",
+    position: "",
     note: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
-  const ready = form.ownerType && form.drivercode.trim() && form.driverName.trim() && form.branch && form.startDate;
+  /* ลาดกระบัง = งานโม่ ต้องเลือกตำแหน่ง · เปลี่ยนไปสาขาอื่นแล้วตำแหน่งถูกล้าง (สาขาอื่นไม่มีชุดนี้) */
+  const mixer = siteOfBranch(form.branch) === "latkrabang";
+  const pickBranch = (v: string) =>
+    setForm((f) => ({ ...f, branch: v, position: siteOfBranch(v) === "latkrabang" ? f.position : "" }));
+  const ready =
+    form.ownerType &&
+    form.drivercode.trim() &&
+    form.driverName.trim() &&
+    form.branch &&
+    form.startDate &&
+    (!mixer || form.position);
 
   async function save() {
     if (!ready || saving) return;
@@ -109,6 +129,18 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
           />
         </Frame>
 
+        {mixer ? (
+          <Frame id="add-position" label="ตำแหน่ง">
+            <SegmentedControl
+              label="ตำแหน่ง"
+              value={form.position}
+              options={POSITION_OPTIONS}
+              onChange={(v) => !saving && set("position")(v)}
+              className="self-start"
+            />
+          </Frame>
+        ) : null}
+
         <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
           <TextField id="add-drivercode" label="รหัสพนักงาน" value={form.drivercode} onChange={set("drivercode")} readOnly={saving} />
           <TextField id="add-driverName" label="ชื่อ – สกุล" value={form.driverName} onChange={set("driverName")} readOnly={saving} />
@@ -117,7 +149,7 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
             label="สาขา"
             options={DRIVER_BRANCH_OPTIONS}
             value={form.branch}
-            onChange={set("branch")}
+            onChange={pickBranch}
             readOnly={saving}
           />
           <DateField id="add-startDate" label="วันเริ่มงาน" value={form.startDate} onChange={set("startDate")} readOnly={saving} />
