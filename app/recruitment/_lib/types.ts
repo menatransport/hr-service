@@ -429,6 +429,8 @@ export interface DocumentData {
   licenseExpiry: string;
   /** ชื่อธนาคาร */
   bankName: string;
+  /** สาขาที่เปิดบัญชี — ได้รหัส พจส. แล้วอยู่ที่ทะเบียน (`drivers/document-sync.ts`) */
+  bankBranch: string;
   /** เลขที่บัญชี (ตัวเลขล้วน) */
   bankAccountNo: string;
   /** ชื่อบัญชี — ต้องตรงกับชื่อตามบัตร ไม่งั้นโอนเงินเดือนไม่ผ่าน */
@@ -446,6 +448,7 @@ export const EMPTY_DOCUMENT_DATA: DocumentData = {
   licenseType: "",
   licenseExpiry: "",
   bankName: "",
+  bankBranch: "",
   bankAccountNo: "",
   bankAccountName: "",
 };
@@ -512,6 +515,7 @@ export const DOCUMENT_FIELDS: DocumentField[] = [
   },
 
   { key: "bankName", label: "ธนาคาร", slot: "bank_book", kind: "text" },
+  { key: "bankBranch", label: "สาขา", slot: "bank_book", kind: "text" },
   {
     key: "bankAccountNo",
     label: "เลขที่บัญชี",
@@ -598,6 +602,11 @@ export interface Application {
   files: ApplicationFile[];
   /** ข้อมูลที่อ่าน/กรอกจากเอกสารแนบ (ดู `DocumentData`) */
   documents: DocumentData;
+  /**
+   * รหัส พจส. ที่ใบนี้ผูกอยู่ — มีค่า = บัตร/ใบขับขี่/บัญชีใน `documents` มาจากทะเบียน และแก้แล้วเขียนลงทะเบียน
+   * (`drivers/application-registry.ts`) · อ่านจาก `getApplication()` ตรง ๆ จะไม่มีค่านี้
+   */
+  registryDrivercode?: string;
   documentMeta: DocumentMeta;
   consent: ConsentRecord;
   timeline: TimelineEntry[];
@@ -639,6 +648,8 @@ export interface ApplicationSummary {
   /** สรุป Driver Rating — ปุ่มดาวในคอลัมน์จัดการอ่านจากนี่ */
   rating: RatingSummary;
   fileCount: number;
+  /** รูปโปรไฟล์ = รูปถ่ายหน้าตรง (ช่อง `portrait`) · `null` = ยังไม่มีรูป */
+  photoUrl: string | null;
   /** ผู้สมัครกดยกเลิกเองและข้อมูลถูกลบแล้ว — แถวนี้ล็อกทั้งแถว (ดู `Application`) */
   erased: boolean;
   createdAt: string;

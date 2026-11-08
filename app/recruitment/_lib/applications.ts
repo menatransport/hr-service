@@ -1168,13 +1168,19 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
     Omit<
       ApplicationDoc,
       "files" | "documents" | "documentMeta" | "consent" | "timeline" | "questionSnapshot"
-    > & { fileCount: number }
+    > & { fileCount: number; portrait: { url?: string }[] }
   >(
     range
       ? [{ $match: { createdAt: { $gte: range.gte, $lt: range.lt } } }, { $sort: { createdAt: -1 } }]
       : [{ $sort: { createdAt: -1 } }],
-    // นับไฟล์ในฐานข้อมูล ไม่ต้องส่งรายการไฟล์ทั้งชุดมานับเองที่นี่
-    { ...SUMMARY_FIELDS, fileCount: { $size: { $ifNull: ["$files", []] } } },
+    // นับไฟล์ในฐานข้อมูล ไม่ต้องส่งรายการไฟล์ทั้งชุดมานับเองที่นี่ · ดึงมาแค่รูปหน้าตรง (รูปโปรไฟล์)
+    {
+      ...SUMMARY_FIELDS,
+      fileCount: { $size: { $ifNull: ["$files", []] } },
+      portrait: {
+        $filter: { input: { $ifNull: ["$files", []] }, cond: { $eq: ["$$this.slot", "portrait"] } },
+      },
+    },
   );
 
   return docs.map<ApplicationSummary>((doc) => ({
@@ -1196,6 +1202,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
       rating: ratingOf(doc),
     }),
     fileCount: doc.fileCount,
+    photoUrl: erasedOf(doc) ? null : doc.portrait?.[0]?.url || null,
     erased: erasedOf(doc),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,

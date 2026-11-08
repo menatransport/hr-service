@@ -6,6 +6,7 @@ import { Camera } from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { AvatarCropper } from "@/components/ui/avatar-cropper";
+import { PhotoPreview } from "@/components/ui/photo-preview";
 import { requestJson } from "@/lib/http";
 import { ACCEPT_ATTR, ACCEPTED_LABEL, isAcceptedImage } from "@/lib/image-resize";
 import { runAction } from "@/lib/swal";
@@ -49,7 +50,11 @@ export function DriverAvatar({
   const [error, setError] = useState<string | null>(null);
 
   if (!editable) {
-    return <Avatar name={driver.name} src={driver.photoUrl || null} size={size} tone={tone} />;
+    return (
+      <PhotoPreview src={driver.photoUrl} name={driver.name}>
+        <Avatar name={driver.name} src={driver.photoUrl || null} size={size} tone={tone} />
+      </PhotoPreview>
+    );
   }
 
   function pick(file: File | undefined) {
@@ -114,6 +119,8 @@ export function DriverAvatar({
       className="relative inline-flex flex-none"
       onClick={(e) => e.stopPropagation()}
     >
+      {/* ชี้เมาส์ = รูปขยาย · กด = เปลี่ยนรูป */}
+      <PhotoPreview src={driver.photoUrl} name={driver.name}>
       <button
         type="button"
         onClick={() => input.current?.click()}
@@ -123,6 +130,7 @@ export function DriverAvatar({
       >
         <Avatar name={driver.name} src={driver.photoUrl || null} size={size} tone={tone} />
       </button>
+      </PhotoPreview>
 
       {/* กล้องเกาะมุมขวาล่าง — ขอบสีพื้นทำให้ไม่จมไปกับรูป และบอกว่าวงนี้กดได้ */}
       <span

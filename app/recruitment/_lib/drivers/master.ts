@@ -1,5 +1,7 @@
 import { etlCol, hrCol } from "@/lib/db";
 
+import { loadPortraitIndex } from "./portrait";
+
 /**
  * ตัวอ่านทะเบียน พจส. ตัวเดียวของทั้งระบบ — **ฝั่งเซิร์ฟเวอร์เท่านั้น**
  *
@@ -97,13 +99,31 @@ export async function readDrivers<T extends object = Record<string, unknown>>(
   const projection: Record<string, 1 | 0> = { _id: 0, drivercode: 1 };
   for (const f of wanted) projection[f] = 1;
 
+  /* รูป = รูปหน้าตรงในใบสมัคร (`./portrait.ts`) — ต้องใช้เลขบัตรจับใบ และดูว่ารูปถูกลบตามนโยบายแล้วหรือยัง
+     สองฟิลด์นี้ขอเพิ่มเอง แล้วตัดทิ้งก่อนคืน ถ้าผู้เรียกไม่ได้ขอ (ตารางรายชื่อไม่ส่งเลขบัตรลง browser) */
+  const withPhoto = wanted.includes("photoUrl");
+  const extra = withPhoto ? (["nationalId", "mediaPurgedAt"] as const).filter((f) => !wanted.includes(f)) : [];
+  for (const f of extra) projection[f] = 1;
+
   const filter = codes ? { ...IN_REGISTRY, drivercode: { $in: [...codes] } } : IN_REGISTRY;
-  const docs = await hrCol("drivers").then((c) =>
-    c.find(filter, { projection }).sort({ drivercode: 1 }).limit(LIST_LIMIT).toArray(),
-  );
+  const [docs, portraits] = await Promise.all([
+    hrCol("drivers").then((c) =>
+      c.find(filter, { projection }).sort({ drivercode: 1 }).limit(LIST_LIMIT).toArray(),
+    ),
+    /* อ่านรูปไม่ได้ไม่ควรล้มทั้งทะเบียน — ตกไปใช้รูปที่เก็บในทะเบียนเอง */
+    withPhoto ? loadPortraitIndex(codes).catch(() => null) : null,
+  ]);
 
   return docs
-    .map((doc) => ({ ...doc, drivercode: code(doc.drivercode) }))
+    .map((doc) => {
+      const row: Record<string, unknown> = { ...doc, drivercode: code(doc.drivercode) };
+      if (withPhoto) {
+        const portrait = row.mediaPurgedAt ? null : portraits?.resolve(row.drivercode as string, row.nationalId);
+        if (portrait) row.photoUrl = portrait;
+        for (const f of extra) delete row[f];
+      }
+      return row;
+    })
     .filter((doc) => doc.drivercode) as T[];
 }
 

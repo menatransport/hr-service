@@ -1,5 +1,7 @@
 "use client";
 
+import { PhotoPreview } from "@/components/ui/photo-preview";
+import { mediaThumbUrl } from "@/lib/media";
 import { Fragment, useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import {
@@ -1025,7 +1027,12 @@ export function CandidatesView({
                       readyToStart: roleAnswer(next, "ready_date"),
                     }
                   : {}),
-                ...(patch.files ? { fileCount: next.files.length } : {}),
+                ...(patch.files
+                  ? {
+                      fileCount: next.files.length,
+                      photoUrl: next.files.find((f) => f.slot === "portrait")?.url ?? null,
+                    }
+                  : {}),
                 /* ดาวในคอลัมน์จัดการต้องขยับตามคะแนนที่เพิ่งบันทึก — คำตอบในฟอร์ม
                    ก็มีผลต่อคะแนนด้วย จึงคิดใหม่ทั้งตอนแก้คะแนนและตอนแก้คำตอบ */
                 ...(patch.rating || patch.answers ? { rating: summarizeRating(next) } : {}),
@@ -1275,7 +1282,7 @@ export function CandidatesView({
                     return (
                       <td className="sticky left-0 z-[5] bg-base-100 px-3 py-2 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line group-hover:bg-base-200">
                         <div className="flex items-center gap-2.5">
-                          <PersonMark status={a.status} />
+                          <PersonMark status={a.status} photoUrl={a.photoUrl} name={a.fullName} />
                           <div className="flex flex-col gap-0.5">
                             <span className="font-medium whitespace-nowrap text-ink">
                               {a.fullName}
@@ -1751,7 +1758,47 @@ const PERSON_TONE: Record<ApplicationStatus, string> = {
   cancelled: "bg-alert/12 text-alert",
 };
 
-function PersonMark({ status }: { status: ApplicationStatus }) {
+/** วงรอบรูปหน้าตรง — สีชุดเดียวกับไอคอนคน สถานะจึงยังอ่านออกตอนมีรูป */
+const PERSON_RING: Record<ApplicationStatus, string> = {
+  pending_contact: "ring-st-wait-ink/45",
+  interview_scheduled: "ring-st-wait-ink/45",
+  interview_passed: "ring-st-live-ink/45",
+  training: "ring-st-live-ink/45",
+  working: "ring-st-live-ink/45",
+  cancelled: "ring-alert/50",
+};
+
+/**
+ * หน้าชื่อ = รูปถ่ายหน้าตรงของใบ (รูปโปรไฟล์ · Bew 8 พ.ย. 2569) · ยังไม่มีรูป = ไอคอนคนตามสถานะเหมือนเดิม
+ * ไม่ใช้รูปอื่นแทน จนกว่าจะมีคนอัปรูปหน้าตรง (กล่องเอกสารในใบ หรือวงรูปบนทะเบียนประวัติ)
+ */
+function PersonMark({
+  status,
+  photoUrl,
+  name,
+}: {
+  status: ApplicationStatus;
+  photoUrl?: string | null;
+  name?: string;
+}) {
+  if (photoUrl) {
+    /* ในตาราง = รูปย่อ 160 px · ชี้เมาส์ = รูปขยาย (`PhotoPreview`) */
+    return (
+      <PhotoPreview src={photoUrl} name={name}>
+        <span className="flex size-7 flex-none">
+          {/* eslint-disable-next-line @next/next/no-img-element -- ลิงก์ /api/media (private) */}
+          <img
+            src={mediaThumbUrl(photoUrl, 160)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className={`size-full rounded-full object-cover ring-2 ${PERSON_RING[status]}`}
+          />
+          <span className="sr-only">{STATUS_LABEL[status]}</span>
+        </span>
+      </PhotoPreview>
+    );
+  }
   return (
     <span
       title={STATUS_LABEL[status]}
