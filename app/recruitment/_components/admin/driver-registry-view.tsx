@@ -1019,7 +1019,7 @@ function Row({
 
   /**
    * แถวของคนที่พ้นสภาพแล้วเป็น **โทนแดงทั้งแถว** — รูป รหัส พื้นตอนชี้ ปุ่มตาท้ายแถว
-   * (ย้ายไปรถร่วม = โทนม่วง `EXIT_TONE.transfer` · 4 พ.ย. 2569)
+   * (ย้ายไปรถร่วม = โทนม่วง `EXIT_TONE.transfer` · 4 พ.ย. 2569 · ย้ายไปพจส. = น้ำเงิน `EXIT_TONE.pjs` · 9 พ.ย. 2569)
    *
    * ดูจาก `driver.active` ไม่ใช่จากแท็บที่เปิดอยู่ — สีจึงติดไปกับภาพที่แคปส่งต่อ
    * และกับกระดาษที่พิมพ์ออกมา ซึ่งไม่มีแท็บติดไปด้วย · ถ้าวันหนึ่งแท็บ “ปัจจุบัน”
@@ -1113,7 +1113,7 @@ function Row({
   );
 }
 
-/** โทนของแถวคนที่ไม่ได้ทำงานแล้ว — พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง · ยังทำงาน = `null` */
+/** โทนของแถวคนที่ไม่ได้ทำงานแล้ว — พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง · ย้ายไปพจส. = น้ำเงิน · ยังทำงาน = `null` */
 const EXIT_TONE = {
   resign: {
     row: "border-alert/15 hover:bg-alert-soft",
@@ -1129,11 +1129,18 @@ const EXIT_TONE = {
     hoverText: "group-hover:text-transfer",
     cardHover: "hover:bg-transfer-soft",
   },
+  pjs: {
+    row: "border-pjs/15 hover:bg-pjs-soft",
+    sticky: "after:bg-pjs/20 group-hover:bg-pjs-soft",
+    text: "text-pjs",
+    hoverText: "group-hover:text-pjs",
+    cardHover: "hover:bg-pjs-soft",
+  },
 } as const;
 
 function exitToneOf(driver: DriverListRecord) {
   if (driver.active) return null;
-  return EXIT_TONE[driver.resignation?.kind === "transfer" ? "transfer" : "resign"];
+  return EXIT_TONE[driver.resignation?.kind ?? "resign"];
 }
 
 function driverHref(driver: DriverListRecord) {

@@ -36,6 +36,7 @@ import {
   formatExpiryGap,
   formatLicenseGap,
   formatTenure,
+  EXIT_KIND_LABEL,
   formatThaiDate,
   formatBankAccount,
   formatThaiDateTime,
@@ -106,8 +107,8 @@ export function DriverProfile({
    */
   const hidePersonal = !driver.active;
   const fromApplication = Boolean(hr.application && !hr.application.erased);
-  const transferred = driver.resignation?.kind === "transfer";
-  const statusText = driver.active ? "ปฏิบัติงานอยู่" : transferred ? "ย้ายไปรถร่วมแล้ว" : "พ้นสภาพแล้ว";
+  const exitNoun = EXIT_KIND_LABEL[driver.resignation?.kind ?? "resign"];
+  const statusText = driver.active ? "ปฏิบัติงานอยู่" : `${exitNoun}แล้ว`;
 
   return (
     <div className="flex flex-col gap-5 animate-rise">
@@ -205,7 +206,7 @@ export function DriverProfile({
                     value={statusText}
                     note={
                       driver.resignation
-                        ? `${transferred ? "ย้ายไปรถร่วม" : "พ้นสภาพ"} ${formatThaiDate(driver.resignation.dateISO)}`
+                        ? `${exitNoun} ${formatThaiDate(driver.resignation.dateISO)}`
                         : undefined
                     }
                   />
@@ -450,8 +451,8 @@ function Blank({ children }: { children: React.ReactNode }) {
  */
 function ResignPanel({ driver, canEdit }: { driver: DriverRecord; canEdit: boolean }) {
   const resignation = driver.resignation;
-  /* ย้ายไปรถร่วม — ไม่มีรหัสเหตุผล/ประเภทการออก แสดงแค่วันที่กับหมายเหตุ */
-  const noun = resignation?.kind === "transfer" ? "ย้ายไปรถร่วม" : "พ้นสภาพ";
+  /* ย้ายไปรถร่วม / ย้ายไปพจส. — ไม่มีรหัสเหตุผล/ประเภทการออก แสดงแค่วันที่กับหมายเหตุ */
+  const noun = EXIT_KIND_LABEL[resignation?.kind ?? "resign"];
 
   if (!resignation) {
     return (
@@ -492,7 +493,7 @@ function ResignPanel({ driver, canEdit }: { driver: DriverRecord; canEdit: boole
           label={`วันที่${noun}`}
           value={formatThaiDate(resignation.dateISO, "full")}
         />
-        {resignation.kind === "transfer" ? null : (
+        {resignation.kind !== "resign" ? null : (
           <Field
             icon={ClipboardList}
             label="เหตุผล"

@@ -377,8 +377,12 @@ function toEntry(cells: string[], line: number, index: Layout["index"]): Entry |
       if (!dateISO) return { ...base, skip: `สถานะ “${status}” แต่ไม่มีวันที่พ้นสภาพ` };
       const reason = text("reason");
       resignation = {
-        /* สถานะในไฟล์ “ย้ายเป็นรถร่วม” = ย้ายไปรถร่วม (`DriverResignation.kind`) */
-        kind: /^(โยก)?ย้าย(ไป|เป็น)รถร่วม$/.test(status) ? "transfer" : "resign",
+        /* สถานะในไฟล์ “ย้ายเป็นรถร่วม” = ย้ายไปรถร่วม · “ย้ายไปพจส.” = ย้ายไปพจส. (`DriverResignation.kind`) */
+        kind: /^(โยก)?ย้าย(ไป|เป็น)รถร่วม$/.test(status)
+          ? "transfer"
+          : /^(โยก)?ย้าย(ไป|เป็น)\s*พจส\.?$/.test(status)
+            ? "pjs"
+            : "resign",
         dateISO,
         reasonCode: "XLS",
         reasonLabel: reason || status,

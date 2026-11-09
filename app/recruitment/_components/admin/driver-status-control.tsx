@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Popover as RPopover } from "radix-ui";
-import { Check, ChevronDown, Settings2, Truck, UserMinus, UserRound } from "lucide-react";
+import { ArrowRightLeft, Check, ChevronDown, Settings2, Truck, UserMinus, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { DateField, SelectField, TextareaField, useOverlayCount } from "@/components/ui/field";
@@ -11,6 +11,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction } from "@/lib/swal";
 import {
+  EXIT_KIND_LABEL,
   employmentLabel,
   formatThaiDate,
   type DriverExitKind,
@@ -29,9 +30,9 @@ import { useCanSee } from "@/components/auth/menu-access-provider";
 /**
  * ปุ่มปรับสถานะการจ้างของ พจส. — ใช้ทั้งในตารางและบนหน้ารายบุคคล
  *
- * กดแล้วได้เมนูสามทาง · เลือก “พ้นสภาพ” จะเปิดฟอร์มที่ **บังคับ** วันที่กับเหตุผล
- * ก่อนบันทึก · “ย้ายไปรถร่วม” (4 พ.ย. 2569) บังคับแค่วันที่ แล้วไปอยู่แท็บพ้นสภาพเหมือนกัน
- * (`resignation.kind: "transfer"`) — ทั้งสองแบบต้องบันทึก เพราะระเบียนที่พ้นสภาพโดยไม่มีสองอย่างนี้เอาไปใช้ต่อไม่ได้เลย
+ * กดแล้วได้เมนูสี่ทาง · เลือก “พ้นสภาพ” จะเปิดฟอร์มที่ **บังคับ** วันที่กับเหตุผล
+ * ก่อนบันทึก · “ย้ายไปรถร่วม” (4 พ.ย. 2569) และ “ย้ายไปพจส.” (9 พ.ย. 2569) บังคับแค่วันที่
+ * แล้วไปอยู่แท็บพ้นสภาพเหมือนกัน (`resignation.kind: "transfer"` / `"pjs"`) — ทุกแบบต้องบันทึก เพราะระเบียนที่พ้นสภาพโดยไม่มีสองอย่างนี้เอาไปใช้ต่อไม่ได้เลย
  * (ทั้งงานเงินเดือน งานประกันสังคม และการตอบคำถามย้อนหลัง)
  *
  * **บันทึกลง `hr_service.master_driver`** — ดู `setDriverStatus()` ใน `lib/drivers/registry.ts`
@@ -56,7 +57,13 @@ export function DriverStatusControl({
   useOverlayCount(menuOpen);
 
   const resigned = !driver.active;
-  const transferred = resigned && driver.resignation?.kind === "transfer";
+  /** ชนิดการพ้นสภาพที่บันทึกอยู่ — `null` = ยังทำงาน */
+  const heldKind: DriverExitKind | null = resigned ? (driver.resignation?.kind ?? "resign") : null;
+  /* พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง · ย้ายไปพจส. = น้ำเงิน ตามโทนของทั้งแถว */
+  const toneText =
+    heldKind === "transfer" ? "text-transfer" : heldKind === "pjs" ? "text-pjs" : "text-alert";
+  const toneHover =
+    heldKind === "transfer" ? "hover:bg-transfer/10" : heldKind === "pjs" ? "hover:bg-pjs/10" : "hover:bg-alert/10";
   const label = employmentLabel(driver);
   /* สิทธิ์ย่อย “↳ ประวัติ” ไม่เห็น = ทะเบียนอ่านอย่างเดียว — เหลือแค่ป้ายสถานะ กดไม่ได้ */
   const canEdit = useCanSee("registry-profile");
@@ -89,7 +96,7 @@ export function DriverStatusControl({
     return (
       <span
         className={`truncate px-1 py-0.5 ${variant === "cell" ? "text-11-5" : "text-13"} ${
-          transferred ? "font-medium text-transfer" : resigned ? "font-medium text-alert" : "text-mut"
+          resigned ? `font-medium ${toneText}` : "text-mut"
         }`}
       >
         {label}
@@ -101,13 +108,9 @@ export function DriverStatusControl({
       <button
         type="button"
         title="เปลี่ยนสถานะการจ้าง"
-        /* พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง ตามโทนของทั้งแถว — คนที่ยังทำงานอยู่คงเป็นข้อความจาง */
+        /* คนที่ยังทำงานอยู่คงเป็นข้อความจาง */
         className={`flex cursor-pointer items-center gap-0.5 rounded-selector px-1 py-0.5 text-11-5 transition-colors ${
-          transferred
-            ? "font-medium text-transfer hover:bg-transfer/10"
-            : resigned
-              ? "font-medium text-alert hover:bg-alert/10"
-              : "text-mut hover:bg-base-300/60 hover:text-ink"
+          resigned ? `font-medium ${toneText} ${toneHover}` : "text-mut hover:bg-base-300/60 hover:text-ink"
         }`}
       >
         <span className="truncate">{label}</span>
@@ -118,8 +121,10 @@ export function DriverStatusControl({
         type="button"
         className="btn-sec flex cursor-pointer items-center gap-2 px-3 py-2 text-13 transition-colors hover:border-primary/40 hover:text-primary"
       >
-        {transferred ? (
+        {heldKind === "transfer" ? (
           <Truck size={15} strokeWidth={1.8} aria-hidden />
+        ) : heldKind === "pjs" ? (
+          <ArrowRightLeft size={15} strokeWidth={1.8} aria-hidden />
         ) : resigned ? (
           <UserMinus size={15} strokeWidth={1.8} aria-hidden />
         ) : (
@@ -158,24 +163,35 @@ export function DriverStatusControl({
 
             <MenuItem
               icon={UserMinus}
-              active={resigned && !transferred}
+              active={heldKind === "resign"}
               onClick={() => {
                 setMenuOpen(false);
                 setFormOpen("resign");
               }}
             >
-              {resigned && !transferred ? "แก้ไขข้อมูลพ้นสภาพ…" : "พ้นสภาพ…"}
+              {heldKind === "resign" ? "แก้ไขข้อมูลพ้นสภาพ…" : "พ้นสภาพ…"}
             </MenuItem>
 
             <MenuItem
               icon={Truck}
-              active={transferred}
+              active={heldKind === "transfer"}
               onClick={() => {
                 setMenuOpen(false);
                 setFormOpen("transfer");
               }}
             >
-              {transferred ? "แก้ไขข้อมูลย้ายไปรถร่วม…" : "ย้ายไปรถร่วม…"}
+              {heldKind === "transfer" ? "แก้ไขข้อมูลย้ายไปรถร่วม…" : "ย้ายไปรถร่วม…"}
+            </MenuItem>
+
+            <MenuItem
+              icon={ArrowRightLeft}
+              active={heldKind === "pjs"}
+              onClick={() => {
+                setMenuOpen(false);
+                setFormOpen("pjs");
+              }}
+            >
+              {heldKind === "pjs" ? "แก้ไขข้อมูลย้ายไปพจส.…" : "ย้ายไปพจส.…"}
             </MenuItem>
           </RPopover.Content>
         </RPopover.Portal>
@@ -226,8 +242,8 @@ function useResignMaster(enabled: boolean) {
 }
 
 /**
- * ฟอร์มพ้นสภาพ — `kind="transfer"` = ย้ายไปรถร่วม: มีแค่วันที่กับหมายเหตุ (ไม่มีรหัสเหตุผล/ประเภทการออก)
- * · เปลี่ยนชนิด (พ้นสภาพ ↔ ย้ายไปรถร่วม) ยกวันที่กับหมายเหตุเดิมมาให้ ส่วนรหัสเหตุผลเริ่มว่าง
+ * ฟอร์มพ้นสภาพ — `kind="transfer"` = ย้ายไปรถร่วม · `kind="pjs"` = ย้ายไปพจส.: มีแค่วันที่กับหมายเหตุ
+ * (ไม่มีรหัสเหตุผล/ประเภทการออก) · เปลี่ยนชนิดยกวันที่กับหมายเหตุเดิมมาให้ ส่วนรหัสเหตุผลเริ่มว่าง
  */
 function ResignForm({
   driver,
@@ -240,12 +256,13 @@ function ResignForm({
 }) {
   const router = useRouter();
   const fieldId = useId();
-  const transfer = kind === "transfer";
-  const { master, error: loadError } = useResignMaster(!transfer);
+  /** ย้ายไปรถร่วม / ย้ายไปพจส. — บันทึกแค่วันที่กับหมายเหตุ */
+  const simple = kind !== "resign";
+  const { master, error: loadError } = useResignMaster(!simple);
 
   const held = driver.resignation;
   const existing = held?.kind === kind ? held : null;
-  const noun = transfer ? "ย้ายไปรถร่วม" : "พ้นสภาพ";
+  const noun = EXIT_KIND_LABEL[kind];
   const [date, setDate] = useState(held?.dateISO || todayInBangkok());
   const [reason, setReason] = useState(existing?.reasonCode ?? "");
   const [exitType, setExitType] = useState<ExitType | "">(existing?.exitType ?? "");
@@ -268,12 +285,12 @@ function ResignForm({
   }
 
   /** บริษัทให้ออก = ต้องมีหมายเหตุ — ป้ายอย่างเดียวไม่พอให้คนอ่านทีหลังรู้ว่าเกิดอะไรขึ้น */
-  const noteRequired = !transfer && exitType === "inv";
+  const noteRequired = !simple && exitType === "inv";
 
   function validate(): string | null {
     if (!date) return `เลือกวันที่${noun}ก่อน`;
     if (date > todayInBangkok()) return `วันที่${noun}เป็นวันในอนาคตไม่ได้`;
-    if (transfer) return null;
+    if (simple) return null;
     if (!reason) return "เลือกรหัสเหตุผลการพ้นสภาพก่อน";
     if (!exitType) return "เลือกประเภทการออกก่อน";
     if (noteRequired && !note.trim())
@@ -292,8 +309,8 @@ function ResignForm({
     const out = await runAction({
       confirm: {
         title: `บันทึกการ${noun}ของ ${driver.name || driver.drivercode}?`,
-        html: transfer
-          ? `<ul class="hrs-swal-list"><li>วันที่ย้ายไปรถร่วม · ${formatThaiDate(date, "full")}</li><li>แถวนี้จะย้ายไปแท็บ “พ้นสภาพแล้ว”</li></ul>`
+        html: simple
+          ? `<ul class="hrs-swal-list"><li>วันที่${noun} · ${formatThaiDate(date, "full")}</li><li>แถวนี้จะย้ายไปแท็บ “พ้นสภาพแล้ว”</li></ul>`
           : `<ul class="hrs-swal-list"><li>วันที่พ้นสภาพ · ${formatThaiDate(date, "full")}</li><li>เหตุผล · ${escapeHtml(picked ? reasonOptionLabel(picked) : reason)}</li><li>ประเภทการออก · ${escapeHtml(exitTypeLabel(exitType))}</li></ul>`,
         confirmText: "บันทึก",
         tone: "warn",
@@ -308,8 +325,8 @@ function ResignForm({
             `/api/drivers/${encodeURIComponent(driver.drivercode)}/status`,
             {
               method: "PUT",
-              body: transfer
-                ? { status: "transferred", resignDate: date, note }
+              body: simple
+                ? { status: kind === "transfer" ? "transferred" : "to_pjs", resignDate: date, note }
                 : { status: "resigned", resignDate: date, reasonCode: reason, exitType, note },
             },
             "บันทึกไม่สำเร็จ",
@@ -370,15 +387,17 @@ function ResignForm({
           id={`${fieldId}-date`}
           label={`วันที่${noun}`}
           hint={
-            transfer
+            kind === "transfer"
               ? "วันที่เริ่มเป็นรถร่วม (พจร.) — ไม่ใช่วันที่กดบันทึก"
+              : kind === "pjs"
+                ? "วันที่เริ่มเป็น พจส. — ไม่ใช่วันที่กดบันทึก"
               : "วันสุดท้ายที่ถือว่ายังเป็นพนักงาน — ไม่ใช่วันที่กดบันทึก"
           }
           value={date}
           onChange={setDate}
         />
 
-        {transfer ? null : (
+        {simple ? null : (
           <>
             <SelectField
               id={`${fieldId}-reason`}
@@ -429,8 +448,10 @@ function ResignForm({
           onChange={setNote}
           rows={3}
           placeholder={
-            transfer
+            kind === "transfer"
               ? "เช่น ซื้อรถร่วม เริ่ม 1 พ.ย. 2569 · ทะเบียนรถ"
+              : kind === "pjs"
+                ? "เช่น ย้ายเป็น พจส. เริ่ม 1 พ.ย. 2569 · รหัส พจส. ใหม่"
               : "เช่น แจ้งล่วงหน้า 30 วัน · ส่งคืนอุปกรณ์ครบแล้ว"
           }
         />

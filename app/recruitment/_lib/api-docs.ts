@@ -52,11 +52,18 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.6.0";
-export const API_DOCS_UPDATED = "2026-11-08";
+export const API_DOCS_VERSION = "4.7.0";
+export const API_DOCS_UPDATED = "2026-11-09";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-09",
+    version: "4.7.0",
+    changes: [
+      "`PUT /api/drivers/{drivercode}/status` รับ `status: \"to_pjs\"` (ย้ายไปพจส. · วันที่ + หมายเหตุ) — เก็บเป็นพ้นสภาพ · `resignation.kind` เพิ่ม `pjs`",
+    ],
+  },
   {
     date: "2026-11-08",
     version: "4.6.0",
@@ -328,7 +335,7 @@ export const API_GROUPS: ApiGroup[] = [
         access: "login",
         params: [P("drivercode", "รหัส พจส.")],
         response:
-          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { kind: \"resign\"|\"transfer\", date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
+          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { kind: \"resign\"|\"transfer\"|\"pjs\", date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
         errors: [{ status: 404, when: "ไม่พบรหัส พจส. ในทะเบียน" }],
       },
       {
@@ -376,12 +383,12 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/drivers/{drivercode}/status",
         summary: "บันทึกสถานะการจ้าง / การพ้นสภาพ",
         description:
-          "`resigned` ต้องมีวันที่และรหัสเหตุผลจาก Reason Code Master ที่เปิดใช้อยู่ · `transferred` = ย้ายไปรถร่วม (วันที่ + หมายเหตุ · นับเป็นพ้นสภาพ) · `active` = ล้างข้อมูลพ้นสภาพ (ใช้เมื่อบันทึกผิด)",
+          "`resigned` ต้องมีวันที่และรหัสเหตุผลจาก Reason Code Master ที่เปิดใช้อยู่ · `transferred` = ย้ายไปรถร่วม · `to_pjs` = ย้ายไปพจส. (สองแบบนี้ใช้วันที่ + หมายเหตุ · นับเป็นพ้นสภาพ) · `active` = ล้างข้อมูลพ้นสภาพ (ใช้เมื่อบันทึกผิด)",
         access: "login",
         params: [
           P("drivercode", "รหัส พจส."),
-          { name: "status", in: "body", type: '"active" | "resigned" | "transferred"', required: true, desc: "สถานะการจ้าง" },
-          { name: "resignDate", in: "body", type: "YYYY-MM-DD", desc: "วันที่พ้นสภาพ (บังคับเมื่อ resigned · ห้ามเป็นวันในอนาคต)" },
+          { name: "status", in: "body", type: '"active" | "resigned" | "transferred" | "to_pjs"', required: true, desc: "สถานะการจ้าง" },
+          { name: "resignDate", in: "body", type: "YYYY-MM-DD", desc: "วันที่พ้นสภาพ / วันที่ย้าย (บังคับเมื่อ resigned · transferred · to_pjs · ห้ามเป็นวันในอนาคต)" },
           { name: "reasonCode", in: "body", type: "string", desc: "รหัสเหตุผล เช่น `P4` (บังคับเมื่อ resigned)" },
           { name: "exitType", in: "body", type: '"vol" | "inv" | "disap"', desc: "ไม่ส่ง = ใช้ค่าตั้งต้นของรหัส" },
           { name: "note", in: "body", type: "string ≤ 500", desc: "หมายเหตุ" },

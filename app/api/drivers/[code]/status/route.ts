@@ -13,6 +13,7 @@ import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
  * { "status": "resigned", "resignDate": "2026-09-16",
  *   "reasonCode": "P4", "exitType": "vol", "note": "" }
  * { "status": "transferred", "resignDate": "2026-11-04", "note": "" }   ← ย้ายไปรถร่วม
+ * { "status": "to_pjs", "resignDate": "2026-11-09", "note": "" }        ← ย้ายไปพจส.
  * { "status": "active" }
  * ```
  *
@@ -48,8 +49,13 @@ export async function PUT(
     if (!body) return badRequest("อ่านข้อมูลที่ส่งมาไม่ได้");
 
     const status = body.status;
-    if (status !== "active" && status !== "resigned" && status !== "transferred") {
-      return badRequest("สถานะต้องเป็น active, resigned หรือ transferred เท่านั้น");
+    if (
+      status !== "active" &&
+      status !== "resigned" &&
+      status !== "transferred" &&
+      status !== "to_pjs"
+    ) {
+      return badRequest("สถานะต้องเป็น active, resigned, transferred หรือ to_pjs เท่านั้น");
     }
 
     const note = typeof body.note === "string" ? body.note.trim() : "";

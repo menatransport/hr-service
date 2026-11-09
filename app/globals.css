@@ -161,6 +161,9 @@
   /** ย้ายไปรถร่วม (ทะเบียน พจส.) — คู่ของ `alert` ที่ใช้กับพ้นสภาพ · `-soft` ทึบสนิทเหตุผลเดียวกัน */
   --color-transfer: #7c3aed;
   --color-transfer-soft: color-mix(in oklab, #7c3aed 12%, #fff);
+  /** ย้ายไปพจส. (ทะเบียน พจส. · 9 พ.ย. 2569) — คู่แบบเดียวกับ `transfer` · โทนน้ำเงิน */
+  --color-pjs: #2563eb;
+  --color-pjs-soft: color-mix(in oklab, #2563eb 12%, #fff);
   /** ปุ่มดึงข้อความจากรูป (OCR) แท็บเอกสาร พจส. — ม่วงโปร่งสว่าง ใช้คู่ `bg-ocr/10` · `-ink` = ตัวหนังสือบนพื้นอ่อน */
   --color-ocr: #8b5cf6;
   --color-ocr-ink: #6d28d9;
@@ -376,6 +379,8 @@
   --color-alert-soft: color-mix(in oklab, #ff7a70 13%, #161c1b);
   --color-transfer: #b794f6;
   --color-transfer-soft: color-mix(in oklab, #b794f6 14%, #161c1b);
+  --color-pjs: #7aa7f5;
+  --color-pjs-soft: color-mix(in oklab, #7aa7f5 14%, #161c1b);
   --color-ocr: #a78bfa;
   --color-ocr-ink: #c4b5fd;
   --color-chat: #06c755;

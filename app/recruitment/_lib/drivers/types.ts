@@ -300,17 +300,30 @@ export const THAI_WEEKDAYS_SHORT = ["อา", "จ", "อ", "พ", "พฤ", "�
  */
 export type DriverStatus = "active" | "resigned";
 
-/** ชนิดของการพ้นสภาพ — `transfer` = ย้ายไปรถร่วม (พจส. → พจร.) */
-export type DriverExitKind = "resign" | "transfer";
+/**
+ * ชนิดของการพ้นสภาพ — `transfer` = ย้ายไปรถร่วม (พจส. → พจร.) · `pjs` = ย้ายไปพจส. (9 พ.ย. 2569)
+ * · สองชนิดหลังบันทึกแค่วันที่ + หมายเหตุ ไม่มีรหัสเหตุผลจาก master
+ */
+export type DriverExitKind = "resign" | "transfer" | "pjs";
 
 /** รหัสเหตุผลที่ใส่ให้การย้ายไปรถร่วม — ไม่ได้อยู่ใน Reason Code Master (ท่าเดียวกับ `XLS` `ONB`) */
 export const TRANSFER_REASON_CODE = "TRF";
 export const TRANSFER_LABEL = "ย้ายไปรถร่วม";
+/** รหัสเหตุผลที่ใส่ให้การย้ายไปพจส. — ท่าเดียวกับ `TRF` */
+export const TO_PJS_REASON_CODE = "PJS";
+export const TO_PJS_LABEL = "ย้ายไปพจส.";
 
-/** ป้ายสถานะการจ้างบนตาราง/ไฟล์ส่งออก — ปฏิบัติงาน · พ้นสภาพ · ย้ายไปรถร่วม */
+/** ป้ายของการพ้นสภาพแต่ละชนิด — ใช้ทั้งป้ายสถานะ หัวฟอร์ม และหน้าประวัติ */
+export const EXIT_KIND_LABEL: Record<DriverExitKind, string> = {
+  resign: "พ้นสภาพ",
+  transfer: TRANSFER_LABEL,
+  pjs: TO_PJS_LABEL,
+};
+
+/** ป้ายสถานะการจ้างบนตาราง/ไฟล์ส่งออก — ปฏิบัติงาน · พ้นสภาพ · ย้ายไปรถร่วม · ย้ายไปพจส. */
 export function employmentLabel(d: { active: boolean; resignation: DriverResignation | null }): string {
   if (d.active) return "ปฏิบัติงาน";
-  return d.resignation?.kind === "transfer" ? TRANSFER_LABEL : "พ้นสภาพ";
+  return EXIT_KIND_LABEL[d.resignation?.kind ?? "resign"];
 }
 
 /**
@@ -325,6 +338,7 @@ export interface DriverResignation {
   /**
    * `transfer` = ย้ายไปรถร่วม (4 พ.ย. 2569) — นับเป็นพ้นสภาพทุกที่ (แท็บ · dashboard · ห้องเช่า)
    * ต่างแค่ป้ายสถานะ · ไม่มีรหัสเหตุผลจาก master (`reasonCode` = `TRF`)
+   * · `pjs` = ย้ายไปพจส. (9 พ.ย. 2569) แบบเดียวกัน (`reasonCode` = `PJS`)
    */
   kind: DriverExitKind;
   /** วันที่พ้นสภาพ `YYYY-MM-DD` (ค.ศ.) */

@@ -55,8 +55,8 @@ export interface DriverDto {
     plant: string | null;
   } | null;
   resignation: {
-    /** `transfer` = ย้ายไปรถร่วม */
-    kind: "resign" | "transfer";
+    /** `transfer` = ย้ายไปรถร่วม · `pjs` = ย้ายไปพจส. */
+    kind: "resign" | "transfer" | "pjs";
     date: string;
     reasonCode: string;
     reasonLabel: string;

@@ -61,6 +61,7 @@ const tones = {
   alert: "bg-alert-soft text-alert ring-alert/35 group-hover:text-alert group-hover:ring-alert/60",
   transfer:
     "bg-transfer-soft text-transfer ring-transfer/35 group-hover:text-transfer group-hover:ring-transfer/60",
+  pjs: "bg-pjs-soft text-pjs ring-pjs/35 group-hover:text-pjs group-hover:ring-pjs/60",
 };
 
 export function Avatar({

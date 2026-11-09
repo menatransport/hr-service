@@ -36,9 +36,11 @@ import {
   type DriverWorkStatus,
   type TraineeDailyEntry,
   RQ_DAILY_PREFIX,
-  TRANSFER_LABEL,
+  EXIT_KIND_LABEL,
+  TO_PJS_REASON_CODE,
   TRANSFER_REASON_CODE,
   requisitionDailyKey,
+  type DriverExitKind,
 } from "./types";
 
 /**
@@ -553,7 +555,7 @@ function toResignation(raw: unknown): DriverResignation | null {
 
   const recordedAt = doc.recordedAt;
   return {
-    kind: isTransferExit(doc) ? "transfer" : "resign",
+    kind: exitKindOf(doc),
     dateISO,
     reasonCode,
     reasonLabel: str(doc.reasonLabel) || reasonCode,
@@ -567,13 +569,15 @@ function toResignation(raw: unknown): DriverResignation | null {
 }
 
 /**
- * ย้ายไปรถร่วม — บันทึกใหม่มี `kind` · ของเก่าที่นำเข้าจาก Excel ทะเบียน (`XLS`) ดูจากป้ายสถานะในไฟล์
- * (“ย้ายเป็นรถร่วม” / “โยกย้ายเป็นรถร่วม”) โดยไม่ต้องแก้ข้อมูลเดิม · “คืนรถร่วม” ไม่ใช่การย้าย
+ * ชนิดของการพ้นสภาพ — บันทึกใหม่มี `kind` · ของเก่าที่นำเข้าจาก Excel ทะเบียน (`XLS`) ดูจากป้ายสถานะในไฟล์
+ * (“ย้ายเป็นรถร่วม” / “โยกย้ายเป็นรถร่วม” / “ย้ายไปพจส.”) โดยไม่ต้องแก้ข้อมูลเดิม · “คืนรถร่วม” ไม่ใช่การย้าย
  */
-function isTransferExit(doc: Record<string, unknown>): boolean {
-  if (doc.kind === "transfer") return true;
-  if (doc.kind === "resign") return false;
-  return /^(โยก)?ย้าย(ไป|เป็น)รถร่วม$/.test(str(doc.reasonLabel));
+function exitKindOf(doc: Record<string, unknown>): DriverExitKind {
+  if (doc.kind === "transfer" || doc.kind === "pjs" || doc.kind === "resign") return doc.kind;
+  const label = str(doc.reasonLabel);
+  if (/^(โยก)?ย้าย(ไป|เป็น)รถร่วม$/.test(label)) return "transfer";
+  if (/^(โยก)?ย้าย(ไป|เป็น)\s*พจส\.?$/.test(label)) return "pjs";
+  return "resign";
 }
 
 /* ------------------------------------------------------ เอกสารในแฟ้ม */
@@ -1100,9 +1104,12 @@ export async function getDriversForApi(range: { from: string; to: string } | nul
 }
 
 export interface DriverStatusInput {
-  /** `transferred` = ย้ายไปรถร่วม — เก็บเป็น `resigned` + `resignation.kind: "transfer"` */
-  status: DriverStatus | "transferred";
-  /** บังคับเมื่อ `status` เป็น `resigned` / `transferred` — `YYYY-MM-DD` */
+  /**
+   * `transferred` = ย้ายไปรถร่วม — เก็บเป็น `resigned` + `resignation.kind: "transfer"`
+   * · `to_pjs` = ย้ายไปพจส. — เก็บเป็น `resigned` + `resignation.kind: "pjs"`
+   */
+  status: DriverStatus | "transferred" | "to_pjs";
+  /** บังคับเมื่อ `status` เป็น `resigned` / `transferred` / `to_pjs` — `YYYY-MM-DD` */
   resignDate?: string;
   reasonCode?: string;
   /** Vol / Inv / Disap — ไม่ส่งมา = ใช้ค่าตั้งต้นของรหัสที่เลือก */
@@ -1135,23 +1142,25 @@ export async function setDriverStatus(
       $set: { active: true },
       $unset: { statusOverride: "", resignation: "", mediaPurgedAt: "" },
     };
-  } else if (input.status === "transferred") {
-    /* ย้ายไปรถร่วม = พ้นสภาพจากการเป็น พจส. — `statusOverride` คง `resigned` ให้ทุกตัวอ่าน
+  } else if (input.status === "transferred" || input.status === "to_pjs") {
+    /* ย้ายไปรถร่วม / ย้ายไปพจส. = พ้นสภาพจากระเบียนนี้ — `statusOverride` คง `resigned` ให้ทุกตัวอ่าน
        (แท็บพ้นสภาพ · ลบแฟ้ม 1 เดือน · ห้องเช่า · dashboard) เห็นเหมือนกัน ต่างแค่ `kind` */
+    const kind: DriverExitKind = input.status === "transferred" ? "transfer" : "pjs";
+    const label = EXIT_KIND_LABEL[kind];
     const dateISO = toIsoDate(input.resignDate);
-    if (!dateISO) throw new DriverRegistryError("ต้องระบุวันที่ย้ายไปรถร่วม");
+    if (!dateISO) throw new DriverRegistryError(`ต้องระบุวันที่${label}`);
     if (dateISO > todayInBangkok())
-      throw new DriverRegistryError("วันที่ย้ายไปรถร่วมเป็นวันในอนาคตไม่ได้");
+      throw new DriverRegistryError(`วันที่${label}เป็นวันในอนาคตไม่ได้`);
 
     update = {
       $set: {
         active: false,
         statusOverride: "resigned",
         resignation: {
-          kind: "transfer",
+          kind,
           dateISO,
-          reasonCode: TRANSFER_REASON_CODE,
-          reasonLabel: TRANSFER_LABEL,
+          reasonCode: kind === "transfer" ? TRANSFER_REASON_CODE : TO_PJS_REASON_CODE,
+          reasonLabel: label,
           categoryLabel: "",
           exitType: "",
           note: (input.note ?? "").trim(),
