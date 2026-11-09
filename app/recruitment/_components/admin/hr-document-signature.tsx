@@ -120,9 +120,17 @@ export function SignaturePanel({
 
   if (!slots.length) return null;
 
-  const staffSignature = (image: string): DocSignature => ({
+  /**
+   * ชื่อใต้ลายเซ็นช่องเจ้าหน้าที่ = ชื่อในรายชื่อผู้ลงนามของเอกสาร (นายจ้าง/พยาน) เสมอ
+   * ถึงคนกดเซ็นจะเป็นบัญชีอื่น (Bew 9 พ.ย. 2569) · ช่องที่ไม่มีรายชื่อ (ผู้สัมภาษณ์)
+   * ถึงถอยไปชื่อบัญชีที่ล็อกอิน
+   */
+  const signerName = (slot: SignSlot) =>
+    staffNames[slot.role]?.trim() || me?.name || "";
+
+  const staffSignature = (slot: SignSlot, image: string): DocSignature => ({
     image,
-    name: me?.name ?? "",
+    name: signerName(slot),
     by: "staff",
     employeeId: me?.employeeId ?? "",
     signedAt: new Date().toISOString(),
@@ -146,7 +154,7 @@ export function SignaturePanel({
       }))
     )
       return;
-    if (me.image) onSign(signKey(doc, slot.role), staffSignature(me.image));
+    if (me.image) onSign(signKey(doc, slot.role), staffSignature(slot, me.image));
     else setPad({ kind: "slot", slot });
   }
 
@@ -174,7 +182,7 @@ export function SignaturePanel({
     onSign(
       signKey(doc, target.slot.role),
       target.slot.staff
-        ? staffSignature(image)
+        ? staffSignature(target.slot, image)
         : {
             image,
             name: applicantName,
@@ -217,7 +225,7 @@ export function SignaturePanel({
           const key = signKey(doc, slot.role);
           const sig = signatures?.[key];
           const name = slot.staff
-            ? sig?.name || staffNames[slot.role] || ""
+            ? staffNames[slot.role]?.trim() || sig?.name || ""
             : applicantName;
           return (
             /* ข้อมูลบน · ปุ่มล่างเต็มแถว — แผงกว้าง 360px ปุ่มสองปุ่มวางข้างข้อความแล้วชื่อถูกบีบ */
@@ -264,7 +272,7 @@ export function SignaturePanel({
                       disabled={!me}
                       onClick={() => void signAsMe(slot)}
                       title={
-                        me ? `เซ็นในชื่อ ${me.name}` : "รอโหลดลายเซ็นของฉัน"
+                        me ? `เซ็นในชื่อ ${signerName(slot)}` : "รอโหลดลายเซ็นของฉัน"
                       }
                       className={`btn-soft flex items-center justify-center gap-1 px-2 py-1.5 text-11-5 disabled:opacity-60 ${me?.image ? "" : "col-span-2"}`}
                     >
@@ -303,14 +311,20 @@ export function SignaturePanel({
         <SignaturePadModal
           title={
             pad.slot.staff
-              ? `ลายเซ็น${slotLabel(pad.slot)} · ${me?.name ?? ""}`
+              ? `ลายเซ็น${slotLabel(pad.slot)} · ${signerName(pad.slot)}`
               : `ลายเซ็นผู้สมัคร · ${applicantName}`
           }
           subtitle={
             pad.slot.staff
-              ? me?.image
-                ? "ชื่อใต้ลายเซ็นอ่านจากบัญชีที่ล็อกอิน · ติ๊กด้านล่างถ้าจะใช้แทนลายเซ็นเดิมของคุณ"
-                : "ชื่อใต้ลายเซ็นอ่านจากบัญชีที่ล็อกอิน · ลายเซ็นนี้จะจำไว้ให้ ครั้งหน้ากดเซ็นได้ทันที"
+              ? `${
+                  staffNames[pad.slot.role]?.trim()
+                    ? "ชื่อใต้ลายเซ็นใช้ตามรายชื่อผู้ลงนาม"
+                    : "ชื่อใต้ลายเซ็นอ่านจากบัญชีที่ล็อกอิน"
+                } · ${
+                  me?.image
+                    ? "ติ๊กด้านล่างถ้าจะใช้แทนลายเซ็นเดิมของคุณ"
+                    : "ลายเซ็นนี้จะจำไว้ให้ ครั้งหน้ากดเซ็นได้ทันที"
+                }`
               : "ให้ผู้สมัครเซ็นบนจอ หรืออัปโหลดรูปลายเซ็น — ชื่อใต้ลายเซ็นดึงจากชื่อผู้สมัคร"
           }
           /* ช่องเจ้าหน้าที่ที่ยังไม่มีลายเซ็นของฉัน: ติ๊กจำไว้ให้ตั้งต้น */

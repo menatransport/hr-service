@@ -226,6 +226,9 @@
   /* ชมพู — รถรอสรรหา (หน้าสถานะรถ · Bew 6 พ.ย. 2026) */
   --color-st-pink: #fbe0ee;
   --color-st-pink-ink: #a3195b;
+  /* ม่วง — รอรับรถ (หน้าผู้สมัคร + รหัส `ร` ในตารางสถานะฝึกงาน · Bew 9 พ.ย. 2026) · คู่ 6.9:1 */
+  --color-st-violet: #ece4fb;
+  --color-st-violet-ink: #5b2fb0;
 
   /**
    * เส้นขอบของป้าย — เข้มกว่าพื้นป้ายหนึ่งขั้น ใช้ผ่าน `@utility chip-*` ท้ายไฟล์
@@ -240,6 +243,7 @@
   --color-st-done-line: #cbd5d1;
   --color-st-ok-line: #a9dbb9;
   --color-st-pink-line: #f3b8d5;
+  --color-st-violet-line: #d3c2f3;
 
   /**
    * ชั้นความสูงของพื้นผิว — สามระดับ ไม่ใช่สเกลเต็มของ Tailwind
@@ -407,6 +411,8 @@
   --color-st-ok-ink: #6fdc95;
   --color-st-pink: #3a1528;
   --color-st-pink-ink: #f58bbd;
+  --color-st-violet: #2a1d45;
+  --color-st-violet-ink: #c4a8ff;
 
   --color-st-new-line: #2f4664;
   --color-st-wait-line: #5c4518;
@@ -414,6 +420,7 @@
   --color-st-done-line: #3a4442;
   --color-st-ok-line: #255c39;
   --color-st-pink-line: #6b2347;
+  --color-st-violet-line: #4a3577;
 
   /**
    * เงาบนพื้นมืดเป็น **ดำล้วน ไม่ใช่สีหมึกของธีม** — หมึกธีมมืดเป็นสีอ่อน
@@ -1591,6 +1598,13 @@
   --chip-line: var(--color-st-pink-line);
 }
 
+/* ม่วง — รอรับรถ (หน้าผู้สมัคร · รหัส `ร` ในตารางสถานะฝึกงาน) */
+@utility chip-violet {
+  --chip-bg: var(--color-st-violet);
+  --chip-ink: var(--color-st-violet-ink);
+  --chip-line: var(--color-st-violet-line);
+}
+
 /* จบสำเร็จ — เขียว (“เสร็จสิ้น” ของบันทึกเคส) */
 @utility chip-ok {
   --chip-bg: var(--color-st-ok);
@@ -2490,6 +2504,9 @@ a.home-row:hover .home-row-arrow {
     --color-st-pink: #fbe0ee;
     --color-st-pink-ink: #a3195b;
     --color-st-pink-line: #f3b8d5;
+    --color-st-violet: #ece4fb;
+    --color-st-violet-ink: #5b2fb0;
+    --color-st-violet-line: #d3c2f3;
   }
 
   @page {

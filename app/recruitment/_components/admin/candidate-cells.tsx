@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { StatusPill } from "@/app/recruitment/_components/status-pill";
+import { WAIT_HANDOVER_LABEL } from "@/app/recruitment/_lib/requisitions/onboarding";
 import {
   THAI_MONTHS_FULL,
   THAI_WEEKDAYS,
@@ -184,9 +185,12 @@ export function StatusCell({
   onPatch,
   locked,
   onStage,
+  handover = false,
 }: CellProps & {
   /** มี = เลือก “รอฝึกงาน”/“ฝึกงาน” แล้วให้หน้าแม่จัดการ (เปิดฟอร์มข้อมูล RC + RQ) แทนการบันทึกตรง */
   onStage?: (to: "interview_passed" | "training") => void;
+  /** ใบฝึกงานที่ RC ลง `ร` แล้ว — ป้ายม่วง “รอรับรถ” แทนป้ายฝึกงาน (ใบสมัครยังเป็นฝึกงาน · Bew 9 พ.ย. 2569) */
+  handover?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -227,10 +231,22 @@ export function StatusCell({
         saving={saving}
         /* ป้ายสถานะอย่างเดียว — เหตุผลที่ยกเลิกกับ Blacklist มีคอลัมน์ของตัวเองแล้ว
            (ถอดเหตุผลที่เคยเกาะท้ายป้ายออกตามคำสั่งเจ้าของงาน 29 ก.ย. 2026) */
-        trigger={<StatusPill status={candidate.status} />}
+        trigger={
+          handover && candidate.status === "training" ? (
+            <span className="chip chip-violet">{WAIT_HANDOVER_LABEL}</span>
+          ) : (
+            <StatusPill status={candidate.status} />
+          )
+        }
       >
         {(close) => (
           <>
+            {/* รอรับรถไม่ใช่สถานะใบสมัคร — เปลี่ยนไป/กลับที่ตารางสถานะฝึกงาน (`ร` / `ฝ`) */}
+            {candidate.status === "training" ? (
+              <span className="mb-1 rounded-selector bg-st-violet/60 px-2 py-1.5 text-11-5 leading-snug text-st-violet-ink">
+                {handover ? "กลับไปฝึกงาน: ลง “ฝ”" : "เปลี่ยนเป็นรอรับรถ: ลง “ร”"} ในแท็บสถานะฝึกงาน
+              </span>
+            ) : null}
             {SELECTABLE.map((s) => (
               <Option
                 key={s}

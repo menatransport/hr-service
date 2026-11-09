@@ -633,6 +633,8 @@ export interface ApplicationSummary {
   ref: string;
   status: ApplicationStatus;
   fullName: string;
+  /** ชื่อเล่นที่ผู้สมัครตอบ — ว่าง = ไม่ได้ตอบ (ดู `nicknameAnswer()`) · หน้าจอโชว์เป็น “ชื่อ (ชื่อเล่น)” */
+  nickname: string;
   phone: string;
   /** เขตงานที่ผู้สมัครสนใจ — จากคำถาม “คุณสนใจทำงานเขตไหน” */
   workZone: string;

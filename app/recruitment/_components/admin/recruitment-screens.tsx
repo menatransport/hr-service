@@ -47,6 +47,7 @@ export function RequisitionsScreen({
 export function CandidatesScreen({
   hub,
   initialView = null,
+  initialTraining = false,
   contactOptions,
   docSlots,
   blacklist,
@@ -57,6 +58,8 @@ export function CandidatesScreen({
   hub: Hub;
   /** `?view=` — เปิดมาที่การ์ดรอสรรหา/รับรถแล้ว */
   initialView?: HubView | null;
+  /** `?view=handover` — มุมมองฝึกงาน + รอรับรถ */
+  initialTraining?: boolean;
   contactOptions: string[];
   /** ช่องเอกสารพร้อมค่าแสดง/บังคับจาก Section 4 ของคลังคำถาม */
   docSlots: DocSlot[];
@@ -75,6 +78,7 @@ export function CandidatesScreen({
     <CandidatesView
       hub={hub}
       initialView={initialView}
+      initialTraining={initialTraining}
       title="ผู้สมัคร"
       rows={applications}
       setRows={setApplications}

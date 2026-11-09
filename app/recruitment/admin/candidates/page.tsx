@@ -13,8 +13,9 @@ import type { BlacklistEntry } from "@/app/recruitment/_lib/types";
  *
  * `?ref=` คือเลขที่ใบสมัครที่คิวงานหรือตารางคำขอส่งมา เพื่อเปิดตรงแถวนั้นเลย ·
  * คำขอสรรหายังต้องโหลดมาด้วย เพราะกล่องทำเอกสารผูก/ปลด RQ ได้จากหน้านี้
- * · โหลดผ่าน `getHub()` ตัวเดียวกับหน้าติดตามพนักงานใหม่ — การ์ดรอสรรหา/รอรับรถ/รับรถแล้ว (`?view=open|handover|working`)
- *   จึงเป็นแถวชุดเดียวกับแท็บอัตราว่าง/รับรถแล้วของหน้านั้น (3 พ.ย. 2569)
+ * · โหลดผ่าน `getHub()` ตัวเดียวกับหน้าติดตามพนักงานใหม่ — การ์ดรอสรรหา/รับรถแล้ว (`?view=open|working`)
+ *   จึงเป็นแถวชุดเดียวกับแท็บอัตราว่าง/รับรถแล้วของหน้านั้น (3 พ.ย. 2569) · `?view=handover` (การ์ดรอรับรถเดิม)
+ *   = มุมมองฝึกงานที่รวมรอรับรถไว้ตารางเดียวกันแล้ว (9 พ.ย. 2569)
  */
 
 export const metadata: Metadata = {
@@ -28,7 +29,7 @@ export default async function CandidatesPage({
 }: PageProps<"/recruitment/admin/candidates">) {
   const params = await searchParams;
   const ref = typeof params.ref === "string" ? params.ref : "";
-  const view = params.view === "open" || params.view === "handover" || params.view === "working" ? params.view : null;
+  const view = params.view === "open" || params.view === "working" ? params.view : null;
 
   let hub: Hub | null = null;
   let contactOptions: string[] = [];
@@ -53,6 +54,7 @@ export default async function CandidatesPage({
         <CandidatesScreen
           hub={hub}
           initialView={view}
+          initialTraining={params.view === "handover"}
           contactOptions={contactOptions}
           docSlots={docSlots}
           blacklist={blacklist}

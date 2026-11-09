@@ -6,13 +6,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  Car,
   ChevronLeft,
   ChevronRight,
+  Plus,
   SearchX,
   X,
 } from "lucide-react";
 
+import { Nickname } from "@/app/recruitment/_components/admin/nickname";
 import { TraineeCell } from "@/app/recruitment/_components/admin/trainee-cell";
 import { TraineeVehicleModal } from "@/app/recruitment/_components/admin/trainee-vehicle-modal";
 import { Avatar } from "@/components/ui/avatar";
@@ -46,10 +47,20 @@ import {
   cellTone,
   dailyKeyOf,
   isoOf,
+  TOTAL_PRIOR_MONTHS,
+  totalOf,
   type CellTone,
   type ManualEdits,
   type TraineeRow,
 } from "@/app/recruitment/_lib/drivers/trainees";
+
+/**
+ * คอลัมน์ยอดรวมต่อคน — ปักต่อจากทะเบียน/เบอร์รถ ไม่ใช่ท้ายตาราง (Bew 9 พ.ย. 2569:
+ * เดิมต้องเลื่อนผ่าน 31 วันถึงเห็นยอด) · ไม่มี “พ้นสภาพ” — แถวนั้นย้อมแดงทั้งแถว
+ * พร้อมวันที่ออกอยู่แล้ว ยอดวันพ้นสภาพจึงซ้ำและเป็นแค่ 0/1 · คำอธิบายสีใต้ตาราง
+ * ยังใช้ `TONES` ครบสี่ เพราะช่องวัน `ลอ`/`ปอ` ยังเป็นสีแดง
+ */
+const SUM_TONES = ["work", "handover", "leave"] as const satisfies readonly CellTone[];
 
 /**
  * ตารางติดตามฝึกงาน — **คนอยู่แถว วันอยู่คอลัมน์ ช่องตัดกันคือสถานะของวันนั้น**
@@ -83,8 +94,11 @@ export function TraineeMatrix({
   onMonth,
   actions,
   toolbarSlot,
+  onDaySaved,
 }: {
   board: TraineeBoard;
+  /** บันทึกช่องสำเร็จ — `requisitionId` ของแถว (ไม่ผูกคำขอ = id ใบสมัคร/ว่าง) · `prev` = รหัสที่กรอกเองก่อนหน้า */
+  onDaySaved?: (requisitionId: string, iso: string, code: string, prev: string) => void;
   /**
    * ที่วางแถบเครื่องมือนอกตาราง — ส่งมา = เครื่องมือย้ายไปอยู่ในกล่องนั้น (portal) ·
    * `null` = กล่องยังไม่เมานต์ (ยังไม่วาด) · ไม่ส่ง = แถบเครื่องมือของตารางเองเหมือนเดิม
@@ -112,6 +126,12 @@ export function TraineeMatrix({
   const [editingVehicle, setEditingVehicle] = useState<TraineeBoardDriver | null>(null);
 
   const [year, monthNo] = board.month.split("-").map(Number);
+  /** ช่วงเดือนของยอดรวม เช่น “ก.ย.–พ.ย.” — เดือนแรกมาจากเซิร์ฟเวอร์ (`totalsFrom`) */
+  const fromNo = Number((board.totalsFrom || board.month).slice(5, 7));
+  const totalsRange =
+    fromNo === monthNo
+      ? THAI_MONTHS_SHORT[monthNo - 1]
+      : `${THAI_MONTHS_SHORT[fromNo - 1]}–${THAI_MONTHS_SHORT[monthNo - 1]}`;
 
   /** คอลัมน์วันของเดือนที่เลือก พร้อมเลขวันในสัปดาห์ไว้ย้อมเสาร์–อาทิตย์ */
   const days = useMemo(() => {
@@ -164,15 +184,22 @@ export function TraineeMatrix({
    * ในตาราง (หลักพัน) ถ้า identity เปลี่ยนทุกครั้งที่ผู้ใช้พิมพ์ในช่องค้นหา
    * `memo` ของ `TraineeCell` จะไม่มีผลเลยสักช่อง
    */
+  /* คีย์บันทึกรายวัน → คำขอของแถว — ส่งต่อให้หน้าแม่ (`onDaySaved`) รู้ว่าเป็นของใคร */
+  const requisitionOf = useMemo(
+    () => new Map(board.drivers.map((d) => [dailyKeyOf(d), d.requisitionId])),
+    [board.drivers],
+  );
+
   const applySaved = useCallback(
-    (drivercode: string, iso: string, entry: TraineeDailyEntry | null) => {
+    (drivercode: string, iso: string, entry: TraineeDailyEntry | null, before: string) => {
       setEdits((prev) => {
         const next = new Map(prev);
         next.set(drivercode, { ...(next.get(drivercode) ?? {}), [iso]: entry });
         return next;
       });
+      onDaySaved?.(requisitionOf.get(drivercode) ?? "", iso, entry?.code ?? "", before);
     },
-    [],
+    [onDaySaved, requisitionOf],
   );
 
   function goToMonth(month: string) {
@@ -243,7 +270,9 @@ export function TraineeMatrix({
         <XlsxExportButton
           name={`สถานะฝึกงาน-${THAI_MONTHS_SHORT[monthNo - 1]}${year + 543}`}
           count={rows.length}
-          build={() => traineeXlsx(rows, days, { year, monthNo, site, query: deferred.trim(), total: board.drivers.length })}
+          build={() =>
+            traineeXlsx(rows, days, { year, monthNo, site, query: deferred.trim(), total: board.drivers.length, totalsRange })
+          }
           className="h-9 px-3.5 text-12-5"
         />
       </div>
@@ -319,11 +348,21 @@ export function TraineeMatrix({
             <table className="w-full border-collapse text-13">
               <thead>
                 <tr className="bg-head">
-                  <th className="sticky left-0 z-30 w-56 min-w-56 bg-head px-3 py-2 text-left align-bottom text-11-5 font-medium text-mut">
+                  <th rowSpan={2} className="border-r border-line sticky left-0 z-30 w-56 min-w-56 bg-head px-3 py-2 text-left align-bottom text-11-5 font-medium text-mut">
                     พนักงาน ({activeRows.length.toLocaleString("th-TH")})
                   </th>
-                  <th className="sticky left-56 z-30 w-28 min-w-28 bg-head px-2 py-2 text-left align-bottom text-11-5 font-medium text-mut after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
-                    ทะเบียนรถ
+                  <th rowSpan={2} className="sticky left-56 z-30 w-28 min-w-28 bg-head px-2 py-2 text-left align-bottom text-11-5 font-medium text-mut after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
+                    ทะเบียน / เบอร์รถ
+                  </th>
+
+                  {/* หัวกลุ่มยอดรวม — บอกช่วงเดือนที่นับครั้งเดียว ไม่ต้องซ้ำทุกคอลัมน์ */}
+                  <th
+                    colSpan={SUM_TONES.length}
+                    scope="colgroup"
+                    title={`ยอดวันรวม ${totalsRange} (เดือนที่เปิด + ย้อนหลัง ${TOTAL_PRIOR_MONTHS} เดือน)`}
+                    className="border-r border-line bg-head px-1 pt-1.5 pb-0.5 text-center text-10-5 font-medium whitespace-nowrap text-mut"
+                  >
+                    รวม {totalsRange}
                   </th>
 
                   {days.map(({ day, weekday }) => {
@@ -331,6 +370,7 @@ export function TraineeMatrix({
                     return (
                       <th
                         key={day}
+                        rowSpan={2}
                         scope="col"
                         /* ไม่ย้อมพื้นเสาร์–อาทิตย์แล้ว (23 ก.ย. 2026) — วันอาทิตย์บอกด้วย
                            ตัวหนังสือสี rose อย่างเดียว · วันนี้ = เลขวันในเม็ดขาว */
@@ -357,18 +397,22 @@ export function TraineeMatrix({
                       </th>
                     );
                   })}
+                </tr>
 
-                  {TONES.map((tone, i) => (
+                <tr className="bg-head">
+                  {SUM_TONES.map((tone, i) => (
                     <th
                       key={tone}
                       scope="col"
-                      title={`รวมวัน${TONE_LABEL[tone]}`}
-                      className={`min-w-12 bg-head px-1 py-1.5 text-center text-10-5 font-medium text-mut ${
-                        i === 0 ? "border-l border-line" : ""
+                      title={`รวมวัน${TONE_LABEL[tone]} ${totalsRange}`}
+                      className={`w-12 min-w-12 bg-head px-1 pt-0.5 pb-1.5 text-center align-bottom text-10-5 font-medium text-mut ${
+                        i === SUM_TONES.length - 1 ? "border-r border-line" : ""
                       }`}
                     >
-                      <span aria-hidden className={`mx-auto block size-2 rounded-full ${TONE_DOT[tone]}`} />
-                      <span className="mt-0.5 block leading-tight">{TONE_LABEL[tone]}</span>
+                      <span className="inline-flex items-center gap-1 leading-tight whitespace-nowrap">
+                        <span aria-hidden className={`size-1.5 flex-none rounded-full ${TONE_DOT[tone]}`} />
+                        {TONE_LABEL[tone]}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -417,7 +461,7 @@ export function TraineeMatrix({
                         </span>
                       </button>
                     </th>
-                    <td colSpan={days.length + TONES.length} className="bg-alert-soft" />
+                    <td colSpan={SUM_TONES.length + days.length} className="bg-alert-soft" />
                   </tr>
                   {exitedOpen
                     ? exitedRows.map((row) => (
@@ -484,7 +528,7 @@ const MatrixRow = memo(function MatrixRow({
   month: number;
   /** กรอกได้ถึงวันไหน (= วันนี้) · ว่าง = ปิดการกรอกทั้งตาราง (อ่านของเดิมไม่สำเร็จ) */
   maxEntryISO: string;
-  onSaved: (drivercode: string, iso: string, entry: TraineeDailyEntry | null) => void;
+  onSaved: (drivercode: string, iso: string, entry: TraineeDailyEntry | null, prev: string) => void;
   onEditVehicle: (driver: TraineeBoardDriver) => void;
 }) {
   const { driver } = row;
@@ -510,7 +554,7 @@ const MatrixRow = memo(function MatrixRow({
          * (แก้ 29 ก.ย. 2026) · `z-20` ให้สูงกว่าทุกอย่างในช่องวัน แต่ต่ำกว่าหัวตาราง
          * ที่ปักบน (`z-30`/`z-40`) ตอนเลื่อนแนวตั้ง
          */
-        className={`sticky left-0 z-20 w-56 max-w-56 min-w-56 px-3 py-1.5 text-left font-normal ${
+        className={`border-r border-line/70 sticky left-0 z-20 w-56 max-w-56 min-w-56 px-3 py-1.5 text-left font-normal ${
           driver.exitedOn ? "bg-alert-soft" : "bg-base-100 group-hover:bg-base-200"
         }`}
       >
@@ -524,14 +568,27 @@ const MatrixRow = memo(function MatrixRow({
             tone={driver.exitedOn ? "alert" : "default"}
           />
           <span className="flex min-w-0 flex-col">
-            <Link
-              href={href}
-              className={`truncate text-13 font-medium transition-colors ${
-                driver.exitedOn ? "text-alert hover:underline" : "hover:text-primary"
-              }`}
-            >
-              {driver.name || driver.drivercode}
-            </Link>
+            <span className="flex min-w-0 items-baseline gap-1">
+              <Link
+                href={href}
+                className={`truncate text-13 font-medium transition-colors ${
+                  driver.exitedOn ? "text-alert hover:underline" : "hover:text-primary"
+                }`}
+              >
+                {driver.name || driver.drivercode}
+              </Link>
+              <Nickname value={driver.nickname} className="shrink-0 text-12" />
+              {/* ผู้ติดต่อกลับ — ป้ายม่วงเล็กท้ายชื่อ (Bew 9 พ.ย. 2569) · เป็นป้ายไม่ใช่วงเล็บ
+                  จะได้ไม่ปนกับ “(ชื่อเล่น)” ที่อยู่ติดกัน */}
+              {driver.contactOwner ? (
+                <span
+                  title={`ผู้ติดต่อกลับ: ${driver.contactOwner}`}
+                  className="max-w-24 shrink-0 self-center truncate rounded-full border border-st-violet-line bg-st-violet px-1.5 text-10-5 leading-4 font-medium text-st-violet-ink"
+                >
+                  {driver.contactOwner}
+                </span>
+              ) : null}
+            </span>
             {driver.exitedOn ? (
               /* แทนที่บรรทัดอายุงาน ไม่ใช่เพิ่มบรรทัดที่สาม — อายุงานของคนที่ออกไปแล้ว
                  ไม่ใช่ข้อมูลที่ใช้ต่อได้ ส่วนวันที่ออกคือสิ่งเดียวที่ต้องรู้ตรงนี้ */
@@ -555,8 +612,6 @@ const MatrixRow = memo(function MatrixRow({
                     ยังไม่มีรหัส พจส.
                   </span>
                 )}
-                <span aria-hidden>·</span>
-                <span>{formatTenure(driver.tenureMonths, driver.tenureDays)}</span>
               </span>
             )}
           </span>
@@ -579,6 +634,23 @@ const MatrixRow = memo(function MatrixRow({
           onEdit={() => onEditVehicle(driver)}
         />
       </td>
+
+      {/* ยอดรวมต่อคน — ต่อจากทะเบียน ก่อนช่องวัน · 0 = ขีดจาง ให้ตาจับเฉพาะตัวเลขที่มีจริง */}
+      {SUM_TONES.map((tone, i) => {
+        const value = totalOf(row, tone);
+        return (
+          <td
+            key={tone}
+            className={`px-1 py-1.5 text-center group-hover:bg-base-200 ${
+              i === SUM_TONES.length - 1 ? "border-r border-line" : ""
+            }`}
+          >
+            <span className={`font-mono text-13 tabular-nums ${value ? "font-semibold text-ink" : "text-mut/40"}`}>
+              {value || "–"}
+            </span>
+          </td>
+        );
+      })}
 
       {days.map(({ day }) => {
         const iso = isoOf(year, month, day);
@@ -604,21 +676,6 @@ const MatrixRow = memo(function MatrixRow({
           />
         );
       })}
-
-      {TONES.map((tone, i) => {
-        const value = row[tone];
-        return (
-          <td key={tone} className={`px-1 py-1.5 text-center ${i === 0 ? "border-l border-line" : ""}`}>
-            <span
-              className={`font-mono text-12-5 tabular-nums ${
-                value ? "font-semibold" : "text-mut/50"
-              }`}
-            >
-              {value || "–"}
-            </span>
-          </td>
-        );
-      })}
     </tr>
   );
 });
@@ -626,8 +683,9 @@ const MatrixRow = memo(function MatrixRow({
 /* ------------------------------------------------------------ ชิ้นย่อย */
 
 /**
- * ทะเบียนรถในแถว — ป้ายกรอบแบบแผ่นป้ายทะเบียน อ่านออกในรูปที่แคป · กดได้ = เปิดหน้าผูก/แก้
- * · ยังไม่มีทะเบียนแต่แก้ได้ = ปุ่มเส้นประ “ผูกทะเบียน” · แก้ไม่ได้และไม่มี = ขีด
+ * ทะเบียนรถ / เบอร์รถในแถว — สองบรรทัดเรียบ ๆ ไม่มีกรอบ (Bew 9 พ.ย. 2569: เดิมเป็นป้ายกรอบ
+ * แบบแผ่นทะเบียน + โชว์แค่อย่างใดอย่างหนึ่ง) · บรรทัดบน = ทะเบียน · บรรทัดล่าง = เบอร์รถ (mono สีจาง)
+ * · มีอย่างเดียวก็โชว์บรรทัดเดียว · กดได้ = เปิดหน้าผูก/แก้ · ยังไม่มีแต่แก้ได้ = “+ ผูกรถ” · ไม่มีและแก้ไม่ได้ = ขีด
  */
 function PlateCell({
   vehicle,
@@ -638,41 +696,53 @@ function PlateCell({
   editable: boolean;
   onEdit: () => void;
 }) {
-  const plate = vehicle ? vehicle.plateNo || vehicle.code : "";
+  const plateNo = vehicle?.plateNo ?? "";
+  const code = vehicle?.code ?? "";
 
-  if (!plate) {
+  if (!plateNo && !code) {
     return editable ? (
       <button
         type="button"
         onClick={onEdit}
-        title="ยังไม่ระบุทะเบียนรถ — กดเพื่อผูก"
-        className="inline-flex cursor-pointer items-center gap-1 rounded-selector border border-dashed border-line-strong px-1.5 py-0.5 text-11-5 whitespace-nowrap text-mut transition-colors hover:border-primary/50 hover:text-primary"
+        title="ยังไม่ระบุรถ — กดเพื่อผูก"
+        className="-mx-1.5 inline-flex cursor-pointer items-center gap-1 rounded-selector px-1.5 py-1 text-11-5 whitespace-nowrap text-mut transition-colors hover:bg-primary/8 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
       >
-        <Car size={12} strokeWidth={1.8} aria-hidden />
-        ผูกทะเบียน
+        <Plus size={12} strokeWidth={2} aria-hidden />
+        ผูกรถ
       </button>
     ) : (
       <span className="text-12-5 text-mut/50">–</span>
     );
   }
 
-  const chip = (
-    <span className="inline-flex items-center rounded-[4px] border border-ink/25 bg-base-100 px-1.5 py-0.5 text-12-5 font-semibold whitespace-nowrap text-ink tabular-nums shadow-[inset_0_-1px_0_var(--color-line)]">
-      {plate}
+  const body = (
+    <span className="flex min-w-0 flex-col items-start leading-tight">
+      <span className="truncate text-12-5 font-medium whitespace-nowrap text-ink tabular-nums">
+        {plateNo || code}
+      </span>
+      {plateNo && code ? (
+        <span className="mt-0.5 truncate font-mono text-11 whitespace-nowrap text-mut">{code}</span>
+      ) : null}
     </span>
   );
+
+  const label = [plateNo && `ทะเบียน ${plateNo}`, code && `เบอร์รถ ${code}`, vehicle?.brand]
+    .filter(Boolean)
+    .join(" · ");
 
   return editable ? (
     <button
       type="button"
       onClick={onEdit}
-      title={`ทะเบียนรถ ${plate}${vehicle?.brand ? ` · ${vehicle.brand}` : ""} — กดเพื่อแก้`}
-      className="cursor-pointer rounded-[5px] transition-shadow hover:ring-2 hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+      title={`${label} — กดเพื่อแก้`}
+      className="-mx-1.5 flex max-w-[calc(100%+0.75rem)] cursor-pointer rounded-selector px-1.5 py-1 text-left transition-colors hover:bg-primary/8 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
     >
-      {chip}
+      {body}
     </button>
   ) : (
-    chip
+    <span title={label} className="flex py-1">
+      {body}
+    </span>
   );
 }
 
@@ -785,7 +855,7 @@ function Empty({ query }: { query: string }) {
 
 /* ------------------------------------------------------------ Excel */
 
-const XLSX_TONE: Record<CellTone, XlsxTone> = { work: "ok", leave: "warn", exit: "alert" };
+const XLSX_TONE: Record<CellTone, XlsxTone> = { work: "ok", handover: "mut", leave: "warn", exit: "alert" };
 
 /**
  * ไฟล์ Excel ของตารางสถานะฝึกงาน — **หนึ่งแถวต่อคน หนึ่งคอลัมน์ต่อวัน** หน้าตาเดียวกับจอ
@@ -798,7 +868,7 @@ const XLSX_TONE: Record<CellTone, XlsxTone> = { work: "ok", leave: "warn", exit:
 function traineeXlsx(
   rows: TraineeRow[],
   days: { day: number; weekday: number }[],
-  ctx: { year: number; monthNo: number; site: SiteFilter; query: string; total: number },
+  ctx: { year: number; monthNo: number; site: SiteFilter; query: string; total: number; totalsRange: string },
 ): XlsxExport<TraineeRow> {
   const monthLabel = `${THAI_MONTHS_FULL[ctx.monthNo - 1]} ${ctx.year + 543}`;
   const codeOf = (row: TraineeRow, day: number) => {
@@ -811,12 +881,8 @@ function traineeXlsx(
   const columns: XlsxColumn<TraineeRow>[] = [
     { header: "ชื่อ-สกุล", width: 24, value: (r) => r.driver.name || r.driver.drivercode },
     { header: "รหัส พจส.", width: 11, kind: "code", value: (r) => r.driver.drivercode },
-    {
-      header: "ทะเบียนรถ",
-      width: 13,
-      kind: "code",
-      value: (r) => (r.driver.vehicle ? r.driver.vehicle.plateNo || r.driver.vehicle.code : ""),
-    },
+    { header: "ทะเบียนรถ", width: 13, kind: "code", value: (r) => r.driver.vehicle?.plateNo ?? "" },
+    { header: "เบอร์รถ", width: 10, kind: "code", value: (r) => r.driver.vehicle?.code ?? "" },
     { header: "แพล้นท์", width: 14, value: (r) => r.driver.plant },
     { header: "วันเริ่มงาน", width: 12, kind: "date", value: (r) => xlsxDate(r.driver.startDateISO) },
     ...days.map<XlsxColumn<TraineeRow>>(({ day, weekday }) => ({
@@ -830,11 +896,11 @@ function traineeXlsx(
         return code ? XLSX_TONE[cellTone(code)] : null;
       },
     })),
-    ...TONES.map<XlsxColumn<TraineeRow>>((tone) => ({
-      header: `รวม${TONE_LABEL[tone]}`,
-      width: 9,
+    ...SUM_TONES.map<XlsxColumn<TraineeRow>>((tone) => ({
+      header: `รวม${TONE_LABEL[tone]}\n${ctx.totalsRange}`,
+      width: 10,
       kind: "int",
-      value: (r) => r[tone],
+      value: (r) => totalOf(r, tone),
     })),
     {
       header: "สถานะ",

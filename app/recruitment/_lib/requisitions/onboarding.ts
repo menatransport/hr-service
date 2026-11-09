@@ -11,6 +11,7 @@
  * จากบอร์ดซ่อม (`repair-status.ts`) · เก็บที่ `recruitment_requests.onboarding.<section>`
  */
 import { todayInBangkok } from "@/lib/record-case-flow";
+import { HANDOVER_CODE } from "@/app/recruitment/_lib/drivers/types";
 import type { RepairStatus } from "./repair-status";
 import type { Requisition } from "./types";
 
@@ -283,6 +284,16 @@ export type OnboardingRecord = Requisition & {
    * · เซิร์ฟเวอร์คิดให้ใน `toRecords()` · ไม่มีค่า = ยังไม่ได้คิด (แถวที่เพิ่งสร้างบนจอ)
    */
   trainedDays?: number;
+  /**
+   * วันแรกที่ RC ลง `ร` (รับรถ) ในตารางสถานะฝึกงาน รอบล่าสุด — ลง `ฝ` ทีหลังถือว่ากลับไปฝึก (ว่าง)
+   * · นับเฉพาะที่ RC กรอกเอง ไม่ดู ATMS · เซิร์ฟเวอร์คิดให้ใน `toRecords()` (`handoverSince()`)
+   */
+  handoverMarkedOn?: string;
+  /**
+   * บันทึก `ร` / `ฝ` ที่ RC กรอกเอง (`YYYY-MM-DD → รหัส`) — มีเฉพาะแถวขั้นฝึกงาน · ให้หน้าจอคิด
+   * `handoverMarkedOn` ใหม่ได้ตรงเป๊ะตอนกรอกช่องในตารางสถานะฝึกงาน (`withDayEdit()`) ไม่ต้องโหลดหน้าใหม่
+   */
+  handoverMarks?: Record<string, string>;
 };
 
 export type Suggestions = Partial<Record<SuggestKey, string[]>>;
@@ -377,14 +388,11 @@ export function stageOf(r: OnboardingRecord): Stage {
 
 /* ------------------------------------------------------------ รอรับรถ */
 
-/** ฝึกงานครบกี่วันถึงรอรับรถได้ — นับเฉพาะวัน `ฝ` (Bew 4 พ.ย. 2569) */
-export const HANDOVER_MIN_TRAINING_DAYS = 10;
-/** เงื่อนไขรอรับรถ เป็นข้อความข้างช่องค้นหา (ชุดเดียวกับ `awaitingHandover()`) */
-export const HANDOVER_NOTE = [
-  `ฝึกงานครบ ${HANDOVER_MIN_TRAINING_DAYS} วัน (นับเฉพาะวันฝึกงาน)`,
-  "ปฐมนิเทศแล้ว",
-  "ST ประเมินผ่าน",
-];
+/** ป้ายของคนฝึกงานที่ RC ลง `ร` แล้ว — ตาราง/การ์ด/ชิปม่วง ใช้คำนี้คำเดียว */
+export const WAIT_HANDOVER_LABEL = "รอรับรถ";
+
+/** วิธีเปลี่ยนเป็นรอรับรถ เป็นข้อความข้างช่องค้นหา (ชุดเดียวกับ `awaitingHandover()`) */
+export const HANDOVER_NOTE = ["RC ลงสถานะ “ร” (รับรถ) ในตารางสถานะฝึกงาน"];
 /** เงื่อนไขรับรถแล้ว เป็นข้อความข้างช่องค้นหา */
 export const WORKING_NOTE = ["จัดส่ง (KA) อัปเดต “รับรถแล้ว”"];
 /** เงื่อนไขฝึกงาน — ตามสถานะใบสมัครบนหน้าผู้สมัคร ไม่ใช่วันเริ่มฝึก (`stageOf` · Bew 5 พ.ย. 2569) */
@@ -403,6 +411,9 @@ const ST_READY: { key: string; value: string }[] = [
   { key: "readiness", value: "พร้อมรับรถ" },
 ];
 
+/** วันฝึกตามแผน (10 วัน · นับเฉพาะวัน `ฝ`) — ใช้บอกความคืบหน้าในตาราง ไม่ใช่เงื่อนไข */
+export const TRAINING_PLAN_DAYS = 10;
+
 export interface HandoverCheck {
   trainedDays: number;
   days: boolean;
@@ -410,26 +421,55 @@ export interface HandoverCheck {
   st: boolean;
 }
 
-/** 3 เงื่อนไขรอรับรถ: ฝึกครบ 10 วัน (เฉพาะวันฝึกงาน) · ปฐมนิเทศแล้ว · ST ประเมินผ่าน */
+/**
+ * ความคืบหน้าของการฝึก (วันฝึก · ปฐมนิเทศ · ST) — **โชว์อย่างเดียว ไม่ได้ตัดสินรอรับรถแล้ว**
+ * (เดิมเป็น 3 เงื่อนไข ถอดตามคำสั่งเจ้าของงาน 9 พ.ย. 2569 — ดู `awaitingHandover()`) · `days` = ครบ 10 วันฝึกตามแผนเดิม
+ */
 export function handoverCheck(r: OnboardingRecord): HandoverCheck {
   const trainedDays = r.trainedDays ?? r.atms?.trainingDays ?? 0;
   return {
     trainedDays,
-    days: trainedDays >= HANDOVER_MIN_TRAINING_DAYS,
+    days: trainedDays >= TRAINING_PLAN_DAYS,
     orientation: Boolean(val(r.onboarding, "hrd", "orientationOn")),
     st: ST_READY.some((s) => val(r.onboarding, "er", s.key) === s.value),
   };
 }
 
 /**
- * รอรับรถ = ขั้นฝึกงานที่ครบ 3 เงื่อนไข (ระบบเปลี่ยนเอง ไม่มีใครกด) · หรือผลที่นำเข้าจากไฟล์เป็น “รอรับรถ”
+ * รอรับรถ = ขั้นฝึกงานที่ **RC ลง `ร` (รับรถ) เองในตารางสถานะฝึกงาน** (`handoverMarkedOn`) · หรือผลที่นำเข้าจากไฟล์เป็น “รอรับรถ”
+ * · ไม่มีเงื่อนไขอัตโนมัติแล้ว (เดิม ฝึกครบ 10 วัน + ปฐมนิเทศ + ST ผ่าน — ถอดตามคำสั่งเจ้าของงาน 9 พ.ย. 2569 **อย่าใส่กลับถ้าไม่ได้สั่ง**)
  * · ใช้ชุดเดียวทั้งแท็บฝึกงาน การ์ดหน้าผู้สมัคร แดชบอร์ด รายงาน RC Alert และ `GET /api/recruitment/pipeline`
  */
 export function awaitingHandover(r: OnboardingRecord): boolean {
   if (stageOf(r) !== "training") return false;
-  if (r.outcome === "waiting_handover") return true;
-  const c = handoverCheck(r);
-  return c.days && c.orientation && c.st;
+  return r.outcome === "waiting_handover" || Boolean(r.handoverMarkedOn);
+}
+
+/** รหัสที่มีผลกับรอรับรถ — `ร` เริ่มรอบ · `ฝ` ล้างรอบ */
+export const isHandoverMark = (code: string) => code === HANDOVER_CODE || code === "ฝ";
+
+/**
+ * ทับช่องที่เพิ่งกรอกในตารางสถานะฝึกงาน (`code` ว่าง = ลบ) ลงแถว แล้วคิด `handoverMarkedOn` ใหม่
+ * · ชุดเดียวกับที่เซิร์ฟเวอร์คิด (`handoverMarks` + `handoverSince`) ป้าย/ตัวเลขรอรับรถจึงขยับทันทีและตรงกับหลังโหลดใหม่
+ */
+export function withDayEdit<T extends OnboardingRecord>(r: T, iso: string, code: string): T {
+  const marks = { ...r.handoverMarks };
+  if (isHandoverMark(code)) marks[iso] = code;
+  else delete marks[iso];
+  return { ...r, handoverMarks: marks, handoverMarkedOn: handoverSince(Object.entries(marks)) };
+}
+
+/**
+ * วันแรกของรอบ `ร` ล่าสุดจากบันทึกที่ RC กรอกเอง — `ฝ` หลังจากนั้นล้างรอบ (กลับไปฝึก) · รหัสอื่น (ลา ฯลฯ) ไม่แตะ
+ * · ไม่มี = "" · ใช้ทั้งเซิร์ฟเวอร์ (`toRecords()`) และหน้าจอที่เพิ่งกรอกช่องในตาราง
+ */
+export function handoverSince(days: Iterable<[string, string]>): string {
+  let since = "";
+  for (const [iso, code] of [...days].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (code === HANDOVER_CODE) since ||= iso;
+    else if (code === "ฝ") since = "";
+  }
+  return since;
 }
 
 /** 4 ช่วงก่อนรับรถ — ชื่อเดียวกับแดชบอร์ดกำลังคนและ `GET /api/recruitment/pipeline` */
@@ -440,7 +480,7 @@ export const PIPELINE_LABEL: Record<Pipeline, string> = {
   open: "รอสรรหา",
   waitTraining: "รอฝึกงาน",
   training: "ฝึกงาน",
-  waitHandover: "รอรับรถ",
+  waitHandover: WAIT_HANDOVER_LABEL,
 };
 
 /** ช่วงของแถว · รับรถแล้ว/จบ = `null` */

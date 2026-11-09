@@ -9,6 +9,7 @@ import {
   toIsoDate,
   todayInBangkok,
 } from "./registry";
+import { TOTAL_PRIOR_MONTHS, cellTone } from "./trainees";
 import { isExitStatus, siteOfBranch, workStatusFullLabel } from "./types";
 import type { DriverSiteKey, TraineeDailyEntry } from "./types";
 
@@ -77,10 +78,25 @@ export interface TraineeBoardDriver {
   /** ทะเบียนรถของคำขอที่ผูกไว้ — **แหล่งความจริงเดียวกับตารางขอสรรหา** ไม่ใช่สำเนา
       แยกต่างหาก แก้จากหน้านี้แล้วตารางขอสรรหาเห็นค่าเดียวกันทันทีที่โหลดใหม่ */
   vehicle: { code: string; plateNo: string; brand: string } | null;
+  /**
+   * ยอดวันของ **`TOTAL_PRIOR_MONTHS` เดือนก่อนหน้าเดือนที่เปิด** (ไม่รวมเดือนที่เปิด) — หน้าจอบวก
+   * ยอดของเดือนที่เปิดเข้าไปเอง เพื่อให้ตัวเลขขยับทันทีที่กรอกช่อง (ดู `totalOf()` ใน `trainees.ts`)
+   */
+  priorTotals: PriorTotals;
+  /** ผู้ติดต่อกลับของใบสมัคร — เซิร์ฟเวอร์ไม่ส่งมา หน้าจอเติมจากรายการผู้สมัคร (`TraineePerson`) */
+  contactOwner?: string;
+  /** ชื่อเล่นจากใบสมัคร — เซิร์ฟเวอร์เติมให้คนที่อยู่ในทะเบียน · หน้าผู้สมัครทับด้วยของใบที่แสดงอยู่ */
+  nickname?: string;
 }
+
+export type PriorTotals = { work: number; handover: number; leave: number };
+
+const emptyTotals = (): PriorTotals => ({ work: 0, handover: 0, leave: 0 });
 
 export interface TraineeBoard {
   month: string;
+  /** เดือนแรกของช่วงที่ยอดรวมนับ (`YYYY-MM`) — หัวคอลัมน์ยอดรวมใช้บอกช่วง */
+  totalsFrom: string;
   drivers: TraineeBoardDriver[];
   /** เดือนที่เลื่อนดูได้ เรียงใหม่→เก่า (`YYYY-MM`) */
   months: string[];
@@ -103,6 +119,8 @@ interface DriverLite {
   drivercode?: unknown;
   driverName?: unknown;
   photoUrl?: unknown;
+  /** เติมโดย `readDrivers()` จากใบสมัคร (`./nickname.ts`) — ไม่ใช่ฟิลด์ในทะเบียน */
+  nickname?: unknown;
   branch?: unknown;
   vehicleCode?: unknown;
   startDate?: unknown;
@@ -154,6 +172,15 @@ function monthList(todayISO: string): string[] {
   const [y, m] = todayISO.split("-").map(Number);
   return Array.from({ length: VISIBLE_MONTHS }, (_, i) => {
     const d = new Date(y, m - 1 - i, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+}
+
+/** `count` เดือนก่อน `month` — เก่า→ใหม่ */
+function monthsBefore(month: string, count: number): string[] {
+  const [y, m] = month.split("-").map(Number);
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(y, m - 1 - (count - i), 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 }
@@ -235,10 +262,15 @@ export async function getTraineeBoard(requestedMonth: string, onlyCodes?: string
 
   /* ยิงพร้อมกัน คนละ db และไม่ขึ้นกัน · `allSettled` เพราะพังแยกกันได้
      — ไม่มีสถานะจากระบบยังกรอกเองได้ และกลับกัน */
-  const [workResult, manualResult] = await Promise.allSettled([
+  const priorMonths = monthsBefore(month, TOTAL_PRIOR_MONTHS);
+  const [workResult, manualResult, priorResult] = await Promise.allSettled([
     loadWorkMonth(codes, month),
     loadManualDays(codes, month),
+    loadPriorTotals(codes, priorMonths),
   ]);
+  /* ยอดย้อนหลังพัง = นับแค่เดือนที่เปิด ไม่ล้มทั้งตาราง (ATMS พังจะขึ้นแถบเตือนจาก `workResult` อยู่แล้ว) */
+  const prior = priorResult.status === "fulfilled" ? priorResult.value : new Map<string, PriorTotals>();
+  if (priorResult.status === "rejected") console.warn("[trainee-board] นับยอดย้อนหลังไม่สำเร็จ —", priorResult.reason);
 
   const enrichmentFailed = atmsCodes.status === "rejected" || workResult.status === "rejected";
   const work = workResult.status === "fulfilled" ? workResult.value : new Map<string, WorkMonth>();
@@ -297,13 +329,61 @@ export async function getTraineeBoard(requestedMonth: string, onlyCodes?: string
       requisitionId: "",
       requisitionCode: "",
       vehicle: null,
+      priorTotals: prior.get(drivercode) ?? emptyTotals(),
+      nickname: str(doc.nickname),
     });
   }
 
   /* คนละ db กัน (`Boom_ETL` vs `hr_service`) และไม่ขึ้นกัน — ยิงพร้อมกันได้ */
   await Promise.all([attachPlants(drivers, docs), attachRequisitions(drivers)]);
 
-  return { month, drivers, months, todayISO, enrichmentFailed, manualFailed };
+  return { month, totalsFrom: priorMonths[0] ?? month, drivers, months, todayISO, enrichmentFailed, manualFailed };
+}
+
+/**
+ * ยอดวันของเดือนก่อนหน้า ต่อคน — **กติกาเดียวกับยอดของเดือนที่เปิด** (`buildTraineeRows()`):
+ * ต่อวันใช้รหัส ATMS ก่อน ไม่มีค่อยใช้ที่กรอกเอง (`effectiveCode`) แล้วจัดกองด้วย `cellTone()`
+ * · ไม่นับวันพ้นสภาพ (ตารางไม่มีคอลัมน์นั้นแล้ว)
+ */
+async function loadPriorTotals(codes: string[], priorMonths: string[]): Promise<Map<string, PriorTotals>> {
+  const totals = new Map<string, PriorTotals>();
+  if (!codes.length || !priorMonths.length) return totals;
+
+  const [atmsDocs, manualByMonth] = await Promise.all([
+    etlCol("workStatus").then((col) =>
+      col
+        .find(
+          { employee_code: { $in: codes } },
+          { projection: { employee_code: 1, ...Object.fromEntries(priorMonths.map((m) => [`months.${m}`, 1])) } },
+        )
+        .toArray(),
+    ),
+    Promise.all(priorMonths.map((m) => loadManualDays(codes, m))),
+  ]);
+
+  const atmsByCode = new Map(
+    atmsDocs.map((doc) => [str(doc.employee_code), (doc.months ?? {}) as Record<string, unknown>]),
+  );
+
+  for (const code of codes) {
+    const merged: Record<string, string> = {};
+    priorMonths.forEach((m, i) => {
+      for (const [iso, entry] of Object.entries(manualByMonth[i].get(code) ?? {})) {
+        if (entry.code.trim()) merged[iso] = entry.code;
+      }
+      /* ATMS ทับที่กรอกเอง — ตัวนั้นคือชุดที่ผูกกับค่าแรง (เหมือน `effectiveCode`) */
+      Object.assign(merged, daysOfMonth(atmsByCode.get(code)?.[m], m));
+    });
+
+    const sum = emptyTotals();
+    for (const value of Object.values(merged)) {
+      const tone = cellTone(value);
+      if (tone !== "exit") sum[tone]++;
+    }
+    totals.set(code, sum);
+  }
+
+  return totals;
 }
 
 /**

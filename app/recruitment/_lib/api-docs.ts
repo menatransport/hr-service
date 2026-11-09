@@ -52,11 +52,33 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.7.0";
+export const API_DOCS_VERSION = "4.10.0";
 export const API_DOCS_UPDATED = "2026-11-09";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-09",
+    version: "4.10.0",
+    changes: [
+      "เพิ่ม `GET /api/recruitment/criminal-record` — ผลตรวจประวัติอาชญากรรมรายคนจากชีต “สรุปรายชื่อตรวจประวัติ” (Google Apps Script) · ใช้ในคอลัมน์ผลประวัติอาชญากรรมของหน้าผู้สมัคร (รอฝึกงาน → รับรถแล้ว) และหน้าประวัติ พจส.",
+    ],
+  },
+  {
+    date: "2026-11-09",
+    version: "4.9.0",
+    changes: [
+      "`GET /api/recruitment/applications` — `ApplicationSummary` มีฟิลด์ `nickname` (ชื่อเล่นจากข้อ “ชื่อเล่น” ในฟอร์ม · ว่าง = ไม่ได้ตอบ)",
+    ],
+  },
+  {
+    date: "2026-11-09",
+    version: "4.8.0",
+    changes: [
+      "`PUT /api/drivers/{drivercode}/daily` รับรหัส `ร` (พจส.รอรับรถ) — RC ลงเองเมื่อคนฝึกงานพร้อมรับรถ",
+      "`GET /api/recruitment/pipeline` — **รอรับรถ = RC ลง `ร` ในตารางสถานะฝึกงาน** แทน 3 เงื่อนไขเดิม (ฝึกครบ 10 วัน + ปฐมนิเทศ + ST ผ่าน) · `handoverReady` เหลือเป็นความคืบหน้าอย่างเดียว · เพิ่ม `handoverMarkedOn` (วันแรกของรอบ `ร` ล่าสุด)",
+    ],
+  },
   {
     date: "2026-11-09",
     version: "4.7.0",
@@ -407,7 +429,7 @@ export const API_GROUPS: ApiGroup[] = [
         params: [
           P("drivercode", "รหัส พจส."),
           { name: "dateISO", in: "body", type: "YYYY-MM-DD", required: true, desc: "วันที่" },
-          { name: "code", in: "body", type: "string", required: true, desc: "ตัวย่อสถานะ · ค่าว่าง = ลบบันทึกวันนั้น" },
+          { name: "code", in: "body", type: "string", required: true, desc: "ตัวย่อสถานะ · `ร` = รอรับรถ (เปลี่ยนคนฝึกงานเป็นรอรับรถ · `ฝ` ทีหลัง = กลับไปฝึก) · ค่าว่าง = ลบบันทึกวันนั้น" },
           { name: "note", in: "body", type: "string", desc: "หมายเหตุ" },
         ],
         response: "{ dateISO, entry }",
@@ -615,16 +637,33 @@ export const API_GROUPS: ApiGroup[] = [
       },
       {
         method: "GET",
+        path: "/api/recruitment/criminal-record",
+        summary: "ผลตรวจประวัติอาชญากรรมของคนหนึ่งคน",
+        description:
+          "อ่านจากชีต “สรุปรายชื่อตรวจประวัติ” ผ่าน Google Apps Script (ค้นตรงตัวด้วยฝ่าย + ชื่อ) · ลองฝ่ายของสาขาก่อน (ลาดกระบัง = `จัดส่ง ศลบ` · สระบุรี = `จัดส่ง สสบ`) ไม่เจอค่อยไล่ฝ่ายที่เหลือ (`TDM`) · ชื่อถูกตัดคำนำหน้า/ช่องว่างซ้ำก่อนค้น · แคชฝั่งเซิร์ฟเวอร์ 30 นาที (เจอ) / 5 นาที (ไม่เจอ) · `found: false` = ไม่มีชื่อนี้ในชีต",
+        access: "login",
+        params: [
+          { name: "name", in: "query", type: "string", required: true, desc: "ชื่อ–นามสกุล" },
+          { name: "site", in: "query", type: "string", desc: "ชื่อสาขา (ลาดกระบัง / สระบุรี / บางปะกง) — ใช้เลือกฝ่ายที่ลองก่อน" },
+        ],
+        response: "{ found: boolean, name: string, records: { department, result, detail }[] } — `result` = ผลตรวจ (คอลัมน์ F) · `detail` = รายละเอียดคดี (คอลัมน์ G)",
+        errors: [
+          { status: 400, when: "ไม่ส่ง `name`" },
+          { status: 502, when: "ชีตตรวจประวัติไม่ตอบ / ตอบไม่ใช่ JSON (ถูกเรียกถี่เกินไป)" },
+        ],
+      },
+      {
+        method: "GET",
         path: "/api/recruitment/pipeline",
         summary: "คนตามช่วงก่อนรับรถ — รอสรรหา · รอฝึกงาน · ฝึกงาน · รอรับรถ",
         description:
-          "ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร · **รอรับรถ = ฝึกงานครบ 10 วัน (นับเฉพาะวันที่สถานะเป็น `ฝ` · ที่ RC กรอกเองชนะ ATMS) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน** ระบบเปลี่ยนให้เอง · รอสรรหา = อัตราว่าง `name` / `drivercode` ว่าง · `counts` นับทุกช่วงเสมอไม่ขึ้นกับ `status` · `total` = ผลรวม 4 ช่วง · เรียงตามช่วง → เลขที่ JR · **สถานะรถ** จากบอร์ดซ่อม: อยู่บนบอร์ด = `notReady` (ยังไม่พร้อมใช้งาน) + เหตุผล (ขั้นซ่อมล่าสุด) + กำหนดเสร็จถ้ามี · ไม่อยู่ = `ready` · ยังไม่มีรถ = `null` และข้อความว่าง",
+          "ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร · **รอรับรถ = RC ลงสถานะ `ร` (รับรถ) ในตารางสถานะฝึกงาน** (บันทึกที่กรอกเอง ไม่ดู ATMS · ลง `ฝ` ทีหลัง = กลับไปฝึกงาน) · `handoverReady` = ความคืบหน้า (ฝึกครบ 10 วัน · ปฐมนิเทศ · ST ผ่าน) โชว์อย่างเดียว ไม่ได้ตัดสินช่วง · `handoverMarkedOn` = วันแรกของรอบ `ร` ล่าสุด (ว่าง = ยังไม่ลง) · รอสรรหา = อัตราว่าง `name` / `drivercode` ว่าง · `counts` นับทุกช่วงเสมอไม่ขึ้นกับ `status` · `total` = ผลรวม 4 ช่วง · เรียงตามช่วง → เลขที่ JR · **สถานะรถ** จากบอร์ดซ่อม: อยู่บนบอร์ด = `notReady` (ยังไม่พร้อมใช้งาน) + เหตุผล (ขั้นซ่อมล่าสุด) + กำหนดเสร็จถ้ามี · ไม่อยู่ = `ready` · ยังไม่มีรถ = `null` และข้อความว่าง",
         access: "login",
         params: [
           { name: "status", in: "query", type: '"open" | "waitTraining" | "training" | "waitHandover" (คั่นด้วย ,)', desc: "ไม่ส่ง = ทั้ง 4 ช่วง" },
         ],
         response:
-          "{ asOf, counts: { open, waitTraining, training, waitHandover, total }, rows: [{ status, statusLabel, requisitionId, jr, requestedOn, branch, position, customer, plant, vehicle: { code, plateNo } | null, vehicleStatus: \"ready\" | \"notReady\" | null, vehicleStatusLabel, vehicleStatusReason, vehicleStatusDue, trainer: { drivercode, name } | null, drivercode, name, applicationRef, trainingStartOn, trainedDays, orientationOn, stResult, handoverReady: { days, orientation, st } }] }",
+          "{ asOf, counts: { open, waitTraining, training, waitHandover, total }, rows: [{ status, statusLabel, requisitionId, jr, requestedOn, branch, position, customer, plant, vehicle: { code, plateNo } | null, vehicleStatus: \"ready\" | \"notReady\" | null, vehicleStatusLabel, vehicleStatusReason, vehicleStatusDue, trainer: { drivercode, name } | null, drivercode, name, applicationRef, trainingStartOn, trainedDays, orientationOn, stResult, handoverReady: { days, orientation, st }, handoverMarkedOn }] }",
         errors: [{ status: 400, when: "`status` ไม่อยู่ใน 4 ค่านี้" }],
       },
       {

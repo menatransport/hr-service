@@ -68,7 +68,8 @@ export interface TraineeCellProps {
   isStart: boolean;
   /** กรอกวันนี้ได้ไหม — ย้อนหลังได้ไม่จำกัด ห้ามเฉพาะอนาคต (บังคับซ้ำฝั่งเซิร์ฟเวอร์) */
   editable: boolean;
-  onSaved: (drivercode: string, iso: string, entry: TraineeDailyEntry | null) => void;
+  /** `prev` = รหัสที่กรอกเองก่อนบันทึก — หน้าผู้สมัครใช้รู้ว่ากด/ถอด `ร` (รอรับรถ) */
+  onSaved: (drivercode: string, iso: string, entry: TraineeDailyEntry | null, prev: string) => void;
 }
 
 export const TraineeCell = memo(function TraineeCell({
@@ -107,7 +108,7 @@ export const TraineeCell = memo(function TraineeCell({
         { method: "PUT", body: { dateISO: iso, code, note: reason, trial: isTrial } },
         "บันทึกไม่สำเร็จ",
       );
-      onSaved(drivercode, iso, res.entry);
+      onSaved(drivercode, iso, res.entry, manual);
       if (res.exitError) toastError("บันทึกสถานะแล้ว แต่ปิดผลสิ้นสุดไม่สำเร็จ", res.exitError);
       else if (res.exited) toastSuccess("บันทึกแล้ว · ปิดผลสิ้นสุดและย้ายใบสมัครไปยกเลิกแล้ว");
     } catch (err) {

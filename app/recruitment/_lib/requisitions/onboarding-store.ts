@@ -33,6 +33,9 @@ import {
   SECTION_SPECS,
   STEP_META,
   fieldApplies,
+  handoverSince,
+  isHandoverMark,
+  stageOf,
   isOutcome,
   trainingStart,
   isSection,
@@ -202,10 +205,20 @@ async function toRecords(docs: WithId<RequisitionDoc>[]): Promise<OnboardingReco
       atms: read?.brief ?? null,
       registry: doc.drivercode ? (registry.get(doc.drivercode) ?? null) : null,
     };
-    row.trainedDays = countTrainedDays(trainingStart(row), read?.days, [
+    const own = [
       manual.get(requisitionDailyKey(doc._id.toHexString())),
       doc.drivercode ? manual.get(doc.drivercode) : undefined,
-    ]);
+    ];
+    row.trainedDays = countTrainedDays(trainingStart(row), read?.days, own);
+    /* รอรับรถ = RC ลง `ร` เอง (ไม่ดู ATMS) · บันทึกก่อนมีรหัสรวมด้วย วันซ้ำ = รหัสจริงชนะ (ตัวท้ายใน `own`) */
+    const merged = new Map<string, string>();
+    for (const byDay of own) for (const [iso, e] of Object.entries(byDay ?? {})) merged.set(iso, e.code);
+    row.handoverMarkedOn = handoverSince(merged);
+    /* ส่ง `ร`/`ฝ` ไปเฉพาะแถวขั้นฝึกงาน — หน้าจอใช้คิดรอรับรถใหม่ตอนกรอกช่อง (`withDayEdit`) */
+    if (stageOf(row) === "training") {
+      const marks = [...merged].filter(([, code]) => isHandoverMark(code));
+      if (marks.length) row.handoverMarks = Object.fromEntries(marks);
+    }
     return row;
   });
 }

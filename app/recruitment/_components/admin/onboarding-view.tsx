@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowUpRight, Eye, FileText, Loader2, Plus, RotateCcw, SearchX, Trash2, UserRound } from "lucide-react";
 
 import { ColumnMenu, type ColumnFilterOption, type SortDir } from "@/components/ui/column-menu";
+import { CriminalRecordButton, CriminalRecordHeadTip } from "@/app/recruitment/_components/admin/criminal-record";
 import { SearchField } from "@/components/ui/field";
 import {
   SummaryPanel,
@@ -27,13 +28,16 @@ import { STATUS_LABEL, type ApplicationStatus, type ApplicationSummary } from "@
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import type { RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
 import {
-  HANDOVER_MIN_TRAINING_DAYS,
+  TRAINING_PLAN_DAYS,
+  WAIT_HANDOVER_LABEL,
   ST_CHECKPOINTS,
   TAB_NOTE,
   TABS,
   STAGE_DOT,
   STAGE_LABEL,
   awaitingHandover,
+  isHandoverMark,
+  withDayEdit,
   daysBetween,
   handoverCheck,
   daysToHandover,
@@ -84,17 +88,16 @@ type Row = OnboardingRecord & {
   repair: RepairStatus | null;
   /** ใบสมัครที่ผูก — แท็บรอฝึกงานโชว์คอลัมน์ชุดเดียวกับหน้าผู้สมัคร · ไม่ได้ส่งใบมา/ไม่ผูก = null */
   app: ApplicationSummary | null;
-  /** เงื่อนไขรอรับรถ 3 ข้อ (วันฝึก · ปฐมนิเทศ · ST) */
+  /** ความคืบหน้าการฝึก (วันฝึก · ปฐมนิเทศ · ST) — โชว์อย่างเดียว */
   ready: HandoverCheck;
-  /** ขั้นฝึกงานที่ครบเงื่อนไขแล้ว = สถานะ “รอรับรถ” ในแท็บฝึกงาน */
+  /** ขั้นฝึกงานที่ RC ลง `ร` แล้ว = สถานะ “รอรับรถ” ในแท็บฝึกงาน (`awaitingHandover`) */
   waitHandover: boolean;
 };
 
 const TRAINING_LABEL = "ฝึกงาน";
-const WAIT_HANDOVER_LABEL = "รอรับรถ";
 
 const TAB_LABEL: Record<Tab, string> = { ...STAGE_LABEL, handover: WAIT_HANDOVER_LABEL };
-const TAB_DOT: Record<Tab, string> = { ...STAGE_DOT, handover: "bg-st-live-ink" };
+const TAB_DOT: Record<Tab, string> = { ...STAGE_DOT, handover: "bg-st-violet-ink" };
 const tabStage = (t: Tab): Stage => (t === "handover" ? "training" : t);
 
 const DASH = "—";
@@ -255,7 +258,7 @@ const C = {
   /* เลขที่ JR — กดเปิดฟอร์ม JR / คัดลอก (ตัวเดียวกับหน้าผู้สมัคร · Bew 4 พ.ย. 2569) */
   jr: { id: "jr", label: "เลขที่ JR", width: "min-w-[130px]", text: (r) => r.code || DASH },
   start: { id: "start", label: "เริ่มฝึก", width: "min-w-[110px]", text: (r) => date(r.start), key: (r) => r.start },
-  /* สถานะในแท็บฝึกงาน — ครบ 3 เงื่อนไข (`awaitingHandover`) ขึ้นรอรับรถเอง (Bew 4 พ.ย. 2569) */
+  /* สถานะในแท็บฝึกงาน — RC ลง `ร` ในตารางสถานะฝึกงาน = รอรับรถ (`awaitingHandover` · Bew 9 พ.ย. 2569) */
   trainStatus: {
     id: "trainStatus",
     label: "สถานะ",
@@ -302,6 +305,8 @@ const C = {
     width: "min-w-[110px]",
     text: (r) => (r.registry ? (r.registry.active ? "ปฏิบัติงาน" : "พ้นสภาพ") : DASH),
   },
+  /* ผลตรวจประวัติอาชญากรรม — เฉพาะแท็บรับรถแล้วที่ฝังในหน้าผู้สมัคร (Bew 9 พ.ย. 2569) · โหลดทีละแถว กรองไม่ได้ */
+  criminal: { id: "criminal", label: "ผลประวัติอาชญากรรม", width: "min-w-[150px]", noFilter: true, text: () => "" },
   end: { id: "end", label: "ผล", width: "min-w-[140px]", text: (r) => endLabel(r) || DASH },
   endOn: {
     id: "endOn",
@@ -556,7 +561,11 @@ export function OnboardingView({
     return d.length ? Math.round(d.reduce((a, b) => a + b, 0) / d.length) : null;
   }, [rows]);
 
-  const columns = COLUMNS[stage];
+  /* หน้าผู้สมัคร (ฝัง) — แท็บรับรถแล้วมีคอลัมน์ผลประวัติอาชญากรรมต่อท้าย ชุดเดียวกับรอฝึกงาน → รอรับรถ */
+  const columns = useMemo(
+    (): Col[] => (embedded && stage === "working" ? [...COLUMNS.working, C.criminal] : COLUMNS[stage]),
+    [embedded, stage],
+  );
   const shownNote = note ?? TAB_NOTE[tab];
 
   const choices = useMemo(() => {
@@ -581,6 +590,11 @@ export function OnboardingView({
   const [dailyToolbar, setDailyToolbar] = useState<HTMLDivElement | null>(null);
   const [dailyAlerts, setDailyAlerts] = useState(0);
   const onDailyAlerts = useCallback((n: number) => setDailyAlerts(n), []);
+  /* กรอก/ถอด `ร` หรือ `ฝ` ในแท็บสถานะฝึกงาน → ทับลงแถว ตัวเลขแท็บฝึกงาน/รอรับรถขยับทันที (`withDayEdit`) */
+  const onDaySaved = useCallback((requisitionId: string, iso: string, code: string, prev: string) => {
+    if (!isHandoverMark(code) && !isHandoverMark(prev)) return;
+    setRecords((cur) => cur.map((r) => (r.id === requisitionId ? withDayEdit(r, iso, code) : r)));
+  }, []);
   const dailyTab = showDaily && traineeTab === "daily";
 
   /* ช่องค้นหาซ่อนในแท็บสถานะฝึกงาน (มีช่องค้นหาของตัวเอง) = ไม่กรองต่อเบื้องหลัง */
@@ -610,7 +624,7 @@ export function OnboardingView({
   const filtering = Boolean(needle) || Object.values(filters).some((p) => p?.length);
 
   /** แถวของตารางรายวัน — `pool` = ทุกคนในขั้นฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
-  const toPerson = (r: Row): TraineePerson => ({ id: r.id, code: r.code, name: r.name, drivercode: r.drivercode, vehicle: r.vehicle });
+  const toPerson = (r: Row): TraineePerson => ({ id: r.id, code: r.code, name: r.name, drivercode: r.drivercode, vehicle: r.vehicle, contactOwner: r.app?.contactOwner ?? "" });
   const dailyPool = useMemo(
     () => (showDaily ? rows.filter((r) => r.stage === "training").map(toPerson) : []),
     [showDaily, rows],
@@ -847,7 +861,13 @@ export function OnboardingView({
         {/* แท็บสถานะฝึกงาน — เมานต์ค้างไว้ (ซ่อนด้วย `hidden`) สลับแท็บไม่ต้องโหลดตารางรายวันใหม่ */}
         {showDaily ? (
           <div hidden={!dailyTab} className="pt-3">
-            <TraineeDailySection pool={dailyPool} people={dailyPeople} onAlerts={onDailyAlerts} toolbarSlot={dailyToolbar} />
+            <TraineeDailySection
+              pool={dailyPool}
+              people={dailyPeople}
+              onAlerts={onDailyAlerts}
+              toolbarSlot={dailyToolbar}
+              onDaySaved={onDaySaved}
+            />
           </div>
         ) : null}
 
@@ -896,24 +916,29 @@ export function OnboardingView({
                       i === 0 ? "left-0 z-20 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line" : "z-10"
                     }`}
                   >
-                    <ColumnMenu
-                      label={column.label}
-                      sort={{
-                        dir: sort.column === column.id ? sort.dir : null,
-                        ascLabel: "น้อย → มาก",
-                        descLabel: "มาก → น้อย",
-                        onSort: (dir) => setSort(dir ? { column: column.id, dir } : DEFAULT_SORT[stage]),
-                      }}
-                      filter={
-                        column.noFilter
-                          ? undefined
-                          : {
-                              options: choices[column.id] ?? [],
-                              selected: filters[column.id] ?? [],
-                              onChange: (next) => setFilters((prev) => ({ ...prev, [column.id]: next })),
-                            }
-                      }
-                    />
+                    <div className="flex items-center gap-1">
+                      <div className="min-w-0 flex-1">
+                        <ColumnMenu
+                          label={column.label}
+                          sort={{
+                            dir: sort.column === column.id ? sort.dir : null,
+                            ascLabel: "น้อย → มาก",
+                            descLabel: "มาก → น้อย",
+                            onSort: (dir) => setSort(dir ? { column: column.id, dir } : DEFAULT_SORT[stage]),
+                          }}
+                          filter={
+                            column.noFilter
+                              ? undefined
+                              : {
+                                  options: choices[column.id] ?? [],
+                                  selected: filters[column.id] ?? [],
+                                  onChange: (next) => setFilters((prev) => ({ ...prev, [column.id]: next })),
+                                }
+                          }
+                        />
+                      </div>
+                      {column.id === "criminal" ? <CriminalRecordHeadTip /> : null}
+                    </div>
                   </th>
                 ))}
                 <th className="sticky top-0 right-0 z-10 w-16 border-b border-line-strong bg-head" />
@@ -1028,6 +1053,8 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
   }
 
   switch (column.id) {
+    case "criminal":
+      return <CriminalRecordButton name={row.name} site={row.branch} />;
     case "code":
       return <span className="font-mono text-11 tracking-wider text-primary">{row.code}</span>;
     case "name":
@@ -1104,8 +1131,8 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
       return row.app?.phone ? <PhoneCell phone={row.app.phone} /> : <span className="text-mut">{DASH}</span>;
     case "trainDays":
       return (
-        <span className="tabular-nums" title={`ฝึกงาน ${row.ready.trainedDays}/${HANDOVER_MIN_TRAINING_DAYS} วัน (นับเฉพาะวันฝึกงาน)`}>
-          <span className={row.ready.trainedDays >= HANDOVER_MIN_TRAINING_DAYS ? "font-medium text-st-live-ink" : ""}>
+        <span className="tabular-nums" title={`ฝึกงาน ${row.ready.trainedDays}/${TRAINING_PLAN_DAYS} วัน (นับเฉพาะวันฝึกงาน)`}>
+          <span className={row.ready.days ? "font-medium text-st-live-ink" : ""}>
             {row.ready.trainedDays} <span className="text-mut">วัน</span>
           </span>
         </span>
@@ -1153,10 +1180,14 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
     case "trainStatus":
       return (
         <span
-          title={`ฝึกงาน ${row.ready.trainedDays}/${HANDOVER_MIN_TRAINING_DAYS} วัน ${row.ready.days ? "✓" : "✗"} · ปฐมนิเทศ ${row.ready.orientation ? "✓" : "✗"} · ST ประเมินผ่าน ${row.ready.st ? "✓" : "✗"}`}
-          className={`rounded-full px-2 py-0.5 text-12 font-medium ${
-            row.waitHandover ? "bg-st-live text-st-live-ink" : "bg-primary/12 text-primary"
-          }`}
+          title={
+            row.waitHandover
+              ? row.handoverMarkedOn
+                ? `RC ลง “ร” รับรถ ตั้งแต่ ${thaiDate(row.handoverMarkedOn)}`
+                : "รอรับรถ (จากไฟล์นำเข้า)"
+              : "ฝึกงาน — RC ลง “ร” ในตารางสถานะฝึกงานเมื่อพร้อมรับรถ"
+          }
+          className={row.waitHandover ? "chip chip-violet" : "rounded-full bg-primary/12 px-2 py-0.5 text-12 font-medium text-primary"}
         >
           {text}
         </span>

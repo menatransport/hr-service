@@ -1,5 +1,6 @@
 import { etlCol, hrCol } from "@/lib/db";
 
+import { loadNicknameIndex } from "./nickname";
 import { loadPortraitIndex } from "./portrait";
 
 /**
@@ -106,12 +107,15 @@ export async function readDrivers<T extends object = Record<string, unknown>>(
   for (const f of extra) projection[f] = 1;
 
   const filter = codes ? { ...IN_REGISTRY, drivercode: { $in: [...codes] } } : IN_REGISTRY;
-  const [docs, portraits] = await Promise.all([
+  const [docs, portraits, nicknames] = await Promise.all([
     hrCol("drivers").then((c) =>
       c.find(filter, { projection }).sort({ drivercode: 1 }).limit(LIST_LIMIT).toArray(),
     ),
     /* อ่านรูปไม่ได้ไม่ควรล้มทั้งทะเบียน — ตกไปใช้รูปที่เก็บในทะเบียนเอง */
     withPhoto ? loadPortraitIndex(codes).catch(() => null) : null,
+    /* ชื่อเล่นจากใบสมัคร (`./nickname.ts`) มากับรูปเสมอ — ทุกหน้าที่วาดหน้าคน ได้ “ชื่อ (ชื่อเล่น)” ด้วย ·
+       อ่านไม่ได้ = ไม่มีชื่อเล่น ไม่ล้มทั้งทะเบียน */
+    withPhoto ? loadNicknameIndex(codes).catch(() => null) : null,
   ]);
 
   return docs
@@ -120,6 +124,7 @@ export async function readDrivers<T extends object = Record<string, unknown>>(
       if (withPhoto) {
         const portrait = row.mediaPurgedAt ? null : portraits?.resolve(row.drivercode as string, row.nationalId);
         if (portrait) row.photoUrl = portrait;
+        row.nickname = nicknames?.resolve(row.drivercode as string, row.nationalId) ?? "";
         for (const f of extra) delete row[f];
       }
       return row;

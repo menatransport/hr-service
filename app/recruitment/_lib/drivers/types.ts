@@ -132,6 +132,8 @@ export const WORK_STATUS_LABELS: Record<string, string> = {
   "Aล": "รถพจส.ซ่อมและพจส.ไปขับแทนคันที่ พจส.ลา",
   AX: "วันทำงานรถเช่าเหมา (จ่ายครึ่งราคา)",
   "ฝ": "พจส.ฝึกงาน",
+  /* ไม่ใช่รหัสของ ATMS — RC กรอกเองในตารางสถานะฝึกงาน = ฝึกจบ รอรับรถ (`HANDOVER_CODE` · Bew 9 พ.ย. 2569) */
+  "ร": "พจส.รอรับรถ",
   "ล": "พจส.จองลาล่วงหน้า",
   "ก": "พจส.ลากิจฉุกเฉิน",
   "ป": "พจส.ลาป่วยฉุกเฉิน",
@@ -147,6 +149,12 @@ export const WORK_STATUS_LABELS: Record<string, string> = {
   "ลข": "รถว่างจากพจส.ขาดงาน",
   "ลซ": "รถซ่อม ปฏิเสธไม่ขึ้นคันอื่น",
 };
+
+/**
+ * รหัส “รับรถ” — **ตัวเดียวที่เปลี่ยนคนฝึกงานเป็นรอรับรถ** (แทน 3 เงื่อนไขเดิม · Bew 9 พ.ย. 2569)
+ * · นับเฉพาะที่ RC กรอกเอง (`trainee_daily`) · กรอก `ฝ` ทีหลัง = กลับไปฝึกงาน (`handoverSince()`)
+ */
+export const HANDOVER_CODE = "ร";
 
 export function workStatusFullLabel(code: string): string {
   const key = code.trim();
@@ -216,6 +224,7 @@ export interface WorkStatusGroup {
  */
 export const WORK_STATUS_GROUPS: WorkStatusGroup[] = [
   { label: "ฝึกงาน", options: [opt("ฝ")] },
+  { label: "รับรถ", options: [opt(HANDOVER_CODE)] },
   {
     label: "มาทำงาน",
     options: ["A", "A75", "A50", "A25", "AX", "Aค", "Aซ", "Aล", "Aส", "Aป", "Aน", "Aด"].map(opt),
@@ -534,6 +543,8 @@ export const NEW_DRIVER_HOURS = 8;
 export interface DriverRecord {
   drivercode: string;
   name: string;
+  /** ชื่อเล่นจากใบสมัครของคนนี้ (`./nickname.ts`) — ว่าง = ไม่มีใบสมัคร/ไม่ได้ตอบ · หน้าจอโชว์ “ชื่อ (ชื่อเล่น)” */
+  nickname: string;
   phone: string;
   /** เบอร์อื่น ๆ (คั่นด้วย `, `) — ว่างได้ */
   phoneAlt: string;

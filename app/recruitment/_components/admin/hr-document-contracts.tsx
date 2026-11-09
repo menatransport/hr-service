@@ -528,8 +528,11 @@ function Signatures({ doc, name, fill }: { doc: "deposit" | "refund"; name: stri
 
 const sigOf = (fill: DocFill, doc: HrDocId, role: SignRole) => fill.signatures?.[signKey(doc, role)];
 
-/** ช่องเจ้าหน้าที่ — เซ็นแล้วชื่อในวงเล็บเป็นชื่อคนที่เซ็นจริง (session) ไม่งั้นชื่อที่พิมพ์ไว้ */
+/**
+ * ช่องเจ้าหน้าที่ — ชื่อในวงเล็บใช้ตามรายชื่อผู้ลงนามที่กรอกไว้เสมอ ถึงคนกดเซ็นจะเป็นบัญชีอื่น
+ * (Bew 9 พ.ย. 2569) · ช่องรายชื่อว่างถึงถอยไปชื่อที่ติดมากับลายเซ็น
+ */
 function staffSign(fill: DocFill, doc: HrDocId, role: SignRole, typed: string) {
   const signature = sigOf(fill, doc, role);
-  return { name: signature?.name || typed, signature };
+  return { name: typed.trim() || signature?.name, signature };
 }

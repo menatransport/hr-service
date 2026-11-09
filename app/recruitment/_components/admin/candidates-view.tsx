@@ -28,6 +28,7 @@ import {
 import {
   CandidateInsights,
   DEFAULT_FILTERS,
+  TRAINING_VIEW_LABELS,
   isFiltering,
   stampDay,
   type InsightFilters,
@@ -38,11 +39,15 @@ import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/ad
 import { SearchField } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/summary-panel";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
+import { Nickname } from "@/app/recruitment/_components/admin/nickname";
+import { CriminalRecordButton, CriminalRecordHeadTip } from "@/app/recruitment/_components/admin/criminal-record";
 import {
   TAB_NOTE,
-  HANDOVER_MIN_TRAINING_DAYS,
-  TRAINING_NOTE,
+  TRAINING_PLAN_DAYS,
+  WAIT_HANDOVER_LABEL,
   ST_CHECKPOINTS,
+  isHandoverMark,
+  withDayEdit,
   outcomeGroup,
   val,
   vehicleReadiness,
@@ -161,7 +166,12 @@ type Row = ApplicationSummary & {
   jrCode: string;
   /** ข้อมูลผู้ฝึกงานของมุมมองฝึกงาน (`traineeOf`) — ไม่ผูก RQ = `null` */
   trainee: Trainee | null;
+  /** ใบฝึกงานที่ RC ลง `ร` แล้ว (`awaitingHandover`) — คอลัมน์สถานะเป็น “รอรับรถ” สีม่วง */
+  waitHandover: boolean;
 };
+
+/** สถานะที่ตารางโชว์ — ฝึกงานที่ RC ลง `ร` แล้วเป็น “รอรับรถ” (ตารางเดียวกับฝึกงาน · Bew 9 พ.ย. 2569) */
+const statusText = (a: Row) => (a.status === "training" && a.waitHandover ? WAIT_HANDOVER_LABEL : STATUS_LABEL[a.status]);
 
 /**
  * คอลัมน์ผู้ฝึกงาน (Bew 5 พ.ย. 2569) — RQ ที่ผูก (รหัส ตำแหน่ง ลูกค้า แพล้นท์ ครูฝึก รถ)
@@ -300,6 +310,17 @@ const COLUMNS = [
     text: (a: Row) => (a.trainee ? vehicleReadiness(a.trainee, a.trainee.repair)?.label : undefined) ?? "ยังไม่มีรถ",
   },
   {
+    /* ผลตรวจประวัติอาชญากรรมจากชีตตรวจประวัติ (Bew 9 พ.ย. 2569) — โหลดทีละแถวตอนแถวขึ้นจอ
+       จึงกรอง/เรียงไม่ได้ (`noFilter`) · รายละเอียดคดีอยู่ในปุ่ม (`CriminalRecordButton`) */
+    id: "criminal",
+    label: "ผลประวัติอาชญากรรม",
+    width: "min-w-[150px]",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+    noFilter: true,
+    text: () => "",
+  },
+  {
     id: "contactOwner",
     label: "ผู้ติดต่อกลับ",
     width: "min-w-[160px]",
@@ -358,7 +379,7 @@ const COLUMNS = [
     width: "min-w-[170px]",
     asc: "ก → ฮ",
     desc: "ฮ → ก",
-    text: (a: Row) => STATUS_LABEL[a.status],
+    text: statusText,
   },
   {
     id: "exitReason",
@@ -420,7 +441,7 @@ const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
 const TRAINING_COLUMNS: ColumnId[] = ["jr", "trainingStart"];
 
 /** คอลัมน์ผู้ฝึกงาน — โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว (Bew 5 พ.ย. 2569) */
-const TRAINEE_COLUMNS: ColumnId[] = ["drivercode", "position", "customer", "plant", "trainer", "trainDays", "orientation", "st", "vehicle"];
+const TRAINEE_COLUMNS: ColumnId[] = ["drivercode", "position", "customer", "plant", "trainer", "trainDays", "orientation", "st", "vehicle", "criminal"];
 
 /**
  * มุมมองฝึกงานมีลำดับคอลัมน์ของตัวเอง (Bew 5 พ.ย. 2569) — รหัสพนักงานย้ายไปอยู่ใต้ชื่อ · JR ตำแหน่ง ลูกค้า แพล้นท์ ต่อจากชื่อ
@@ -440,6 +461,7 @@ const TRAINEE_ORDER: ColumnId[] = [
   "orientation",
   "st",
   "vehicle",
+  "criminal",
   "status",
 ];
 
@@ -558,8 +580,8 @@ function candidateXlsxColumns(
       header: "สถานะการสมัคร",
       width: 20,
       kind: "status",
-      value: (a) => STATUS_LABEL[a.status],
-      tone: (a) => (a.status === "cancelled" ? "alert" : a.status === "working" || a.status === "training" ? "ok" : null),
+      value: statusText,
+      tone: (a) => (a.status === "cancelled" ? "alert" : a.waitHandover ? "mut" : a.status === "working" || a.status === "training" ? "ok" : null),
     },
     ...(showReason
       ? [{ header: "เหตุผลที่ยกเลิก", width: 26, value: text("exitReason") } satisfies XlsxColumn<Row>]
@@ -652,11 +674,12 @@ function facetOf(
 type ColumnId = (typeof COLUMNS)[number]["id"];
 type Filters = Partial<Record<ColumnId, string[]>>;
 
-/** การ์ดที่ไม่ใช่สถานะใบสมัคร — แถวมาจากหน้าติดตามพนักงานใหม่ (อัตราว่าง · รอรับรถ · รับรถแล้ว) */
-export type HubView = "open" | "handover" | "working";
+/** การ์ดที่ไม่ใช่สถานะใบสมัคร — แถวมาจากหน้าติดตามพนักงานใหม่ (อัตราว่าง · รับรถแล้ว)
+ *  · รอรับรถย้ายไปอยู่ตารางเดียวกับฝึกงานแล้ว (การ์ดแบ่งครึ่ง · Bew 9 พ.ย. 2569) */
+export type HubView = "open" | "working";
 
-/** การ์ด → แท็บของหน้าติดตาม (รอรับรถ = แท็บรอรับรถ ชุดเดียวกัน) */
-const HUB_STAGE: Record<HubView, Tab> = { open: "open", handover: "handover", working: "working" };
+/** การ์ด → แท็บของหน้าติดตาม */
+const HUB_STAGE: Record<HubView, Tab> = { open: "open", working: "working" };
 
 export function CandidatesView({
   title,
@@ -671,6 +694,7 @@ export function CandidatesView({
   setRequisitions,
   hub,
   initialView = null,
+  initialTraining = false,
 }: {
   title: string;
   rows: ApplicationSummary[];
@@ -699,6 +723,8 @@ export function CandidatesView({
   /** ข้อมูลหน้าติดตามพนักงานใหม่ (`getHub()`) — การ์ดรอสรรหา/รับรถแล้ว */
   hub?: Hub;
   initialView?: HubView | null;
+  /** `?view=handover` (ลิงก์เก่าของการ์ดรอรับรถ) — เปิดมุมมองฝึกงาน + รอรับรถ */
+  initialTraining?: boolean;
 }) {
   /** ลำดับที่ผู้ใช้เลือกจากหัวคอลัมน์ · `null` = ลำดับตั้งต้นของมุมมอง (ดู `sort` ข้างล่าง) */
   const [pickedSort, setSort] = useState<TableSort | null>(null);
@@ -707,7 +733,8 @@ export function CandidatesView({
     const match = ref ? rows.find((a) => a.ref.toUpperCase() === ref) : undefined;
     /* มาจากลิงก์ `?ref=` = ตั้งใจดูคนนี้คนเดียว ไม่ว่าเขาอยู่สถานะไหน — ถ้ายังกรอง
        “รอการติดต่อ” ซ้อนอยู่ คนที่ผ่านสัมภาษณ์ไปแล้วจะได้ตารางว่าง */
-    return match ? { fullName: [match.fullName] } : DEFAULT_FILTERS;
+    if (match) return { fullName: [match.fullName] };
+    return initialTraining ? { status: TRAINING_VIEW_LABELS } : DEFAULT_FILTERS;
   });
 
   /**
@@ -729,6 +756,12 @@ export function CandidatesView({
    * การ์ดรอสรรหา/รับรถแล้วขยับทันที ไม่ต้องโหลดใหม่ · ขั้นคิดด้วย `hubRows()` ตัวเดียวกับหน้านั้น
    */
   const [view, setView] = useState<HubView | null>(hub ? initialView : null);
+  /**
+   * ช่อง `ร` / `ฝ` ที่เพิ่งกรอกในแท็บสถานะฝึกงาน (`คำขอ → วันที่ → รหัส` · ว่าง = ลบ) — ทับลงแถวด้วย
+   * `withDayEdit()` ป้าย/การ์ดรอรับรถขยับทันที และตรงกับที่เซิร์ฟเวอร์คิดหลังโหลดใหม่ (ทับซ้ำได้ ผลเท่าเดิม)
+   */
+  const [dayEdits, setDayEdits] = useState<Map<string, Record<string, string>>>(() => new Map());
+
   const hubRecords = useMemo<OnboardingRecord[]>(() => {
     if (!hub) return [];
     const live = new Map(requisitions.map((r) => [r.id, r]));
@@ -741,13 +774,22 @@ export function CandidatesView({
     return [
       ...added,
       ...hub.records.map((r) => {
-        const next = { ...r, ...live.get(r.id) };
-        return next.match
-          ? { ...next, match: { ...next.match, status: appStatus.get(next.match.applicationId) ?? next.match.status } }
-          : next;
+        /* `requisitions` ถือแถวชุดแรกที่โหลดมา — ค่าที่เซิร์ฟเวอร์คิดเอง (วันฝึก · `ร`/`ฝ`) ต้องเป็นของ `hub` เสมอ
+           ไม่งั้นค่าเก่าในชุดแรกทับของใหม่ */
+        let next: OnboardingRecord = {
+          ...r,
+          ...live.get(r.id),
+          trainedDays: r.trainedDays,
+          handoverMarkedOn: r.handoverMarkedOn,
+          handoverMarks: r.handoverMarks,
+        };
+        if (next.match)
+          next = { ...next, match: { ...next.match, status: appStatus.get(next.match.applicationId) ?? next.match.status } };
+        for (const [iso, code] of Object.entries(dayEdits.get(r.id) ?? {})) next = withDayEdit(next, iso, code);
+        return next;
       }),
     ];
-  }, [hub, requisitions, rows]);
+  }, [hub, requisitions, rows, dayEdits]);
   const hubList = useMemo(() => (hub ? hubRows(hubRecords, hub.repairs) : []), [hub, hubRecords]);
   const hubById = useMemo(() => new Map(hubList.map((r) => [r.id, r])), [hubList]);
   const hubCounts = useMemo(() => {
@@ -755,7 +797,6 @@ export function CandidatesView({
     const list = hubList;
     return {
       open: list.filter((r) => r.stage === "open").length,
-      handover: list.filter((r) => r.waitHandover).length,
       working: list.filter((r) => r.stage === "working").length,
     };
   }, [hub, hubList]);
@@ -776,23 +817,37 @@ export function CandidatesView({
     [requisitions],
   );
 
+  /** บันทึกช่องในแท็บสถานะฝึกงาน — แตะ `ร`/`ฝ` (ใส่ หรือเปลี่ยนจาก) = ทับลงแถวคำขอนั้น */
+  const onDaySaved = useCallback((requisitionId: string, iso: string, code: string, prev: string) => {
+    if (!isHandoverMark(code) && !isHandoverMark(prev)) return;
+    setDayEdits((cur) => {
+      const next = new Map(cur);
+      next.set(requisitionId, { ...(next.get(requisitionId) ?? {}), [iso]: code });
+      return next;
+    });
+  }, []);
+
   /* จับเฉพาะใบที่รอการติดต่อ — จังหวะเดียวที่การเตือนมีประโยชน์คือก่อนยกหูโทร */
   const enriched = useMemo<Row[]>(
     () =>
-      rows.map((a) => ({
-        ...a,
-        blacklistHit:
-          a.status === "pending_contact" ? findBlacklistHit(a, blacklistIndex) : null,
-        trainingStartOn: rqByApplication.get(a.id)?.trainingStartOn ?? "",
-        jrCode: rqByApplication.get(a.id)?.code ?? "",
-        trainee: traineeOf(
-          rqByApplication.get(a.id),
-          hubById.get(rqByApplication.get(a.id)?.id ?? ""),
-          hub?.repairs,
-        ),
-      })),
+      rows.map((a) => {
+        const rq = rqByApplication.get(a.id);
+        const row = hubById.get(rq?.id ?? "");
+        return {
+          ...a,
+          blacklistHit:
+            a.status === "pending_contact" ? findBlacklistHit(a, blacklistIndex) : null,
+          trainingStartOn: rq?.trainingStartOn ?? "",
+          jrCode: rq?.code ?? "",
+          trainee: traineeOf(rq, row, hub?.repairs),
+          waitHandover: a.status === "training" && Boolean(row?.waitHandover),
+        };
+      }),
     [rows, blacklistIndex, rqByApplication, hubById, hub],
   );
+
+  /** ครึ่งขวาของการ์ดฝึกงาน — นับจากแถวชุดเดียวกับตาราง */
+  const handoverCount = useMemo(() => enriched.filter((a) => a.waitHandover).length, [enriched]);
 
   /**
    * กล่องข้อมูล RC — ปุ่ม RC (ใบที่ผูกแล้ว) · คอลัมน์วันที่ฝึกงาน · เลือกสถานะ “รอฝึกงาน”/“ฝึกงาน”
@@ -858,16 +913,19 @@ export function CandidatesView({
 
   const showBlacklist = BLACKLIST_VIEWS.some(onlyStatus);
 
-  const showTraining = onlyStatus(STATUS_LABEL.training) || onlyStatus(STATUS_LABEL.interview_passed);
+  /** มุมมองฝึกงาน = กรองเฉพาะ ฝึกงาน และ/หรือ รอรับรถ (การ์ดแบ่งครึ่งกรองสองค่าพร้อมกัน · ติ๊กเหลือค่าเดียวที่หัวคอลัมน์ได้) */
+  const trainingView = pickedStatus.length > 0 && pickedStatus.every((l) => TRAINING_VIEW_LABELS.includes(l));
+
+  const showTraining = trainingView || onlyStatus(STATUS_LABEL.interview_passed);
 
   /** กรองรอฝึกงาน = คอลัมน์ผู้ฝึกงานแบบเดียวกัน แต่ไม่มี ฝึกมา/ปฐมนิเทศ/ST (Bew 5 พ.ย. 2569) */
   const showWaiting = onlyStatus(STATUS_LABEL.interview_passed);
 
   /** กรองฝึกงาน/รอฝึกงานอย่างเดียว = คอลัมน์ผู้ฝึกงาน แทนคอลัมน์ช่วงสมัคร (Bew 5 พ.ย. 2569) */
-  const showTrainee = onlyStatus(STATUS_LABEL.training) || showWaiting;
+  const showTrainee = trainingView || showWaiting;
 
   /** กรองฝึกงานอย่างเดียว = ตารางฝึกงานรายวัน + ปุ่มคัดลอกสรุปใต้ตาราง (ย้ายมาจากหน้าติดตามพนักงานใหม่ 25 ต.ค. 2569) */
-  const showDaily = !view && onlyStatus(STATUS_LABEL.training);
+  const showDaily = !view && trainingView;
 
   /**
    * แท็บเหนือตารางของมุมมองฝึกงาน: ตาราง | สถานะฝึกงาน (Bew 5 พ.ย. 2569 — เดิมตารางรายวันต่อท้าย)
@@ -917,7 +975,7 @@ export function CandidatesView({
     const matched = enriched.filter((a) => {
       if (needle) {
         const rq = rqByApplication.get(a.id);
-        const hay = [a.fullName, a.ref, a.phone, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
+        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
         if (!hay.some((t) => t?.toLowerCase().includes(needle))) return false;
       }
       return columns.every((column) => {
@@ -946,7 +1004,7 @@ export function CandidatesView({
   /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
   const toPerson = (a: ApplicationSummary): TraineePerson => {
     const rq = rqByApplication.get(a.id);
-    return { id: rq?.id ?? a.id, code: rq?.code ?? "", name: a.fullName, drivercode: rq?.drivercode ?? "", vehicle: rq?.vehicle ?? null };
+    return { id: rq?.id ?? a.id, code: rq?.code ?? "", name: a.fullName, drivercode: rq?.drivercode ?? "", vehicle: rq?.vehicle ?? null, contactOwner: a.contactOwner, nickname: a.nickname };
   };
   const dailyPool = showDaily ? rows.filter((a) => a.status === "training").map(toPerson) : [];
   const dailyPeople = showDaily ? visible.map(toPerson) : [];
@@ -1094,6 +1152,7 @@ export function CandidatesView({
           setFilters(DEFAULT_FILTERS);
         }}
         hubCounts={hubCounts}
+        handoverCount={handoverCount}
         view={view}
         onView={pickView}
       />
@@ -1149,10 +1208,6 @@ export function CandidatesView({
                 tone="filled"
                 className="lg:max-w-sm lg:flex-1"
               />
-              <p className="text-12 leading-relaxed text-ink">
-                <span className="font-medium">เงื่อนไข: </span>
-                <span className="text-alert">{TRAINING_NOTE.join(", ")}</span>
-              </p>
             </>
           )}
         </div>
@@ -1166,6 +1221,7 @@ export function CandidatesView({
             people={dailyPeople}
             onAlerts={onDailyAlerts}
             toolbarSlot={dailyToolbar}
+            onDaySaved={onDaySaved}
           />
         </div>
       ) : null}
@@ -1202,24 +1258,34 @@ export function CandidatesView({
                       : "z-10"
                   }`}
                 >
-                  <ColumnMenu
-                    label={head(column).label}
-                    sort={{
-                      dir: sort.column === column.id ? sort.dir : null,
-                      ascLabel: column.asc,
-                      descLabel: column.desc,
-                      /* กดปุ่มเรียงที่กำลังทำงานอยู่ซ้ำ = ถอยกลับไปลำดับตั้งต้น
-                         ไม่ใช่ “ไม่เรียงอะไรเลย” — หัวคอลัมน์จึงบอกลำดับจริงเสมอ */
-                      onSort: (dir) =>
-                        setSort(dir ? { column: column.id, dir } : null),
-                    }}
-                    filter={{
-                      options: choices[column.id],
-                      selected: filters[column.id] ?? [],
-                      onChange: (next) =>
-                        setFilters((prev) => ({ ...prev, [column.id]: next })),
-                    }}
-                  />
+                  {/* ผลประวัติอาชญากรรม — ⓘ บอกเงื่อนไขการดึงข้อมูลข้างหัวคอลัมน์ */}
+                  <div className="flex items-center gap-1">
+                    <div className="min-w-0 flex-1">
+                      <ColumnMenu
+                        label={head(column).label}
+                        sort={{
+                          dir: sort.column === column.id ? sort.dir : null,
+                          ascLabel: column.asc,
+                          descLabel: column.desc,
+                          /* กดปุ่มเรียงที่กำลังทำงานอยู่ซ้ำ = ถอยกลับไปลำดับตั้งต้น
+                             ไม่ใช่ “ไม่เรียงอะไรเลย” — หัวคอลัมน์จึงบอกลำดับจริงเสมอ */
+                          onSort: (dir) =>
+                            setSort(dir ? { column: column.id, dir } : null),
+                        }}
+                        filter={
+                          "noFilter" in column
+                            ? undefined
+                            : {
+                                options: choices[column.id],
+                                selected: filters[column.id] ?? [],
+                                onChange: (next) =>
+                                  setFilters((prev) => ({ ...prev, [column.id]: next })),
+                              }
+                        }
+                      />
+                    </div>
+                    {column.id === "criminal" ? <CriminalRecordHeadTip /> : null}
+                  </div>
                 </th>
               ))}
 
@@ -1285,7 +1351,7 @@ export function CandidatesView({
                           <PersonMark status={a.status} photoUrl={a.photoUrl} name={a.fullName} />
                           <div className="flex flex-col gap-0.5">
                             <span className="font-medium whitespace-nowrap text-ink">
-                              {a.fullName}
+                              {a.fullName} <Nickname value={a.nickname} />
                             </span>
                             <span className="flex items-center gap-1.5 font-mono text-10-5 tracking-wider text-primary">
                               {/* มุมมองฝึกงาน — รหัสพนักงานอยู่ใต้ชื่อแทนคอลัมน์แยก (Bew 5 พ.ย. 2569) */}
@@ -1349,12 +1415,12 @@ export function CandidatesView({
                     return (
                       <td
                         className="px-3 py-2 whitespace-nowrap tabular-nums"
-                        title={t?.trainedDays == null ? undefined : `ฝึกงาน ${t.trainedDays}/${HANDOVER_MIN_TRAINING_DAYS} วัน (นับเฉพาะวันฝึกงาน)`}
+                        title={t?.trainedDays == null ? undefined : `ฝึกงาน ${t.trainedDays}/${TRAINING_PLAN_DAYS} วัน (นับเฉพาะวันฝึกงาน)`}
                       >
                         {t?.trainedDays == null ? (
                           dash
                         ) : (
-                          <span className={t.trainedDays >= HANDOVER_MIN_TRAINING_DAYS ? "font-medium text-st-live-ink" : ""}>
+                          <span className={t.trainedDays >= TRAINING_PLAN_DAYS ? "font-medium text-st-live-ink" : ""}>
                             {t.trainedDays} <span className="text-mut">วัน</span>
                           </span>
                         )}
@@ -1398,6 +1464,12 @@ export function CandidatesView({
                         )}
                       </td>
                     );
+                  case "criminal":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <CriminalRecordButton name={locked ? "" : a.fullName} site={rq?.branch ?? ""} />
+                      </td>
+                    );
                   case "contactOwner":
                     return (
                       <td className="px-2 py-1.5">
@@ -1437,6 +1509,7 @@ export function CandidatesView({
                           {...cell}
                           /* เป็นรอฝึกงาน/ฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
                           onStage={(to) => toStage(a, to)}
+                          handover={a.waitHandover}
                         />
                       </td>
                     );

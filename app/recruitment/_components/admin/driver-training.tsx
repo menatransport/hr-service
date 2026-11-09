@@ -388,7 +388,7 @@ function DailySection({
   }
 
   /* นับตามโทนของรหัสที่ใช้ (ATMS ก่อน — กติกาเดียวกับตารางรายวัน `effectiveCode`) */
-  const counts = { work: 0, leave: 0, exit: 0 };
+  const counts = { work: 0, handover: 0, leave: 0, exit: 0 };
   for (const d of days) {
     const code = d.atms || d.manual;
     if (code) counts[cellTone(code)] += 1;

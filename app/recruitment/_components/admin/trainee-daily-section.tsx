@@ -23,6 +23,10 @@ export type TraineePerson = {
   name: string;
   drivercode: string;
   vehicle: RequisitionVehicle | null;
+  /** ผู้ติดต่อกลับของใบสมัคร — ขึ้นตัวเล็กท้ายชื่อในตาราง (Bew 9 พ.ย. 2569) */
+  contactOwner: string;
+  /** ชื่อเล่นจากใบสมัคร — “ชื่อ (ชื่อเล่น)” · ว่าง = ใช้ของที่เซิร์ฟเวอร์หาให้จากทะเบียน */
+  nickname?: string;
 };
 
 /**
@@ -45,6 +49,9 @@ const placeholder = (p: TraineePerson, own?: TraineeBoardDriver): TraineeBoardDr
   requisitionId: p.id,
   requisitionCode: p.code,
   vehicle: p.vehicle,
+  priorTotals: own?.priorTotals ?? { work: 0, handover: 0, leave: 0 },
+  contactOwner: p.contactOwner,
+  nickname: p.nickname ?? "",
 });
 
 /**
@@ -60,8 +67,11 @@ export function TraineeDailySection({
   people,
   onAlerts,
   toolbarSlot,
+  onDaySaved,
 }: {
   pool: TraineePerson[];
+  /** บันทึกช่องสำเร็จ — ส่งต่อจาก `TraineeMatrix` (หน้าผู้สมัครใช้ขยับสถานะรอรับรถทันที) */
+  onDaySaved?: (requisitionId: string, iso: string, code: string, prev: string) => void;
   /** แถบของหน้าผู้สมัครที่ให้เครื่องมือของตาราง (เดือน · ค้นหา · สาขา · RC Alert · Excel) ไปอยู่ —
       ดู `toolbarSlot` ของ `TraineeMatrix` */
   toolbarSlot?: HTMLElement | null;
@@ -88,7 +98,7 @@ export function TraineeDailySection({
       const found = p.drivercode ? byCode.get(p.drivercode) : undefined;
       if (found && !seen.has(p.drivercode)) {
         seen.add(p.drivercode);
-        return [{ ...found, name: found.name || p.name, requisitionId: found.requisitionId || p.id }];
+        return [{ ...found, name: found.name || p.name, requisitionId: found.requisitionId || p.id, contactOwner: p.contactOwner, nickname: p.nickname || found.nickname }];
       }
       return [placeholder(p, p.drivercode ? undefined : byCode.get(requisitionDailyKey(p.id)))];
     });
@@ -175,6 +185,7 @@ export function TraineeDailySection({
           onMonth={load}
           actions={alertButton}
           toolbarSlot={toolbarSlot}
+          onDaySaved={onDaySaved}
         />
       ) : (
         <p role="status" className="flex items-center gap-2 py-6 text-13 text-mut">

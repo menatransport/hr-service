@@ -12,6 +12,7 @@ import {
 
 import { DriverAddDialog } from "@/app/recruitment/_components/admin/driver-add-dialog";
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
+import { Nickname } from "@/app/recruitment/_components/admin/nickname";
 import { DriverExcelSyncDialog } from "@/app/recruitment/_components/admin/driver-excel-sync";
 import { DriverPasteDialog } from "@/app/recruitment/_components/admin/driver-paste-import";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
@@ -546,6 +547,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
       if (!q) return true;
       return (
         norm(d.name).includes(q) ||
+        norm(d.nickname).includes(q) ||
         norm(d.drivercode).includes(q) ||
         norm(d.phone).includes(q) ||
         norm(d.vehicleRef).includes(q) ||
@@ -1053,7 +1055,9 @@ function Row({
           <span className="flex-none transition-transform duration-300 group-hover:scale-108">
             <DriverAvatar driver={driver} editable={canEdit} />
           </span>
-          <span className="truncate font-medium text-ink">{driver.name || "—"}</span>
+          <span className="truncate font-medium text-ink">
+            {driver.name || "—"} <Nickname value={driver.nickname} />
+          </span>
           {driver.isNew ? <NewBadge /> : null}
         </span>
       </td>
@@ -1199,7 +1203,9 @@ function DriverCard({
         <DriverAvatar driver={driver} size="md" editable={canEdit} />
         <div className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-13-5 font-medium text-pretty">
-            {driver.name || "—"}
+            <span>
+              {driver.name || "—"} <Nickname value={driver.nickname} />
+            </span>
             {driver.isNew ? <NewBadge /> : null}
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-11-5 text-mut">

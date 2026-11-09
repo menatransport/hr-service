@@ -60,6 +60,8 @@ interface MasterDriverDoc {
   driverName?: unknown;
   /** ฟิลด์ของ hr-service เอง ไม่ได้มาจาก ETL — ดู `setDriverPhoto()` / `setDriverStatus()` */
   photoUrl?: unknown;
+  /** เติมโดย `readDrivers()` จากใบสมัคร (`./nickname.ts`) — ไม่ใช่ฟิลด์ในทะเบียน */
+  nickname?: unknown;
   statusOverride?: unknown;
   /** วันหมดอายุบัตรประชาชนที่ฝ่ายบุคคลกรอกเอง — ดู `setDriverIdCardExpiry()` */
   idCardExpiryDate?: unknown;
@@ -654,6 +656,7 @@ function toRecord(
   return {
     drivercode,
     name: str(doc.driverName),
+    nickname: str(doc.nickname),
     phone: str(doc.phone),
     phoneAlt: str(doc.phoneAlt),
     photoUrl: str(doc.photoUrl),

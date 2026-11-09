@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
+import { Nickname } from "@/app/recruitment/_components/admin/nickname";
 import { DocGroup, Field, Hidden, Section } from "@/app/recruitment/_components/admin/driver-profile-parts";
 import { DriverDocumentData } from "@/app/recruitment/_components/admin/driver-document-data";
 import { DriverDocumentSlots } from "@/app/recruitment/_components/admin/driver-document-slots";
 import { DriverProfileEdit } from "@/app/recruitment/_components/admin/driver-profile-edit";
 import { DriverProfileTabs } from "@/app/recruitment/_components/admin/driver-profile-tabs";
+import { CriminalRecordPanel } from "@/app/recruitment/_components/admin/criminal-record";
 import { DriverRental } from "@/app/recruitment/_components/admin/driver-rental";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { DriverTraining } from "@/app/recruitment/_components/admin/driver-training";
@@ -134,7 +136,7 @@ export function DriverProfile({
 
         <div className="flex min-w-0 flex-col gap-1.5">
           <h1 className="text-xl font-semibold tracking-[-0.01em]">
-            {driver.name || "ไม่มีชื่อในทะเบียน"}
+            {driver.name || "ไม่มีชื่อในทะเบียน"} <Nickname value={driver.nickname} />
           </h1>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-12-5 text-mut">{driver.drivercode}</span>
@@ -237,6 +239,13 @@ export function DriverProfile({
                 </dl>
               </Section>
 
+              {/* ผลตรวจประวัติอาชญากรรมจากชีตตรวจประวัติ (Bew 9 พ.ย. 2569) — เฉพาะผู้มีสิทธิ์ “↳ ประวัติ”
+                  (`registry-profile`) ชุดเดียวกับแท็บเอกสาร · ไม่มีสิทธิ์ = ไม่ขึ้นกล่องนี้เลย */}
+              {canEdit ? (
+                <Section title="ผลประวัติอาชญากรรม" note="อัปเดตตามชีตสรุปรายชื่อตรวจประวัติ">
+                  <CriminalRecordPanel name={driver.name} site={driver.siteLabel} />
+                </Section>
+              ) : null}
             </div>
             <div className="flex flex-col gap-6 border-t border-line pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
               <Section title="ช่องทางติดต่อ">

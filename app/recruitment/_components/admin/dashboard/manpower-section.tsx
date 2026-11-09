@@ -542,7 +542,7 @@ interface PivotXlsxRow {
 const PIPE: { key: People; label: string; hint: string }[] = [
   { key: "waitTraining", label: "รอฝึกงาน", hint: "ผ่านสัมภาษณ์แล้ว ยังไม่เริ่มฝึก" },
   { key: "training", label: "กำลังฝึกงาน", hint: "อยู่ระหว่างฝึกงาน" },
-  { key: "waitHandover", label: "รอรับรถ", hint: "ฝึกครบแล้ว รอรับรถ" },
+  { key: "waitHandover", label: "รอรับรถ", hint: "RC ลงสถานะ “ร” แล้ว รอรับรถ" },
 ];
 
 const valueOf = (t: Totals, k: ValueKey) => (k === "net" ? net(t) : t[k]);

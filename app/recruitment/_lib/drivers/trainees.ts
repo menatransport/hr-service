@@ -1,4 +1,4 @@
-import { isExitStatus, requisitionDailyKey } from "./types";
+import { HANDOVER_CODE, isExitStatus, requisitionDailyKey } from "./types";
 import type { TraineeDailyEntry } from "./types";
 import type { TraineeBoardDriver } from "./trainee-board";
 
@@ -28,11 +28,13 @@ import type { TraineeBoardDriver } from "./trainee-board";
  * (`ก` ลากิจ · `ป` ลาป่วย · `ย` หยุดไม่ได้รับเงิน · `จ` บาดเจ็บ · `กด`/`กม` กักตัว ·
  * `X` ตกคิว · `ล…` ลาแบบต่าง ๆ — ดู `WORK_STATUS_LABELS`) จึงนับเป็น “ลา” ทั้งหมด
  */
-export type CellTone = "work" | "leave" | "exit";
+export type CellTone = "work" | "handover" | "leave" | "exit";
 
 /** สีพื้นของสามเหลี่ยม — ใช้เป็น `background` ของชั้นที่ถูก `clip-path` ตัด */
 export const TONE_FILL: Record<CellTone, string> = {
   work: "var(--color-primary)",
+  /* `ร` รับรถ — ม่วง ชุดเดียวกับป้าย “รอรับรถ” บนหน้าผู้สมัคร (Bew 9 พ.ย. 2569) */
+  handover: "var(--color-st-violet-ink)",
   leave: "var(--color-st-wait-ink)",
   exit: "var(--color-alert)",
 };
@@ -40,6 +42,7 @@ export const TONE_FILL: Record<CellTone, string> = {
 /** สีตัวอักษรบนสามเหลี่ยมสีนั้น */
 export const TONE_TEXT: Record<CellTone, string> = {
   work: "text-primary-content",
+  handover: "text-st-violet",
   leave: "text-st-wait",
   /* `ink-content` พลิกเป็นสีเข้มในธีมมืดพอดีกับ `alert` ที่สว่างขึ้น */
   exit: "text-ink-content",
@@ -47,17 +50,19 @@ export const TONE_TEXT: Record<CellTone, string> = {
 
 export const TONE_DOT: Record<CellTone, string> = {
   work: "bg-primary",
+  handover: "bg-st-violet-ink",
   leave: "bg-st-wait-ink",
   exit: "bg-alert",
 };
 
 export const TONE_LABEL: Record<CellTone, string> = {
   work: "ฝึกงาน",
+  handover: "รับรถ",
   leave: "ลา",
   exit: "พ้นสภาพ",
 };
 
-export const TONES: CellTone[] = ["work", "leave", "exit"];
+export const TONES: CellTone[] = ["work", "handover", "leave", "exit"];
 
 /** รหัสฝึกงาน — นับเป็น “ปฏิบัติงาน” (`ฝ` = พจส.ฝึกงาน) */
 const TRAIN_CODES = ["ฝ"];
@@ -70,6 +75,7 @@ const TRAIN_CODES = ["ฝ"];
 export function cellTone(code: string): CellTone {
   const value = code.trim();
   if (isExitStatus(value)) return "exit";
+  if (value === HANDOVER_CODE) return "handover";
   if (TRAIN_CODES.includes(value) || value.toUpperCase().startsWith("A")) return "work";
   return "leave";
 }
@@ -132,10 +138,28 @@ export interface TraineeRow {
   byDay: Map<number, DayCell>;
   /** วันปฏิบัติงาน — ฝึกงาน (`ฝ`) + ออกงาน (`A…`) รวมกัน */
   work: number;
+  /** วัน `ร` (รับรถ) */
+  handover: number;
   leave: number;
   exit: number;
   /** กี่วันในเดือนนี้ที่ฝ่ายบุคคลกรอกเอง */
   manualCount: number;
+}
+
+/**
+ * ยอดรวมต่อคนนับย้อนหลังกี่เดือน **นอกเหนือจากเดือนที่เปิด** (Bew 9 พ.ย. 2569: “ใช้ค่ารวม
+ * จากทุกเดือน ย้อนหลัง 2 เดือนได้”) — เปิด พ.ย. = นับ ก.ย. + ต.ค. + พ.ย. · ตัดที่ 2 เพราะ
+ * คนในตารางนี้คือคนฝึกงาน ซึ่งแทบทั้งหมดเริ่มงานไม่เกินนั้น และ `months.<YYYY-MM>` เป็น
+ * ฟิลด์แบบจุด ขอเพิ่มทีละเดือนได้โดยไม่ต้องลากทั้งก้อน `months` มา (`getTraineeBoard()`)
+ */
+export const TOTAL_PRIOR_MONTHS = 2;
+
+/**
+ * ยอดรวมของคอลัมน์สรุปต่อคน = เดือนที่เปิด (นับสดจาก `byDay` ขยับทันทีที่กรอก) +
+ * เดือนก่อนหน้าที่เซิร์ฟเวอร์นับมาให้ (`priorTotals` — ดู `TOTAL_PRIOR_MONTHS`)
+ */
+export function totalOf(row: TraineeRow, tone: "work" | "handover" | "leave"): number {
+  return row[tone] + (row.driver.priorTotals?.[tone] ?? 0);
 }
 
 /* ------------------------------------------------------------ ตัวกรอง */
@@ -176,8 +200,8 @@ export type ManualEdits = Map<string, Record<string, TraineeDailyEntry | null>>;
  * (มีสถานะฝึกงาน `ฝ` ในเดือนนั้น ทั้งจาก ATMS หรือที่ฝ่ายบุคคลกรอกเอง)
  * ที่นี่จึงเหลือแค่กรองตามสาขา และคำค้นที่กดอยู่บนหน้าจอ
  *
- * เรียงคนใหม่สุดขึ้นก่อน — คนที่เพิ่งเริ่มคือคนที่ต้องจับตามากที่สุด · อายุงาน
- * เท่ากันค่อยเรียงตามชื่อ เพื่อให้ลำดับคงที่ไม่สลับไปมาทุกครั้งที่โหลด
+ * เรียงตามรหัส พจส. จากน้อยไปมาก (Bew 9 พ.ย. 2569 — เดิมมากไปน้อย ก่อนนั้นเรียงตามอายุงาน) · คนที่ยังไม่มีรหัส
+ * ไปท้ายสุด · รหัสเท่ากันค่อยเรียงตามชื่อ เพื่อให้ลำดับคงที่ไม่สลับไปมาทุกครั้งที่โหลด
  */
 /** คีย์บันทึกรายวันของแถว — รหัส พจส. หรือ `rq:<id>` ของคนที่ยังไม่ผูก ATMS · ว่าง = กรอกไม่ได้ */
 export function dailyKeyOf(driver: Pick<TraineeBoardDriver, "drivercode" | "requisitionId" | "requisitionCode">): string {
@@ -223,6 +247,7 @@ export function buildTraineeRows(
         driver,
         byDay,
         work: 0,
+        handover: 0,
         leave: 0,
         exit: 0,
         manualCount: 0,
@@ -242,13 +267,16 @@ export function buildTraineeRows(
       if (!q) return true;
       return (
         norm(row.driver.name).includes(q) ||
+        norm(row.driver.nickname ?? "").includes(q) ||
         norm(row.driver.drivercode).includes(q) ||
         norm(row.driver.plant).includes(q)
       );
     })
     .sort(
       (a, b) =>
-        (a.driver.tenureMonths ?? 9999) - (b.driver.tenureMonths ?? 9999) ||
+        /* คนที่ยังไม่มีรหัส พจส. ไปท้ายสุด */
+        Number(!a.driver.drivercode) - Number(!b.driver.drivercode) ||
+        a.driver.drivercode.localeCompare(b.driver.drivercode, "en", { numeric: true }) ||
         a.driver.name.localeCompare(b.driver.name, "th"),
     );
 }

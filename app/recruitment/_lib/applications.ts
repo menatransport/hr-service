@@ -152,6 +152,17 @@ function titleAnswer(doc: Pick<ApplicationDoc, "questionSnapshot" | "answers">):
   return value === "—" ? "" : value;
 }
 
+/**
+ * ชื่อเล่นที่ผู้สมัครตอบ — ข้อที่ป้ายมีคำว่า “ชื่อเล่น” (กติกาเดียวกับ `FACT_RULES.nickname` ใน
+ * `hr-documents.ts`) · ตอบ “-” = ไม่มี · ทุกหน้าที่โชว์ “ชื่อ (ชื่อเล่น)” อ่านจากตัวนี้ (Bew 9 พ.ย. 2569)
+ */
+export function nicknameAnswer(doc: Partial<Pick<ApplicationDoc, "questionSnapshot" | "answers">>): string {
+  const question = doc.questionSnapshot?.find((q) => q.label.includes("ชื่อเล่น"));
+  if (!question) return "";
+  const value = displayAnswer(doc.answers?.[question.key], question.options).trim();
+  return value === "—" || value === "-" ? "" : value;
+}
+
 /** ชื่อเต็มของใบนี้ — ต่อ “ชื่อ” กับ “นามสกุล” ที่คลังคำถามจริงแยกเป็นคนละข้อ */
 export function fullNameOf(
   doc: Partial<Pick<ApplicationDoc, "fullName" | "questionSnapshot" | "answers">>,
@@ -1188,6 +1199,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
     ref: doc.ref,
     status: normalizeStatus(doc.status),
     fullName: fullNameOf(doc),
+    nickname: erasedOf(doc) ? "" : nicknameAnswer(doc),
     phone: doc.phone,
     workZone: roleAnswer(doc, "work_zone"),
     readyToStart: roleAnswer(doc, "ready_date"),

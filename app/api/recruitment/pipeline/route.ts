@@ -22,8 +22,9 @@ import { customerLabel, personName, positionLabel } from "@/app/recruitment/_lib
  * `GET /api/recruitment/pipeline?status=open,waitTraining,training,waitHandover`
  * — คนตามช่วงก่อนรับรถ: รอสรรหา · รอฝึกงาน · ฝึกงาน · รอรับรถ (ไม่ส่ง `status` = ทั้ง 4 ช่วง)
  *
- * ช่วงคิดด้วย `pipelineOf()` ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร/แดชบอร์ด · รอรับรถ = ฝึกครบ 10 วัน
- * (เฉพาะวันฝึกงาน `ฝ`) + ปฐมนิเทศแล้ว + ST ประเมินผ่าน · รอสรรหายังไม่มีคน = `name` / `drivercode` ว่าง
+ * ช่วงคิดด้วย `pipelineOf()` ชุดเดียวกับหน้าติดตามพนักงานใหม่/หน้าผู้สมัคร/แดชบอร์ด · รอรับรถ = RC ลงสถานะ `ร`
+ * (รับรถ) ในตารางสถานะฝึกงาน (`handoverMarkedOn` · 9 พ.ย. 2569) · `handoverReady` เหลือเป็นความคืบหน้าอย่างเดียว
+ * · รอสรรหายังไม่มีคน = `name` / `drivercode` ว่าง
  * · สถานะรถ = `vehicleReadiness()` จาก ATMS หยุดวิ่ง + ขั้นงานบอร์ดซ่อม (อ่านไม่ได้ทั้งคู่ = ทุกคันพร้อมใช้งาน) · ยังไม่มีรถ = `null` / ว่าง
  */
 export async function GET(request: NextRequest) {
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
         orientationOn: val(r.onboarding, "hrd", "orientationOn"),
         stResult: val(r.onboarding, "er", "day8") || val(r.onboarding, "er", "day4") || val(r.onboarding, "er", "day1"),
         handoverReady: { days: check.days, orientation: check.orientation, st: check.st },
+        handoverMarkedOn: r.handoverMarkedOn ?? "",
       });
     }
 

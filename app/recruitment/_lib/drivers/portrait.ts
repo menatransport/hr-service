@@ -36,7 +36,7 @@ const erased = (a: AppLite) => Boolean(a.erasedAt) || a.status === "withdrawn";
 const portraitOf = (a: AppLite) => a.files?.find((f) => f.slot === PORTRAIT_SLOT)?.url || "";
 
 /** รหัส พจส. → ใบสมัครที่ผูกไว้ผ่านคำขอสรรหา (คำขอที่แก้ล่าสุดชนะ) */
-async function requisitionLinks(codes?: readonly string[]): Promise<Map<string, string>> {
+export async function requisitionLinks(codes?: readonly string[]): Promise<Map<string, string>> {
   const rows = await (
     await hrCol("requisitions")
   )

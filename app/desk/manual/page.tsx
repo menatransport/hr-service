@@ -68,7 +68,7 @@ export default async function ManualIndexPage() {
           <h2 className="text-16 font-semibold">ประวัติการปรับปรุง</h2>
           <ol className="flex flex-col divide-y divide-line rounded-xl border border-line bg-base-100">
             {changes.map((v) => (
-              <li key={v.date} className="grid gap-1.5 px-4 py-3 sm:grid-cols-[110px_1fr]">
+              <li key={v.date + v.time}className="grid gap-1.5 px-4 py-3 sm:grid-cols-[110px_1fr]">
                 <span className="flex flex-col text-12-5 text-mut tabular-nums">
                   <span className="font-medium">{thaiDate(v.date)}</span>
                   <span>{v.time} น.</span>

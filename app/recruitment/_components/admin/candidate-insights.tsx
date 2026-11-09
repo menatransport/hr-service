@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { ListFilter } from "lucide-react";
 
 import type { SortDir } from "@/components/ui/column-menu";
 import { SummaryPanel, SummaryStat, SummaryStats } from "@/components/ui/summary-panel";
@@ -9,7 +10,7 @@ import {
   type ApplicationStatus,
   type ApplicationSummary,
 } from "@/app/recruitment/_lib/types";
-import { STAGE_DOT } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { STAGE_DOT, WAIT_HANDOVER_LABEL } from "@/app/recruitment/_lib/requisitions/onboarding";
 import type { HubView } from "@/app/recruitment/_components/admin/candidates-view";
 
 /**
@@ -55,24 +56,29 @@ const PIPELINE: (ApplicationStatus | HubView)[] = [
   "pending_contact",
   "interview_scheduled",
   "interview_passed",
+  /* ฝึกงาน + รอรับรถ = การ์ดเดียวแบ่งครึ่ง (`TrainingSplit` · Bew 9 พ.ย. 2569) เมื่อมีข้อมูลหน้าติดตาม */
   "training",
-  "handover",
   "working",
   "cancelled",
 ];
 
 /**
  * การ์ดที่แถวมาจากหน้าติดตามพนักงานใหม่ (3 พ.ย. 2569 · Bew) — รอสรรหา = แท็บอัตราว่าง ·
- * รอรับรถ = แท็บฝึกงานกรองสถานะรอรับรถ · รับรถแล้ว = แท็บรับรถแล้ว · ตัวเลขนับด้วย `hubRows()` ชุดเดียวกับหน้านั้น
+ * รับรถแล้ว = แท็บรับรถแล้ว · ตัวเลขนับด้วย `hubRows()` ชุดเดียวกับหน้านั้น
  * · `working` ตรงนี้ไม่ใช่สถานะใบสมัคร “ปฏิบัติงาน” (การ์ดนั้นถอดไปแล้ว ดูหัวไฟล์)
+ * · การ์ด “รอรับรถ” แยกเดิมถูกรวมเข้าการ์ดฝึกงาน (ครึ่งขวา) แล้ว — แถวอยู่ตารางเดียวกับฝึกงาน (Bew 9 พ.ย. 2569)
  */
 const HUB_CARD: Record<HubView, { label: string; unit: string; dot: string }> = {
   open: { label: "รอสรรหา", unit: "อัตรา", dot: STAGE_DOT.open },
-  /* ฝึกครบ 10 วัน (เฉพาะวันฝึกงาน) + ปฐมนิเทศ + ST ผ่าน — ระบบเปลี่ยนเอง (Bew 4 พ.ย. 2569) */
-  handover: { label: "รอรับรถ", unit: "คน", dot: "bg-st-live-ink" },
   working: { label: "รับรถแล้ว", unit: "คน", dot: STAGE_DOT.working },
 };
-const isHubView = (v: string): v is HubView => v === "open" || v === "handover" || v === "working";
+const isHubView = (v: string): v is HubView => v === "open" || v === "working";
+
+/**
+ * ป้ายสถานะของมุมมองฝึกงาน — ฝึกงาน + รอรับรถ อยู่ตารางเดียวกัน (คอลัมน์สถานะแยกให้)
+ * · การ์ดแบ่งครึ่งกรองด้วยสองค่านี้พร้อมกัน · ติ๊กเหลือค่าเดียวที่หัวคอลัมน์ได้
+ */
+export const TRAINING_VIEW_LABELS: string[] = [STATUS_LABEL.training, WAIT_HANDOVER_LABEL];
 
 /** จุดสีหน้าชื่อสถานะ — ชุดเดียวกับไอคอนคนหน้าชื่อในตาราง (`PersonMark`) */
 const DOT: Record<ApplicationStatus, string> = {
@@ -122,6 +128,7 @@ export function CandidateInsights({
   onFilter,
   onClearAll,
   hubCounts = null,
+  handoverCount = 0,
   view = null,
   onView,
 }: {
@@ -134,6 +141,8 @@ export function CandidateInsights({
   onClearAll: () => void;
   /** จำนวนของการ์ดรอสรรหา/รับรถแล้ว · `null` = ไม่มีข้อมูลหน้าติดตาม (ไม่โชว์การ์ด) */
   hubCounts?: Record<HubView, number> | null;
+  /** ใบสมัคร “ฝึกงาน” ที่ RC ลง `ร` แล้ว (รอรับรถ) — ครึ่งขวาของการ์ดฝึกงาน · นับจากแถวชุดเดียวกับตาราง */
+  handoverCount?: number;
   /** การ์ดฝั่งติดตามพนักงานใหม่ที่เปิดอยู่ — เปิดอยู่ = การ์ดสถานะไม่ active */
   view?: HubView | null;
   onView?: (view: HubView) => void;
@@ -176,7 +185,15 @@ export function CandidateInsights({
           className={`col-span-2 ${hubCounts ? "sm:col-span-4" : "sm:col-span-3"} lg:col-span-1 ${filtering ? "hover:brightness-[0.97]" : ""}`}
         />
         {PIPELINE.map((status) =>
-          isHubView(status) ? (
+          status === "training" && hubCounts ? (
+            <TrainingSplit
+              key={status}
+              training={Math.max(0, (count.get("training") ?? 0) - handoverCount)}
+              handover={handoverCount}
+              active={!view && pickedStatus.length > 0 && pickedStatus.every((l) => TRAINING_VIEW_LABELS.includes(l))}
+              onClick={() => pickStatus(TRAINING_VIEW_LABELS)}
+            />
+          ) : isHubView(status) ? (
             hubCounts ? (
               <SummaryStat
                 key={status}
@@ -209,5 +226,78 @@ export function CandidateInsights({
         )}
       </SummaryStats>
     </SummaryPanel>
+  );
+}
+
+/**
+ * การ์ดฝึกงานแบ่งครึ่ง — ซ้าย ฝึกงาน · ขวา รอรับรถ (ม่วง) · **กดที่ไหนก็เปิดตารางเดียวกันทั้งสองกลุ่ม**
+ * (คอลัมน์สถานะบอกว่าใครอยู่กลุ่มไหน) · กว้าง 2 ช่องของแถบ หน้าตาเดียวกับ `SummaryStat` แบบ `compact`
+ * · แถบล่างคือสัดส่วนสองกลุ่ม · RC เปลี่ยนคนจากฝึกงานเป็นรอรับรถเองด้วยรหัส `ร` ในแท็บสถานะฝึกงาน
+ * · (ลองแบบช่องเดียวคั่นขีดแล้ว เจ้าของงานให้กลับมาแบบนี้ 9 พ.ย. 2569)
+ */
+function TrainingSplit({
+  training,
+  handover,
+  active,
+  onClick,
+}: {
+  training: number;
+  handover: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const total = training + handover;
+  const handoverShare = total ? (handover / total) * 100 : 0;
+
+  const half = (label: string, value: number, dot: string, extra = "") => (
+    <span className={`flex min-w-0 flex-col gap-1.5 px-3.5 py-2.5 ${extra}`}>
+      <span className="flex items-center gap-1.5 text-11-5 text-mut">
+        <span aria-hidden className={`size-2 flex-none rounded-full ${dot}`} />
+        <span className="min-w-0 truncate">{label}</span>
+      </span>
+      <span className="flex items-baseline gap-1">
+        <span key={value} className="animate-fade-in font-mono text-18 leading-none font-semibold text-ink tabular-nums">
+          {value.toLocaleString("th-TH")}
+        </span>
+        <span className="text-12 text-mut">คน</span>
+      </span>
+    </span>
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title="ดูฝึกงานและรอรับรถในตารางเดียวกัน — เปลี่ยนเป็นรอรับรถด้วยรหัส “ร” ในแท็บสถานะฝึกงาน"
+      className={`group relative col-span-2 grid cursor-pointer grid-cols-2 overflow-hidden text-left transition-colors ${
+        active ? "bg-base-100 ring-2 ring-primary/45 ring-inset" : "bg-base-100 hover:bg-base-200/60"
+      }`}
+    >
+      {half(STATUS_LABEL.training, training, "bg-st-live-ink")}
+      {half(WAIT_HANDOVER_LABEL, handover, "bg-st-violet-ink", `border-l border-dashed border-line-strong ${active ? "pr-12" : ""}`)}
+
+      {active ? (
+        <>
+          <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-primary" />
+          <span
+            aria-hidden
+            className="absolute inset-y-0 right-3.5 my-auto flex size-8 animate-pop-in items-center justify-center rounded-full bg-primary text-base-100"
+          >
+            <ListFilter size={16} strokeWidth={2.2} />
+          </span>
+        </>
+      ) : null}
+
+      {/* สัดส่วน ฝึกงาน : รอรับรถ — ว่างทั้งคู่ = แถบเทาเปล่า */}
+      <span aria-hidden className="absolute inset-x-0 bottom-0 flex h-[3px] bg-base-200">
+        {total ? (
+          <>
+            <span className="h-full bg-st-live-ink transition-[width] duration-700 ease-out" style={{ width: `${100 - handoverShare}%` }} />
+            <span className="h-full bg-st-violet-ink transition-[width] duration-700 ease-out" style={{ width: `${handoverShare}%` }} />
+          </>
+        ) : null}
+      </span>
+    </button>
   );
 }
