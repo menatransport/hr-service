@@ -332,9 +332,10 @@ const COLUMNS: Record<Stage, Col[]> = {
     C.trainOn, C.trainDays, C.orientation, C.st, C.car, C.trainStatus,
   ],
   /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding
-     · คน → งาน (ตำแหน่ง สาขา ลูกค้า แพล้นท์ ครูฝึก) → วันที่ → สถานะท้าย แบบแท็บฝึกงาน (Bew 10 พ.ย. 2569) */
+     · คน → งาน (ตำแหน่ง สาขา ลูกค้า แพล้นท์ รถ ครูฝึก) → วันที่ → สถานะท้าย แบบแท็บฝึกงาน (Bew 10 พ.ย. 2569) */
   working: [
-    C.driver, C.code, C.position, C.branch, C.customer, C.plant, C.trainer,
+    C.driver, C.code, C.position, C.branch, C.customer, C.plant,
+    { ...C.vehicle, label: "ทะเบียนรถ/เบอร์รถ" }, C.trainer,
     C.start, C.handover, C.days, C.driverStatus,
   ],
   ended: [C.name, C.code, C.customer, C.plant, C.start, C.end, C.endOn, C.atms],
@@ -396,7 +397,7 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   hireType: [{ header: "ประเภท", width: 14, value: C.hireType.text }],
   vehicle: [
     { header: "ทะเบียนรถ", width: 14, kind: "code", value: (r) => r.vehicle?.plateNo },
-    { header: "เลขรถ", width: 10, kind: "code", value: (r) => r.vehicle?.code },
+    { header: "เบอร์รถ", width: 10, kind: "code", value: (r) => r.vehicle?.code },
   ],
   repair: [
     { header: "สถานะรถ", width: 18, kind: "status", value: C.repair.text, tone: (r) => (r.repair ? "warn" : r.vehicle ? "ok" : null) },

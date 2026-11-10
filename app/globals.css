@@ -2753,6 +2753,15 @@ a.home-row:hover .home-row-arrow {
   padding-top: 8mm;
 }
 
+/* ชุดลงนาม 2×2 ของสัญญาจ้าง — ช่องชิดกันกว่าปกติ (รูปเตี้ยลง ที่ว่างบน 7mm) */
+.hrdoc-sign-stack .hrdoc-sign {
+  padding-top: 7mm;
+}
+
+.hrdoc-sign-stack .hrdoc-sig-img {
+  height: 11mm;
+}
+
 /* ชื่อ/บทบาทใต้เส้น — เล็กกว่าเนื้อหาแค่ขั้นเดียว (Bew 10 พ.ย. 2569 ขอให้ใหญ่ขึ้น) */
 .hrdoc-sign-name {
   font-size: 9.5pt;
@@ -2776,6 +2785,12 @@ a.home-row:hover .home-row-arrow {
 
 .hrdoc-tight .hrdoc-title {
   font-size: 14pt;
+}
+
+/* สัญญาจ้าง — ค่ากลางระหว่าง dense กับ tight ให้หน้าสุดท้ายมีเนื้อหาพอดีกับชุดลงนาม 2×2 */
+.hrdoc-contract {
+  font-size: 10.5pt;
+  line-height: 1.38;
 }
 
 /* ท้ายกระดาษบริษัท (`Sheet letterhead`) — รูป ISO + ที่อยู่ กว้างเต็มเนื้อที่ 174mm

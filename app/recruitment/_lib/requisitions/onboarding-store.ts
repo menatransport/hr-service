@@ -158,6 +158,28 @@ async function readRegistryStatus(codes: string[]): Promise<Map<string, Registry
   return out;
 }
 
+/**
+ * ทะเบียน/ยี่ห้อของรถที่สำเนาในคำขอว่าง — แถวนำเข้าจาก Google Sheet (4 พ.ย. 2569) เก็บแค่เลขรถ
+ * (เช่น KP99) · เติมตอนอ่านจาก `Boom_ETL.vehicles` ไม่เขียนกลับ · พังก็แค่โชว์เลขรถอย่างเดียว
+ */
+async function readVehiclePlates(codes: string[]): Promise<Map<string, { plateNo: string; brand: string }>> {
+  const out = new Map<string, { plateNo: string; brand: string }>();
+  if (!codes.length) return out;
+  try {
+    const vehicles = await etlCol<{ code?: string; plate_no?: string; brand?: string }>("vehicles");
+    const docs = await vehicles
+      .find({ code: { $in: codes } }, { projection: { code: 1, plate_no: 1, brand: 1 } })
+      .toArray();
+    for (const d of docs) {
+      const plateNo = (d.plate_no ?? "").trim();
+      if (d.code && plateNo) out.set(d.code.trim(), { plateNo, brand: (d.brand ?? "").trim() });
+    }
+  } catch (err) {
+    console.warn("[onboarding] อ่านทะเบียนรถไม่สำเร็จ —", err);
+  }
+  return out;
+}
+
 /** บันทึกรายวันที่ RC กรอกเอง (รหัส พจส. + `rq:<id>` ของคนที่ยังไม่มีรหัส) — พังก็แค่นับจาก ATMS อย่างเดียว */
 async function readManualDays(keys: string[]): Promise<Map<string, Record<string, { code: string }>>> {
   try {
@@ -191,16 +213,20 @@ async function toRecords(docs: WithId<RequisitionDoc>[]): Promise<OnboardingReco
   const dailyKeys = [...codes, ...docs.map((d) => requisitionDailyKey(d._id.toHexString()))];
   /* สถานะใบสมัครที่ผูกไม่ขึ้นกับ ATMS/ทะเบียน — อ่านพร้อมกันบน `toRequisition()` ชุดเดียวกับที่กางลงแถว */
   const base = docs.map(toRequisition);
-  const [atms, registry, manual] = await Promise.all([
+  const noPlate = [...new Set(base.filter((r) => r.vehicle?.code && !r.vehicle.plateNo).map((r) => r.vehicle!.code))];
+  const [atms, registry, manual, plates] = await Promise.all([
     readAtms(codes),
     readRegistryStatus(codes),
     readManualDays(dailyKeys),
+    readVehiclePlates(noPlate),
     attachMatchStatus(base),
   ]);
   return docs.map((doc, i) => {
     const read = doc.drivercode ? atms.get(doc.drivercode) : undefined;
+    const plate = base[i].vehicle && !base[i].vehicle.plateNo ? plates.get(base[i].vehicle.code) : undefined;
     const row: OnboardingRecord = {
       ...base[i],
+      ...(plate ? { vehicle: { ...base[i].vehicle!, plateNo: plate.plateNo, brand: base[i].vehicle!.brand || plate.brand } } : {}),
       onboarding: doc.onboarding ?? {},
       atms: read?.brief ?? null,
       registry: doc.drivercode ? (registry.get(doc.drivercode) ?? null) : null,

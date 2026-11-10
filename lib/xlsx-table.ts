@@ -14,7 +14,8 @@ import type { Worksheet } from "exceljs";
 export type XlsxValue = string | number | Date | null | undefined;
 
 /** ชนิดของคอลัมน์ — ตัดสิน numFmt + การจัดวางในช่อง */
-export type XlsxKind = "text" | "code" | "date" | "datetime" | "int" | "decimal" | "status";
+/** `month` = วันที่จริง (วันที่ 1 ของเดือน) แสดงแค่ปี-เดือน — เรียง/กรองแบบวันที่ได้ */
+export type XlsxKind = "text" | "code" | "date" | "datetime" | "month" | "int" | "decimal" | "status";
 
 /** สีตัวหนังสือรายช่อง — ชุดเดียวกับสีสถานะบนจอ */
 export type XlsxTone = "alert" | "warn" | "ok" | "mut";
@@ -70,16 +71,19 @@ const FONT = "Tahoma";
  */
 const DATE_FMT = "[$-107041E]dd/mm/yyyy";
 const DATETIME_FMT = "[$-107041E]dd/mm/yyyy hh:mm";
+/** ปี พ.ศ.-เดือน เช่น `2569-11` (ปฏิทินไทยชุดเดียวกับ `DATE_FMT`) */
+const MONTH_FMT = "[$-107041E]yyyy-mm";
 
 const NUM_FMT: Partial<Record<XlsxKind, string>> = {
   date: DATE_FMT,
   datetime: DATETIME_FMT,
+  month: MONTH_FMT,
   int: "#,##0",
   decimal: "#,##0.00",
   code: "@",
 };
 
-const CENTER: ReadonlySet<XlsxKind> = new Set(["code", "date", "datetime", "int", "decimal", "status"]);
+const CENTER: ReadonlySet<XlsxKind> = new Set(["code", "date", "datetime", "month", "int", "decimal", "status"]);
 
 const solid = (argb: string) => ({ type: "pattern", pattern: "solid", fgColor: { argb } }) as const;
 const hair = { style: "thin", color: { argb: LINE } } as const;

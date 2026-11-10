@@ -34,7 +34,7 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
   const end = probationEnd(fill);
 
   return (
-    <Sheet code="HR0204-04" letterhead dense>
+    <Sheet code="HR0204-04" letterhead dense="contract">
       <div className="relative">
         <h1 className="hrdoc-title">บันทึกข้อตกลงการจ้างงาน</h1>
         <span className="absolute top-0 right-0 font-bold">
@@ -379,14 +379,15 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
         จึงลงลายมือชื่อต่อหน้าพยานไว้เป็นสำคัญ
       </Clause>
 
-      {/* สี่ช่องแถวเดียว ไม่ใช่เรียงลงมา — ชุดลงนามต้องอยู่หน้าเดียวกับข้อ 14 (Bew 10 พ.ย. 2569) */}
-      <div className="hrdoc-keep mt-[5mm] flex flex-col">
+      {/* ชุดลงนาม 2×2 อยู่หน้าเดียวกับข้อ 14 เสมอ — ตัวอักษรของสัญญาใช้ชุด `tight`
+          เพื่อให้เหลือที่ท้ายหน้าสุดท้ายพอ (Bew 10 พ.ย. 2569) */}
+      <div className="hrdoc-keep hrdoc-sign-stack mt-[4mm] flex flex-col">
         <p className="text-center">{COMPANY}</p>
-        <div className="grid grid-cols-4 gap-x-[4mm]">
-          <SignLine compact role="นายจ้าง" {...staffSign(fill, "contract", "employer", fill.employer)} />
-          <SignLine compact role="พนักงาน / ลูกจ้าง" name={name} signature={sigOf(fill, "contract", "applicant")} />
-          <SignLine compact role="พยาน" {...staffSign(fill, "contract", "witness1", fill.witness1)} />
-          <SignLine compact role="พยาน" {...staffSign(fill, "contract", "witness2", fill.witness2)} />
+        <div className="grid grid-cols-2 gap-x-[10mm] px-[8mm]">
+          <SignLine role="นายจ้าง" {...staffSign(fill, "contract", "employer", fill.employer)} />
+          <SignLine role="พนักงาน / ลูกจ้าง" name={name} signature={sigOf(fill, "contract", "applicant")} />
+          <SignLine role="พยาน" {...staffSign(fill, "contract", "witness1", fill.witness1)} />
+          <SignLine role="พยาน" {...staffSign(fill, "contract", "witness2", fill.witness2)} />
         </div>
       </div>
     </Sheet>

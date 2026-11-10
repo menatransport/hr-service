@@ -46,10 +46,10 @@ export function Sheet({
    * บรรทัดชิดขึ้น — `true` = 1.4 (สัญญาจ้าง/สัญญาค้ำ) · `"tight"` = 10pt/1.32 สำหรับ
    * ยินยอมคืนเงินค้ำที่เนื้อหาเต็มหน้าพอดี ชุดลงนามต้องอยู่หน้าเดียวกันเสมอ (Bew 10 พ.ย. 2569)
    */
-  dense?: boolean | "tight";
+  dense?: boolean | "tight" | "contract";
   children: React.ReactNode;
 }) {
-  const cls = `hrdoc-sheet elev-card ${dense === "tight" ? "hrdoc-tight" : dense ? "hrdoc-dense" : ""} ${sarabun.className}`;
+  const cls = `hrdoc-sheet elev-card ${dense === "tight" ? "hrdoc-tight" : dense === "contract" ? "hrdoc-contract" : dense ? "hrdoc-dense" : ""} ${sarabun.className}`;
   if (!letterhead) {
     return (
       <section className={cls}>
