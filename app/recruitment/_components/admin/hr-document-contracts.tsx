@@ -34,7 +34,7 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
   const end = probationEnd(fill);
 
   return (
-    <Sheet code="HR0204-04" letterhead>
+    <Sheet code="HR0204-04" letterhead dense>
       <div className="relative">
         <h1 className="hrdoc-title">บันทึกข้อตกลงการจ้างงาน</h1>
         <span className="absolute top-0 right-0 font-bold">
@@ -379,12 +379,15 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
         จึงลงลายมือชื่อต่อหน้าพยานไว้เป็นสำคัญ
       </Clause>
 
-      <div className="hrdoc-keep mt-[2mm] ml-[18mm] flex w-[62%] flex-col">
+      {/* สี่ช่องแถวเดียว ไม่ใช่เรียงลงมา — ชุดลงนามต้องอยู่หน้าเดียวกับข้อ 14 (Bew 10 พ.ย. 2569) */}
+      <div className="hrdoc-keep mt-[5mm] flex flex-col">
         <p className="text-center">{COMPANY}</p>
-        <SignLine role="นายจ้าง" {...staffSign(fill, "contract", "employer", fill.employer)} />
-        <SignLine role="พนักงาน / ลูกจ้าง" name={name} signature={sigOf(fill, "contract", "applicant")} />
-        <SignLine role="พยาน" {...staffSign(fill, "contract", "witness1", fill.witness1)} />
-        <SignLine role="พยาน" {...staffSign(fill, "contract", "witness2", fill.witness2)} />
+        <div className="grid grid-cols-4 gap-x-[4mm]">
+          <SignLine compact role="นายจ้าง" {...staffSign(fill, "contract", "employer", fill.employer)} />
+          <SignLine compact role="พนักงาน / ลูกจ้าง" name={name} signature={sigOf(fill, "contract", "applicant")} />
+          <SignLine compact role="พยาน" {...staffSign(fill, "contract", "witness1", fill.witness1)} />
+          <SignLine compact role="พยาน" {...staffSign(fill, "contract", "witness2", fill.witness2)} />
+        </div>
       </div>
     </Sheet>
   );
@@ -397,7 +400,7 @@ export function DepositConsent({ fill }: { fill: DocFill }) {
   const from = thaiDateParts(fill.deductFrom);
 
   return (
-    <Sheet code="HR0207-04" letterhead>
+    <Sheet code="HR0207-04" letterhead dense>
       <h1 className="hrdoc-title">หนังสือให้ความยินยอม</h1>
       <p className="mt-[2mm] text-right">ทำที่ {COMPANY}</p>
       <p className="mb-[3mm] text-right">
@@ -449,7 +452,7 @@ export function RefundConsent({ fill }: { fill: DocFill }) {
   const name = personName(fill);
 
   return (
-    <Sheet letterhead>
+    <Sheet letterhead dense="tight">
       <h1 className="hrdoc-title">
         หนังสือให้ความยินยอมขยายระยะเวลาการคืนเงินประกันความเสียหายจากการทำงาน
       </h1>
@@ -514,14 +517,14 @@ export function RefundConsent({ fill }: { fill: DocFill }) {
   );
 }
 
-/** ช่องลงนามสองคอลัมน์ของหนังสือยินยอม — ลูกจ้าง/นายจ้าง แล้วพยานสองคน */
+/** ช่องลงนามของหนังสือยินยอม — สี่ช่องแถวเดียว ให้อยู่หน้าเดียวกับเนื้อหา (Bew 10 พ.ย. 2569) */
 function Signatures({ doc, name, fill }: { doc: "deposit" | "refund"; name: string; fill: DocFill }) {
   return (
-    <div className="hrdoc-keep mt-[1mm] grid grid-cols-2 gap-x-[8mm]">
-      <SignLine role="ลูกจ้าง / ผู้ให้ความยินยอม" name={name} signature={sigOf(fill, doc, "applicant")} />
-      <SignLine role="นายจ้าง" {...staffSign(fill, doc, "employer", fill.employer)} />
-      <SignLine role="พยาน" {...staffSign(fill, doc, "witness1", fill.witness1)} />
-      <SignLine role="พยาน" {...staffSign(fill, doc, "witness2", fill.witness2)} />
+    <div className="hrdoc-keep mt-[4mm] grid grid-cols-4 gap-x-[4mm]">
+      <SignLine compact role="ลูกจ้าง / ผู้ให้ความยินยอม" name={name} signature={sigOf(fill, doc, "applicant")} />
+      <SignLine compact role="นายจ้าง" {...staffSign(fill, doc, "employer", fill.employer)} />
+      <SignLine compact role="พยาน" {...staffSign(fill, doc, "witness1", fill.witness1)} />
+      <SignLine compact role="พยาน" {...staffSign(fill, doc, "witness2", fill.witness2)} />
     </div>
   );
 }

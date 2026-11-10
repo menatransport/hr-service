@@ -2748,6 +2748,36 @@ a.home-row:hover .home-row-arrow {
   break-inside: avoid;
 }
 
+/* สี่ช่องในแถวเดียว — รูปลายเซ็นเตี้ยลงนิดหน่อย ที่ว่างด้านบนจึงเหลือ 6mm */
+.hrdoc-sign-compact {
+  padding-top: 8mm;
+}
+
+/* ชื่อ/บทบาทใต้เส้น — เล็กกว่าเนื้อหาแค่ขั้นเดียว (Bew 10 พ.ย. 2569 ขอให้ใหญ่ขึ้น) */
+.hrdoc-sign-name {
+  font-size: 9.5pt;
+  white-space: nowrap;
+}
+
+.hrdoc-sign-compact .hrdoc-sig-img {
+  height: 10mm;
+}
+
+.hrdoc-dense {
+  line-height: 1.4;
+}
+
+/* ยินยอมคืนเงินค้ำ — ตัวอักษรลดครึ่งพอยต์และบรรทัดชิด ให้เหลือที่ท้ายหน้าพอสำหรับชุดลงนาม
+   แม้ชื่อ/ตำแหน่งยาวจนข้อความแตกบรรทัดเพิ่ม */
+.hrdoc-tight {
+  font-size: 10pt;
+  line-height: 1.32;
+}
+
+.hrdoc-tight .hrdoc-title {
+  font-size: 14pt;
+}
+
 /* ท้ายกระดาษบริษัท (`Sheet letterhead`) — รูป ISO + ที่อยู่ กว้างเต็มเนื้อที่ 174mm
    (สูง ≈ 34mm ตามสัดส่วนรูป) · บนจอ: ตารางกรอบหายไป (`contents`) เซลล์เนื้อหาเป็น
    flex column ที่ยืดเต็มแผ่น ของที่ `mt-auto` จึงยังชิดล่างเหนือท้ายกระดาษ */

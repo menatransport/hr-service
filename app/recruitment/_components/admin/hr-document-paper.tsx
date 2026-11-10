@@ -35,24 +35,31 @@ const sarabun = Sarabun({
 export function Sheet({
   code,
   letterhead = false,
+  dense = false,
   children,
 }: {
   /** รหัสแบบฟอร์มมุมขวาบน เช่น `HR0204-04` */
   code?: string;
   /** หัว + ท้ายกระดาษบริษัท — ใบสมัครวาดหัวของตัวเอง */
   letterhead?: boolean;
+  /**
+   * บรรทัดชิดขึ้น — `true` = 1.4 (สัญญาจ้าง/สัญญาค้ำ) · `"tight"` = 10pt/1.32 สำหรับ
+   * ยินยอมคืนเงินค้ำที่เนื้อหาเต็มหน้าพอดี ชุดลงนามต้องอยู่หน้าเดียวกันเสมอ (Bew 10 พ.ย. 2569)
+   */
+  dense?: boolean | "tight";
   children: React.ReactNode;
 }) {
+  const cls = `hrdoc-sheet elev-card ${dense === "tight" ? "hrdoc-tight" : dense ? "hrdoc-dense" : ""} ${sarabun.className}`;
   if (!letterhead) {
     return (
-      <section className={`hrdoc-sheet elev-card ${sarabun.className}`}>
+      <section className={cls}>
         {code ? <p className="hrdoc-small text-right">{code}</p> : null}
         {children}
       </section>
     );
   }
   return (
-    <section className={`hrdoc-sheet elev-card ${sarabun.className}`}>
+    <section className={cls}>
       <table className="hrdoc-frame">
         <tbody>
           <tr>
@@ -178,12 +185,41 @@ export function SignLine({
   name,
   signature,
   dated = false,
+  compact = false,
 }: {
   role: string;
   name?: string;
   signature?: { image: string; signedAt: string };
   dated?: boolean;
+  /**
+   * แบบกระชับสำหรับวางสี่ช่องในแถวเดียว — บทบาทลงบรรทัดใต้ชื่อแทนท้ายเส้น
+   * เส้นลงชื่อยืดเต็มคอลัมน์ · ใช้ให้ชุดลงนามอยู่หน้าเดียวกับเนื้อหา (Bew 10 พ.ย. 2569)
+   */
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div className="hrdoc-sign hrdoc-sign-compact">
+        <Row className="w-full">
+          <span>ลงชื่อ</span>
+          <span className="hrdoc-blank hrdoc-sig-slot hrdoc-grow">
+            {signature ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={signature.image} alt="" className="hrdoc-sig-img" />
+            ) : null}
+            {" "}
+          </span>
+        </Row>
+        {/* ชื่อตัวเล็กลงหนึ่งขั้นและไม่ตัดบรรทัด — คอลัมน์กว้าง ~40mm ชื่อยาวแตกสองบรรทัดแล้วดันทั้งแถว */}
+        <Row className="hrdoc-sign-name w-full justify-center">
+          <span>(</span>
+          <Blank v={name} grow />
+          <span>)</span>
+        </Row>
+        <span className="hrdoc-sign-name text-center">{role}</span>
+      </div>
+    );
+  }
   return (
     <div className="hrdoc-sign">
       <Row>
