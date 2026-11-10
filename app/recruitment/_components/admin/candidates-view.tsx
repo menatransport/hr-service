@@ -56,7 +56,8 @@ import {
   type OnboardingRecord,
 } from "@/app/recruitment/_lib/requisitions/onboarding";
 import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
-import { OnboardingView, hubRows } from "@/app/recruitment/_components/admin/onboarding-view";
+import { OnboardingView, hubRows, workingMonth } from "@/app/recruitment/_components/admin/onboarding-view";
+import { todayInBangkok } from "@/lib/record-case-flow";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
 import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
 import { VehicleStatusCell } from "@/app/recruitment/_components/admin/repair-badge";
@@ -792,12 +793,14 @@ export function CandidatesView({
   }, [hub, requisitions, rows, dayEdits]);
   const hubList = useMemo(() => (hub ? hubRows(hubRecords, hub.repairs) : []), [hub, hubRecords]);
   const hubById = useMemo(() => new Map(hubList.map((r) => [r.id, r])), [hubList]);
+  /** การ์ดรับรถแล้ว = เดือนนี้ ตรงกับเดือนตั้งต้นของตาราง */
   const hubCounts = useMemo(() => {
     if (!hub) return null;
     const list = hubList;
+    const thisMonth = todayInBangkok().slice(0, 7);
     return {
       open: list.filter((r) => r.stage === "open").length,
-      working: list.filter((r) => r.stage === "working").length,
+      working: list.filter((r) => r.stage === "working" && workingMonth(r, thisMonth) === thisMonth).length,
     };
   }, [hub, hubList]);
 

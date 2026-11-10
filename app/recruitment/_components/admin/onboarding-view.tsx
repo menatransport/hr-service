@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, Eye, FileText, Loader2, Plus, RotateCcw, SearchX, Trash2, UserRound } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Eye, FileText, Loader2, Plus, RotateCcw, SearchX, Trash2, UserRound } from "lucide-react";
 
 import { ColumnMenu, type ColumnFilterOption, type SortDir } from "@/components/ui/column-menu";
 import { CriminalRecordButton, CriminalRecordHeadTip } from "@/app/recruitment/_components/admin/criminal-record";
@@ -38,7 +38,6 @@ import {
   awaitingHandover,
   isHandoverMark,
   withDayEdit,
-  daysBetween,
   handoverCheck,
   daysToHandover,
   endLabel,
@@ -70,6 +69,7 @@ import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
 import { CheckMark, PhoneCell } from "@/app/recruitment/_components/admin/candidate-cells";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
 import { thaiNumericCompare } from "@/lib/thai-order";
+import { THAI_MONTHS_SHORT } from "@/app/recruitment/_lib/drivers/types";
 
 /**
  * ติดตามพนักงานใหม่ — **หน้าเดียวแทน** ขออัตราสรรหา + Onboarding + ติดตามฝึกงาน (14 ต.ค. 2026)
@@ -155,6 +155,8 @@ const C = {
   requested: { id: "requested", label: "วันที่แจ้ง", width: "min-w-[110px]", text: (r) => date(r.requestedOn), key: (r) => r.requestedOn },
   customer: { id: "customer", label: "ลูกค้า", width: "min-w-[100px]", text: (r) => customerLabel(r) || DASH },
   plant: { id: "plant", label: "แพล้นท์", width: "min-w-[120px]", text: (r) => r.plant || DASH },
+  /* สาขาที่ขออัตรา — ใบก่อน 3 พ.ย. 2569 ไม่มีค่า = — */
+  branch: { id: "branch", label: "สาขา", width: "min-w-[100px]", text: (r) => r.branch || DASH },
   position: { id: "position", label: "ตำแหน่ง", width: "min-w-[80px]", text: (r) => positionLabel(r) },
   hireType: { id: "hireType", label: "ประเภท", width: "min-w-[90px]", text: (r) => hireTypeLabel(r.hireType) },
   vehicle: {
@@ -329,8 +331,12 @@ const COLUMNS: Record<Stage, Col[]> = {
     C.trainee, C.jr, C.position, C.customer, C.plant, C.trainOwner, C.trainPhone, C.trainTrainer,
     C.trainOn, C.trainDays, C.orientation, C.st, C.car, C.trainStatus,
   ],
-  /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding */
-  working: [C.driver, C.code, C.driverStatus, C.customer, C.plant, C.start, C.handover, C.days],
+  /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding
+     · คน → งาน (ตำแหน่ง สาขา ลูกค้า แพล้นท์ ครูฝึก) → วันที่ → สถานะท้าย แบบแท็บฝึกงาน (Bew 10 พ.ย. 2569) */
+  working: [
+    C.driver, C.code, C.position, C.branch, C.customer, C.plant, C.trainer,
+    C.start, C.handover, C.days, C.driverStatus,
+  ],
   ended: [C.name, C.code, C.customer, C.plant, C.start, C.end, C.endOn, C.atms],
 };
 
@@ -350,7 +356,10 @@ const num = (n: number | null | undefined) => (n === null || n === undefined ? n
 const XLSX: Record<string, XlsxColumn<Row>[]> = {
   code: [{ header: "เลขที่", width: 14, kind: "code", value: C.code.text }],
   name: [{ header: "ชื่อ - นามสกุล", width: 28, value: (r) => r.name }],
-  driver: [{ header: "ชื่อ - นามสกุล", width: 28, value: (r) => r.name }],
+  driver: [
+    { header: "ชื่อ - นามสกุล", width: 28, value: (r) => r.name },
+    { header: "รหัสพนักงาน", width: 12, kind: "code", value: (r) => r.drivercode },
+  ],
   applicant: [
     { header: "ชื่อ–นามสกุล", width: 28, value: (r) => r.name },
     { header: "รหัส", width: 10, kind: "code", value: (r) => r.drivercode },
@@ -382,6 +391,7 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   requested: [{ header: "วันที่แจ้ง", width: 13, kind: "date", value: (r) => xlsxDate(r.requestedOn) }],
   customer: [{ header: "ลูกค้า", width: 14, value: C.customer.text }],
   plant: [{ header: "แพล้นท์", width: 18, value: C.plant.text }],
+  branch: [{ header: "สาขา", width: 12, value: C.branch.text }],
   position: [{ header: "ตำแหน่ง", width: 12, value: C.position.text }],
   hireType: [{ header: "ประเภท", width: 14, value: C.hireType.text }],
   vehicle: [
@@ -435,22 +445,16 @@ function endOn(r: OnboardingRecord): string {
   return r.applicant?.cancelledOn || val(r.onboarding, "rc", "exitOn") || (r.atms?.exited ? r.atms.latestDate : "");
 }
 
-/** แท็บรับรถแล้วเก็บแค่ 7 วันล่าสุด (นับวันรับรถเป็นวันที่ 1) — เกินนั้นคนอยู่ทะเบียนประวัติ พจส. แล้ว */
-const WORKING_DAYS = 7;
-
 /**
- * รับรถเกิน 7 วันและเข้าทะเบียนแล้ว = ไม่ต้องตามต่อในหน้านี้ · ยังไม่เข้าทะเบียน หรือไม่มีวันรับรถ
- * ยังโชว์ไว้ เพราะยังไม่มีที่อื่นให้ดู
+ * เดือนของแถวรับรถแล้ว (`YYYY-MM`) — วันรับรถ → วันเริ่มฝึก · ไม่มีทั้งคู่ = เดือนนี้ (ยังต้องตามอยู่)
+ * · แท็บรับรถแล้วเป็นรายเดือน แทนการตัดเก็บ 7 วันล่าสุด (Bew 10 พ.ย. 2569)
  */
-function leftForRegistry(r: Row, today: string): boolean {
-  const handover = C.handover.key(r);
-  if (!r.registry || !handover) return false;
-  const d = daysBetween(handover, today);
-  return d !== null && d >= WORKING_DAYS;
+export function workingMonth(r: Row, today = todayInBangkok()): string {
+  return (C.handover.key(r) || r.start || today).slice(0, 7);
 }
 
 /**
- * แถวของหน้าติดตามพนักงานใหม่ — ขั้น/ความคืบหน้า/บอร์ดซ่อม + ตัดคนรับรถเกิน 7 วันออก
+ * แถวของหน้าติดตามพนักงานใหม่ — ขั้น/ความคืบหน้า/บอร์ดซ่อม (รับรถแล้วไม่ตัดแล้ว · กรองรายเดือนที่ตาราง)
  * · หน้าผู้สมัคร (การ์ดรอสรรหา/รับรถแล้ว) นับจากตัวนี้ด้วย ตัวเลขสองหน้าจึงตรงกันเสมอ
  */
 export function hubRows(
@@ -458,7 +462,6 @@ export function hubRows(
   repairs: Record<string, RepairStatus>,
   applications: ApplicationSummary[] = [],
 ): Row[] {
-  const today = todayInBangkok();
   const apps = new Map(applications.map((a) => [a.id, a]));
   return records
     .map((r) => {
@@ -474,8 +477,7 @@ export function hubRows(
         ready: handoverCheck(r),
         waitHandover: awaitingHandover(r),
       };
-    })
-    .filter((r) => r.stage !== "working" || !leftForRegistry(r, today));
+    });
 }
 
 export function OnboardingView({
@@ -536,30 +538,49 @@ export function OnboardingView({
   const [viewing, setViewing] = useState(initialOpen);
   const router = useRouter();
 
+  /** แท็บรับรถแล้ว = รายเดือน ตั้งต้นเดือนนี้ (แทนการตัด 7 วัน · Bew 10 พ.ย. 2569) */
+  const monthly = stage === "working";
+  const thisMonth = todayInBangkok().slice(0, 7);
+  const [month, setMonth] = useState(thisMonth);
+
   const rows = useMemo(() => hubRows(records, repairs, applications), [records, repairs, applications]);
+  /** เดือนที่มีคนรับรถ + เดือนนี้ — ใหม่ → เก่า (ลูกศรเดินตามรายการนี้ ไม่ข้ามไปเดือนว่าง) */
+  const months = useMemo(() => {
+    const set = new Set([thisMonth]);
+    for (const r of rows) if (r.stage === "working") set.add(workingMonth(r, thisMonth));
+    return [...set].sort().reverse();
+  }, [rows, thisMonth]);
+  const monthAt = months.indexOf(month);
+  const monthLabel = `${THAI_MONTHS_SHORT[Number(month.slice(5, 7)) - 1]} ${Number(month.slice(0, 4)) + 543}`;
 
-
+  /** การ์ดรับรถแล้ว = เดือนที่เลือก ตรงกับตาราง */
   const counts = useMemo(() => {
     const c = Object.fromEntries(TABS.map((s) => [s, 0])) as Record<Tab, number>;
     for (const r of rows) {
-      c[r.stage]++;
+      if (r.stage !== "working" || workingMonth(r, thisMonth) === month) c[r.stage]++;
       if (r.waitHandover) c.handover++;
     }
     return c;
-  }, [rows]);
+  }, [rows, month, thisMonth]);
 
   const inStage = useMemo(
-    () => rows.filter((r) => r.stage === stage && (tab !== "handover" || r.waitHandover)),
-    [rows, stage, tab],
+    () =>
+      rows.filter(
+        (r) =>
+          r.stage === stage &&
+          (tab !== "handover" || r.waitHandover) &&
+          (!monthly || workingMonth(r, thisMonth) === month),
+      ),
+    [rows, stage, tab, monthly, month, thisMonth],
   );
 
   const avgDays = useMemo(() => {
     const d = rows
-      .filter((r) => r.stage === "working")
+      .filter((r) => r.stage === "working" && workingMonth(r, thisMonth) === month)
       .map(daysToHandover)
       .filter((n): n is number => n !== null && n >= 0);
     return d.length ? Math.round(d.reduce((a, b) => a + b, 0) / d.length) : null;
-  }, [rows]);
+  }, [rows, month, thisMonth]);
 
   /* หน้าผู้สมัคร (ฝัง) — แท็บรับรถแล้วมีคอลัมน์ผลประวัติอาชญากรรมต่อท้าย ชุดเดียวกับรอฝึกงาน → รอรับรถ */
   const columns = useMemo(
@@ -619,7 +640,7 @@ export function OnboardingView({
   }, [inStage, needle, columns, filters, sort]);
 
   /** หน้าละ 25 แถว — เปลี่ยนขั้น/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([tab, needle, filters, sort]));
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([tab, needle, filters, sort, month]));
 
   const filtering = Boolean(needle) || Object.values(filters).some((p) => p?.length);
 
@@ -752,7 +773,7 @@ export function OnboardingView({
               tone={s === "ended" ? "ink" : "primary"}
               sub={
                 s === "working"
-                  ? `${WORKING_DAYS} วันล่าสุด${avgDays !== null ? ` · เฉลี่ยฝึก ${avgDays} วัน` : ""}`
+                  ? `${monthLabel}${avgDays !== null ? ` · เฉลี่ยฝึก ${avgDays} วัน` : ""}`
                   : undefined
               }
               active={tab === s}
@@ -780,6 +801,19 @@ export function OnboardingView({
           {showDaily ? <div ref={setDailyToolbar} className={dailyTab ? "contents" : "hidden"} /> : null}
           {dailyTab ? null : (
           <>
+          {monthly ? (
+            <div className="flex items-center gap-1">
+              <MonthStep label="เดือนก่อนหน้า" disabled={monthAt >= months.length - 1} onClick={() => setMonth(months[monthAt + 1])}>
+                <ChevronLeft size={15} strokeWidth={1.9} aria-hidden />
+              </MonthStep>
+              <span aria-live="polite" className="min-w-24 text-center text-13-5 font-semibold tabular-nums">
+                {monthLabel}
+              </span>
+              <MonthStep label="เดือนถัดไป" disabled={monthAt <= 0} onClick={() => setMonth(months[monthAt - 1])}>
+                <ChevronRight size={15} strokeWidth={1.9} aria-hidden />
+              </MonthStep>
+            </div>
+          ) : null}
           <SearchField
             value={query}
             onChange={setQuery}
@@ -802,12 +836,13 @@ export function OnboardingView({
           <div className="flex items-center gap-2 lg:ml-auto">
             <XlsxExportButton
               className="px-3.5 py-2 text-13"
-              name={`ติดตามพนักงานใหม่-${TAB_LABEL[tab]}`}
+              name={`ติดตามพนักงานใหม่-${TAB_LABEL[tab]}${monthly ? `-${month}` : ""}`}
               count={visible.length}
               build={() => ({
                 sheet: TAB_LABEL[tab],
-                title: `ติดตามพนักงานใหม่ · ${TAB_LABEL[tab]}`,
+                title: `ติดตามพนักงานใหม่ · ${TAB_LABEL[tab]}${monthly ? ` · ${monthLabel}` : ""}`,
                 filter: [
+                  monthly ? `เดือน: ${monthLabel}` : "",
                   needle ? `คำค้น: “${query.trim()}”` : "",
                   ...columns
                     .filter((c) => filters[c.id]?.length)
@@ -1045,6 +1080,32 @@ const APPLICANT_TONE: Record<ApplicationStatus, string> = {
   working: "bg-st-live text-st-live-ink",
   cancelled: "bg-alert/12 text-alert",
 };
+
+/** ปุ่มเลื่อนเดือนของแท็บรับรถแล้ว (ฝัง) — หน้าตาเดียวกับ `Step` ของตารางสถานะฝึกงาน */
+function MonthStep({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="flex size-8 cursor-pointer items-center justify-center rounded-selector border border-line bg-base-100 text-mut transition-colors hover:border-ink/30 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
 
 function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => void }) {
   const text = column.text(row);
