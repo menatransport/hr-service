@@ -69,6 +69,7 @@ const EXT: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
+  "application/pdf": "pdf",
 };
 
 /** ส่วนหนึ่งของ path — รหัสที่มีอักษรแปลก/ไทยถูกแทนด้วย `_` key จะได้อ่านออกและไม่แตก */

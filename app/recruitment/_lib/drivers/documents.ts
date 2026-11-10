@@ -22,11 +22,16 @@ export const MAX_DOC_BYTES = 10 * 1024 * 1024;
  * ชนิดไฟล์ที่รับ — **ต้องตรวจฝั่งเซิร์ฟเวอร์เสมอ** `accept` ของ `<input>`
  * เป็นแค่ตัวกรองในหน้าต่างเลือกไฟล์ ลากมาวางหรือยิง API ตรงยังผ่านมาได้
  *
- * **รูปภาพอย่างเดียว** (ตามคำสั่งเจ้าของงาน 1 ต.ค. 2026 — เลิกรับ PDF/Word)
+ * **รูปภาพอย่างเดียว** (ตามคำสั่งเจ้าของงาน 1 ต.ค. 2026 — เลิกรับ PDF/Word) · ยกเว้น
+ * **เอกสาร HR** (ประเภทที่มี `hr`) รับ PDF ได้ด้วย (Bew 10 พ.ย. 2569 — ฉบับเซ็นมักสแกนเป็น PDF)
  */
 export const ALLOWED_DOC_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export const ALLOWED_DOC_LABEL = "รูปภาพ JPG · PNG · WebP";
+
+export const HR_DOC_MIME = new Set([...ALLOWED_DOC_MIME, "application/pdf"]);
+
+export const HR_DOC_LABEL = "รูปภาพ JPG · PNG · WebP หรือ PDF";
 
 export interface StoredDriverFile {
   fileId: string;

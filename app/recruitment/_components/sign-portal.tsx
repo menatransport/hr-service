@@ -323,6 +323,7 @@ function DocView({
               docSlots={data.docSlots}
               requisition={data.requisition}
               signatures={signatures}
+              interviewerName={fill.interviewer}
               forApplicant
             />
           ) : null}

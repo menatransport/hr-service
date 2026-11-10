@@ -52,6 +52,7 @@ export function ApplicantProfile({
   docSlots,
   requisition,
   signatures,
+  interviewerName,
   forApplicant = false,
 }: {
   application: Application;
@@ -60,6 +61,8 @@ export function ApplicantProfile({
   requisition: Requisition | null;
   /** ลายเซ็นที่ลงไว้ในกล่อง — อ่านเฉพาะ `profile:*` */
   signatures?: DocSignatures;
+  /** ชื่อผู้สัมภาษณ์ที่กรอกในกล่อง — ใช้แทนชื่อคนกดเซ็นเสมอ (Bew 10 พ.ย. 2569) */
+  interviewerName?: string;
   /** หน้าเซ็นของผู้สมัครเอง (`/recruitment/sign`) — ซ่อนแผน/บันทึกภายในของผู้สัมภาษณ์ */
   forApplicant?: boolean;
 }) {
@@ -294,7 +297,7 @@ export function ApplicantProfile({
           <Box>สำรองไว้พิจารณา</Box>
         </Row>
 
-        <div className="mt-[10mm] grid grid-cols-2 gap-x-[10mm]">
+        <div className="mt-[4mm] grid grid-cols-2 gap-x-[10mm]">
           <SignLine
             role="ผู้สมัคร"
             name={application.erased ? "" : application.fullName}
@@ -303,7 +306,7 @@ export function ApplicantProfile({
           />
           <SignLine
             role="ผู้สัมภาษณ์"
-            name={signatures?.["profile:interviewer"]?.name}
+            name={interviewerName?.trim() || signatures?.["profile:interviewer"]?.name}
             signature={signatures?.["profile:interviewer"]}
             dated
           />

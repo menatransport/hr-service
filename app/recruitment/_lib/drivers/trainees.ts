@@ -269,6 +269,7 @@ export function buildTraineeRows(
         norm(row.driver.name).includes(q) ||
         norm(row.driver.nickname ?? "").includes(q) ||
         norm(row.driver.drivercode).includes(q) ||
+        norm(row.driver.customer).includes(q) ||
         norm(row.driver.plant).includes(q)
       );
     })

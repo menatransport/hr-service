@@ -379,7 +379,7 @@ export function EmploymentContract({ fill }: { fill: DocFill }) {
         จึงลงลายมือชื่อต่อหน้าพยานไว้เป็นสำคัญ
       </Clause>
 
-      <div className="hrdoc-keep mt-[8mm] ml-[18mm] flex w-[62%] flex-col gap-[5mm]">
+      <div className="hrdoc-keep mt-[2mm] ml-[18mm] flex w-[62%] flex-col">
         <p className="text-center">{COMPANY}</p>
         <SignLine role="นายจ้าง" {...staffSign(fill, "contract", "employer", fill.employer)} />
         <SignLine role="พนักงาน / ลูกจ้าง" name={name} signature={sigOf(fill, "contract", "applicant")} />
@@ -517,7 +517,7 @@ export function RefundConsent({ fill }: { fill: DocFill }) {
 /** ช่องลงนามสองคอลัมน์ของหนังสือยินยอม — ลูกจ้าง/นายจ้าง แล้วพยานสองคน */
 function Signatures({ doc, name, fill }: { doc: "deposit" | "refund"; name: string; fill: DocFill }) {
   return (
-    <div className="hrdoc-keep mt-[7mm] grid grid-cols-2 gap-x-[8mm] gap-y-[4mm]">
+    <div className="hrdoc-keep mt-[1mm] grid grid-cols-2 gap-x-[8mm]">
       <SignLine role="ลูกจ้าง / ผู้ให้ความยินยอม" name={name} signature={sigOf(fill, doc, "applicant")} />
       <SignLine role="นายจ้าง" {...staffSign(fill, doc, "employer", fill.employer)} />
       <SignLine role="พยาน" {...staffSign(fill, doc, "witness1", fill.witness1)} />

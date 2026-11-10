@@ -88,12 +88,17 @@ function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: number }).code === 11000;
 }
 
+/** ช่องที่เพิ่มหลังมีข้อมูลในฐานแล้ว — แถวเก่าไม่มีคีย์ อ่านเป็นค่าว่างให้ช่องกรอกบนจอเป็น controlled เสมอ */
+function readFill(fill: DocFill): DocFill {
+  return { ...fill, interviewer: fill.interviewer ?? "" };
+}
+
 function toRecord(doc: WithId<HrDocumentDoc>): HrDocumentRecord {
   return {
     id: doc._id.toHexString(),
     applicationId: doc.applicationId,
     ref: doc.ref,
-    fill: doc.fill,
+    fill: readFill(doc.fill),
     revision: doc.revision,
     createdAt: doc.createdAt,
     createdBy: doc.createdBy,
@@ -113,7 +118,7 @@ function toPrint(doc: WithId<HrDocumentPrintDoc>): HrDocumentPrint {
 }
 
 function toPrintFull(doc: WithId<HrDocumentPrintDoc>): HrDocumentPrintFull {
-  return { ...toPrint(doc), fill: doc.fill };
+  return { ...toPrint(doc), fill: readFill(doc.fill) };
 }
 
 /* --------------------------------------------------------- ตรวจ/ตัดแต่งค่าที่กรอก */
@@ -144,6 +149,7 @@ const TEXT_FIELD_CAPS: Record<
   supervisorTitle: MAX_TEXT,
   guarantor: MAX_TEXT,
   deductFrom: MAX_TEXT,
+  interviewer: MAX_TEXT,
   employer: MAX_TEXT,
   witness1: MAX_TEXT,
   witness2: MAX_TEXT,

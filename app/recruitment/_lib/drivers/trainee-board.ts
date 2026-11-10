@@ -1,6 +1,7 @@
 import type { WithId } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
+import { OTHER } from "@/app/recruitment/_lib/requisitions/types";
 import { readDrivers } from "./master";
 import {
   DriverRegistryError,
@@ -48,7 +49,11 @@ export interface TraineeBoardDriver {
   name: string;
   photoUrl: string;
   siteKey: DriverSiteKey | null;
-  /** แพล้นท์ของรถประจำ — มีไว้ให้ช่องค้นหาเท่านั้น */
+  /**
+   * ลูกค้า / แพล้นท์ — คอลัมน์ในตารางรายวัน (Bew 10 พ.ย. 2569) · ลูกค้ามาจากคำขอสรรหาที่ผูกอยู่
+   * (`customerLabel()` คลี่ “อื่นๆ” แล้ว) · แพล้นท์ = ของคำขอก่อน ว่างค่อยใช้ของรถประจำใน ETL
+   */
+  customer: string;
   plant: string;
   startDateISO: string;
   tenureMonths: number | null;
@@ -316,6 +321,7 @@ export async function getTraineeBoard(requestedMonth: string, onlyCodes?: string
       name: str(doc.driverName),
       photoUrl: str(doc.photoUrl),
       siteKey: siteOfBranch(str(doc.branch)),
+      customer: "",
       plant: "",
       startDateISO,
       tenureMonths,
@@ -476,11 +482,11 @@ async function loadWorkMonth(codes: string[], month: string): Promise<Map<string
 }
 
 /**
- * เติมแพล้นท์ให้คนที่เหลือ — **ยิงหลังคัดคนแล้ว ไม่ใช่ก่อน**
+ * เติมแพล้นท์จากรถประจำให้คนที่เหลือ — **ยิงหลังคัดคนแล้ว ไม่ใช่ก่อน**
  *
- * แพล้นท์ถูกใช้ที่เดียวคือช่องค้นหา ("ค้นหาชื่อ รหัส หรือแพล้นท์") การดึงรถของ
- * ทั้งทะเบียนมาเพื่อสิ่งนี้คือ 531 KB ที่เกือบทั้งหมดถูกทิ้ง · พังก็แค่ค้นด้วย
- * แพล้นท์ไม่ได้ ตารางยังครบ จึงไม่ต้องรายงานความล้มเหลวขึ้นไปถึงหน้าจอ
+ * การดึงรถของทั้งทะเบียนมาเพื่อสิ่งนี้คือ 531 KB ที่เกือบทั้งหมดถูกทิ้ง · พังก็แค่
+ * ไม่มีแพล้นท์สำรอง ตารางยังครบ จึงไม่ต้องรายงานความล้มเหลวขึ้นไปถึงหน้าจอ
+ * · **เติมเฉพาะช่องที่ยังว่าง** — วิ่งคู่กับ `attachRequisitions()` ซึ่งแพล้นท์ของคำขอชนะ
  */
 async function attachPlants(drivers: TraineeBoardDriver[], docs: DriverLite[]): Promise<void> {
   const refByCode = new Map(docs.map((doc) => [str(doc.drivercode), str(doc.vehicleCode)]));
@@ -507,7 +513,7 @@ async function attachPlants(drivers: TraineeBoardDriver[], docs: DriverLite[]): 
     }
 
     for (const driver of drivers) {
-      driver.plant = plants.get(refByCode.get(driver.drivercode) ?? "") ?? "";
+      if (!driver.plant) driver.plant = plants.get(refByCode.get(driver.drivercode) ?? "") ?? "";
     }
   } catch {
     /* ค้นด้วยแพล้นท์ไม่ได้ แต่ตารางยังครบ — ไม่คุ้มที่จะล้มทั้งหน้าเพราะเรื่องนี้ */
@@ -519,6 +525,9 @@ interface RequisitionLite {
   code?: unknown;
   drivercode?: unknown;
   status?: unknown;
+  customer?: unknown;
+  customerOther?: unknown;
+  plant?: unknown;
   vehicle?: { code?: unknown; plateNo?: unknown; brand?: unknown } | null;
   match?: { fullName?: unknown } | null;
 }
@@ -545,7 +554,18 @@ async function attachRequisitions(drivers: TraineeBoardDriver[]): Promise<void> 
     const rows = await requisitions
       .find(
         { drivercode: { $in: codes } },
-        { projection: { code: 1, drivercode: 1, status: 1, vehicle: 1, "match.fullName": 1 } },
+        {
+          projection: {
+            code: 1,
+            drivercode: 1,
+            status: 1,
+            customer: 1,
+            customerOther: 1,
+            plant: 1,
+            vehicle: 1,
+            "match.fullName": 1,
+          },
+        },
       )
       .toArray();
 
@@ -568,6 +588,10 @@ async function attachRequisitions(drivers: TraineeBoardDriver[]): Promise<void> 
       driver.requisitionCode = str(req.code);
       /* พจส. ใหม่ที่ยังไม่มีใน `master_driver` ไม่มีชื่อ — ใช้ชื่อผู้สมัครที่ผูกกับคำขอแทน */
       if (!driver.name) driver.name = str(req.match?.fullName);
+      /* ค่าเดียวกับคอลัมน์ลูกค้า/แพล้นท์ของตารางผู้สมัคร (`customerLabel()`) — “อื่นๆ” คลี่เป็นที่พิมพ์ไว้ */
+      const customer = str(req.customer);
+      driver.customer = customer === OTHER ? str(req.customerOther) || "อื่นๆ" : customer;
+      if (str(req.plant)) driver.plant = str(req.plant);
       driver.vehicle = req.vehicle
         ? {
             code: str(req.vehicle.code),

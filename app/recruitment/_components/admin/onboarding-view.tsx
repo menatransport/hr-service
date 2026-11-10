@@ -624,7 +624,16 @@ export function OnboardingView({
   const filtering = Boolean(needle) || Object.values(filters).some((p) => p?.length);
 
   /** แถวของตารางรายวัน — `pool` = ทุกคนในขั้นฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
-  const toPerson = (r: Row): TraineePerson => ({ id: r.id, code: r.code, name: r.name, drivercode: r.drivercode, vehicle: r.vehicle, contactOwner: r.app?.contactOwner ?? "" });
+  const toPerson = (r: Row): TraineePerson => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    drivercode: r.drivercode,
+    vehicle: r.vehicle,
+    customer: customerLabel(r),
+    plant: r.plant,
+    contactOwner: r.app?.contactOwner ?? "",
+  });
   const dailyPool = useMemo(
     () => (showDaily ? rows.filter((r) => r.stage === "training").map(toPerson) : []),
     [showDaily, rows],

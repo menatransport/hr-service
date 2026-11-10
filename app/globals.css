@@ -2737,10 +2737,15 @@ a.home-row:hover .home-row-arrow {
   text-indent: 28mm;
 }
 
+/* ที่ว่างด้านบนเท่าส่วนที่รูปลายเซ็นล้นขึ้นเหนือเส้น (รูปสูง 13mm ลอยทับบรรทัด ~4mm)
+   — เป็น padding ไม่ใช่ margin เพราะ margin ที่ขอบบนของหน้าใหม่ตอนพิมพ์หายไป
+   รูปที่ล้นเหนือกล่องจึงถูกตัดไปโผล่ท้ายหน้าก่อน (ยินยอมคืนเงินค้ำ 10 พ.ย. 2569) */
 .hrdoc-sign {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-top: 10mm;
+  break-inside: avoid;
 }
 
 /* ท้ายกระดาษบริษัท (`Sheet letterhead`) — รูป ISO + ที่อยู่ กว้างเต็มเนื้อที่ 174mm

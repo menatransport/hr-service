@@ -23,6 +23,9 @@ export type TraineePerson = {
   name: string;
   drivercode: string;
   vehicle: RequisitionVehicle | null;
+  /** ลูกค้า / แพล้นท์ของคำขอ — คอลัมน์ในตารางรายวัน (Bew 10 พ.ย. 2569) · ว่าง = ไม่มีคำขอ */
+  customer: string;
+  plant: string;
   /** ผู้ติดต่อกลับของใบสมัคร — ขึ้นตัวเล็กท้ายชื่อในตาราง (Bew 9 พ.ย. 2569) */
   contactOwner: string;
   /** ชื่อเล่นจากใบสมัคร — “ชื่อ (ชื่อเล่น)” · ว่าง = ใช้ของที่เซิร์ฟเวอร์หาให้จากทะเบียน */
@@ -38,7 +41,8 @@ const placeholder = (p: TraineePerson, own?: TraineeBoardDriver): TraineeBoardDr
   name: p.name,
   photoUrl: "",
   siteKey: null,
-  plant: "",
+  customer: p.customer,
+  plant: p.plant,
   startDateISO: "",
   tenureMonths: null,
   tenureDays: null,
@@ -98,7 +102,15 @@ export function TraineeDailySection({
       const found = p.drivercode ? byCode.get(p.drivercode) : undefined;
       if (found && !seen.has(p.drivercode)) {
         seen.add(p.drivercode);
-        return [{ ...found, name: found.name || p.name, requisitionId: found.requisitionId || p.id, contactOwner: p.contactOwner, nickname: p.nickname || found.nickname }];
+        return [{
+          ...found,
+          name: found.name || p.name,
+          requisitionId: found.requisitionId || p.id,
+          customer: found.customer || p.customer,
+          plant: found.plant || p.plant,
+          contactOwner: p.contactOwner,
+          nickname: p.nickname || found.nickname,
+        }];
       }
       return [placeholder(p, p.drivercode ? undefined : byCode.get(requisitionDailyKey(p.id)))];
     });

@@ -221,8 +221,15 @@ function findLicenseNo(text: string): string {
 function findLicenseType(text: string): string {
   const coded = text.match(/([ทบ])\s*\.\s*([1-4])(?!\d)/);
   if (coded) return `${coded[1]}.${coded[2]}`;
-  const typed = text.match(/ชนิดที่\s*([1-4])|\btype\s*([1-4])\b/i);
-  if (typed) return `ชนิดที่ ${typed[1] ?? typed[2]}`;
+  /* `ชนิดที่ 3` / `Type 3` / `Class III` → เก็บเป็นรหัสเดียวกับที่ทะเบียนใช้ (`ท.3`) —
+     ใบ "ทุกประเภท/Public" คือ ท. ใบ "ส่วนบุคคล" ที่มีเลขชนิดคือ บ. */
+  const typed = text.match(/ชนิดที่\s*([1-4])|\b(?:type|class)\s*([1-4]|IV|I{1,3})\b/i);
+  if (typed) {
+    const raw = (typed[1] ?? typed[2]).toUpperCase();
+    const n = /^\d$/.test(raw) ? raw : { I: "1", II: "2", III: "3", IV: "4" }[raw];
+    const prefix = /ส่วนบุคคล|personal/i.test(text) && !/ทุกประเภท|public/i.test(text) ? "บ" : "ท";
+    return `${prefix}.${n}`;
+  }
 
   const motorcycle = /จักรยานยนต์|motor\s*cycle/i.test(text);
   const base = /สาธารณะ|public/i.test(text)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eraser, ImageUp, PenLine, UserRound, X } from "lucide-react";
+import { Eraser, ImageUp, PenLine, UserPen, UserRound, X } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
@@ -103,6 +103,7 @@ export function SignaturePanel({
   staffNames,
   mine,
   onSign,
+  onNameChange,
 }: {
   doc: HrDocId;
   signatures: DocSignatures | undefined;
@@ -112,9 +113,16 @@ export function SignaturePanel({
   staffNames: Partial<Record<SignSlot["role"], string>>;
   mine: MySignatureStore;
   onSign: (key: SignKey, signature: DocSignature | null) => void;
+  /**
+   * ช่องเจ้าหน้าที่ที่ไม่มีรายชื่อในแผงซ้าย (ผู้สัมภาษณ์) ให้พิมพ์ชื่อในแถวนี้เอง —
+   * ส่งมาเฉพาะ role ที่แก้ได้ · ชื่อนี้ใช้บนกระดาษเสมอถึงคนกดเซ็นจะเป็นบัญชีอื่น (Bew 10 พ.ย. 2569)
+   */
+  onNameChange?: Partial<Record<SignSlot["role"], (name: string) => void>>;
 }) {
   const slots = DOC_SIGN_SLOTS[doc];
   const [pad, setPad] = useState<PadTarget | null>(null);
+  /** แถวที่เปิดช่องพิมพ์ชื่ออยู่ */
+  const [naming, setNaming] = useState<SignSlot["role"] | null>(null);
   const [savingMine, setSavingMine] = useState(false);
   const me = mine.state.status === "ready" ? mine.state.me : null;
 
@@ -122,8 +130,8 @@ export function SignaturePanel({
 
   /**
    * ชื่อใต้ลายเซ็นช่องเจ้าหน้าที่ = ชื่อในรายชื่อผู้ลงนามของเอกสาร (นายจ้าง/พยาน) เสมอ
-   * ถึงคนกดเซ็นจะเป็นบัญชีอื่น (Bew 9 พ.ย. 2569) · ช่องที่ไม่มีรายชื่อ (ผู้สัมภาษณ์)
-   * ถึงถอยไปชื่อบัญชีที่ล็อกอิน
+   * ถึงคนกดเซ็นจะเป็นบัญชีอื่น (Bew 9 พ.ย. 2569) · ผู้สัมภาษณ์ใช้ช่อง `interviewer`
+   * ของรายงาน (10 พ.ย. 2569) · ช่องที่เว้นว่างถึงถอยไปชื่อบัญชีที่ล็อกอิน
    */
   const signerName = (slot: SignSlot) =>
     staffNames[slot.role]?.trim() || me?.name || "";
@@ -227,6 +235,7 @@ export function SignaturePanel({
           const name = slot.staff
             ? staffNames[slot.role]?.trim() || sig?.name || ""
             : applicantName;
+          const setName = slot.staff ? onNameChange?.[slot.role] : undefined;
           return (
             /* ข้อมูลบน · ปุ่มล่างเต็มแถว — แผงกว้าง 360px ปุ่มสองปุ่มวางข้างข้อความแล้วชื่อถูกบีบ */
             <li
@@ -253,6 +262,19 @@ export function SignaturePanel({
                     </span>
                   ) : null}
                 </div>
+                {setName ? (
+                  <button
+                    type="button"
+                    onClick={() => setNaming((v) => (v === slot.role ? null : slot.role))}
+                    title="พิมพ์ชื่อที่จะขึ้นใต้ช่องลงนาม — ใช้ชื่อนี้ถึงคนกดเซ็นจะเป็นบัญชีอื่น"
+                    className={`flex items-center gap-1 rounded-selector px-1.5 py-1 text-11-5 transition-colors hover:bg-base-200 hover:text-primary ${
+                      naming === slot.role ? "text-primary" : "text-mut"
+                    }`}
+                  >
+                    <UserPen size={12} strokeWidth={2} aria-hidden />
+                    ชื่อ{slot.label}
+                  </button>
+                ) : null}
                 {sig ? (
                   <button
                     type="button"
@@ -264,6 +286,20 @@ export function SignaturePanel({
                   </button>
                 ) : null}
               </div>
+              {setName && naming === slot.role ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={staffNames[slot.role] ?? ""}
+                  placeholder={`ชื่อ${slot.label} เช่น ${me?.name || "นาย สมชาย ใจดี"}`}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") setNaming(null);
+                  }}
+                  onBlur={() => setNaming(null)}
+                  className="field-ring w-full rounded-field border border-line bg-base-100 px-2.5 py-1.5 text-12-5"
+                />
+              ) : null}
               {sig ? null : (
                 <div className="grid grid-cols-2 gap-1.5">
                   {slot.staff ? (

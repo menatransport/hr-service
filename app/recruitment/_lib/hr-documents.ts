@@ -118,6 +118,12 @@ export interface DocFill {
   installment: number | null;
   deductFrom: string;
 
+  /**
+   * ผู้สัมภาษณ์ (รายงานผู้สมัคร) — ชื่อที่พิมพ์ใต้ช่องลงนาม · ใช้ตามที่กรอกเสมอ
+   * ถึงคนกดเซ็นจะเป็นบัญชีอื่น (Bew 10 พ.ย. 2569) · ว่าง = ชื่อบัญชีที่กดเซ็น
+   */
+  interviewer: string;
+
   /** ผู้ลงนามฝั่งบริษัท */
   employer: string;
   witness1: string;
@@ -374,6 +380,7 @@ export function initialDocFill(facts: ApplicantFacts, appliedPosition: string): 
     startDate: ready && ready > today ? ready : today,
     guarantor: "",
     deductFrom: "",
+    interviewer: "",
     signatures: {},
   };
 }

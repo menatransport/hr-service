@@ -781,9 +781,16 @@ export function HrDocumentMaker({
                 applicantName={
                   doc.id === "profile" ? application.fullName : personName(fill) || application.fullName
                 }
-                staffNames={{ employer: fill.employer, witness1: fill.witness1, witness2: fill.witness2 }}
+                staffNames={{
+                  interviewer: fill.interviewer,
+                  employer: fill.employer,
+                  witness1: fill.witness1,
+                  witness2: fill.witness2,
+                }}
                 mine={mine}
                 onSign={setSignature}
+                /* ผู้สัมภาษณ์ไม่มีรายชื่อในแผงซ้าย — พิมพ์ชื่อในแถวลายเซ็นเอง (Bew 10 พ.ย. 2569) */
+                onNameChange={{ interviewer: set("interviewer") }}
               />
             ) : null}
 
@@ -847,6 +854,7 @@ export function HrDocumentMaker({
               docSlots={docSlots}
               requisition={chosen}
               signatures={fill.signatures}
+              interviewerName={fill.interviewer}
             />
           ) : null}
           {doc.id === "rating" ? (

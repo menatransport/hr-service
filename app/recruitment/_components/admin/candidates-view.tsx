@@ -1004,7 +1004,17 @@ export function CandidatesView({
   /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
   const toPerson = (a: ApplicationSummary): TraineePerson => {
     const rq = rqByApplication.get(a.id);
-    return { id: rq?.id ?? a.id, code: rq?.code ?? "", name: a.fullName, drivercode: rq?.drivercode ?? "", vehicle: rq?.vehicle ?? null, contactOwner: a.contactOwner, nickname: a.nickname };
+    return {
+      id: rq?.id ?? a.id,
+      code: rq?.code ?? "",
+      name: a.fullName,
+      drivercode: rq?.drivercode ?? "",
+      vehicle: rq?.vehicle ?? null,
+      customer: rq ? customerLabel(rq) : "",
+      plant: rq?.plant ?? "",
+      contactOwner: a.contactOwner,
+      nickname: a.nickname,
+    };
   };
   const dailyPool = showDaily ? rows.filter((a) => a.status === "training").map(toPerson) : [];
   const dailyPeople = showDaily ? visible.map(toPerson) : [];

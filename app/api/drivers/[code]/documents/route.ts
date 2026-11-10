@@ -12,10 +12,12 @@ import {
   ALLOWED_DOC_LABEL,
   ALLOWED_DOC_MIME,
   deleteDriverDocumentFile,
+  HR_DOC_LABEL,
+  HR_DOC_MIME,
   MAX_DOC_BYTES,
   saveDriverDocumentFile,
 } from "@/app/recruitment/_lib/drivers/documents";
-import { isDriverDocType } from "@/app/recruitment/_lib/drivers/types";
+import { DRIVER_DOC_TYPES, isDriverDocType } from "@/app/recruitment/_lib/drivers/types";
 import { StorageError } from "@/lib/s3";
 import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
@@ -57,8 +59,10 @@ export async function POST(
 
     if (!(file instanceof File) || !file.size) return badRequest("ไม่พบไฟล์ที่แนบมา");
     if (!isDriverDocType(docType)) return badRequest("เลือกประเภทเอกสารก่อน");
-    if (!ALLOWED_DOC_MIME.has(file.type))
-      return badRequest(`แนบได้เฉพาะ${ALLOWED_DOC_LABEL}`);
+    /* เอกสาร HR รับ PDF เพิ่ม — ประเภทอื่นยังรูปภาพอย่างเดียว */
+    const hr = Boolean(DRIVER_DOC_TYPES.find((t) => t.code === docType)?.hr);
+    if (!(hr ? HR_DOC_MIME : ALLOWED_DOC_MIME).has(file.type))
+      return badRequest(`แนบได้เฉพาะ${hr ? HR_DOC_LABEL : ALLOWED_DOC_LABEL}`);
     if (file.size > MAX_DOC_BYTES)
       return badRequest(`ไฟล์ใหญ่เกิน ${MAX_DOC_BYTES / 1024 / 1024} MB`);
     if (note.length > MAX_NOTE) return badRequest(`หมายเหตุยาวเกิน ${MAX_NOTE} ตัวอักษร`);

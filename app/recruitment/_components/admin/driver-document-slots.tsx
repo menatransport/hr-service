@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, FileText, Loader2, Plus, RefreshCw, ScanText, Upload } from "lucide-react";
+import { Eye, FileText, Loader2, Plus, RefreshCw, ScanText, Trash2, Upload } from "lucide-react";
 
 import { requestJson } from "@/lib/http";
 import { escapeHtml, runAction, toastError } from "@/lib/swal";
@@ -47,8 +47,8 @@ import type { Application } from "@/app/recruitment/_lib/types";
  * เป็นรอบ แนบรูปแล้วเปิดกล่องตรวจผลสแกน (`driver-document-scan.tsx`) ก่อนบันทึกเสมอ
  * ปุ่มของสองแถวนี้จึงเขียนว่า “ต่ออายุ” เมื่อมีฉบับเดิมอยู่แล้ว
  *
- * **แนบได้เฉพาะรูปภาพ** (1 ต.ค. 2026) — PDF/Word ที่แนบไว้ก่อนหน้านั้นยังเปิดดูได้ใน
- * ตัวดูเต็มจอ จึงยังมีไอคอนไฟล์สำหรับของเก่าอยู่
+ * **แนบได้เฉพาะรูปภาพ** (1 ต.ค. 2026) — ยกเว้นเอกสาร HR ที่รับ PDF ด้วย (10 พ.ย. 2569) ·
+ * รูปย่อ PDF เป็นลิงก์เปิดแท็บใหม่ (ตัวดู PDF ของเบราว์เซอร์) ไม่ผ่านตัวดูเต็มจอ
  *
  * **เอกสาร HR (ประเภทที่มี `hr`) แยกเป็นกลุ่มบนสุด** (Bew 8 พ.ย. 2569) — รายงานผู้สมัคร · สัญญาจ้าง ·
  * สัญญาค้ำ · ยินยอมคืนเงินค้ำ · ค่าตั้งต้นคือ **ฉบับที่ระบบทำจากใบสมัคร** (ปุ่ม “เปิดดู” = กล่องทำเอกสาร
@@ -57,8 +57,10 @@ import type { Application } from "@/app/recruitment/_lib/types";
  * ชื่อประเภทกับลำดับมาจาก `DRIVER_DOC_TYPES` ที่เดียว — อย่าก๊อปรายชื่อมาไว้ในไฟล์นี้
  */
 
-/** ต้องตรงกับ `ALLOWED_DOC_MIME` ใน `_lib/drivers/documents.ts` — ฝั่งเซิร์ฟเวอร์ตรวจซ้ำอีกที */
+/** ต้องตรงกับ `ALLOWED_DOC_MIME` / `HR_DOC_MIME` ใน `_lib/drivers/documents.ts` — ฝั่งเซิร์ฟเวอร์ตรวจซ้ำอีกที */
 const ACCEPT = "image/jpeg,image/png,image/webp";
+/** เอกสาร HR รับ PDF เพิ่ม (Bew 10 พ.ย. 2569) — ฉบับเซ็นแล้วมักสแกนมาเป็น PDF */
+const HR_ACCEPT = `${ACCEPT},application/pdf`;
 const MAX_MB = 10;
 
 /** ประเภทที่อ่านวันหมดอายุจากรูปได้ — รหัสใน `DRIVER_DOC_TYPES` ตรงกับ `ScanDocKind` */
@@ -68,6 +70,8 @@ const SCAN_KINDS: Record<string, ScanDocKind> = {
 };
 
 const isImage = (type: string) => /^image\/(jpeg|png|webp)$/.test(type);
+const isPdf = (file: { type: string; name: string }) =>
+  file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 
 export function DriverDocumentSlots({
   driver,
@@ -159,8 +163,11 @@ export function DriverDocumentSlots({
   async function pick(type: DriverDocType, file: File | undefined) {
     if (!file) return;
     /* ลากไฟล์มาวางข้าม `accept` ได้ — บอกตั้งแต่ตรงนี้ ไม่ต้องรอเซิร์ฟเวอร์ตอบ 400 */
-    if (!isImage(file.type)) {
-      toastError("แนบได้เฉพาะรูปภาพ", `“${file.name}” ไม่ใช่ไฟล์ JPG · PNG · WebP`);
+    if (type.hr ? !isImage(file.type) && file.type !== "application/pdf" : !isImage(file.type)) {
+      toastError(
+        type.hr ? "แนบได้เฉพาะรูปภาพหรือ PDF" : "แนบได้เฉพาะรูปภาพ",
+        `“${file.name}” ไม่ใช่ไฟล์ JPG · PNG · WebP${type.hr ? " · PDF" : ""}`,
+      );
       return;
     }
     if (file.size > MAX_MB * 1024 * 1024) {
@@ -246,6 +253,7 @@ export function DriverDocumentSlots({
               busy={uploading === group.type.code}
               onPick={(file) => void pick(group.type, file)}
               onView={(index) => setViewing({ code: group.type.code, index })}
+              onRemove={(file) => void remove(file)}
               system={
                 fromApplication
                   ? { busy: opening === group.type.code, onOpen: () => void openSystem(group.type) }
@@ -286,6 +294,7 @@ export function DriverDocumentSlots({
               busy={uploading === group.type.code}
               onPick={(file) => void pick(group.type, file)}
               onView={(index) => setViewing({ code: group.type.code, index })}
+              onRemove={(file) => void remove(file)}
             />
           ))}
         </ul>
@@ -386,6 +395,7 @@ function Slot({
   busy,
   onPick,
   onView,
+  onRemove,
   system,
 }: {
   group: DriverDocGroup;
@@ -395,6 +405,8 @@ function Slot({
   busy: boolean;
   onPick: (file: File | undefined) => void;
   onView: (index: number) => void;
+  /** ลบฉบับล่าสุด — `remove()` ถามยืนยันก่อนเสมอ (PDF ไม่ผ่านตัวดูเต็มจอ จึงต้องมีปุ่มที่แถว) */
+  onRemove: (file: DriverDocument) => void;
   /** เอกสาร HR ที่เปิดฉบับจากใบสมัครได้ — ไม่ต้องแนบก็มีฉบับให้ดู (ค่าตั้งต้น) */
   system?: { busy: boolean; onOpen: () => void };
 }) {
@@ -476,7 +488,7 @@ function Slot({
                   .filter(Boolean)
                   .join(" · ")
               : system
-                ? "ฉบับจากใบสมัคร · แนบฉบับเซ็นแล้วได้"
+                ? "ฉบับจากใบสมัคร · แนบฉบับเซ็นแล้วได้ (รูป/PDF)"
                 : "ลากไฟล์มาวาง หรือกดปุ่มขวา"}
         </span>
 
@@ -523,11 +535,24 @@ function Slot({
         {latest ? (scan ? "ต่ออายุ" : "เพิ่ม") : "แนบ"}
       </button>
 
+      {latest ? (
+        <button
+          type="button"
+          onClick={() => onRemove(latest)}
+          disabled={busy}
+          aria-label={`ลบ${type.label}`}
+          title={files.length > 1 ? `ลบ${type.label}ฉบับล่าสุด (${latest.name})` : `ลบ${type.label} (${latest.name})`}
+          className="flex size-8 flex-none cursor-pointer items-center justify-center rounded-field border border-line text-mut transition-colors hover:border-alert/40 hover:bg-alert/8 hover:text-alert disabled:pointer-events-none disabled:opacity-60"
+        >
+          <Trash2 size={13} strokeWidth={2} aria-hidden />
+        </button>
+      ) : null}
+
       {/* `<input type="file">` ดิบเป็นข้อยกเว้นที่ CLAUDE.md อนุญาต — ซ่อนด้วย `sr-only` */}
       <input
         ref={input}
         type="file"
-        accept={ACCEPT}
+        accept={type.hr ? HR_ACCEPT : ACCEPT}
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => {
@@ -571,6 +596,30 @@ function Thumb({
 
   const kind = attachmentKind(file);
   const Glyph = kind.icon ?? FileText;
+  const badge =
+    count > 1 ? (
+      <span className="absolute top-0.5 right-0.5 rounded-full bg-ink/75 px-1.5 font-mono text-9-5 leading-4 text-white">
+        {count}
+      </span>
+    ) : null;
+
+  /* PDF = ลิงก์ธรรมดาเปิดแท็บใหม่ ให้เบราว์เซอร์แสดงเอง (คลิก · คลิกกลาง · Ctrl+คลิก ได้ตามปกติ) */
+  if (isPdf(file)) {
+    return (
+      <a
+        href={driverDocumentUrl(drivercode, file.fileId)}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`เปิด ${file.name} ในแท็บใหม่`}
+        title="คลิกเพื่อเปิดในแท็บใหม่"
+        className="relative flex size-13 flex-none cursor-pointer flex-col items-center justify-center gap-0.5 rounded-field border border-line bg-base-200 transition-colors hover:border-primary/40"
+      >
+        <Glyph size={18} strokeWidth={1.6} aria-hidden className={kind.tone} />
+        <span className="font-mono text-9-5 font-semibold leading-none text-mut">PDF</span>
+        {badge}
+      </a>
+    );
+  }
 
   return (
     <button
@@ -593,11 +642,7 @@ function Thumb({
       ) : (
         <Glyph size={20} strokeWidth={1.6} aria-hidden className={kind.tone} />
       )}
-      {count > 1 ? (
-        <span className="absolute top-0.5 right-0.5 rounded-full bg-ink/75 px-1.5 font-mono text-9-5 leading-4 text-white">
-          {count}
-        </span>
-      ) : null}
+      {badge}
     </button>
   );
 }

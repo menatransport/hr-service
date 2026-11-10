@@ -247,7 +247,7 @@ export function TraineeMatrix({
         value={query}
         onChange={setQuery}
         label="ค้นหาในตารางติดตามฝึกงาน"
-        placeholder="ค้นหาชื่อ รหัส หรือแพล้นท์…"
+        placeholder="ค้นหาชื่อ รหัส ลูกค้า หรือแพล้นท์…"
         tone="filled"
         className={`w-full lg:flex-1 ${slotted ? "lg:max-w-64" : "lg:max-w-80"}`}
       />
@@ -351,8 +351,12 @@ export function TraineeMatrix({
                   <th rowSpan={2} className="border-r border-line sticky left-0 z-30 w-56 min-w-56 bg-head px-3 py-2 text-left align-bottom text-11-5 font-medium text-mut">
                     พนักงาน ({activeRows.length.toLocaleString("th-TH")})
                   </th>
-                  <th rowSpan={2} className="sticky left-56 z-30 w-28 min-w-28 bg-head px-2 py-2 text-left align-bottom text-11-5 font-medium text-mut after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
+                  <th rowSpan={2} className="border-r border-line sticky left-56 z-30 w-28 min-w-28 bg-head px-2 py-2 text-left align-bottom text-11-5 font-medium whitespace-nowrap text-mut">
                     ทะเบียน / เบอร์รถ
+                  </th>
+                  {/* ลูกค้า / แพล้นท์ — ปักซ้ายต่อจากทะเบียน (Bew 10 พ.ย. 2569) · เส้นแบ่งกลุ่มปักซ้ายอยู่ท้ายคอลัมน์นี้ */}
+                  <th rowSpan={2} className="sticky left-84 z-30 w-32 min-w-32 bg-head px-2 py-2 text-left align-bottom text-11-5 font-medium text-mut after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
+                    ลูกค้า / แพล้นท์
                   </th>
 
                   {/* หัวกลุ่มยอดรวม — บอกช่วงเดือนที่นับครั้งเดียว ไม่ต้องซ้ำทุกคอลัมน์ */}
@@ -440,7 +444,7 @@ export function TraineeMatrix({
                     {/* ป้ายกลุ่มปักซ้ายเหมือนคอลัมน์ชื่อ — เลื่อนไปวันที่ 28 ก็ยังกดได้ */}
                     <th
                       scope="rowgroup"
-                      colSpan={2}
+                      colSpan={3}
                       className="sticky left-0 z-20 bg-alert-soft p-0 text-left after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line"
                     >
                       <button
@@ -624,7 +628,7 @@ const MatrixRow = memo(function MatrixRow({
           คำขอสรรหาผูกอยู่ — ไม่งั้นไม่มีปลายทางให้ `PATCH` ไปแก้ (ครูฝึกแก้ที่หน้าขอสรรหา —
           ดู `.claude/docs/requisitions.md` หัวข้อ “ครูฝึกไหลไปหน้าฝึกงานยังไง”) */}
       <td
-        className={`sticky left-56 z-20 w-28 min-w-28 px-2 py-1.5 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line ${
+        className={`border-r border-line/70 sticky left-56 z-20 w-28 min-w-28 px-2 py-1.5 ${
           driver.exitedOn ? "bg-alert-soft" : "bg-base-100 group-hover:bg-base-200"
         }`}
       >
@@ -633,6 +637,16 @@ const MatrixRow = memo(function MatrixRow({
           editable={Boolean(driver.requisitionId && driver.drivercode)}
           onEdit={() => onEditVehicle(driver)}
         />
+      </td>
+
+      {/* ลูกค้า / แพล้นท์ — สองบรรทัดแบบเดียวกับทะเบียนรถ (Bew 10 พ.ย. 2569) · อ่านอย่างเดียว
+          แก้ที่การ์ดคำขอสรรหาในหน้าผู้สมัคร · ไม่มีคำขอ = ขีด */}
+      <td
+        className={`sticky left-84 z-20 w-32 min-w-32 px-2 py-1.5 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line ${
+          driver.exitedOn ? "bg-alert-soft" : "bg-base-100 group-hover:bg-base-200"
+        }`}
+      >
+        <CustomerPlantCell customer={driver.customer} plant={driver.plant} />
       </td>
 
       {/* ยอดรวมต่อคน — ต่อจากทะเบียน ก่อนช่องวัน · 0 = ขีดจาง ให้ตาจับเฉพาะตัวเลขที่มีจริง */}
@@ -681,6 +695,20 @@ const MatrixRow = memo(function MatrixRow({
 });
 
 /* ------------------------------------------------------------ ชิ้นย่อย */
+
+/** ลูกค้า (บน) / แพล้นท์ (ล่าง, จาง) — สองบรรทัดแบบเดียวกับทะเบียนรถ (Bew 10 พ.ย. 2569) · มีอย่างเดียวก็บรรทัดเดียว · ไม่มีเลย = ขีด */
+function CustomerPlantCell({ customer, plant }: { customer: string; plant: string }) {
+  if (!customer && !plant) return <span className="text-12-5 text-mut/50">–</span>;
+  const title = [customer && `ลูกค้า ${customer}`, plant && `แพล้นท์ ${plant}`].filter(Boolean).join(" · ");
+  return (
+    <span title={title} className="flex min-w-0 flex-col items-start py-1 leading-tight">
+      <span className="max-w-full truncate text-12-5 font-medium whitespace-nowrap text-ink">{customer || plant}</span>
+      {customer && plant ? (
+        <span className="mt-0.5 max-w-full truncate text-11 whitespace-nowrap text-mut">{plant}</span>
+      ) : null}
+    </span>
+  );
+}
 
 /**
  * ทะเบียนรถ / เบอร์รถในแถว — สองบรรทัดเรียบ ๆ ไม่มีกรอบ (Bew 9 พ.ย. 2569: เดิมเป็นป้ายกรอบ
@@ -883,6 +911,7 @@ function traineeXlsx(
     { header: "รหัส พจส.", width: 11, kind: "code", value: (r) => r.driver.drivercode },
     { header: "ทะเบียนรถ", width: 13, kind: "code", value: (r) => r.driver.vehicle?.plateNo ?? "" },
     { header: "เบอร์รถ", width: 10, kind: "code", value: (r) => r.driver.vehicle?.code ?? "" },
+    { header: "ลูกค้า", width: 12, value: (r) => r.driver.customer },
     { header: "แพล้นท์", width: 14, value: (r) => r.driver.plant },
     { header: "วันเริ่มงาน", width: 12, kind: "date", value: (r) => xlsxDate(r.driver.startDateISO) },
     ...days.map<XlsxColumn<TraineeRow>>(({ day, weekday }) => ({
