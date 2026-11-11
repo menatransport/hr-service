@@ -4,6 +4,7 @@ import { etlCol, hrCol } from "@/lib/db";
 import { deleteDriverDocumentFile } from "./documents";
 import { driverExists, HR_FIELDS, IN_REGISTRY, PROFILE_FIELDS, readDriver, readDrivers, type DriverField } from "./master";
 import { mediaKeyOf } from "@/lib/media";
+import { ageOn } from "@/app/recruitment/_lib/form";
 import { deleteMedia } from "@/lib/s3";
 import { pickResignReason } from "@/app/recruitment/_lib/resign-reasons/store";
 import { isExitType } from "@/app/recruitment/_lib/resign-reasons/types";
@@ -62,6 +63,11 @@ interface MasterDriverDoc {
   photoUrl?: unknown;
   /** เติมโดย `readDrivers()` จากใบสมัคร (`./nickname.ts`) — ไม่ใช่ฟิลด์ในทะเบียน */
   nickname?: unknown;
+  /** เติมโดย `readDrivers()` จากใบสมัครเดียวกับชื่อเล่น — ไม่ใช่ฟิลด์ในทะเบียน */
+  age?: unknown;
+  /** วันเกิดในใบสมัคร — เติมโดย `readDrivers()` · ใช้เมื่อทะเบียนยังไม่มี `birthDate` */
+  applicationBirthDate?: unknown;
+  birthDate?: unknown;
   statusOverride?: unknown;
   /** วันหมดอายุบัตรประชาชนที่ฝ่ายบุคคลกรอกเอง — ดู `setDriverIdCardExpiry()` */
   idCardExpiryDate?: unknown;
@@ -652,11 +658,17 @@ function toRecord(
   const statusOverride = toStatusOverride(doc.statusOverride);
   const vehicle = vehicleRef ? (vehicles.get(vehicleRef) ?? null) : null;
   const createdAt = toIso(doc.registeredAt);
+  /* วันเกิดของทะเบียนชนะ · ว่างค่อยใช้ของใบสมัคร — อายุคิดจากตัวที่ได้ (Bew 11 พ.ย. 2569) */
+  const ownBirth = toIsoDate(doc.birthDate);
+  const birthDateISO = ownBirth || str(doc.applicationBirthDate);
 
   return {
     drivercode,
     name: str(doc.driverName),
     nickname: str(doc.nickname),
+    birthDateISO,
+    birthDateSource: ownBirth ? "registry" : birthDateISO ? "application" : "",
+    age: birthDateISO ? ageOn(birthDateISO, today) : typeof doc.age === "number" ? doc.age : null,
     phone: str(doc.phone),
     phoneAlt: str(doc.phoneAlt),
     photoUrl: str(doc.photoUrl),
@@ -801,6 +813,10 @@ const LIST_FIELDS: DriverField[] = [
   "vehicleCode",
   "startDate",
   "licenseExpiryDate",
+  /* อายุในตารางคิดจากวันเกิด (ตัววันเกิดไม่ส่งลง browser — `DRIVER_DETAIL_FIELDS`) */
+  "birthDate",
+  /* ชนิดใบขับขี่ขึ้นเป็นคอลัมน์ในตารางแล้ว (Bew 11 พ.ย. 2569) — ไม่ใช่ข้อมูลส่วนบุคคลแบบเลขที่ใบขับขี่ */
+  "licenseType",
   "phone",
   "customer",
   "plant",

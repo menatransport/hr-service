@@ -7,12 +7,12 @@ import {
   type ApplicationPatch,
 } from "@/app/recruitment/_lib/applications";
 import { RecruitmentError } from "@/app/recruitment/_lib/questions";
-import type { Application, DocumentData } from "@/app/recruitment/_lib/types";
+import { EMPTY_DOCUMENT_DATA, type Application, type DocumentData } from "@/app/recruitment/_lib/types";
 import { listDocSlots } from "@/app/recruitment/_lib/doc-slots";
 import { linkedApplicationId } from "./portrait";
 import { DriverRegistryError, getDriver, updateDriverProfile } from "./registry";
-import { REGISTRY_OWNED, SHARED_KEY, type DriverDocSource } from "./document-sync";
-import type { DriverRecord } from "./types";
+import { REGISTRY_OWNED, REGISTRY_SLOT_DOC_TYPES, SHARED_KEY, type DriverDocSource } from "./document-sync";
+import { driverDocumentUrl, type DriverRecord } from "./types";
 
 /**
  * ใบสมัคร ↔ ทะเบียน พจส. — **ข้อมูลจากเอกสารมีเจ้าของที่เดียว** (กติกาอยู่ที่ `document-sync.ts`)
@@ -193,14 +193,34 @@ export async function moveDocumentsToRegistry(
 }
 
 /** แท็บเอกสารของหน้าประวัติ — ข้อมูลเอกสาร + รูปของใบที่ผูกไว้ (ไม่ส่งใบสมัครเต็มใบลง browser) */
-export async function getDriverDocSource(applicationId: string): Promise<DriverDocSource | null> {
+export async function getDriverDocSource(applicationId: string, drivercode: string): Promise<DriverDocSource | null> {
   const [application, docSlots] = await Promise.all([getApplicationWithRegistry(applicationId), listDocSlots()]);
   if (!application || application.erased) return null;
   return {
     applicationId: application.id,
+    drivercode,
     ref: application.ref,
     documents: application.documents,
     files: Object.fromEntries(application.files.map((f) => [f.slot, f.url])),
     docSlots,
   };
+}
+
+/**
+ * แท็บเอกสารของคนที่ **ไม่มีใบสมัคร** — กล่องเอกสารชุดเดียวกัน แต่อ่านจากทะเบียนตรง (Bew 11 พ.ย. 2569)
+ * ข้อมูล = ช่องที่ทะเบียนเก็บ (`REGISTRY_OWNED`) · รูป = ไฟล์ล่าสุดของกองที่คู่กับช่อง (`REGISTRY_SLOT_DOC_TYPES`)
+ */
+export async function getRegistryDocSource(driver: DriverRecord): Promise<DriverDocSource> {
+  const docSlots = (await listDocSlots()).filter((s) => REGISTRY_SLOT_DOC_TYPES[s.id]);
+  const documents: DocumentData = { ...EMPTY_DOCUMENT_DATA };
+  for (const { doc, field } of REGISTRY_OWNED) documents[doc] = registryValue(driver, field.from);
+
+  const files: Record<string, string> = {};
+  for (const slot of docSlots) {
+    const latest = driver.documents
+      .filter((d) => d.docType === REGISTRY_SLOT_DOC_TYPES[slot.id] && d.key)
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
+    if (latest) files[slot.id] = driverDocumentUrl(driver.drivercode, latest.fileId);
+  }
+  return { applicationId: null, drivercode: driver.drivercode, ref: "", documents, files, docSlots };
 }

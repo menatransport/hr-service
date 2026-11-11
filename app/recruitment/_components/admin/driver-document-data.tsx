@@ -11,17 +11,25 @@ import { mediaThumbUrl } from "@/lib/media";
 import { toastError } from "@/lib/swal";
 import {
   DOC_FORM_FIELDS,
+  REGISTRY_DOC_KEYS,
+  REGISTRY_OWNED,
+  REGISTRY_SLOT_DOC_TYPES,
   dataSlots,
   type DriverDocSource,
 } from "@/app/recruitment/_lib/drivers/document-sync";
 import {
+  driverDocumentUrl,
   formatBankAccount,
   formatLicenseGap,
   formatThaiDate,
   licenseState,
 } from "@/app/recruitment/_lib/drivers/types";
 import { formatNationalId } from "@/app/recruitment/_lib/form";
-import type { Application, DocumentField } from "@/app/recruitment/_lib/types";
+import type { Application, DocumentData, DocumentField } from "@/app/recruitment/_lib/types";
+import type { DriverDocument } from "@/app/recruitment/_lib/drivers/types";
+
+type Subject = Pick<Application, "id" | "ref" | "fullName" | "files" | "documents">;
+type DocPatch = { files: Record<string, string | null>; documents: DocumentData };
 
 /**
  * แท็บเอกสาร → “ข้อมูลจากเอกสาร” — **ชุดเดียวกับกล่อง “เอกสารและข้อมูลจากเอกสาร”** (Bew 8 พ.ย. 2569)
@@ -31,20 +39,28 @@ import type { Application, DocumentField } from "@/app/recruitment/_lib/types";
  * บัตร/ใบขับขี่/บัญชีอยู่ที่ทะเบียนนี้ · ทะเบียนบ้าน ชื่อธนาคาร ชื่อบัญชี อยู่ในใบสมัคร
  * (`drivers/document-sync.ts`) — เซิร์ฟเวอร์แยกเขียนให้ หน้านี้ไม่ต้องรู้
  *
- * ใช้เมื่อคนนี้มีใบสมัครในระบบเท่านั้น · ไม่มี = กล่องแก้ทะเบียนแบบเดิม (`driver-profile-edit.tsx`)
+ * ไม่มีใบสมัคร (`applicationId === null` · Bew 11 พ.ย. 2569) = กล่องเดียวกัน แต่รูปเข้า/ออกแฟ้มเอกสารของทะเบียน
+ * (`REGISTRY_SLOT_DOC_TYPES`) และกรอกได้เฉพาะช่องที่ทะเบียนมีที่เก็บ (`REGISTRY_DOC_KEYS`)
  */
 export function DriverDocumentData({
   source,
+  name,
   hidePersonal,
 }: {
   source: DriverDocSource;
+  /** ชื่อคนขับ — หัวกล่องเอกสารของคนที่ไม่มีใบสมัคร */
+  name: string;
   /** พ้นสภาพแล้ว — ซ่อนค่าและรูป ไม่มีปุ่มแก้ (ทะเบียนไม่รับแก้ข้อมูลส่วนบุคคลของคนที่ออกแล้ว) */
   hidePersonal: boolean;
 }) {
   const router = useRouter();
-  const [application, setApplication] = useState<Application | null>(null);
+  const [application, setApplication] = useState<Subject | null>(null);
+  const registry = source.applicationId === null;
+  const formFields = registry ? DOC_FORM_FIELDS.filter((f) => REGISTRY_DOC_KEYS.includes(f.key)) : DOC_FORM_FIELDS;
   const [opening, setOpening] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  /** แนบรูปเข้าแฟ้มทะเบียนไปแล้วในรอบนี้ — ปิดกล่องโดยไม่บันทึกก็ต้องรีเฟรชให้แฟ้มเห็นไฟล์ใหม่ */
+  const [uploaded, setUploaded] = useState(false);
 
   const slots = dataSlots(source.docSlots);
   const { documents, files } = source;
@@ -52,6 +68,17 @@ export function DriverDocumentData({
   /* ใบสมัครเต็มใบ (กล่องต้องใช้) โหลดตอนกดครั้งแรก — หน้าประวัติไม่ต้องแบกทุกครั้งที่เปิด */
   async function open(slot: string) {
     if (application) {
+      setEditing(slot);
+      return;
+    }
+    if (registry) {
+      setApplication({
+        id: "",
+        ref: source.drivercode,
+        fullName: name,
+        documents: source.documents,
+        files: Object.entries(source.files).map(([slot, url]) => ({ slot, url, uploadedAt: "" })),
+      });
       setEditing(slot);
       return;
     }
@@ -73,7 +100,8 @@ export function DriverDocumentData({
   }
 
   /* ยิงตัวเดียวกับหน้าผู้สมัคร — เซิร์ฟเวอร์เขียนช่องของทะเบียนลงทะเบียนเอง · โยน error ให้กล่องโชว์ */
-  async function save(patch: { files: Record<string, string | null>; documents: Application["documents"] }) {
+  async function save(patch: DocPatch) {
+    if (registry) return saveRegistry(patch);
     const next = await requestJson<Application>(
       `/api/recruitment/applications/${source.applicationId}`,
       { method: "PATCH", body: patch },
@@ -83,7 +111,49 @@ export function DriverDocumentData({
     router.refresh();
   }
 
-  const firstOpen = slots.find((s) => files[s.id] && DOC_FORM_FIELDS.some((f) => f.slot === s.id && !documents[f.key]))
+  const base = `/api/drivers/${encodeURIComponent(source.drivercode)}`;
+
+  /** ไม่มีใบสมัคร — แนบ = เพิ่มเข้ากองในแฟ้มเอกสารทันที (ฉบับเก่ายังอยู่) แล้วโชว์ฉบับนั้นในกล่อง */
+  async function uploadRegistry(slot: string, file: File): Promise<string> {
+    const docType = REGISTRY_SLOT_DOC_TYPES[slot];
+    if (!docType) throw new Error("ช่องนี้แนบเข้าทะเบียนไม่ได้");
+    const body = new FormData();
+    body.append("file", file);
+    body.append("docType", docType);
+    const { documents } = await requestJson<{ documents: DriverDocument[] }>(
+      `${base}/documents`,
+      { method: "POST", body },
+      "อัปโหลดไม่สำเร็จ",
+    );
+    const latest = documents
+      .filter((d) => d.docType === docType)
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
+    if (!latest) throw new Error("อัปโหลดแล้วแต่ไม่พบไฟล์ในแฟ้ม");
+    setUploaded(true);
+    return driverDocumentUrl(source.drivercode, latest.fileId);
+  }
+
+  /** ไม่มีใบสมัคร — ช่องที่เปลี่ยนเขียนลงทะเบียน · กดเอารูปออก = ลบฉบับที่โชว์อยู่ออกจากแฟ้ม */
+  async function saveRegistry(patch: DocPatch) {
+    const changes: Record<string, string> = {};
+    for (const { doc, field } of REGISTRY_OWNED) {
+      const value = patch.documents[doc].trim();
+      if (value !== source.documents[doc].trim()) changes[field.key] = value;
+    }
+    if (Object.keys(changes).length)
+      await requestJson(`${base}`, { method: "PATCH", body: changes }, "บันทึกข้อมูลเอกสารไม่สำเร็จ");
+
+    for (const [slot, url] of Object.entries(source.files)) {
+      if (patch.files[slot] !== null) continue;
+      const fileId = url.slice(url.lastIndexOf("/") + 1);
+      await requestJson(`${base}/documents/${encodeURIComponent(fileId)}`, { method: "DELETE" }, "ลบรูปไม่สำเร็จ");
+    }
+    setApplication(null);
+    setUploaded(false);
+    router.refresh();
+  }
+
+  const firstOpen = slots.find((s) => files[s.id] && formFields.some((f) => f.slot === s.id && !documents[f.key]))
     ?.id ?? slots[0]?.id ?? "";
 
   return (
@@ -92,7 +162,9 @@ export function DriverDocumentData({
       note={
         hidePersonal
           ? undefined
-          : `ชุดเดียวกับเอกสารในใบสมัคร ${source.ref} · บัตร ใบขับขี่ และบัญชีเก็บที่ทะเบียนนี้ที่เดียว`
+          : registry
+            ? "ไม่มีใบสมัครในระบบ · รูปที่แนบเข้าแฟ้มเอกสารด้านล่าง ข้อมูลเก็บที่ทะเบียนนี้"
+            : `ชุดเดียวกับเอกสารในใบสมัคร ${source.ref} · บัตร ใบขับขี่ และบัญชีเก็บที่ทะเบียนนี้ที่เดียว`
       }
       action={
         hidePersonal ? undefined : (
@@ -114,7 +186,7 @@ export function DriverDocumentData({
     >
       <div className="flex flex-col divide-y divide-line">
         {slots.map((slot) => {
-          const fields = DOC_FORM_FIELDS.filter((f) => f.slot === slot.id);
+          const fields = formFields.filter((f) => f.slot === slot.id);
           const filled = fields.filter((f) => documents[f.key]).length;
           const url = files[slot.id];
           const done = Boolean(url) && filled === fields.length;
@@ -185,8 +257,18 @@ export function DriverDocumentData({
           application={application}
           docSlots={source.docSlots}
           initialSlot={editing}
+          onlyFields={registry ? REGISTRY_DOC_KEYS : undefined}
+          onUpload={registry ? uploadRegistry : undefined}
           onPatch={save}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            /* ทะเบียน: เปิดใหม่ต้องอ่านจากหน้าล่าสุด ไม่ใช่สำเนาที่เปิดค้างไว้ */
+            if (registry) setApplication(null);
+            if (uploaded) {
+              setUploaded(false);
+              router.refresh();
+            }
+          }}
         />
       ) : null}
     </Section>

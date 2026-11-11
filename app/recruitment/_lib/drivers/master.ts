@@ -29,6 +29,8 @@ export const PROFILE_FIELDS = [
   "vehicleCode",
   "startDate",
   "licenseExpiryDate",
+  /** วันเกิด `YYYY-MM-DD` — ฝ่ายบุคคลกรอกที่หน้าประวัติ · ว่าง = ใช้วันเกิดในใบสมัคร (Bew 11 พ.ย. 2569) */
+  "birthDate",
   /** เลขที่ใบขับขี่ · ชนิดใบขับขี่ (ท.2 …) · เลขบัตรประชาชน 13 หลัก — ข้อมูลส่วนบุคคล ไม่ส่งลงตารางรายชื่อ */
   "licenseNo",
   "licenseType",
@@ -125,6 +127,8 @@ export async function readDrivers<T extends object = Record<string, unknown>>(
         const portrait = row.mediaPurgedAt ? null : portraits?.resolve(row.drivercode as string, row.nationalId);
         if (portrait) row.photoUrl = portrait;
         row.nickname = nicknames?.resolve(row.drivercode as string, row.nationalId) ?? "";
+        row.age = nicknames?.age(row.drivercode as string, row.nationalId) ?? null;
+        row.applicationBirthDate = nicknames?.birthDate(row.drivercode as string, row.nationalId) ?? "";
         for (const f of extra) delete row[f];
       }
       return row;

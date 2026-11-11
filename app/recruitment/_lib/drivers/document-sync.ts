@@ -44,6 +44,20 @@ export function dataSlots(docSlots: DocSlot[]): DocSlot[] {
   return docSlots.filter((s) => DOC_FORM_FIELDS.some((f) => f.slot === s.id));
 }
 
+/**
+ * พจส. ที่ไม่มีใบสมัคร — ช่องในกล่องเอกสาร → กองในแฟ้มเอกสารของทะเบียน (`DRIVER_DOC_TYPES`)
+ * รูปของช่อง = ไฟล์ล่าสุดในกองนั้น · แนบใหม่ = เพิ่มเข้ากอง (ฉบับเก่ายังอยู่ในแฟ้ม)
+ */
+export const REGISTRY_SLOT_DOC_TYPES: Record<string, string> = {
+  id_card: "id-card",
+  house_reg: "house-registration",
+  license_front: "driver-license",
+  bank_book: "bank-book",
+};
+
+/** ช่องกรอกที่ทะเบียนมีที่เก็บ — กล่องเอกสารของคนที่ไม่มีใบสมัครเปิดให้กรอกแค่ชุดนี้ */
+export const REGISTRY_DOC_KEYS: (keyof DocumentData)[] = PAIRS.map((p) => p.doc);
+
 /** ใบสมัครที่ผูกกับทะเบียนแล้ว — ช่องไหนอ่าน/เขียนที่ทะเบียน */
 export function isRegistryOwned(key: keyof DocumentData): boolean {
   return REGISTRY_OWNED.some((p) => p.doc === key);
@@ -54,7 +68,10 @@ export function isRegistryOwned(key: keyof DocumentData): boolean {
  * · `documents` ผ่าน `withRegistryDocuments()` มาแล้ว = ค่าเดียวกับที่กล่องแสดง
  */
 export interface DriverDocSource {
-  applicationId: string;
+  /** `null` = คนนี้ไม่มีใบสมัคร — ข้อมูล/รูปอ่านเขียนที่ทะเบียนตรง (`REGISTRY_SLOT_DOC_TYPES`) */
+  applicationId: string | null;
+  drivercode: string;
+  /** เลขที่ใบสมัคร · ไม่มีใบสมัคร = `""` */
   ref: string;
   documents: DocumentData;
   /** รูปของแต่ละช่อง — `slot` → url */

@@ -10,7 +10,7 @@ import { DataError } from "@/components/ui/data-error";
 import { canAccessMenu } from "@/lib/menu-permissions";
 import { getDriverProfile } from "@/app/recruitment/_lib/drivers/registry";
 import { getDriverHrLink } from "@/app/recruitment/_lib/drivers/driver-hr";
-import { getDriverDocSource } from "@/app/recruitment/_lib/drivers/application-registry";
+import { getDriverDocSource, getRegistryDocSource } from "@/app/recruitment/_lib/drivers/application-registry";
 
 /**
  * ประวัติคนขับรายคน — `code` คือ `drivercode` ตรง ๆ
@@ -69,13 +69,16 @@ export default async function DriverProfilePage(
 
   const hr = await hrLink;
   /* แท็บเอกสาร = ข้อมูลชุดเดียวกับกล่อง “เอกสารและข้อมูลจากเอกสาร” ของใบที่ผูกไว้ — อ่านไม่ได้ก็ยังขึ้นหน้า */
-  const docSource =
-    canEdit && hr.application && !hr.application.erased
-      ? await getDriverDocSource(hr.application.id).catch((err) => {
-          console.warn("[driver-profile] อ่านข้อมูลเอกสารจากใบสมัครไม่สำเร็จ —", err);
-          return null;
-        })
-      : null;
+  /* ไม่มีใบสมัคร = กล่องเดียวกันแต่อ่าน/เขียนที่ทะเบียนตรง (`getRegistryDocSource` · Bew 11 พ.ย. 2569) */
+  const docSource = !canEdit
+    ? null
+    : await (hr.application && !hr.application.erased
+        ? getDriverDocSource(hr.application.id, driver.drivercode)
+        : getRegistryDocSource(driver)
+      ).catch((err) => {
+        console.warn("[driver-profile] อ่านข้อมูลเอกสารไม่สำเร็จ —", err);
+        return null;
+      });
 
   return (
     <DriverProfile

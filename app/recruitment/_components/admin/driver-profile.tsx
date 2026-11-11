@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   Building2,
+  Cake,
   CalendarDays,
   CarFront,
   ClipboardList,
@@ -229,6 +230,21 @@ export function DriverProfile({
                     }
                     noteTone={isProbation(driver.tenureMonths) ? "primary" : "mut"}
                   />
+                  {/* วันเกิดของทะเบียน · ว่างใช้ของใบสมัคร — อายุในตารางทะเบียน/ผู้สมัครคิดจากตัวนี้ (Bew 11 พ.ย. 2569) */}
+                  {hidePersonal ? (
+                    <Hidden icon={Cake} label="วันเกิด" />
+                  ) : (
+                    <Field
+                      icon={Cake}
+                      label="วันเกิด"
+                      value={formatThaiDate(driver.birthDateISO, "full")}
+                      note={
+                        driver.age !== null
+                          ? `อายุ ${driver.age} ปี${driver.birthDateSource === "application" ? " · จากใบสมัคร" : driver.birthDateISO ? "" : " · ตามที่ตอบในใบสมัคร"}`
+                          : undefined
+                      }
+                    />
+                  )}
                   <Field icon={Building2} label="ลูกค้า" value={driver.customer} />
                   <Field
                     icon={MapPin}
@@ -333,7 +349,7 @@ export function DriverProfile({
             {/* มีใบสมัคร = ชุดเดียวกับกล่องเอกสาร (ปุ่มแก้ไขเปิดกล่องนั้น) · ไม่มี = แก้ทะเบียนตรงผ่านปุ่ม “แก้ไข”
                 · ซ่อนข้อมูลส่วนบุคคลเมื่อพ้นสภาพแล้วทั้งสองแบบ */}
             {docSource ? (
-              <DriverDocumentData source={docSource} hidePersonal={hidePersonal} />
+              <DriverDocumentData source={docSource} name={driver.name} hidePersonal={hidePersonal} />
             ) : (
               <Section
                 title="เอกสารประจำตัว · บัญชีรับเงิน"

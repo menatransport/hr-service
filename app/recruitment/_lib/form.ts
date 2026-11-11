@@ -194,6 +194,25 @@ const ROLE_MATCHERS: Record<QuestionRole, RoleMatcher> = {
   age: { keys: [], includes: ["อายุเท่าไหร่"] },
 };
 
+/** วันเกิดที่ผู้สมัครตอบ `YYYY-MM-DD` — ไม่ได้ตอบ/อ่านไม่ออก = `""` */
+export function applicantBirthDate(doc: {
+  questionSnapshot?: { key: string; label: string }[];
+  answers?: AnswerMap;
+}): string {
+  const q = findByRole(doc.questionSnapshot ?? [], "birth_date");
+  const v = q ? doc.answers?.[q.key] : undefined;
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "";
+}
+
+/** อายุเต็มปี ณ `todayIso` จากวันเกิด `YYYY-MM-DD` — นอกช่วง 15–99 ปีถือว่ากรอกผิด = `null` */
+export function ageOn(birthIso: string, todayIso: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthIso);
+  if (!m) return null;
+  let age = Number(todayIso.slice(0, 4)) - Number(m[1]);
+  if (todayIso.slice(5, 10) < `${m[2]}-${m[3]}`) age -= 1;
+  return age >= 15 && age < 100 ? age : null;
+}
+
 /**
  * อายุผู้สมัคร ณ วันนี้ (`todayIso` = `YYYY-MM-DD`) — คิดจากข้อวันเกิดก่อน (อายุขยับตามวันจริง)
  * ไม่มีวันเกิดค่อยใช้ข้อ “อายุเท่าไหร่” ที่ตอบไว้ตอนสมัคร · อ่านไม่ออก = `null`
@@ -203,14 +222,8 @@ export function applicantAge(
   todayIso: string,
 ): number | null {
   const snapshot = doc.questionSnapshot ?? [];
-  const birthQ = findByRole(snapshot, "birth_date");
-  const birth = birthQ ? doc.answers?.[birthQ.key] : undefined;
-  const m = typeof birth === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(birth) : null;
-  if (m) {
-    let age = Number(todayIso.slice(0, 4)) - Number(m[1]);
-    if (todayIso.slice(5, 10) < `${m[2]}-${m[3]}`) age -= 1;
-    if (age >= 15 && age < 100) return age;
-  }
+  const fromBirth = ageOn(applicantBirthDate(doc), todayIso);
+  if (fromBirth != null) return fromBirth;
   const ageQ = findByRole(snapshot, "age");
   const n = ageQ ? Number.parseInt(String(doc.answers?.[ageQ.key] ?? ""), 10) : NaN;
   return n >= 15 && n < 100 ? n : null;

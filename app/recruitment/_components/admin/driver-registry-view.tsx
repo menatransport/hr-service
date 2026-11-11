@@ -4,6 +4,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import Link from "next/link";
 import {
   Eye,
+  IdCard,
   ListFilter,
   Plus,
   SearchX,
@@ -117,7 +118,7 @@ function siteTabsOf(sites: readonly RecruitSite[], totals: Record<string, number
 }
 type EmploymentTab = "current" | "resigned";
 
-type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "license" | "status" | "fleet" | "exitMonth";
+type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "licenseType" | "license" | "status" | "fleet" | "exitMonth";
 type Filters = Record<FilterKey, string[]>;
 
 type SortKey =
@@ -126,11 +127,13 @@ type SortKey =
   | "name"
   | "code"
   | "phone"
+  | "age"
   | "vehicle"
   | "fleet"
   | "plant"
   | "owner"
   | "tenure"
+  | "licenseType"
   | "license"
   | "status";
 type SortDir = "asc" | "desc";
@@ -149,6 +152,7 @@ const NO_FILTERS: Filters = {
   plant: [],
   owner: [],
   tenure: [],
+  licenseType: [],
   license: [],
   status: [],
   fleet: [],
@@ -161,6 +165,7 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   plant: "แพล้นท์",
   owner: "ประเภท",
   tenure: "อายุงาน",
+  licenseType: "ชนิดใบขับขี่",
   license: "ใบขับขี่",
   status: "สถานะ",
   fleet: "ลูกค้า",
@@ -205,6 +210,17 @@ const COLUMNS: {
   { sort: "exitDate", label: "วันที่พ้นสภาพ", width: "w-[120px]", asc: "เก่า → ใหม่", desc: "ใหม่ → เก่า" },
   { sort: "code", label: "รหัสพนักงาน", width: "w-[112px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
   { sort: "phone", label: "เบอร์โทร", width: "w-[124px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
+  /* อายุจากใบสมัครที่ผูกกับคนนี้ — ทะเบียนไม่มีวันเกิด คนเก่าจาก Excel จึงว่าง (Bew 11 พ.ย. 2569) */
+  { sort: "age", label: "อายุ", width: "w-[72px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
+  /* ต่อจากอายุ · กดไปแท็บเอกสารของคนนั้นได้เฉพาะสิทธิ์ “↳ ประวัติ” (Bew 11 พ.ย. 2569) */
+  {
+    sort: "licenseType",
+    label: "ชนิดใบขับขี่",
+    width: "w-[112px]",
+    filter: "licenseType",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+  },
   {
     sort: "vehicle",
     label: "รถที่ขับ",
@@ -356,6 +372,8 @@ async function driverSheet(
       tone: (d) => (isProbation(d.tenureMonths) ? "ok" : null),
     },
     { header: "อายุงาน (เดือน)", width: 12, kind: "int", value: (d) => d.tenureMonths },
+    { header: "วันเกิด", width: 13, kind: "date", value: (d) => date(d.birthDateISO) },
+    { header: "อายุ", width: 8, kind: "int", value: (d) => d.age },
     { header: "เลขที่ใบขับขี่", width: 16, kind: "code", value: (d) => d.licenseNo },
     { header: "ชนิดใบขับขี่", width: 10, kind: "code", value: (d) => d.licenseType },
     {
@@ -552,6 +570,7 @@ export function DriverRegistryView({
     const owner = new Map<string, number>();
     const status = new Map<string, number>();
     const license = new Map<LicenseState, number>();
+    const licenseType = new Map<string, number>();
     const exitMonth = new Map<string, number>();
     let hasVehicle = 0;
     let noVehicle = 0;
@@ -565,6 +584,7 @@ export function DriverRegistryView({
       bump(plant, d.plant || NONE);
       bump(fleet, d.customer || NONE);
       bump(owner, d.ownerTypeKey ?? NONE);
+      bump(licenseType, d.licenseType || NONE);
       bump(status, d.work?.latestStatus || NONE);
       if (!d.active) bump(exitMonth, exitMonthKey(d) || NONE);
 
@@ -635,6 +655,7 @@ export function DriverRegistryView({
           { value: "normal", label: "พนักงานปกติ", count: normalTenure },
         ] as ColumnFilterOption[]
       ).filter((o) => o.count),
+      licenseType: byLabel(licenseType, "ไม่ระบุชนิด"),
       license: licenseOrder
         .filter(([key]) => license.get(key))
         .map(([key, label]) => ({ value: key, label, count: license.get(key) })),
@@ -666,6 +687,7 @@ export function DriverRegistryView({
       if (!on("owner", d.ownerTypeKey ?? NONE)) return false;
       if (!on("status", d.work?.latestStatus || NONE)) return false;
       if (!on("license", licenseState(d.licenseDaysLeft))) return false;
+      if (!on("licenseType", d.licenseType || NONE)) return false;
       if (!on("tenure", isProbation(d.tenureMonths) ? "under4" : "normal")) return false;
 
       if (!q) return true;
@@ -1108,6 +1130,8 @@ function compare(a: DriverListRecord, b: DriverListRecord, key: SortKey): number
       return byText(a.drivercode, b.drivercode);
     case "phone":
       return byText(primaryPhone(a.phone), primaryPhone(b.phone));
+    case "age":
+      return byNumber(a.age, b.age);
     case "vehicle":
       return byText(vehicleLead(a), vehicleLead(b));
     case "fleet":
@@ -1118,6 +1142,8 @@ function compare(a: DriverListRecord, b: DriverListRecord, key: SortKey): number
       return byText(a.ownerTypeKey ?? "", b.ownerTypeKey ?? "");
     case "tenure":
       return byNumber(a.tenureMonths, b.tenureMonths);
+    case "licenseType":
+      return byText(a.licenseType, b.licenseType);
     case "license":
       return byNumber(a.licenseDaysLeft, b.licenseDaysLeft);
     case "status":
@@ -1206,6 +1232,14 @@ function Row({
         {driver.phone ? primaryPhone(driver.phone) : <Dash />}
       </td>
 
+      <td className="px-3 py-2 tabular-nums whitespace-nowrap text-ink">
+        {driver.age == null ? <Dash /> : <>{driver.age} <span className="text-mut">ปี</span></>}
+      </td>
+
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <LicenseTypeCell driver={driver} href={href} canEdit={canEdit} />
+      </td>
+
       {hideVehicle ? null : (
         <>
           <td className="px-3 py-2 whitespace-nowrap">
@@ -1250,6 +1284,28 @@ function Row({
         <ViewDetailLink href={href} name={driver.name} exit={exit} />
       </td>
     </tr>
+  );
+}
+
+/**
+ * ชนิดใบขับขี่ — สิทธิ์ “↳ ประวัติ” (`registry-profile`) กดแล้วไปแท็บเอกสารของคนนั้น (ดูรูป/แก้ใบขับขี่)
+ * · ไม่มีสิทธิ์ = ข้อความเฉย ๆ (หน้าประวัติของคนไม่มีสิทธิ์ไม่มีแท็บเอกสารอยู่แล้ว)
+ */
+function LicenseTypeCell({ driver, href, canEdit }: { driver: DriverListRecord; href: string; canEdit: boolean }) {
+  const label = driver.licenseType || "ไม่ระบุ";
+  if (!canEdit) return <span className="px-1 text-ink">{driver.licenseType || <Dash />}</span>;
+  return (
+    <Link
+      href={`${href}?tab=docs`}
+      title="เปิดเอกสารใบขับขี่ · แก้ไข"
+      className={`inline-flex h-8 items-center gap-1.5 rounded-selector border border-line px-2 transition-colors hover:border-primary/40 hover:text-primary ${
+        driver.licenseType ? "text-ink" : "text-mut"
+      }`}
+    >
+      <IdCard size={14} strokeWidth={1.9} aria-hidden className="text-mut" />
+      {label}
+      <span className="sr-only">ของ {driver.name}</span>
+    </Link>
   );
 }
 
@@ -1378,6 +1434,10 @@ function DriverCard({
         )}
         <CardField label="อายุงาน">
           <TenureCell driver={driver} />
+        </CardField>
+        <CardField label="อายุ">{driver.age == null ? <Dash /> : `${driver.age} ปี`}</CardField>
+        <CardField label="ชนิดใบขับขี่">
+          <LicenseTypeCell driver={driver} href={driverHref(driver)} canEdit={canEdit} />
         </CardField>
         <CardField label="ใบขับขี่หมดอายุ">
           <LicenseCell driver={driver} />

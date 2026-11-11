@@ -418,6 +418,8 @@ export const DRIVER_DOC_TYPES: DriverDocType[] = [
     required: true,
     hint: "ต้องเห็นประเภทใบขับขี่และวันหมดอายุ — ใช้ยืนยันวันที่ในทะเบียนว่าตรงกัน",
   },
+  /* คู่กับช่อง `bank_book` ของกล่องเอกสาร — คนที่ไม่มีใบสมัครแนบหน้าสมุดบัญชีเข้าแฟ้มนี้ (Bew 11 พ.ย. 2569) */
+  { code: "bank-book", label: "หน้าสมุดบัญชีธนาคาร", required: false },
   {
     code: "medical",
     label: "ใบรับรองแพทย์",
@@ -551,6 +553,12 @@ export interface DriverRecord {
   name: string;
   /** ชื่อเล่นจากใบสมัครของคนนี้ (`./nickname.ts`) — ว่าง = ไม่มีใบสมัคร/ไม่ได้ตอบ · หน้าจอโชว์ “ชื่อ (ชื่อเล่น)” */
   nickname: string;
+  /** วันเกิด `YYYY-MM-DD` — ของทะเบียน (กรอกที่หน้าประวัติ) ก่อน · ว่างค่อยใช้ของใบสมัคร · `""` = ไม่มีทั้งคู่ */
+  birthDateISO: string;
+  /** `birthDateISO` มาจากไหน — `application` = ยังไม่เคยกรอกที่ทะเบียน */
+  birthDateSource: "registry" | "application" | "";
+  /** อายุ ณ วันนี้จาก `birthDateISO` · ไม่มีวันเกิดใช้อายุที่ตอบในใบสมัคร (`./nickname.ts`) · `null` = ไม่รู้ */
+  age: number | null;
   phone: string;
   /** เบอร์อื่น ๆ (คั่นด้วย `, `) — ว่างได้ */
   phoneAlt: string;
@@ -659,7 +667,8 @@ export interface DriverRegistry {
 export const DRIVER_DETAIL_FIELDS = [
   "phoneAlt",
   "licenseNo",
-  "licenseType",
+  "birthDateISO",
+  "birthDateSource",
   "nationalId",
   "idCardExpiryISO",
   "idCardDaysLeft",
@@ -773,6 +782,15 @@ export const DRIVER_EDIT_FIELDS: DriverEditField[] = [
     hint: "เช่น ME009",
   },
   { key: "startDate", from: "startDateISO", label: "วันเริ่มงาน", kind: "date", group: "employment" },
+  {
+    key: "birthDate",
+    from: "birthDateISO",
+    label: "วันเกิด",
+    kind: "date",
+    group: "employment",
+    personal: true,
+    hint: "ว่างไว้ = ใช้วันเกิดในใบสมัคร · อายุในตารางคิดจากช่องนี้",
+  },
 
   {
     key: "licenseNo",

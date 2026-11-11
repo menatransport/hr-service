@@ -60,16 +60,23 @@ import {
 const MAX_MB = 10;
 const ZOOM = 2.5;
 
-const FORM_FIELDS = DOCUMENT_FIELDS.filter((f) => !f.legacy);
+const ALL_FORM_FIELDS = DOCUMENT_FIELDS.filter((f) => !f.legacy);
 
 export function CandidateDocumentsModal({
   application,
   docSlots,
   initialSlot,
+  onlyFields,
+  onUpload,
   onPatch,
   onClose,
 }: {
-  application: Application;
+  /** ใบสมัคร — หรือเจ้าของเอกสารที่ไม่มีใบสมัคร (พจส. เก่าในทะเบียน · `driver-document-data.tsx`) */
+  application: Pick<Application, "id" | "ref" | "fullName" | "files" | "documents">;
+  /** ช่องกรอกที่ให้เห็น — ไม่ส่ง = ทุกช่อง · ทะเบียนที่ไม่มีใบสมัครรับแค่ช่องที่ทะเบียนมีที่เก็บ */
+  onlyFields?: readonly (keyof DocumentData)[];
+  /** อัปรูปของช่อง `slot` แล้วคืน url — ไม่ส่ง = ขึ้นโฟลเดอร์ใบสมัคร (`/api/recruitment/applications/{id}/files`) */
+  onUpload?: (slot: string, file: File) => Promise<string>;
   /**
    * ทุกช่องรวมที่ซ่อนจากผู้สมัคร — ฝ่ายบุคคลยังแนบเองได้ทุกช่อง (เช่นใบรับรองแพทย์
    * ที่ไม่ได้ขอตอนสมัครแต่ถือมาวันสัมภาษณ์) ช่องที่ซ่อนมีป้ายบอกไว้
@@ -83,6 +90,7 @@ export function CandidateDocumentsModal({
   }) => Promise<void>;
   onClose: () => void;
 }) {
+  const FORM_FIELDS = onlyFields ? ALL_FORM_FIELDS.filter((f) => onlyFields.includes(f.key)) : ALL_FORM_FIELDS;
   /* ทุกช่องในคลัง + ช่องที่ถูกลบไปแล้วแต่ใบนี้ยังมีไฟล์ — ต้องเห็นเพื่อลบทิ้งหรือเก็บไว้ได้ */
   const [slots] = useState(() => [
     ...docSlots,
@@ -271,7 +279,11 @@ export function CandidateDocumentsModal({
         {current ? (
           <SlotPanel
             key={current.id}
-            applicationId={application.id}
+            upload={
+              onUpload
+                ? (file) => onUpload(current.id, file)
+                : (file) => uploadToApplication(application.id, current.id, file)
+            }
             slot={current}
             url={files[current.id] ?? null}
             onUrl={(url) => setFiles((prev) => ({ ...prev, [current.id]: url }))}
@@ -288,8 +300,22 @@ export function CandidateDocumentsModal({
 
 /* ─────────────────────────────────────────── เอกสารที่เลือก: รูป + ช่องกรอก */
 
+/** อัปรูปขึ้นโฟลเดอร์ของใบสมัครบน S3 (`mass-image/applications/{ref}/{slot}/`) — คืน url */
+async function uploadToApplication(applicationId: string, slot: string, file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("slot", slot);
+  const res = await fetch(`/api/recruitment/applications/${encodeURIComponent(applicationId)}/files`, {
+    method: "POST",
+    body,
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.url) throw new Error(json?.error ?? "อัปโหลดไม่สำเร็จ");
+  return json.url as string;
+}
+
 function SlotPanel({
-  applicationId,
+  upload: send,
   slot,
   url,
   onUrl,
@@ -298,8 +324,8 @@ function SlotPanel({
   errors,
   onField,
 }: {
-  /** ไฟล์ขึ้นโฟลเดอร์ของใบนี้บน S3 (`mass-image/applications/{ref}/{slot}/`) */
-  applicationId: string;
+  /** ส่งรูป (ย่อแล้ว) ขึ้นที่เก็บของเจ้าของเอกสาร — คืน url */
+  upload: (file: File) => Promise<string>;
   slot: DocSlot;
   url: string | null;
   onUrl: (url: string | null) => void;
@@ -325,16 +351,7 @@ function SlotPanel({
     setError("");
     setBusy(true);
     try {
-      const body = new FormData();
-      body.append("file", await prepareImageForUpload(file));
-      body.append("slot", slot.id);
-      const res = await fetch(
-        `/api/recruitment/applications/${encodeURIComponent(applicationId)}/files`,
-        { method: "POST", body },
-      );
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.url) throw new Error(json?.error ?? "อัปโหลดไม่สำเร็จ");
-      onUrl(json.url as string);
+      onUrl(await send(await prepareImageForUpload(file)));
     } catch (err) {
       /* ล้มเหลวต้องไม่ทิ้งสถานะ “แนบแล้ว” ไว้หลอกตา ของจริงยังไม่ขึ้นเซิร์ฟเวอร์ */
       setError(err instanceof Error ? err.message : "อัปโหลดไม่สำเร็จ ลองใหม่อีกครั้ง");
