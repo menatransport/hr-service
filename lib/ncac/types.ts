@@ -143,6 +143,8 @@ export interface UserDto {
 
   /** รหัสอ้างอิงภายในของ NCAC — ไม่ตรงกับ `DepartmentId` ของฝั่งคำร้อง อย่าเอามาปนกัน */
   department_id?: number | null;
+  /** ฝ่ายที่แผนกสังกัด (join มาให้แล้ว) — ไม่มีใน `/openapi.json` แต่ payload จริงมี */
+  division?: { division_id: number | null; division_th?: string | null } | null;
   site_id?: number | null;
   position_id?: number | null;
 

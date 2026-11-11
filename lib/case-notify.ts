@@ -29,6 +29,16 @@ import type { HrCase } from "./types";
 /* ---------------------------------------------------------------- ผู้รับ */
 
 /**
+ * หน่วยงานที่หาผู้รับจาก **ทั้งฝ่าย** แทนแผนกเดียว
+ *
+ * ยานยนต์ (3): หลังปรับโครงสร้าง หัวหน้า/ผู้จัดการที่ยังทำงานอยู่ย้ายไปแผนกใหม่ใน
+ * ฝ่ายยานยนต์ (25 Condition Control · 26 Vehicle Services · 35 Vehicle Maintenance)
+ * ส่วนที่ยังค้างใน dept 3 เป็น Inactive หมด (ตรวจกับ `GET /users` 11 พ.ย. 2569)
+ * — ไม่ขยายแล้วจะไม่มีใครให้ส่งถึงเลย
+ */
+const DIVISION_SCOPE: Partial<Record<string, number>> = { "3": 20 };
+
+/**
  * `UserDto.department_id` ของ NCAC **ตรงกับ `DepartmentId` ของฝั่งคำร้องทั้ง 8 ค่า**
  * (ยืนยันกับ payload จริงของ `GET /users` เมื่อ 8 ก.ย. 2026: 3 ยานยนต์ · 11 Operation
  * Support · 15 จัดส่งลาดกระบัง · 19 จัดส่งสระบุรี · 20 จัดส่งบางปะกง · 8 Safety
@@ -37,10 +47,15 @@ import type { HrCase } from "./types";
  * จับคู่ด้วยรหัสไม่ใช่ชื่อหน่วยงาน เพราะชื่อฝั่ง `/users` เป็นคนละชุดกับป้ายใน
  * `DEPARTMENTS` และเปลี่ยนได้ตลอดโดยไม่บอกใคร
  */
-const inDepartment = (u: UserDto, departmentId: string): boolean =>
-  u.department_id !== null &&
-  u.department_id !== undefined &&
-  String(u.department_id) === departmentId;
+const inDepartment = (u: UserDto, departmentId: string): boolean => {
+  const division = DIVISION_SCOPE[departmentId];
+  if (division !== undefined) return u.division?.division_id === division;
+  return (
+    u.department_id !== null &&
+    u.department_id !== undefined &&
+    String(u.department_id) === departmentId
+  );
+};
 
 /** ระดับต่ำสุดที่ถือว่าเป็น “ผู้จัดการ” — ตรงกับ `POSITION_LEVEL` ใน `ncac/adapt.ts` */
 const MANAGER_MIN_LEVEL = 5;
