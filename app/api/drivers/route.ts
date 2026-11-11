@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
  * { "ownerType": "1", "drivercode": "690800", "driverName": "สมชาย ใจดี", "branch": "2", "startDate": "2026-11-03", "phone": "0812345678", "note": "ย้ายมาจากสาขาบางปะกง" }
  * ```
  *
- * ช่องและกติกาอยู่ที่ `addDriverManually()` · เอกสารอัปโหลดทีหลังบนหน้าประวัติ · ตอบ `{ drivercode }`
+ * ช่องและกติกาอยู่ที่ `addDriverManually()` · เอกสารอัปโหลดทีหลังบนหน้าประวัติ · ตอบ `{ drivercode, copied }`
+ * · `copyFrom` = รหัสเดิมที่คัดลอกข้อมูล/เอกสารมา (ย้ายประเภท) — `copied` = จำนวนไฟล์ที่คัดได้/พลาด, ไม่ส่ง = `null`
  */
 
 export const runtime = "nodejs";
@@ -62,8 +63,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as unknown;
     if (!body || typeof body !== "object" || Array.isArray(body)) return badRequest("อ่านข้อมูลที่ส่งมาไม่ได้");
 
-    const drivercode = await addDriverManually(body as ManualDriverInput, user.name || user.employeeId);
-    return ok({ drivercode });
+    return ok(await addDriverManually(body as ManualDriverInput, user.name || user.employeeId));
   } catch (err) {
     if (err instanceof DriverRegistryError) return badRequest(err.message);
     return fail(err);

@@ -893,6 +893,30 @@ export const DRIVER_EDIT_GROUPS: {
   { id: "bank", title: "บัญชีรับเงิน", tab: "docs" },
 ];
 
+/**
+ * ช่องที่ “เพิ่มพนักงาน” คัดลอกจากรหัสเดิมให้เงียบ ๆ ตอนบันทึก (คนย้ายประเภท พจร. ⇄ พจส. = ปิดรหัสเก่า เปิดรหัสใหม่)
+ * — ช่องที่อยู่บนฟอร์มเติมให้ตั้งแต่กดตรวจสอบและแก้ได้ · ไม่คัด: ประเภทพนักงาน วันเริ่มงาน เบอร์รถ (ของรอบจ้างใหม่)
+ */
+export const DRIVER_COPY_FIELDS = DRIVER_EDIT_FIELDS.filter(
+  (f) => !["driverName", "ownerType", "branch", "customer", "plant", "position", "vehicleCode", "startDate", "phone"].includes(f.key),
+);
+
+/** ผลของปุ่ม “ตรวจสอบ” ในกล่องเพิ่มพนักงาน (`GET /api/drivers/{code}/copy-source`) */
+export interface DriverCopySource {
+  drivercode: string;
+  /** ปฏิบัติงาน · พ้นสภาพ · ย้ายไปรถร่วม · ย้ายไปพจส. */
+  statusLabel: string;
+  exitDateISO: string;
+  ownerTypeLabel: string;
+  siteLabel: string;
+  /** ช่องบนฟอร์มที่เติมให้ */
+  form: { driverName: string; branch: string; phone: string; customer: string; plant: string; position: string };
+  /** ช่องที่คัดลอกตอนบันทึก (`DRIVER_COPY_FIELDS` ที่มีค่า) */
+  fields: { key: string; label: string; kind: DriverEditKind; value: string }[];
+  /** ยังปฏิบัติงาน — คัดลอกไม่ได้จนกว่าจะบันทึกพ้นสภาพ/ย้ายประเภทที่รหัสเดิม */
+  active: boolean;
+}
+
 /** รหัสสาขาที่เลือกได้ — ตัวแรกของแต่ละสาขาใน `DRIVER_SITES` */
 export const DRIVER_BRANCH_OPTIONS = DRIVER_SITES.map((s) => ({ value: s.branches[0], label: s.label }));
 

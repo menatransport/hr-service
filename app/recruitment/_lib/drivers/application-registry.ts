@@ -46,9 +46,10 @@ export async function drivercodeOfApplication(application: Pick<Application, "id
 
   const nid = digits(application.documents.nationalId);
   if (!codes.length && nid.length === 13) {
+    /* เลขบัตรเดียวมีได้หลายรหัส (ย้ายประเภทแล้วเปิดรหัสใหม่แบบคัดลอก) — เอารหัสที่ยังทำงาน/ใหม่สุด */
     const byNid = await (await hrCol("drivers")).findOne(
       { nationalId: nid },
-      { projection: { _id: 0, drivercode: 1 } },
+      { projection: { _id: 0, drivercode: 1 }, sort: { active: -1, registeredAt: -1 } },
     );
     if (byNid?.drivercode) codes.push(String(byNid.drivercode).trim());
   }

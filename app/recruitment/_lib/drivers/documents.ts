@@ -1,4 +1,4 @@
-import { deleteMedia, mediaKeys, putMedia } from "@/lib/s3";
+import { copyMedia, deleteMedia, mediaKeys, putMedia } from "@/lib/s3";
 
 /**
  * ไฟล์เอกสารในแฟ้มประวัติ พจส. — เก็บบน **S3 แบบ private** ใต้
@@ -59,6 +59,26 @@ export async function saveDriverDocumentFile(
     name: file.name || "document",
     type: file.type || "application/octet-stream",
     size: file.size,
+  };
+}
+
+/**
+ * ทำสำเนาไฟล์ในแฟ้มของรหัสหนึ่งไปไว้ในโฟลเดอร์ของอีกรหัส (เพิ่มพนักงานแบบคัดลอกจากรหัสเดิม)
+ * — ไม่ชี้ไฟล์เดียวกัน เพราะแฟ้มของคนพ้นสภาพถูกลบทิ้งเมื่อครบ 1 เดือน (`media-retention.ts`)
+ */
+export async function copyDriverDocumentFile(
+  from: { key: string; name: string; type: string; size: number },
+  drivercode: string,
+  docType: string,
+): Promise<StoredDriverFile> {
+  const key = mediaKeys.driverDocument(drivercode, docType, from.type);
+  await copyMedia(from.key, key);
+  return {
+    fileId: key.slice(key.lastIndexOf("/") + 1).replace(/\.[^.]+$/, ""),
+    key,
+    name: from.name,
+    type: from.type,
+    size: from.size,
   };
 }
 

@@ -1,16 +1,18 @@
 import { ObjectId, type Collection } from "mongodb";
 
 import { etlCol, hrCol } from "@/lib/db";
-import { deleteDriverDocumentFile } from "./documents";
+import { copyDriverDocumentFile, deleteDriverDocumentFile } from "./documents";
 import { driverExists, HR_FIELDS, IN_REGISTRY, PROFILE_FIELDS, readDriver, readDrivers, type DriverField } from "./master";
-import { mediaKeyOf } from "@/lib/media";
+import { mediaKeyOf, mediaUrl } from "@/lib/media";
 import { ageOn } from "@/app/recruitment/_lib/form";
-import { deleteMedia } from "@/lib/s3";
+import { copyMedia, deleteMedia, mediaKeys } from "@/lib/s3";
 import { pickResignReason } from "@/app/recruitment/_lib/resign-reasons/store";
 import { isExitType } from "@/app/recruitment/_lib/resign-reasons/types";
 import {
   collectDocExpiries,
+  DRIVER_COPY_FIELDS,
   DRIVER_EDIT_FIELDS,
+  employmentLabel,
   MIXER_POSITIONS,
   isDriverDocType,
   isExitStatus,
@@ -23,6 +25,7 @@ import {
   siteOfBranch,
   vehicleMixLabel,
   type DocExpiry,
+  type DriverCopySource,
   type DriverDocument,
   type DriverPick,
   DRIVER_DETAIL_FIELDS,
@@ -1364,7 +1367,97 @@ export async function enrollDriver(input: EnrollInput, actor: string): Promise<b
 /** ช่องของฟอร์ม “เพิ่มพนักงาน” — กติกาค่าเดียวกับ `DRIVER_EDIT_FIELDS` · ช่องที่เหลือเติมทีหลังบนหน้าประวัติ */
 export const MANUAL_DRIVER_FIELDS = ["driverName", "branch", "startDate", "phone", "vehicleCode", "customer", "plant", "position"] as const;
 
-export type ManualDriverInput = { drivercode: string; ownerType?: string; note?: string } & Partial<Record<(typeof MANUAL_DRIVER_FIELDS)[number], string>>;
+export type ManualDriverInput = {
+  drivercode: string;
+  ownerType?: string;
+  note?: string;
+  /** รหัสเดิมที่จะคัดลอกข้อมูล/เอกสารมา (ถ้ามี) — ดู `getDriverCopySource()` */
+  copyFrom?: string;
+} & Partial<Record<(typeof MANUAL_DRIVER_FIELDS)[number], string>>;
+
+/** ค่าของช่องคัดลอกหนึ่งช่องจากประวัติเดิม — วันเกิดคัดเฉพาะที่กรอกในทะเบียน (ของใบสมัครตามมาเองผ่านเลขบัตร) */
+function copyValue(record: DriverRecord, key: string): string {
+  const field = DRIVER_EDIT_FIELDS.find((f) => f.key === key)!;
+  if (key === "birthDate" && record.birthDateSource !== "registry") return "";
+  const raw = record[field.from];
+  const out = normalizeDriverEdit(field, typeof raw === "string" ? raw : "");
+  return "value" in out ? out.value : "";
+}
+
+/**
+ * ปุ่ม “ตรวจสอบ” ในกล่องเพิ่มพนักงาน — ข้อมูลของรหัสเดิมที่จะคัดลอก **รวมข้อมูลส่วนบุคคลของคนพ้นสภาพ**
+ * (ต่างจาก `getDriverProfile()` ที่ล้างทิ้ง) · เส้นนี้จึงเปิดเฉพาะคนที่แก้ทะเบียนได้ (`registryWriteDenied`)
+ */
+export async function getDriverCopySource(code: string): Promise<DriverCopySource | null> {
+  const record = await getDriver(code);
+  if (!record) return null;
+
+  return {
+    drivercode: record.drivercode,
+    statusLabel: employmentLabel(record),
+    exitDateISO: record.resignation?.dateISO ?? "",
+    ownerTypeLabel: record.ownerTypeLabel,
+    siteLabel: record.siteLabel,
+    form: {
+      driverName: record.name,
+      branch: record.branch,
+      phone: copyValue(record, "phone"),
+      customer: record.customer,
+      plant: record.plant,
+      position: record.position,
+    },
+    fields: DRIVER_COPY_FIELDS.map((f) => ({ key: f.key, label: f.label, kind: f.kind, value: copyValue(record, f.key) })).filter(
+      (f) => f.value,
+    ),
+    active: record.active,
+  };
+}
+
+/**
+ * ทำสำเนาแฟ้มเอกสาร + รูปประจำตัว (ที่อัปไว้ในทะเบียน) ของรหัสเดิมให้รหัสใหม่ — ไฟล์ละครั้ง พลาดบางไฟล์ไม่ล้มทั้งชุด
+ * · รูปจากใบสมัครไม่ต้องคัด รหัสใหม่ผูกใบสมัครเดิมผ่านเลขบัตรประชาชนที่คัดมาแล้ว (`./portrait.ts`)
+ */
+async function copyDriverMedia(
+  source: DriverRecord,
+  drivercode: string,
+  actor: string,
+): Promise<{ files: number; failed: number }> {
+  const drivers = await hrCol<MasterDriverDoc>("drivers");
+  const raw = await drivers.findOne({ ...IN_REGISTRY, drivercode: source.drivercode }, { projection: { photoUrl: 1 } });
+  let files = 0;
+  let failed = 0;
+
+  const entries: StoredDocumentEntry[] = [];
+  for (const doc of source.documents) {
+    try {
+      const stored = await copyDriverDocumentFile(doc, drivercode, doc.docType);
+      entries.push({ ...stored, docType: doc.docType, note: doc.note, uploadedAt: new Date(), uploadedBy: actor });
+      files++;
+    } catch (err) {
+      failed++;
+      console.warn("[registry] คัดลอกเอกสารไม่สำเร็จ —", doc.key, err);
+    }
+  }
+  if (entries.length) await drivers.updateOne({ drivercode }, { $push: { documents: { $each: entries } } });
+
+  const avatarKey = mediaKeyOf(str(raw?.photoUrl));
+  if (avatarKey?.includes("/avatar/")) {
+    try {
+      const type = /\.png$/i.test(avatarKey) ? "image/png" : /\.webp$/i.test(avatarKey) ? "image/webp" : "image/jpeg";
+      const key = mediaKeys.driverAvatar(drivercode, type);
+      await copyMedia(avatarKey, key);
+      await drivers.updateOne(
+        { drivercode },
+        { $set: { photoUrl: mediaUrl(key), photoUpdatedAt: new Date(), photoUpdatedBy: actor } },
+      );
+      files++;
+    } catch (err) {
+      failed++;
+      console.warn("[registry] คัดลอกรูปประจำตัวไม่สำเร็จ —", avatarKey, err);
+    }
+  }
+  return { files, failed };
+}
 
 /**
  * เพิ่ม พจส./พจร. เข้าทะเบียนตรง ๆ ไม่ผ่านใบสมัคร/คำขอสรรหา — ประเภทพนักงาน `1` (พจส.) หรือ `2` (พจร.) ต้องส่งมา
@@ -1372,7 +1465,10 @@ export type ManualDriverInput = { drivercode: string; ownerType?: string; note?:
  * · รหัสที่อยู่ในทะเบียนแล้ว = `DriverRegistryError` (ไม่ทับคนเดิม) · แถวเก่าจาก ETL ที่ไม่มี `registry` ถูกเขียนทับ
  * · ช่องที่กรอกลง `editedFields` → ตัวนำเข้า Excel ไม่ทับ (ค่าบนเว็บชนะไฟล์ เหมือนแก้บนหน้าประวัติ)
  */
-export async function addDriverManually(input: ManualDriverInput, actor: string): Promise<string> {
+export async function addDriverManually(
+  input: ManualDriverInput,
+  actor: string,
+): Promise<{ drivercode: string; copied: { files: number; failed: number } | null }> {
   const drivercode = String(input.drivercode ?? "").replace(/\s+/g, "").trim();
   if (!/^[A-Za-z0-9-]{3,20}$/.test(drivercode)) throw new DriverRegistryError("รหัสพนักงานต้องเป็นตัวเลข/ตัวอักษร 3–20 ตัว");
   const ownerType = String(input.ownerType ?? "").trim();
@@ -1399,6 +1495,20 @@ export async function addDriverManually(input: ManualDriverInput, actor: string)
 
   if (await driverExists(drivercode)) throw new DriverRegistryError(`รหัส ${drivercode} อยู่ในทะเบียนแล้ว`);
 
+  /* คัดลอกจากรหัสเดิม — ช่องบนฟอร์มใช้ค่าที่ส่งมา (ผู้ใช้แก้ได้) ช่องที่เหลือเอาจากประวัติเดิม */
+  const copyFrom = String(input.copyFrom ?? "").trim();
+  const source = copyFrom ? await getDriver(copyFrom) : null;
+  if (copyFrom && !source) throw new DriverRegistryError(`ไม่พบรหัส ${copyFrom} ที่จะคัดลอกในทะเบียน`);
+  /* คนเดียวทำงานสองรหัสพร้อมกันไม่ได้ — ปิดรหัสเดิม (พ้นสภาพ/ย้ายประเภท) ก่อนเสมอ */
+  if (source?.active)
+    throw new DriverRegistryError(`รหัส ${source.drivercode} ยังปฏิบัติงานอยู่ — บันทึกพ้นสภาพ/ย้ายประเภทที่รหัสเดิมก่อน`);
+  if (source) {
+    for (const f of DRIVER_COPY_FIELDS) {
+      const value = copyValue(source, f.key);
+      if (value) $set[f.key] = value;
+    }
+  }
+
   const now = new Date();
   const drivers = await hrCol<MasterDriverDoc>("drivers");
   await drivers.updateOne(
@@ -1412,13 +1522,20 @@ export async function addDriverManually(input: ManualDriverInput, actor: string)
         syncedAt: now,
         registeredAt: now,
         editedFields: [...Object.keys($set), "ownerType"],
-        registry: { source: "manual", at: now, by: actor, ...(note ? { note } : {}) },
+        registry: {
+          source: "manual",
+          at: now,
+          by: actor,
+          ...(note ? { note } : {}),
+          ...(source ? { copiedFrom: source.drivercode } : {}),
+        },
       },
       $unset: { statusOverride: "", resignation: "" },
     } as Record<string, unknown>,
     { upsert: true },
   );
-  return drivercode;
+  const copied = source ? await copyDriverMedia(source, drivercode, actor) : null;
+  return { drivercode, copied };
 }
 
 /**
