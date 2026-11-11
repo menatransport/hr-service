@@ -37,6 +37,7 @@ const SHORT: Record<string, string> = {
   candidates: "ผู้สมัคร",
   registry: "ทะเบียน",
   "registry-profile": "↳ ประวัติ",
+  "recruit-all-sites": "↳ ทุกสาขา",
   trucks: "สถานะรถ",
   dashboard: "แดชบอร์ด",
   employee: "ข้อมูลพนง.",

@@ -59,6 +59,8 @@ export type CellPatch = {
   exitReasonNote?: string;
   blacklist?: boolean;
   contactOwner?: string;
+  /** ย้ายสาขา — ปุ่มในคอลัมน์จัดการ (ดู `sites.ts`) */
+  site?: ApplicationSummary["site"];
   interview?: Partial<ApplicationSummary["interview"]>;
   /**
    * ข้อความที่ถูกบันทึกลงไทม์ไลน์พร้อมชื่อผู้แก้ไขและเวลา — ช่องในตารางไม่ได้ส่ง

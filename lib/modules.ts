@@ -75,6 +75,8 @@ export interface ModuleAction {
   id: string;
   label: string;
   desc: string;
+  /** ค่าเริ่มต้น (ทุกคน) = **ไม่เห็น** — ต้องเปิดให้ฝ่าย/แผนกเองที่ `/desk/permissions` */
+  defaultOff?: boolean;
 }
 
 export interface ModuleMatch {
@@ -138,6 +140,15 @@ export const MODULES: ModuleGroup[] = [
             desc: "ใบสมัคร · ติดต่อ · นัดสัมภาษณ์",
             href: "/recruitment/admin/candidates",
             icon: UserRoundSearch,
+            actions: [
+              {
+                /* Bew 11 พ.ย. 2569 — ปกติเห็นแค่แท็บสาขาของตัวเอง (site ใน NCAC) · เปิดให้ RC MASS */
+                id: "recruit-all-sites",
+                label: "ดูทุกสาขา",
+                desc: "หน้าผู้สมัคร + ทะเบียน พจส. · ไม่เห็น = เห็นแค่แท็บสาขาของตัวเอง (ลาดกระบัง หรือ สระบุรี+บางปะกง) · คนที่ site ไม่ใช่สองสาขานี้เห็นทุกแท็บเสมอ",
+                defaultOff: true,
+              },
+            ],
           },
         ],
       },

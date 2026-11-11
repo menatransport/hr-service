@@ -2,11 +2,13 @@
 
 import { PhotoPreview } from "@/components/ui/photo-preview";
 import { mediaThumbUrl } from "@/lib/media";
-import { Fragment, useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { Fragment, useCallback, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import Link from "next/link";
 import {
+  ArrowLeftRight,
   ClipboardList,
   FilePenLine,
+  IdCard,
   Loader2,
   Search,
   Star,
@@ -35,6 +37,7 @@ import {
   type TableSort,
 } from "@/app/recruitment/_components/admin/candidate-insights";
 import { HrDocumentMaker } from "@/app/recruitment/_components/admin/hr-document-maker";
+import { CandidateDocumentsModal } from "@/app/recruitment/_components/admin/candidate-documents";
 import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
 import { SearchField } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/summary-panel";
@@ -69,7 +72,8 @@ import { TablePager, usePaged } from "@/components/ui/table-pager";
 import { XlsxMenuButton } from "@/components/ui/xlsx-export-button";
 import { FormSyncDialog, type FormSyncMode } from "@/app/recruitment/_components/admin/form-import-dialog";
 import { requestJson } from "@/lib/http";
-import { alertError } from "@/lib/swal";
+import { alertError, confirm, toastSuccess } from "@/lib/swal";
+import { RECRUIT_SITES, RECRUIT_SITE_BRANCHES, recruitSiteLabel, type RecruitSite } from "@/app/recruitment/_lib/sites";
 import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
 import type { ApplicationFormExport } from "@/app/recruitment/_lib/applications";
 import {
@@ -348,6 +352,25 @@ const COLUMNS = [
     text: (a: Row) => formatPhone(a.phone),
   },
   {
+    /* อายุ + ประเภทใบขับขี่ — โผล่เฉพาะแท็บรอการติดต่อ · นัดสัมภาษณ์ (`PENDING_VIEWS` · Bew 11 พ.ย. 2569) */
+    id: "age",
+    label: "อายุ",
+    width: "min-w-[70px]",
+    asc: "น้อย → มาก",
+    desc: "มาก → น้อย",
+    text: (a: Row) => (a.age == null ? "—" : `${a.age} ปี`),
+    key: (a: Row) => String(a.age ?? 999).padStart(3, "0"),
+  },
+  {
+    /* กดแล้วเปิดกล่องเอกสารที่ช่องใบขับขี่ — ดูรูป/แก้ข้อมูลใบขับขี่ต่อได้เลย */
+    id: "licenseType",
+    label: "ประเภทใบขับขี่",
+    width: "min-w-[130px]",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+    text: (a: Row) => a.licenseType || "ยังไม่ระบุ",
+  },
+  {
     id: "workZone",
     label: "สนใจงานเขต",
     width: "min-w-[130px]",
@@ -437,6 +460,10 @@ const REASON_COLUMN: ColumnId = "exitReason";
  */
 const BLACKLIST_COLUMN: ColumnId = "blacklist";
 const BLACKLIST_VIEWS = [STATUS_LABEL.cancelled, STATUS_LABEL.pending_contact];
+
+/** คอลัมน์ อายุ + ประเภทใบขับขี่ — โผล่เฉพาะตอนกรอง “รอการติดต่อ” หรือ “นัดสัมภาษณ์” อย่างเดียว */
+const PENDING_COLUMNS: ColumnId[] = ["age", "licenseType"];
+const PENDING_VIEWS = [STATUS_LABEL.pending_contact, STATUS_LABEL.interview_scheduled];
 
 /** คอลัมน์ JR + วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว */
 const TRAINING_COLUMNS: ColumnId[] = ["jr", "trainingStart"];
@@ -696,6 +723,8 @@ export function CandidatesView({
   hub,
   initialView = null,
   initialTraining = false,
+  siteNav,
+  site,
 }: {
   title: string;
   rows: ApplicationSummary[];
@@ -726,6 +755,10 @@ export function CandidatesView({
   initialView?: HubView | null;
   /** `?view=handover` (ลิงก์เก่าของการ์ดรอรับรถ) — เปิดมุมมองฝึกงาน + รอรับรถ */
   initialTraining?: boolean;
+  /** แถบสาขาบนสุด (`SiteNav`) — `rows`/`requisitions`/`hub` ที่ส่งมาถูกกรองเหลือสาขานี้แล้ว */
+  siteNav?: ReactNode;
+  /** สาขาที่เปิดอยู่ — มีค่า = ปุ่มย้ายสาขาในคอลัมน์จัดการ (เฉพาะใบที่ยังไม่ผูก RQ) */
+  site?: RecruitSite;
 }) {
   /** ลำดับที่ผู้ใช้เลือกจากหัวคอลัมน์ · `null` = ลำดับตั้งต้นของมุมมอง (ดู `sort` ข้างล่าง) */
   const [pickedSort, setSort] = useState<TableSort | null>(null);
@@ -881,6 +914,8 @@ export function CandidatesView({
   }
 
   const [opening, setOpening] = useState<string | null>(null);
+  /** ใบที่เปิดกล่องเอกสารค้างไว้ที่ช่องใบขับขี่ (คอลัมน์ประเภทใบขับขี่) */
+  const [licenseFor, setLicenseFor] = useState<Application | null>(null);
   /* Sync ใบสมัครจาก Google Form — วางแถว (ทุกโหมด) / ชี้ path ไฟล์ (เฉพาะ dev) */
   const [syncMode, setSyncMode] = useState<FormSyncMode | null>(null);
   const [drafting, setDrafting] = useState<Application | null>(null);
@@ -916,6 +951,8 @@ export function CandidatesView({
 
   const showBlacklist = BLACKLIST_VIEWS.some(onlyStatus);
 
+  const showPending = PENDING_VIEWS.some(onlyStatus);
+
   /** มุมมองฝึกงาน = กรองเฉพาะ ฝึกงาน และ/หรือ รอรับรถ (การ์ดแบ่งครึ่งกรองสองค่าพร้อมกัน · ติ๊กเหลือค่าเดียวที่หัวคอลัมน์ได้) */
   const trainingView = pickedStatus.length > 0 && pickedStatus.every((l) => TRAINING_VIEW_LABELS.includes(l));
 
@@ -944,7 +981,9 @@ export function CandidatesView({
   /** ช่องค้นหา — มีเฉพาะแท็บตารางของมุมมองฝึกงาน (Bew 5 พ.ย. 2569) · ช่องซ่อน = ไม่กรองต่อเบื้องหลัง
    *  (แท็บสถานะฝึกงานมีช่องค้นหาของตัวเอง) */
   const [query, setQuery] = useState("");
-  const needle = showDaily && !dailyTab ? query.trim().toLowerCase() : "";
+  /* รอการติดต่อ · นัดสัมภาษณ์ · รอฝึกงาน ก็มีช่องค้นหาเหนือตาราง (Bew 11 พ.ย. 2569) */
+  const searchBar = !view && !showDaily && (showPending || showWaiting);
+  const needle = (showDaily && !dailyTab) || searchBar ? query.trim().toLowerCase() : "";
 
   const columns = useMemo(
     () =>
@@ -954,10 +993,11 @@ export function CandidatesView({
             (c) =>
               (c.id !== REASON_COLUMN || showReason) &&
               (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
+              (!PENDING_COLUMNS.includes(c.id) || showPending) &&
               (!TRAINING_COLUMNS.includes(c.id) || showTraining) &&
               !TRAINEE_COLUMNS.includes(c.id),
           ),
-    [showReason, showBlacklist, showTraining, showTrainee, showWaiting],
+    [showReason, showBlacklist, showPending, showTraining, showTrainee, showWaiting],
   );
   const head = (c: (typeof COLUMNS)[number]) => ({
     label: (showTrainee && TRAINEE_HEAD[c.id]?.label) || c.label,
@@ -978,7 +1018,7 @@ export function CandidatesView({
     const matched = enriched.filter((a) => {
       if (needle) {
         const rq = rqByApplication.get(a.id);
-        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
+        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.contactOwner, a.licenseType, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
         if (!hay.some((t) => t?.toLowerCase().includes(needle))) return false;
       }
       return columns.every((column) => {
@@ -1061,6 +1101,7 @@ export function CandidatesView({
               ...("contactOwner" in patch
                 ? { contactOwner: patch.contactOwner! }
                 : {}),
+              ...(patch.site ? { site: patch.site } : {}),
               ...(patch.interview
                 ? { interview: { ...a.interview, ...patch.interview } }
                 : {}),
@@ -1082,6 +1123,7 @@ export function CandidatesView({
                 ...a,
                 status: next.status,
                 contactOwner: next.contactOwner,
+                site: next.site,
                 interview: next.interview,
                 exitReason: next.exitReason,
                 exitReasonNote: next.exitReasonNote,
@@ -1102,8 +1144,10 @@ export function CandidatesView({
                   ? {
                       fileCount: next.files.length,
                       photoUrl: next.files.find((f) => f.slot === "portrait")?.url ?? null,
+                      hasLicenseImage: next.files.some((f) => f.slot === "license_front"),
                     }
                   : {}),
+                ...(patch.documents ? { licenseType: next.documents.licenseType } : {}),
                 /* ดาวในคอลัมน์จัดการต้องขยับตามคะแนนที่เพิ่งบันทึก — คำตอบในฟอร์ม
                    ก็มีผลต่อคะแนนด้วย จึงคิดใหม่ทั้งตอนแก้คะแนนและตอนแก้คำตอบ */
                 ...(patch.rating || patch.answers ? { rating: summarizeRating(next) } : {}),
@@ -1117,6 +1161,20 @@ export function CandidatesView({
       if (rethrow) throw err;
       alertError("บันทึกไม่สำเร็จ", err instanceof Error ? err.message : undefined);
     }
+  }
+
+  /** ย้ายใบไปอีกสาขา — แถวหายจากแท็บนี้ไปขึ้นอีกแท็บ · ลงไทม์ไลน์ “ย้ายสาขา → …” */
+  async function moveSite(a: Row) {
+    if (!site) return;
+    const to = otherSite(site);
+    const ok = await confirm({
+      title: `ย้ายไป${recruitSiteLabel(to)}?`,
+      text: `${a.fullName} (${a.ref}) จะไปอยู่แท็บ ${recruitSiteLabel(to)} — ย้ายกลับได้ทุกเมื่อ`,
+      confirmText: "ย้ายสาขา",
+    });
+    if (!ok) return;
+    await patchCandidate(a.id, { site: to });
+    toastSuccess(`ย้ายไป${recruitSiteLabel(to)}แล้ว`);
   }
 
   /**
@@ -1141,6 +1199,19 @@ export function CandidatesView({
     }
   }
 
+  /** กดประเภทใบขับขี่ในแถว → กล่องเอกสารเปิดที่ช่องใบขับขี่ (โหลดใบเต็มก่อน เหมือน `openDocs`) */
+  async function openLicense(id: string) {
+    const failed = "เปิดเอกสารใบขับขี่ไม่สำเร็จ";
+    setOpening(`license:${id}`);
+    try {
+      setLicenseFor(await requestJson<Application>(`/api/recruitment/applications/${id}`, {}, failed));
+    } catch (err) {
+      alertError(failed, err instanceof Error ? err.message : undefined);
+    } finally {
+      setOpening(null);
+    }
+  }
+
   const filtering = isFiltering(filters as InsightFilters);
 
   return (
@@ -1149,6 +1220,8 @@ export function CandidatesView({
       {/* หัวเรื่องซ่อนไว้ให้โปรแกรมอ่านจอเท่านั้น — ถอดหัวที่มองเห็นออกตามคำขอ 23 ก.ย. 2026
           (`sr-only` เป็น absolute จึงไม่กิน `gap` ของกล่องนอก) */}
       <h1 className="sr-only">{title}</h1>
+
+      {siteNav}
 
       {/* ─────────────────────── แถบสรุป — ทุกชิ้นกดแล้วกรองตารางข้างล่าง */}
       <CandidateInsights
@@ -1179,6 +1252,7 @@ export function CandidatesView({
           repairs={hub.repairs}
           initialStage={HUB_STAGE[view]}
           note={TAB_NOTE[HUB_STAGE[view]]}
+          branches={site ? RECRUIT_SITE_BRANCHES[site] : undefined}
           onCreated={(created) => setRequisitions?.((prev) => [...created, ...prev])}
           onUpdated={(updated) =>
             setRequisitions?.((prev) =>
@@ -1223,6 +1297,17 @@ export function CandidatesView({
               />
             </>
           )}
+        </div>
+      ) : searchBar ? (
+        <div className="flex flex-none py-3">
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            label="ค้นหา"
+            placeholder={showWaiting ? "ชื่อ เลขที่ เบอร์ JR แพล้นท์ ครูฝึก…" : "ชื่อ เลขที่ เบอร์โทร ผู้ติดต่อกลับ ใบขับขี่…"}
+            tone="filled"
+            className="w-full lg:max-w-sm"
+          />
         </div>
       ) : null}
 
@@ -1503,6 +1588,24 @@ export function CandidatesView({
                     );
                   case "workZone":
                     return <td className="px-3 py-2 whitespace-nowrap">{a.workZone || "—"}</td>;
+                  case "age":
+                    return (
+                      <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                        {a.age == null ? dash : <>{a.age} <span className="text-mut">ปี</span></>}
+                      </td>
+                    );
+                  case "licenseType":
+                    return (
+                      <td className="px-2 py-1.5">
+                        <LicenseCell
+                          type={a.licenseType}
+                          hasImage={a.hasLicenseImage}
+                          locked={locked}
+                          busy={opening === `license:${a.id}`}
+                          onOpen={() => openLicense(a.id)}
+                        />
+                      </td>
+                    );
                   case "readyToStart":
                     return (
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums">
@@ -1576,6 +1679,19 @@ export function CandidatesView({
                         />
                       ) : null}
 
+                      {/* ย้ายสาขา — เฉพาะใบที่ยังไม่ผูก RQ (ผูกแล้วอยู่สาขาของ RQ เสมอ) */}
+                      {!locked && site && !rqByApplication.get(a.id) ? (
+                        <button
+                          type="button"
+                          onClick={() => moveSite(a)}
+                          title={`ย้ายไป${recruitSiteLabel(otherSite(site))}`}
+                          className="inline-flex size-8 items-center justify-center rounded-selector border border-line text-mut transition-colors hover:border-primary/40 hover:text-primary"
+                        >
+                          <ArrowLeftRight size={14} strokeWidth={1.9} aria-hidden />
+                          <span className="sr-only">ย้าย {a.fullName} ไป{recruitSiteLabel(otherSite(site))}</span>
+                        </button>
+                      ) : null}
+
                       {/* ปุ่มเดียวทั้งรายงานและสัญญา — รายงานผู้สมัครเป็นฉบับแรกในกล่อง
                           ใบที่ผู้สมัครขอลบข้อมูลแล้วยังเปิดได้ แต่เหลือแค่รายงาน */}
                       <button
@@ -1609,14 +1725,18 @@ export function CandidatesView({
             <Search size={20} strokeWidth={1.6} aria-hidden className="text-mut" />
             <p className="text-13 font-medium">
               {!rows.length
-                ? "ยังไม่มีใบสมัครเข้ามา"
+                ? site
+                  ? `ยังไม่มีใบสมัครของ${recruitSiteLabel(site)}`
+                  : "ยังไม่มีใบสมัครเข้ามา"
                 : filtering
                   ? "ไม่มีผู้สมัครที่ตรงกับตัวกรอง"
                   : `ไม่มีใบที่${STATUS_LABEL.pending_contact}`}
             </p>
             <p className="max-w-[44ch] text-12 leading-relaxed text-mut text-pretty">
               {!rows.length
-                ? "แชร์ลิงก์ /recruitment ให้ผู้สนใจ ใบที่ส่งเข้ามาจะขึ้นที่นี่ทันที"
+                ? site
+                  ? `ใบที่ผูก RQ ของ${recruitSiteLabel(site)}ขึ้นที่นี่เอง · ใบที่ยังไม่ผูก ย้ายมาจากอีกแท็บได้ด้วยปุ่ม ⇄ ท้ายแถว`
+                  : "แชร์ลิงก์ /recruitment ให้ผู้สนใจ ใบที่ส่งเข้ามาจะขึ้นที่นี่ทันที"
                 : filtering
                   ? "ปรับตัวกรองที่หัวคอลัมน์ หรือเริ่มใหม่ทั้งหมดด้วยปุ่มข้างล่าง"
                   : "โทรกลับครบทุกใบแล้ว — กดสถานะอื่นบนแถบสรุปข้างบนเพื่อดูใบที่เดินต่อไปแล้ว"}
@@ -1673,6 +1793,16 @@ export function CandidatesView({
         />
       ) : null}
 
+      {licenseFor ? (
+        <CandidateDocumentsModal
+          application={licenseFor}
+          docSlots={docSlots}
+          initialSlot="license_front"
+          onPatch={(patch) => patchCandidate(licenseFor.id, patch, true)}
+          onClose={() => setLicenseFor(null)}
+        />
+      ) : null}
+
       {drafting ? (
         <HrDocumentMaker
           application={drafting}
@@ -1697,6 +1827,43 @@ export function CandidatesView({
  * ดีเยี่ยม/ดี = เขียว · ปานกลาง = เหลือง · ต่ำ/เสี่ยง = แดง · ยังไม่มีคะแนน = เทา
  * `title` บอกระดับ ผลรวม และจำนวนข้อที่ประเมินแล้ว — ไม่ต้องเปิดกล่องก็รู้ว่าครบหรือยัง
  */
+/**
+ * ประเภทใบขับขี่ในแถว — กดแล้วเปิดกล่องเอกสารที่ช่องใบขับขี่ (ดูรูป · แก้ชนิด/เลขที่/วันหมดอายุ)
+ * ไอคอนเขียว = มีรูปแนบแล้ว · เทา = ยังไม่มีรูป (กดเข้าไปแนบได้)
+ */
+function LicenseCell({
+  type,
+  hasImage,
+  locked,
+  busy,
+  onOpen,
+}: {
+  type: string;
+  hasImage: boolean;
+  locked: boolean;
+  busy: boolean;
+  onOpen: () => void;
+}) {
+  const label = type || "ยังไม่ระบุ";
+  if (locked) return <span className="px-1 text-mut">{type || "—"}</span>;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={busy}
+      title={hasImage ? "ดูรูปใบขับขี่ · แก้ข้อมูลใบขับขี่" : "ยังไม่มีรูปใบขับขี่ — กดเพื่อแนบ/กรอกข้อมูล"}
+      className="inline-flex h-8 items-center gap-1.5 rounded-selector border border-line px-2 whitespace-nowrap transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-50"
+    >
+      {busy ? (
+        <Loader2 size={14} strokeWidth={2} aria-hidden className="animate-spin" />
+      ) : (
+        <IdCard size={14} strokeWidth={1.9} aria-hidden className={hasImage ? "text-st-live-ink" : "text-mut"} />
+      )}
+      <span className={type ? "" : "text-mut"}>{label}</span>
+    </button>
+  );
+}
+
 /** ปุ่มข้อมูล RC — ใบที่มีผลสิ้นสุดแล้ว (ปลด/ลาออก …) ขึ้นเป็นสีแดงพร้อมป้าย */
 function RcButton({ requisition, name, onOpen }: { requisition: Requisition; name: string; onOpen: () => void }) {
   const ended = ["withdrawn", "lost"].includes(outcomeGroup(requisition.outcome));
@@ -1912,3 +2079,8 @@ function PersonMark({
  * ทั้งที่สิ่งที่คนทำจริงคือคัดลอกเบอร์ไปวางในโทรศัพท์หรือแชท · กดครั้งเดียว
  * คัดลอกทั้งเบอร์ และตัวเลขยังเป็น `select-all` ให้ลากเลือกเองได้ตามปกติ
  */
+
+/** สาขาอีกฝั่ง — มีสองแท็บ ย้ายได้ทางเดียว */
+function otherSite(site: RecruitSite): RecruitSite {
+  return RECRUIT_SITES.find((s) => s.key !== site)!.key;
+}

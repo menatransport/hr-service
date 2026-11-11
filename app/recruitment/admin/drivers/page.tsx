@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { BookUser, Info, RefreshCw } from "lucide-react";
 
 import { PageHead } from "@/components/desk/page-head";
 import { DriverRegistryView } from "@/app/recruitment/_components/admin/driver-registry-view";
 import { DataError } from "@/components/ui/data-error";
+import { readSessionUser } from "@/lib/auth/session";
+import { canAccessMenu } from "@/lib/menu-permissions";
 import { getDriverList } from "@/app/recruitment/_lib/drivers/registry";
-import { formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
+import { DRIVER_SITE_COOKIE, formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
 import type { DriverListRegistry } from "@/app/recruitment/_lib/drivers/types";
+import { pickRecruitSite, visibleRecruitSites } from "@/app/recruitment/_lib/sites";
 
 /**
  * ทะเบียนประวัติ พจส. — รายชื่อพนักงานขับรถทั้งหมด
@@ -28,9 +32,19 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function DriversRegistryPage() {
+export default async function DriversRegistryPage({ searchParams }: PageProps<"/recruitment/admin/drivers">) {
   let registry: DriverListRegistry | null = null;
   let error: string | null = null;
+  const user = await readSessionUser();
+  const savedSite = (await cookies()).get(DRIVER_SITE_COOKIE)?.value;
+  const urlSite = (await searchParams).site;
+  /* แท็บสาขา: เห็นเฉพาะสาขาของตัวเอง (สิทธิ์ “ดูทุกสาขา” / site อื่นเห็นทั้งหมด) · `?site=` → คุกกี้ → สาขาของตัวเอง
+     · แท็บ `other` (สาขานอกสามสาขาหลัก) ส่งต่อตรง ๆ ให้ view ตัดสินเอง */
+  const allSites = await canAccessMenu("recruit-all-sites");
+  const sites = visibleRecruitSites(user, allSites);
+  const wanted = typeof urlSite === "string" ? urlSite : null;
+  const initialSite =
+    (wanted ?? savedSite) === "other" && sites.length > 1 ? "other" : pickRecruitSite(user, allSites, wanted, savedSite);
 
   try {
     registry = await getDriverList();
@@ -44,7 +58,7 @@ export default async function DriversRegistryPage() {
         registry.drivers.length ? (
           <>
             <ReadOnlyNotice enrichmentFailed={registry.enrichmentFailed} />
-            <DriverRegistryView registry={registry} />
+            <DriverRegistryView registry={registry} sites={sites} initialSite={initialSite} />
           </>
         ) : (
           <EmptyRegistry />

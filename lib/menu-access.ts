@@ -74,15 +74,28 @@ export function leafMenus(): LeafMenu[] {
   );
 }
 
-/** ค่าที่ชั้นนี้ “จะได้ถ้าไม่ตั้งเอง” — ค่าเริ่มต้นได้ `true` · ฝ่ายได้ค่าเริ่มต้น · แผนกได้ค่าของฝ่าย */
+let defaultOff: ReadonlySet<string> | null = null;
+
+/** ค่าเริ่มต้นเมื่อไม่มีใครตั้ง — เห็น · ยกเว้นสิทธิ์ย่อยที่ `defaultOff` (เช่น `recruit-all-sites`) */
+export function baseDefault(menuId: string): boolean {
+  defaultOff ??= new Set(
+    MODULES.flatMap((g) => g.items.flatMap((i) => [i, ...(i.children ?? [])]))
+      .flatMap((i) => i.actions ?? [])
+      .filter((a) => a.defaultOff)
+      .map((a) => a.id),
+  );
+  return !defaultOff.has(menuId);
+}
+
+/** ค่าที่ชั้นนี้ “จะได้ถ้าไม่ตั้งเอง” — ค่าเริ่มต้นได้ `baseDefault` · ฝ่ายได้ค่าเริ่มต้น · แผนกได้ค่าของฝ่าย */
 export function parentValue(
   scopes: MenuScopes,
   menuId: string,
   kind: ScopeKind,
   divisionId: number | null,
 ): boolean {
-  if (kind === "base") return true;
-  const base = scopes.base[menuId] ?? true;
+  if (kind === "base") return baseDefault(menuId);
+  const base = scopes.base[menuId] ?? baseDefault(menuId);
   if (kind === "division" || divisionId === null) return base;
   return scopes.divisions[String(divisionId)]?.[menuId] ?? base;
 }

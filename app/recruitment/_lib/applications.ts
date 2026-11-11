@@ -10,6 +10,7 @@ import { CONSENT_ITEMS, CONSENT_VERSION, hasRequiredConsent } from "./consent";
 import {
   KEY_FULL_NAME,
   KEY_PHONE,
+  applicantAge,
   composeName,
   digitsOnly,
   displayAnswer,
@@ -23,6 +24,8 @@ import {
   type DocSlot,
 } from "./form";
 import { listDocSlots } from "./doc-slots";
+import { todayInBangkok } from "@/lib/record-case-flow";
+import { DEFAULT_RECRUIT_SITE, isRecruitSite, recruitSiteLabel, type RecruitSite } from "./sites";
 import { mergeRatingAnswers, summarizeRating } from "./driver-rating";
 import { eraseHrDocuments } from "./hr-document-records-store";
 import { listActiveQuestions, RecruitmentError } from "./questions";
@@ -95,6 +98,8 @@ interface ApplicationDoc {
    * และเปลี่ยนมือได้เมื่อส่งต่องานกัน
    */
   contactOwner: string;
+  /** สาขาที่ฝ่ายบุคคลย้ายใบไป (แท็บหน้าผู้สมัคร) · ไม่มี = ลาดกระบัง — อ่านผ่าน `siteOf()` */
+  site?: RecruitSite;
   interview: InterviewRecord;
   exitReason: ExitReason;
   /** ใบเก่ายังไม่มีคีย์นี้ — อ่านผ่าน `exitNoteOf()` เสมอ */
@@ -221,6 +226,10 @@ function exitNoteOf(doc: Pick<ApplicationDoc, "exitReason" | "exitReasonNote">):
   return doc.exitReason === OTHER_EXIT_REASON ? (doc.exitReasonNote ?? "") : "";
 }
 
+function siteOf(doc: Pick<ApplicationDoc, "site">): RecruitSite {
+  return isRecruitSite(doc.site) ? doc.site : DEFAULT_RECRUIT_SITE;
+}
+
 function toApplication(doc: WithId<ApplicationDoc>): Application {
   return {
     id: doc._id.toHexString(),
@@ -229,6 +238,7 @@ function toApplication(doc: WithId<ApplicationDoc>): Application {
     fullName: fullNameOf(doc),
     phone: doc.phone,
     contactOwner: doc.contactOwner ?? "",
+    site: siteOf(doc),
     interview: interviewOf(doc),
     exitReason: isExitReason(doc.exitReason) ? doc.exitReason : "",
     exitReasonNote: exitNoteOf(doc),
@@ -648,6 +658,8 @@ export interface ApplicationPatch {
    * (กลับไปใช้คำตอบจากฟอร์ม) · ส่งมาเฉพาะข้อที่เปลี่ยน (ดู `mergeRatingAnswers()`)
    */
   rating?: unknown;
+  /** ย้ายสาขา (แท็บหน้าผู้สมัคร) — `RecruitSite` · ใบที่ผูก RQ แล้วอยู่สาขาของ RQ เสมอ ค่านี้ไม่มีผล */
+  site?: unknown;
 }
 
 /**
@@ -932,6 +944,9 @@ export async function updateApplication(
       ? (found.contactOwner ?? "")
       : text(patch.contactOwner, 80);
 
+  if (patch.site !== undefined && !isRecruitSite(patch.site)) throw new RecruitmentError("สาขาไม่ถูกต้อง");
+  const site = patch.site === undefined ? siteOf(found) : (patch.site as RecruitSite);
+
   /* คำตอบในใบ — ฝ่ายบุคคลแก้แทนผู้สมัครได้ (ดู `editAnswers()`) · ชื่อกับเบอร์
      ที่แยกเก็บไว้นอก `answers` ต้องถูกคำนวณใหม่ตาม ไม่งั้นตารางกับใบจะไม่ตรงกัน */
   const edit =
@@ -994,6 +1009,7 @@ export async function updateApplication(
       ? `บันทึกข้อมูลจากเอกสาร · ${docEdit.changed.join(" · ")}`
       : "",
     filesChanged ? "ปรับไฟล์เอกสารแนบ" : "",
+    site !== siteOf(found) ? `ย้ายสาขา → ${recruitSiteLabel(site)}` : "",
     ratingEdit?.changed ? `ประเมิน Driver Rating · ${ratingEdit.changed} ข้อ` : "",
     /* ขึ้น/ถอด Blacklist คือการตัดสินเรื่องตัวคน ต้องมีร่องรอยว่าใครทำเมื่อไหร่ */
     blacklist !== wasBlacklisted
@@ -1026,6 +1042,7 @@ export async function updateApplication(
         exitReasonNote,
         blacklist,
         updatedAt: now,
+        ...(site !== siteOf(found) ? { site } : {}),
         ...(edit ? { answers, fullName, phone } : {}),
         ...(filesChanged ? { files } : {}),
         ...(docEdit ? { documents, documentMeta } : {}),
@@ -1049,6 +1066,7 @@ export async function updateApplication(
     exitReason,
     exitReasonNote,
     blacklist,
+    site,
     answers,
     fullName,
     phone,
@@ -1132,6 +1150,7 @@ const SUMMARY_FIELDS = {
   fullName: 1,
   phone: 1,
   contactOwner: 1,
+  site: 1,
   interview: 1,
   exitReason: 1,
   exitReasonNote: 1,
@@ -1179,7 +1198,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
     Omit<
       ApplicationDoc,
       "files" | "documents" | "documentMeta" | "consent" | "timeline" | "questionSnapshot"
-    > & { fileCount: number; portrait: { url?: string }[] }
+    > & { fileCount: number; portrait: { url?: string }[]; licenseType?: string; hasLicenseImage?: boolean }
   >(
     range
       ? [{ $match: { createdAt: { $gte: range.gte, $lt: range.lt } } }, { $sort: { createdAt: -1 } }]
@@ -1191,8 +1210,12 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
       portrait: {
         $filter: { input: { $ifNull: ["$files", []] }, cond: { $eq: ["$$this.slot", "portrait"] } },
       },
+      /* คอลัมน์ อายุ · ประเภทใบขับขี่ ในแท็บรอการติดต่อ (Bew 11 พ.ย. 2569) — ไม่ลากทั้งก้อนเอกสาร/ไฟล์มา */
+      licenseType: "$documents.licenseType",
+      hasLicenseImage: { $in: ["license_front", { $ifNull: ["$files.slot", []] }] },
     },
   );
+  const today = todayInBangkok();
 
   return docs.map<ApplicationSummary>((doc) => ({
     id: doc._id.toHexString(),
@@ -1204,6 +1227,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
     workZone: roleAnswer(doc, "work_zone"),
     readyToStart: roleAnswer(doc, "ready_date"),
     contactOwner: doc.contactOwner || declaredContact(doc),
+    site: siteOf(doc),
     interview: interviewOf(doc),
     exitReason: isExitReason(doc.exitReason) ? doc.exitReason : "",
     exitReasonNote: exitNoteOf(doc),
@@ -1216,6 +1240,9 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
     fileCount: doc.fileCount,
     photoUrl: erasedOf(doc) ? null : doc.portrait?.[0]?.url || null,
     erased: erasedOf(doc),
+    age: erasedOf(doc) ? null : applicantAge(doc, today),
+    licenseType: erasedOf(doc) ? "" : doc.licenseType || "",
+    hasLicenseImage: !erasedOf(doc) && Boolean(doc.hasLicenseImage),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   }));

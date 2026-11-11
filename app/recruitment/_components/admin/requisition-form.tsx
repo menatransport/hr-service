@@ -42,6 +42,11 @@ import {
   type Requisition,
 } from "@/app/recruitment/_lib/requisitions/types";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
+import {
+  RegistryPlantFields,
+  isSameCustomer,
+  pickedOrTyped,
+} from "@/app/recruitment/_components/admin/registry-plant-fields";
 
 /**
  * ฟอร์มขอสรรหา — **โมดัล ไม่ใช่แถวในตารางและไม่ใช่แผ่นเลื่อน**
@@ -72,10 +77,13 @@ import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
  */
 export function RequisitionForm({
   options,
+  branches = BRANCHES,
   onClose,
   onCreated,
 }: {
   options: RequisitionOptions;
+  /** สาขาที่เลือกได้ — หน้าผู้สมัครส่งตามแท็บสาขาที่เปิดอยู่ (Bew 11 พ.ย. 2569) · มีตัวเดียว = เลือกไว้ให้ */
+  branches?: readonly string[];
   onClose: () => void;
   /** คำขอที่เพิ่งสร้าง — ตารางเอาไปต่อหัวรายการเองโดยไม่ต้องโหลดหน้าใหม่ */
   onCreated: (created: Requisition[]) => void;
@@ -83,7 +91,7 @@ export function RequisitionForm({
   const me = useDeskIdentity();
 
   const [requestedOn, setRequestedOn] = useState(todayInBangkok());
-  const [branch, setBranch] = useState("");
+  const [branch, setBranch] = useState(() => (branches.length === 1 ? branches[0] : ""));
   const [position, setPosition] = useState("");
   const [positionOther, setPositionOther] = useState("");
   const [customer, setCustomer] = useState("");
@@ -141,22 +149,26 @@ export function RequisitionForm({
 
   const mixer = isMixerBranch(branch);
   const branchCustomers = options.branchCustomers[branch] ?? [];
+  /** สาขาที่เติมจากรถ/คนที่จะแทนได้ — นอกแท็บที่เปิดอยู่ไม่เติม */
+  const inBranches = (v: string | undefined): string => (v && branches.includes(v) ? v : "");
 
   /**
-   * เปลี่ยนสาขา — สระบุรี/บางปะกงไม่มีตำแหน่ง/แพล้นท์ จึง**ล้างค่าทิ้งจริง** (หลักเดียวกับ
-   * `switchHireType`) · ลูกค้าที่ไม่อยู่ในรายชื่อของสาขาใหม่ถูกล้าง · มีรายเดียว = เลือกให้เลย
+   * เปลี่ยนสาขา — ตำแหน่ง/แพล้นท์ของงานโม่กับของสระบุรี/บางปะกงเป็นคนละชุด จึง**ล้างค่าทิ้งจริง**
+   * เมื่อข้ามชุด (หลักเดียวกับ `switchHireType`) · ลูกค้าที่ไม่อยู่ในรายชื่อของสาขาใหม่ถูกล้าง · มีรายเดียว = เลือกให้เลย
    */
   function pickBranch(next: string) {
     setBranch(next);
+    if (!(isMixerBranch(next) && isMixerBranch(branch))) {
+      setPosition("");
+      setPositionOther("");
+      setPlant("");
+      setPlantOther("");
+    }
     if (isMixerBranch(next)) {
       if (customer && customer !== OTHER && !(CUSTOMERS as readonly string[]).includes(customer))
         setCustomer("");
       return;
     }
-    setPosition("");
-    setPositionOther("");
-    setPlant("");
-    setPlantOther("");
     setCustomerOther("");
     const list = options.branchCustomers[next] ?? [];
     if (list.length === 1) setCustomer(list[0]);
@@ -191,7 +203,10 @@ export function RequisitionForm({
     if (value) fillFromVehicle(options.vehicles.find((x) => x.value === value));
   }
 
-  /** เลือกคนที่จะแทน → รถประจำของคนนั้นมาเอง (ถ้าช่องรถยังว่างหรือเป็นรถของคนก่อน) */
+  /**
+   * เลือกคนที่จะแทน → รถประจำของคนนั้นมาเอง (ถ้าช่องรถยังว่างหรือเป็นรถของคนก่อน)
+   * · สระบุรี/บางปะกง: ลูกค้า/แพล้นท์/ตำแหน่งตามทะเบียนของคนนั้น เติมเฉพาะช่องที่ยังว่าง
+   */
   function pickReplace(code: string) {
     setReplaceDrivercode(code);
     const driver = options.drivers.find((d) => d.value === code);
@@ -204,6 +219,15 @@ export function RequisitionForm({
     if (v && (!slots[0].vehicle || slots[0].vehicle === autoVehicle.current)) {
       autoVehicle.current = v.value;
       pickVehicle(0, v.value);
+    }
+    /* หลังเติมรถ — `pickVehicle()` อาจเรียก `pickBranch()` ซ้ำซึ่งล้างแพล้นท์/ตำแหน่ง */
+    const at = branch || site;
+    if (driver && at && !isMixerBranch(at)) {
+      const fresh = !branch;
+      const match = (options.branchCustomers[at] ?? []).find((c) => isSameCustomer(c, driver.customer ?? ""));
+      if (match && (fresh || !customer)) setCustomer(match);
+      if (driver.plant && (fresh || !plant)) setPlant(driver.plant);
+      if (driver.position && (fresh || !position)) setPosition(driver.position);
     }
   }
 
@@ -235,7 +259,9 @@ export function RequisitionForm({
     setSlots((cur) => cur.map((s) => ({ ...s, trainer: firstTrainer })));
   }
 
-  const plantValue = plant === OTHER ? plantOther.trim() : plant;
+  const plantValue = pickedOrTyped(plant, plantOther);
+  /** สระบุรี/บางปะกง เก็บตำแหน่งเป็นชื่อ (`other` + `positionOther`) — ดู `createRequisitions()` */
+  const positionText = mixer ? labelOf(POSITIONS, position) || positionOther.trim() : pickedOrTyped(position, positionOther);
 
   const customerGroups = useMemo(() => groupCustomers(options, branch), [options, branch]);
   const plantGroups = useMemo(
@@ -248,7 +274,9 @@ export function RequisitionForm({
       branch &&
       customer.trim() &&
       (customer !== OTHER || customerOther.trim()) &&
-      (!mixer || (position && (position !== OTHER || positionOther.trim()) && plantValue)) &&
+      position &&
+      (position !== OTHER || positionOther.trim()) &&
+      plantValue &&
       (hireType === "new_rate" || replaceDrivercode),
   );
 
@@ -258,7 +286,7 @@ export function RequisitionForm({
   /** สรุปสิ่งที่กำลังจะบันทึกในกล่องยืนยัน — ทุกค่าที่มาจากผู้ใช้ต้อง `escapeHtml()` */
   function summary(): string {
     const head = [
-      [branch, customer === OTHER ? customerOther : customer, plantValue, labelOf(POSITIONS, position) || positionOther]
+      [branch, customer === OTHER ? customerOther : customer, plantValue, positionText]
         .filter(Boolean)
         .join(" · "),
       hireType === "replace"
@@ -295,8 +323,8 @@ export function RequisitionForm({
               body: {
                 requestedOn,
                 branch,
-                position,
-                positionOther: positionOther.trim(),
+                position: mixer ? position : OTHER,
+                positionOther: mixer ? positionOther.trim() : positionText,
                 customer: customer.trim(),
                 customerOther: customerOther.trim(),
                 plant: plantValue,
@@ -434,7 +462,7 @@ export function RequisitionForm({
         <Chips
           id="rq-branch"
           label="สาขา"
-          options={BRANCHES.map((b) => ({ value: b, label: b }))}
+          options={branches.map((b) => ({ value: b, label: b }))}
           value={branch}
           onChange={pickBranch}
         />
@@ -462,7 +490,7 @@ export function RequisitionForm({
           </div>
         ) : null}
 
-        <div className={`grid gap-4 ${mixer ? "sm:grid-cols-3" : "sm:grid-cols-[2fr_1fr]"}`}>
+        <div className={`grid gap-4 ${mixer ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           {mixer ? (
             <div className="flex flex-col gap-2">
               <SelectField
@@ -532,7 +560,21 @@ export function RequisitionForm({
                 />
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <RegistryPlantFields
+              idPrefix="rq"
+              rows={options.registryPlants}
+              customer={customer}
+              plant={plant}
+              plantOther={plantOther}
+              position={position}
+              positionOther={positionOther}
+              onPlant={setPlant}
+              onPlantOther={setPlantOther}
+              onPosition={setPosition}
+              onPositionOther={setPositionOther}
+            />
+          )}
           <DateField
             id="rq-date"
             label="วันที่แจ้งสรรหา"
@@ -808,8 +850,7 @@ function Chips({
   );
 }
 
-const inBranches = (v: string | undefined): string =>
-  v && (BRANCHES as readonly string[]).includes(v) ? v : "";
+
 
 /**
  * จับกลุ่มจากทะเบียนรถ (`Boom_ETL.vehicles`: branch · fleet → ลูกค้า · plant)

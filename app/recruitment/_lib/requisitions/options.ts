@@ -1,7 +1,7 @@
 import { etlCol } from "@/lib/db";
 import { listClients } from "@/lib/ncac/client";
 import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
-import { siteLabel } from "@/app/recruitment/_lib/drivers/types";
+import { siteLabel, siteOfBranch } from "@/app/recruitment/_lib/drivers/types";
 import { normalizeStatus, type AnswerMap } from "@/app/recruitment/_lib/types";
 import {
   fullNameOf,
@@ -36,6 +36,21 @@ export interface DriverOption extends PickOption {
   vehicle?: string;
   /** ชื่อสาขา (`siteLabel`) — ฟอร์มเติมช่องสาขาให้เมื่อเลือกคนนี้เป็นคนที่จะแทน */
   branch?: string;
+  /** ลูกค้า · แพล้นท์ · ตำแหน่งตามทะเบียน — สระบุรี/บางปะกงเติมให้เมื่อเลือกคนนี้เป็นคนที่จะแทน */
+  customer?: string;
+  plant?: string;
+  position?: string;
+}
+
+/**
+ * แพล้นท์ของสาขาที่ไม่ใช่งานโม่ (สระบุรี + บางปะกง รวมกันเหมือนแท็บสาขาของทะเบียน) จากทะเบียนประวัติ พจส.
+ * — หนึ่งแถวต่อ ลูกค้า·แพล้นท์·ตำแหน่ง · `count` = จำนวนคนในทะเบียน (รวมพ้นสภาพ) ใช้เรียง
+ */
+export interface RegistryPlant {
+  customer: string;
+  plant: string;
+  position: string;
+  count: number;
 }
 
 /**
@@ -70,6 +85,8 @@ export interface RequisitionOptions {
   failed: string[];
   /** ลูกค้าของสาขาที่ไม่ใช่งานโม่ (สระบุรี/บางปะกง) → รายชื่อ — ดู `loadBranchCustomers()` */
   branchCustomers: Record<string, string[]>;
+  /** แพล้นท์/ตำแหน่งของสระบุรี+บางปะกง — ดู `loadRegistryPlants()` */
+  registryPlants: RegistryPlant[];
 }
 
 const EMPTY: RequisitionOptions = {
@@ -80,6 +97,7 @@ const EMPTY: RequisitionOptions = {
   repairs: {},
   failed: [],
   branchCustomers: {},
+  registryPlants: [],
 };
 
 /**
@@ -97,8 +115,11 @@ export async function loadDrivers(): Promise<DriverOption[]> {
     driverName?: string;
     branch?: string;
     vehicleCode?: string;
+    customer?: string;
+    plant?: string;
+    position?: string;
     active?: boolean;
-  }>(["drivercode", "driverName", "branch", "vehicleCode", "active"]);
+  }>(["drivercode", "driverName", "branch", "vehicleCode", "customer", "plant", "position", "active"]);
 
   return docs
     .filter((d) => d.active === true && (d.drivercode ?? "").trim())
@@ -109,11 +130,22 @@ export async function loadDrivers(): Promise<DriverOption[]> {
       /* ป้ายมีทั้งชื่อ รหัส และสาขา เพราะช่องค้นหาของ `Select` ค้นจากป้าย —
          พิมพ์รหัสหรือชื่อสาขาก็เจอ ไม่ต้องจำว่าต้องพิมพ์อะไร */
       const vehicle = String(d.vehicleCode ?? "").trim();
+      const own = siteOfBranch((d.branch ?? "").trim());
+      /* ลาดกระบังเติมลูกค้า/แพล้นท์/ตำแหน่งจาก fleet ของรถอยู่แล้ว — ส่งเฉพาะสาขาอื่น */
+      const extra =
+        own === "saraburi" || own === "bangpakong"
+          ? {
+              ...((d.customer ?? "").trim() ? { customer: (d.customer ?? "").trim() } : {}),
+              ...((d.plant ?? "").trim() ? { plant: (d.plant ?? "").trim() } : {}),
+              ...((d.position ?? "").trim() ? { position: (d.position ?? "").trim() } : {}),
+            }
+          : {};
       return {
         value: code,
         label: site ? `${name} — ${code} · ${site}` : `${name} — ${code}`,
         ...(vehicle ? { vehicle } : {}),
         ...(site ? { branch: site } : {}),
+        ...extra,
       };
     })
     .sort(thai);
@@ -236,16 +268,43 @@ export async function loadBranchCustomers(): Promise<Record<string, string[]>> {
 }
 
 /**
+ * แพล้นท์ + ตำแหน่งของสระบุรี/บางปะกงจากทะเบียนประวัติ พจส. (Bew 11 พ.ย. 2569) — ETL ไม่มีแพล้นท์ของสองสาขานี้
+ * · นับรวมคนพ้นสภาพ แพล้นท์ที่ตอนนี้ไม่มีคนเหลือยังเลือกได้
+ */
+export async function loadRegistryPlants(): Promise<RegistryPlant[]> {
+  const docs = await readDrivers<{ branch?: string; customer?: string; plant?: string; position?: string }>([
+    "branch",
+    "customer",
+    "plant",
+    "position",
+  ]);
+  const rows = new Map<string, RegistryPlant>();
+  for (const d of docs) {
+    const site = siteOfBranch(String(d.branch ?? ""));
+    const plant = (d.plant ?? "").trim();
+    if ((site !== "saraburi" && site !== "bangpakong") || !plant) continue;
+    const customer = (d.customer ?? "").trim();
+    const position = (d.position ?? "").trim();
+    const key = `${customer}|${plant}|${position}`;
+    const row = rows.get(key);
+    if (row) row.count += 1;
+    else rows.set(key, { customer, plant, position, count: 1 });
+  }
+  return [...rows.values()].sort((a, b) => b.count - a.count || THAI_ORDER.compare(a.plant, b.plant));
+}
+
+/**
  * อ่านทุกชุดพร้อมกัน — ไม่มีชุดไหนขึ้นกับชุดอื่น การรอทีละอันคือการต่อเวลา
  * โหลดหน้าฟรี ๆ · ชุดที่พังไม่ลากชุดที่เหลือลงไปด้วย (`allSettled`)
  */
 export async function getRequisitionOptions(): Promise<RequisitionOptions> {
-  const [drivers, vehicles, candidates, repairs, branchCustomers] = await Promise.allSettled([
+  const [drivers, vehicles, candidates, repairs, branchCustomers, registryPlants] = await Promise.allSettled([
     loadDrivers(),
     loadVehicles(),
     loadCandidates(),
     getRepairStatuses(),
     loadBranchCustomers(),
+    loadRegistryPlants(),
   ]);
 
   const failed: string[] = [];
@@ -266,6 +325,8 @@ export async function getRequisitionOptions(): Promise<RequisitionOptions> {
       branchCustomers.status === "fulfilled"
         ? branchCustomers.value
         : { บางปะกง: BANGPAKONG_CUSTOMERS },
+    /* อ่านไม่ได้ = รายการว่าง ฟอร์มยังพิมพ์เองได้ (ทะเบียนล่มขึ้นแถบเตือนจาก `drivers` อยู่แล้ว) */
+    registryPlants: registryPlants.status === "fulfilled" ? registryPlants.value : [],
     failed,
   };
 }

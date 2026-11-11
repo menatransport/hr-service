@@ -56,8 +56,8 @@ export const BRANCHES = ["ลาดกระบัง", "สระบุรี",
 
 /**
  * งานโม่ (ตำแหน่ง ML/MS + แพล้นท์ + ลูกค้าใน `CUSTOMERS`) มีเฉพาะลาดกระบัง
- * · สระบุรี/บางปะกง **ไม่มีตำแหน่งและแพล้นท์** ลูกค้ามาจาก master ลูกค้าของ NCAC
- * (`branchCustomers` ใน `options.ts`) — ตามคำสั่ง 3 พ.ย. 2026
+ * · สระบุรี/บางปะกง ลูกค้ามาจาก master ลูกค้าของ NCAC (`branchCustomers` ใน `options.ts`) — 3 พ.ย. 2026
+ * · แพล้นท์/ตำแหน่งเลือกจากทะเบียนประวัติ พจส. (`registryPlants`) ตำแหน่งเก็บเป็น `other` + ชื่อ — 11 พ.ย. 2569
  */
 export const isMixerBranch = (branch: string): boolean =>
   branch !== "สระบุรี" && branch !== "บางปะกง";

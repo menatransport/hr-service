@@ -7,6 +7,8 @@
  * (ท่าเดียวกับ `survey-forms.ts` ↔ `newyear-survey.ts`)
  */
 
+import type { RecruitSite } from "./sites";
+
 /* ------------------------------------------------------------------ คำถาม */
 
 /**
@@ -585,6 +587,8 @@ export interface Application {
   phone: string;
   /** ชื่อเจ้าหน้าที่ที่รับผิดชอบโทรกลับ · `""` = ยังไม่มีใครรับเรื่อง */
   contactOwner: string;
+  /** สาขาที่ใบนี้อยู่เมื่อยังไม่ผูก RQ (ดู `sites.ts`) */
+  site: RecruitSite;
   interview: InterviewRecord;
   exitReason: ExitReason;
   /** เหตุผลที่พิมพ์เอง — มีค่าเฉพาะเมื่อ `exitReason === "other"` (อ่านผ่าน `exitReasonText()`) */
@@ -641,6 +645,8 @@ export interface ApplicationSummary {
   /** ความพร้อมเริ่มงาน — `YYYY-MM-DD` ถ้าตอบเป็นวันที่ ไม่งั้นเป็นข้อความตามที่ตอบ */
   readyToStart: string;
   contactOwner: string;
+  /** สาขาที่ใบนี้อยู่เมื่อยังไม่ผูก RQ (ดู `Application.site`) */
+  site: RecruitSite;
   interview: InterviewRecord;
   exitReason: ExitReason;
   /** เหตุผลที่พิมพ์เอง (ดู `Application.exitReasonNote`) */
@@ -654,6 +660,12 @@ export interface ApplicationSummary {
   photoUrl: string | null;
   /** ผู้สมัครกดยกเลิกเองและข้อมูลถูกลบแล้ว — แถวนี้ล็อกทั้งแถว (ดู `Application`) */
   erased: boolean;
+  /** อายุ ณ วันที่โหลดหน้า (`applicantAge()`) · `null` = ไม่ได้ตอบวันเกิด/อายุ */
+  age: number | null;
+  /** ชนิดใบขับขี่จากข้อมูลเอกสาร (`documents.licenseType`) — ว่าง = ยังไม่ได้กรอก */
+  licenseType: string;
+  /** แนบรูปใบขับขี่ (ช่อง `license_front`) แล้วหรือยัง */
+  hasLicenseImage: boolean;
   createdAt: string;
   updatedAt: string;
 }

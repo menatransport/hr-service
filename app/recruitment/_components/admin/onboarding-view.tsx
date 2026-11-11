@@ -491,6 +491,7 @@ export function OnboardingView({
   initialOpen = "",
   embedded = false,
   note,
+  branches,
   onCreated,
   onUpdated,
 }: {
@@ -512,6 +513,8 @@ export function OnboardingView({
   embedded?: boolean;
   /** เงื่อนไขข้างช่องค้นหา (ทีละข้อ) — แถวของหน้านี้มาจากอะไร */
   note?: string[];
+  /** สาขาที่ฟอร์มขอสรรหาเลือกได้ — หน้าผู้สมัครส่งตามแท็บสาขาที่เปิดอยู่ · ไม่ส่ง = ทุกสาขา */
+  branches?: readonly string[];
   /** ฝังอยู่ = หน้าแม่ถือแถวเอง — คำขอที่เพิ่งสร้างส่งกลับไปให้หน้าแม่ต่อเข้ารายการ */
   onCreated?: (created: Requisition[]) => void;
   /** ฝังอยู่ = คำขอที่เพิ่งแก้ (ฟอร์มคำขอ · KA / dialog) ส่งกลับให้หน้าแม่ทับแถวเดิม */
@@ -1049,6 +1052,7 @@ export function OnboardingView({
       {creating && formOptions ? (
         <RequisitionForm
           options={formOptions}
+          branches={branches}
           onClose={() => setCreating(false)}
           onCreated={(created) =>
             embedded

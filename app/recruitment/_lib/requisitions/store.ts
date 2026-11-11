@@ -427,10 +427,11 @@ export async function createRequisitions(
 
   const branchName = branch(input.branch);
   const mixer = isMixerBranch(branchName);
-  /* สระบุรี/บางปะกงไม่มีตำแหน่ง/แพล้นท์ — เก็บค่าว่างจริง ไม่ใช่ค่าที่ค้างจากฟอร์ม */
+  /* สระบุรี/บางปะกง: ตำแหน่งเป็นชื่อตามทะเบียน พจส. (10W L · Trailer (ตู้) …) ไม่ใช่ ML/MS
+     → เก็บเป็น `other` + ชื่อใน `positionOther` (Bew 11 พ.ย. 2569) */
   const position = mixer
     ? oneOf<RequisitionPosition>(POSITIONS, input.position, "ตำแหน่ง")
-    : ("" as RequisitionPosition);
+    : (OTHER as RequisitionPosition);
   const hireType =
     input.hireType === "replace" || input.hireType === "new_rate"
       ? (input.hireType as HireType)
@@ -467,7 +468,7 @@ export async function createRequisitions(
     ...(mixer
       ? customer(input.customer, input.customerOther)
       : await branchCustomer(branchName, input.customer)),
-    plant: mixer ? text(input.plant, "แพล้นท์") : "",
+    plant: text(input.plant, "แพล้นท์"),
     hireType,
     replace,
     status: "open" as const,
@@ -629,7 +630,7 @@ async function updateDetails(
   const mixer = isMixerBranch(branchName);
 
   const position: RequisitionPosition = !mixer
-    ? ("" as RequisitionPosition)
+    ? (OTHER as RequisitionPosition)
     : current.position && same(input.position, current.position)
       ? current.position
       : oneOf<RequisitionPosition>(POSITIONS, input.position, "ตำแหน่ง");
@@ -687,7 +688,7 @@ async function updateDetails(
     position,
     positionOther,
     ...customerSet,
-    plant: mixer ? text(input.plant, "แพล้นท์") : "",
+    plant: text(input.plant, "แพล้นท์"),
     hireType,
     replace,
     vehicle: nextVehicle,

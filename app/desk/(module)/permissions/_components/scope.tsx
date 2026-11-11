@@ -1,6 +1,6 @@
 import { Eye, Minus } from "lucide-react";
 
-import { canSeeMenu, type MenuScopes, type ScopeKind, type Visibility } from "@/lib/menu-access";
+import { baseDefault, canSeeMenu, type MenuScopes, type ScopeKind, type Visibility } from "@/lib/menu-access";
 import type { OrgDepartment, OrgDivision } from "@/lib/menu-permissions";
 
 /**
@@ -57,8 +57,9 @@ export function ownOf(scopes: MenuScopes, unit: Unit): Visibility {
 
 /** หน่วยนี้เห็นเมนูนี้จริงไหม (รวมการสืบทอดแล้ว) */
 export function effectiveOf(scopes: MenuScopes, unit: Unit, menuId: string): boolean {
-  if (unit.kind === "base") return scopes.base[menuId] ?? true;
-  if (unit.kind === "division") return scopes.divisions[String(unit.id)]?.[menuId] ?? scopes.base[menuId] ?? true;
+  if (unit.kind === "base") return scopes.base[menuId] ?? baseDefault(menuId);
+  if (unit.kind === "division")
+    return scopes.divisions[String(unit.id)]?.[menuId] ?? scopes.base[menuId] ?? baseDefault(menuId);
   return canSeeMenu(scopes, menuId, { departmentId: unit.id, divisionId: unit.divisionId });
 }
 

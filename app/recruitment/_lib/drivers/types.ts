@@ -69,6 +69,12 @@ export const DRIVER_SITES: { key: DriverSiteKey; label: string; branches: string
   { key: "bangpakong", label: "บางปะกง", branches: ["7"] },
 ];
 
+/**
+ * คุกกี้จำแท็บสาขาบนหน้าทะเบียน — เข้าไปดูประวัติแล้วกด “กลับ” ต้องกลับมาแท็บเดิม ไม่เด้งไปแท็บตาม site
+ * (Bew 11 พ.ย. 2569) · หน้า server อ่านไปส่งเป็น `savedSite` จึงไม่กระพริบตอน hydrate · หมดเมื่อปิดเบราว์เซอร์
+ */
+export const DRIVER_SITE_COOKIE = "hrs.drivers-site";
+
 export function siteOfBranch(branch: string): DriverSiteKey | null {
   const value = branch.trim().replace(/\.0$/, "");
   return DRIVER_SITES.find((site) => site.branches.includes(value))?.key ?? null;

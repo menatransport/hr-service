@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Eye,
@@ -35,6 +35,7 @@ import {
   SummaryToolbar,
 } from "@/components/ui/summary-panel";
 import {
+  DRIVER_SITE_COOKIE,
   DRIVER_SITES,
   LICENSE_WARN_DAYS,
   NEW_DRIVER_HOURS,
@@ -57,6 +58,7 @@ import {
   type LicenseState,
 } from "@/app/recruitment/_lib/drivers/types";
 import { thaiCompare } from "@/lib/thai-order";
+import { RECRUIT_SITES, type RecruitSite } from "@/app/recruitment/_lib/sites";
 
 /**
  * ทะเบียนประวัติ พจส. — ตารางข้อมูลแบบมาตรฐาน (เรียง + กรองที่หัวคอลัมน์)
@@ -88,7 +90,31 @@ import { thaiCompare } from "@/lib/thai-order";
  * `EmployeeDirectory` — ยิงกรองฝั่งเซิร์ฟเวอร์ทุกครั้งที่พิมพ์จะช้ากว่าและกระตุก
  */
 
-type SiteFilter = DriverSiteKey | "all" | "other";
+/**
+ * แท็บสาขา — เหลือสองแท็บ ลาดกระบัง | สระบุรี+บางปะกง ไม่มี “ทุกสาขา” (Bew 11 พ.ย. 2569)
+ * · `other` = คนที่สาขาไม่อยู่ในสามสาขาหลัก มีแท็บเฉพาะตอนที่มีคนอยู่จริง
+ */
+type SiteFilter = "latkrabang" | "saraburi-bangpakong" | "other";
+
+const SITE_TAB_KEYS: Record<Exclude<SiteFilter, "other">, DriverSiteKey[]> = {
+  latkrabang: ["latkrabang"],
+  "saraburi-bangpakong": ["saraburi", "bangpakong"],
+};
+
+/** แท็บของคนขับ — ไม่อยู่ในสามสาขาหลัก = `other` */
+function siteTabOf(siteKey: DriverSiteKey | null | undefined): SiteFilter {
+  if (siteKey === "saraburi" || siteKey === "bangpakong") return "saraburi-bangpakong";
+  return siteKey === "latkrabang" ? "latkrabang" : "other";
+}
+
+/**
+ * แท็บที่ผู้ใช้เห็น — `sites` จาก `visibleRecruitSites()` (เห็นแค่สาขาตัวเอง · สิทธิ์ “ดูทุกสาขา” / site อื่นเห็นทั้งหมด)
+ * · `other` มีเฉพาะคนที่เห็นทุกสาขา และมีคนอยู่จริง
+ */
+function siteTabsOf(sites: readonly RecruitSite[], totals: Record<string, number>): SiteFilter[] {
+  const all = sites.length === RECRUIT_SITES.length;
+  return [...sites, ...(all && totals.other ? (["other"] as SiteFilter[]) : [])];
+}
 type EmploymentTab = "current" | "resigned";
 
 type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "license" | "status" | "fleet" | "exitMonth";
@@ -407,14 +433,36 @@ function vehicleLead(driver: DriverListRecord): string {
   return driver.siteKey === "latkrabang" ? code || plate : plate || code;
 }
 
-export function DriverRegistryView({ registry }: { registry: DriverListRegistry }) {
+export function DriverRegistryView({
+  registry,
+  sites,
+  initialSite,
+}: {
+  registry: DriverListRegistry;
+  /** แท็บสาขาที่ผู้ใช้เห็นได้ (`visibleRecruitSites`) */
+  sites: readonly RecruitSite[];
+  /** แท็บตั้งต้น — `?site=` → คุกกี้ `DRIVER_SITE_COOKIE` → สาขาของผู้ใช้ (หน้า server เลือกให้) */
+  initialSite: string;
+}) {
   /**
    * สิทธิ์ย่อย “↳ ประวัติ” (/desk/permissions) — ไม่เห็น = ทะเบียน**อ่านอย่างเดียว**: ไม่มี
    * นำเข้า/Sync เปลี่ยนรูป (Bew 5 พ.ย. 2569) · ส่งออก Excel ยังได้ · API กันซ้ำฝั่งเซิร์ฟเวอร์
    * · ปุ่มเพิ่มพนักงาน/เปลี่ยนสถานะกลับมา (Bew 6 พ.ย. 2569) เฉพาะคนที่มีสิทธิ์
    */
   const canEdit = useCanSee("registry-profile");
-  const [site, setSite] = useState<SiteFilter>("all");
+  const siteTabs = useMemo(() => siteTabsOf(sites, registry.siteTotals), [sites, registry.siteTotals]);
+  const [site, setSiteState] = useState<SiteFilter>(() =>
+    siteTabs.includes(initialSite as SiteFilter) ? (initialSite as SiteFilter) : siteTabs[0],
+  );
+  const setSite = useCallback((v: SiteFilter) => {
+    setSiteState(v);
+    document.cookie = `${DRIVER_SITE_COOKIE}=${v}; path=/recruitment/admin/drivers; samesite=lax`;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("site", v);
+      window.history.replaceState(null, "", url);
+    } catch {}
+  }, []);
   const [employment, setEmployment] = useState<EmploymentTab>("current");
 
   /* คนพ้นสภาพไม่มากับหน้า — โหลดตอนเปิดแท็บครั้งแรก · `of` = ชุดของหน้าที่โหลดไว้ (refresh แล้วโหลดใหม่) */
@@ -469,17 +517,11 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
     [resignedTab],
   );
 
-  /** ทุกแท็บนับจำนวนของตัวเองเสมอ ไม่ว่าตัวกรองอื่นจะเลือกอะไรอยู่ — นับฝั่งเซิร์ฟเวอร์ รวมคนพ้นสภาพที่ยังไม่ได้โหลด */
-  const siteCounts = useMemo(
-    () => new Map(Object.entries(registry.siteTotals) as [SiteFilter, number][]),
-    [registry.siteTotals],
-  );
-
   /** รายชื่อในขอบเขตสาขา + สถานะการจ้างที่เลือกอยู่ — ฐานของทั้งไทล์และตัวเลือกตัวกรอง */
   const scope = useMemo(
     () =>
       drivers.filter((d) => {
-        if (site !== "all" && (d.siteKey ?? "other") !== site) return false;
+        if (siteTabOf(d.siteKey) !== site) return false;
         return employmentOf(d) === employment;
       }),
     [drivers, site, employment],
@@ -765,7 +807,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
       sheet: resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน",
       title: `ทะเบียนประวัติ พจส. · ${resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน"}`,
       filter: [
-        site !== "all" ? `สาขา: ${siteFilterLabel(site)}` : "",
+        `สาขา: ${siteFilterLabel(site)}`,
         deferred.trim() ? `คำค้น: “${deferred.trim()}”` : "",
         ...activeFilters.map(
           ({ key, values }) =>
@@ -794,7 +836,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
             }
             value={counts.total}
             unit="คน"
-            sub={site === "all" ? "ทุกสาขา" : `สาขา${siteFilterLabel(site)}`}
+            sub={`สาขา${siteFilterLabel(site)}`}
             tone={resignedTab ? "alert" : "ink"}
           />
           <SummaryStat
@@ -842,7 +884,7 @@ export function DriverRegistryView({ registry }: { registry: DriverListRegistry 
             className="w-full lg:max-w-88 lg:flex-1"
           />
 
-          <SiteTabs value={site} counts={siteCounts} onChange={(v) => setSite(v)} />
+          <SiteTabs value={site} tabs={siteTabs} onChange={(v) => setSite(v)} />
 
           <div className="flex items-center gap-2 lg:ml-auto">
             {/* ปุ่ม Excel = ส่งออกอย่างเดียว — เอานำเข้า/Sync จาก Excel ออกไปก่อน (Bew 10 พ.ย. 2569)
@@ -1613,9 +1655,8 @@ function ActiveFilterBar({
 }
 
 function siteFilterLabel(site: SiteFilter): string {
-  if (site === "all") return "ทุกสาขา";
   if (site === "other") return "อื่น ๆ";
-  return DRIVER_SITES.find((s) => s.key === site)?.label ?? site;
+  return SITE_TAB_KEYS[site].map((key) => DRIVER_SITES.find((s) => s.key === key)?.label ?? key).join("+");
 }
 
 /**
@@ -1624,19 +1665,13 @@ function siteFilterLabel(site: SiteFilter): string {
  */
 function SiteTabs({
   value,
-  counts,
+  tabs,
   onChange,
 }: {
   value: SiteFilter;
-  counts: Map<SiteFilter, number>;
+  tabs: SiteFilter[];
   onChange: (v: SiteFilter) => void;
 }) {
-  const tabs: SiteFilter[] = [
-    "all",
-    ...DRIVER_SITES.map((s) => s.key),
-    ...(counts.get("other") ? (["other"] as SiteFilter[]) : []),
-  ];
-
   return (
     <SegmentedControl
       label="เลือกสาขา"

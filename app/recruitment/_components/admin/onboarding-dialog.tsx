@@ -40,7 +40,6 @@ import {
 import {
   customerLabel,
   hireTypeLabel,
-  isMixerBranch,
   personName,
   positionLabel,
   waitingDays,
@@ -492,7 +491,6 @@ function RequestKaCard({
   const handover = record.onboarding.handover?.values ?? {};
   const handoverFields = person ? shownFields("handover", handover) : [];
   const editable = record.status !== "cancelled";
-  const mixer = isMixerBranch(record.branch);
 
   return (
     <section className="flex-none overflow-hidden rounded-box border border-line bg-base-100">
@@ -542,8 +540,8 @@ function RequestKaCard({
           <Item label="สาขา">{record.branch || <Dash />}</Item>
           <Item label="ผู้แจ้ง">{record.requester.name || <Dash />}</Item>
           <Item label="ลูกค้า">{customerLabel(record) || <Dash />}</Item>
-          {mixer ? <Item label="แพล้นท์">{record.plant || <Dash />}</Item> : null}
-          {mixer ? <Item label="ตำแหน่ง">{positionLabel(record) || <Dash />}</Item> : null}
+          <Item label="แพล้นท์">{record.plant || <Dash />}</Item>
+          <Item label="ตำแหน่ง">{positionLabel(record) || <Dash />}</Item>
         </dl>
 
         <dl className="grid gap-x-6 gap-y-3 border-t border-line pt-3 sm:grid-cols-4">

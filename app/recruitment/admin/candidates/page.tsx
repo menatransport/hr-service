@@ -7,6 +7,9 @@ import { listBlacklist, listContactOwners } from "@/app/recruitment/_lib/applica
 import { listDocSlots } from "@/app/recruitment/_lib/doc-slots";
 import type { DocSlot } from "@/app/recruitment/_lib/form";
 import type { BlacklistEntry } from "@/app/recruitment/_lib/types";
+import { pickRecruitSite, visibleRecruitSites } from "@/app/recruitment/_lib/sites";
+import { readSessionUser } from "@/lib/auth/session";
+import { canAccessMenu } from "@/lib/menu-permissions";
 
 /**
  * ผู้สมัคร — แยกออกจากหน้าขอสรรหามาเป็นหน้าของตัวเองอีกครั้ง (14 ต.ค. 2026)
@@ -30,6 +33,10 @@ export default async function CandidatesPage({
   const params = await searchParams;
   const ref = typeof params.ref === "string" ? params.ref : "";
   const view = params.view === "open" || params.view === "working" ? params.view : null;
+  /* แท็บสาขา: เห็นเฉพาะสาขาของตัวเอง (สิทธิ์ “ดูทุกสาขา” / site อื่นเห็นทั้งหมด) · `?site=` ชนะถ้าเห็นได้ · ไม่งั้นสาขาของตัวเอง */
+  const [user, allSites] = await Promise.all([readSessionUser(), canAccessMenu("recruit-all-sites")]);
+  const sites = visibleRecruitSites(user, allSites);
+  const site = pickRecruitSite(user, allSites, typeof params.site === "string" ? params.site : null);
 
   let hub: Hub | null = null;
   let contactOptions: string[] = [];
@@ -60,6 +67,8 @@ export default async function CandidatesPage({
           blacklist={blacklist}
           initialRef={ref}
           initialRc={params.rc === "1"}
+          initialSite={site}
+          sites={sites}
         />
       ) : (
         <div className="mx-auto max-w-xl py-6">

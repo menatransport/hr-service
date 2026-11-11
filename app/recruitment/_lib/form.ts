@@ -168,7 +168,9 @@ export type QuestionRole =
   | "last_name"
   | "work_zone"
   | "ready_date"
-  | "hr_contact";
+  | "hr_contact"
+  | "birth_date"
+  | "age";
 
 interface RoleMatcher {
   /** คีย์ที่ระบบเคยตั้งไว้เอง — ตรงตัวไหนใช้ตัวนั้นก่อนเสมอ */
@@ -188,7 +190,31 @@ const ROLE_MATCHERS: Record<QuestionRole, RoleMatcher> = {
   work_zone: { keys: ["branch", "work_zone"], includes: ["เขต"] },
   ready_date: { keys: ["start_availability"], includes: ["เริ่มงาน"] },
   hr_contact: { keys: ["hr_contact"], includes: ["ฝ่ายบุคคล"] },
+  birth_date: { keys: ["birth_date"], includes: ["เกิดวันที่"] },
+  age: { keys: [], includes: ["อายุเท่าไหร่"] },
 };
+
+/**
+ * อายุผู้สมัคร ณ วันนี้ (`todayIso` = `YYYY-MM-DD`) — คิดจากข้อวันเกิดก่อน (อายุขยับตามวันจริง)
+ * ไม่มีวันเกิดค่อยใช้ข้อ “อายุเท่าไหร่” ที่ตอบไว้ตอนสมัคร · อ่านไม่ออก = `null`
+ */
+export function applicantAge(
+  doc: { questionSnapshot?: { key: string; label: string }[]; answers?: AnswerMap },
+  todayIso: string,
+): number | null {
+  const snapshot = doc.questionSnapshot ?? [];
+  const birthQ = findByRole(snapshot, "birth_date");
+  const birth = birthQ ? doc.answers?.[birthQ.key] : undefined;
+  const m = typeof birth === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(birth) : null;
+  if (m) {
+    let age = Number(todayIso.slice(0, 4)) - Number(m[1]);
+    if (todayIso.slice(5, 10) < `${m[2]}-${m[3]}`) age -= 1;
+    if (age >= 15 && age < 100) return age;
+  }
+  const ageQ = findByRole(snapshot, "age");
+  const n = ageQ ? Number.parseInt(String(doc.answers?.[ageQ.key] ?? ""), 10) : NaN;
+  return n >= 15 && n < 100 ? n : null;
+}
 
 /** ข้อที่ทำหน้าที่นี้ในใบสมัครใบหนึ่ง — ไม่มีก็คืน `undefined` ตารางจะขึ้น “—” */
 export function findByRole<T extends { key: string; label: string }>(

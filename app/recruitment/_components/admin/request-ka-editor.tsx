@@ -27,6 +27,11 @@ import {
   type RequisitionDetails,
 } from "@/app/recruitment/_lib/requisitions/types";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
+import {
+  RegistryPlantFields,
+  pickedOrTyped,
+  splitPicked,
+} from "@/app/recruitment/_components/admin/registry-plant-fields";
 
 /**
  * แก้คำขอสรรหา + KA ในการ์ดของ dialog รายคน — ช่องอยู่ตำแหน่งเดียวกับตอนดู กดแก้ไขแล้วกลายเป็น input
@@ -56,7 +61,19 @@ export function RequestKaEditor({
   onCancel: () => void;
   onSaved: (next: OnboardingRecord) => void;
 }) {
-  const plantListed = !record.plant || options.plants.some((o) => o.value === record.plant);
+  const startMixer = isMixerBranch(record.branch);
+  const plantListed =
+    !record.plant ||
+    (startMixer ? options.plants : options.registryPlants.map((r) => ({ value: r.plant }))).some(
+      (o) => o.value === record.plant,
+    );
+  /* สระบุรี/บางปะกง: ตำแหน่งเก็บเป็น `other` + ชื่อ → ดรอปดาวน์ถือชื่อตรง ๆ (ดู `RegistryPlantFields`) */
+  const [startPosition, startPositionOther] = startMixer
+    ? [record.position as string, record.positionOther]
+    : splitPicked(
+        record.positionOther,
+        options.registryPlants.map((r) => r.position),
+      );
 
   const [hireType, setHireType] = useState<string>(record.hireType);
   const [replace, setReplace] = useState(record.replace?.drivercode ?? "");
@@ -65,8 +82,8 @@ export function RequestKaEditor({
   const [customerOther, setCustomerOther] = useState(record.customerOther);
   const [plant, setPlant] = useState(plantListed ? record.plant : OTHER);
   const [plantOther, setPlantOther] = useState(plantListed ? "" : record.plant);
-  const [position, setPosition] = useState<string>(record.position);
-  const [positionOther, setPositionOther] = useState(record.positionOther);
+  const [position, setPosition] = useState<string>(startPosition);
+  const [positionOther, setPositionOther] = useState(startPositionOther);
   const [trainer, setTrainer] = useState(record.trainer?.drivercode ?? "");
   const [vehicle, setVehicle] = useState(record.vehicle?.code ?? "");
   const [note, setNote] = useState(record.note);
@@ -116,21 +133,23 @@ export function RequestKaEditor({
     [record.hireType],
   );
 
-  const plantValue = plant === OTHER ? plantOther.trim() : plant;
+  const plantValue = pickedOrTyped(plant, plantOther);
   const plate = options.vehicles.find((v) => v.value === vehicle)?.plate || record.vehicle?.plateNo || "";
   const repair = plate ? options.repairs[plate] : undefined;
 
-  /** สลับสาขา — สระบุรี/บางปะกงไม่มีตำแหน่ง/แพล้นท์ ล้างทิ้งจริง · ลูกค้าที่ไม่อยู่ในรายชื่อสาขาใหม่ถูกล้าง */
+  /** สลับสาขา — ตำแหน่ง/แพล้นท์งานโม่กับสระบุรี/บางปะกงคนละชุด ข้ามชุด = ล้างทิ้งจริง · ลูกค้าที่ไม่อยู่ในรายชื่อสาขาใหม่ถูกล้าง */
   function pickBranch(next: string) {
     setBranch(next);
+    if (!(isMixerBranch(next) && isMixerBranch(branch))) {
+      setPosition("");
+      setPositionOther("");
+      setPlant("");
+      setPlantOther("");
+    }
     if (isMixerBranch(next)) {
       if (customer && customer !== OTHER && !(CUSTOMERS as readonly string[]).includes(customer)) setCustomer("");
       return;
     }
-    setPosition("");
-    setPositionOther("");
-    setPlant("");
-    setPlantOther("");
     setCustomerOther("");
     const list = options.branchCustomers[next] ?? [];
     setCustomer(list.length === 1 ? list[0] : list.includes(customer) ? customer : "");
@@ -147,8 +166,8 @@ export function RequestKaEditor({
           body: {
             details: {
               branch,
-              position,
-              positionOther: positionOther.trim(),
+              position: mixer ? position : OTHER,
+              positionOther: mixer ? positionOther.trim() : pickedOrTyped(position, positionOther),
               customer: customer.trim(),
               customerOther: customerOther.trim(),
               plant: plantValue,
@@ -253,7 +272,21 @@ export function RequestKaEditor({
               <TextField id="rk-plant-other" label="ระบุชื่อแพล้นท์" srLabel placeholder="ระบุชื่อแพล้นท์…" value={plantOther} onChange={setPlantOther} />
             ) : null}
           </div>
-        ) : null}
+        ) : (
+          <RegistryPlantFields
+            idPrefix="rk"
+            rows={options.registryPlants}
+            customer={customer}
+            plant={plant}
+            plantOther={plantOther}
+            position={position}
+            positionOther={positionOther}
+            onPlant={setPlant}
+            onPlantOther={setPlantOther}
+            onPosition={setPosition}
+            onPositionOther={setPositionOther}
+          />
+        )}
         {mixer ? (
           <div className="flex flex-col gap-2">
             <SelectField

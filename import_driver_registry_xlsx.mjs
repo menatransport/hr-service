@@ -17,6 +17,11 @@
  * `resignation.recordedBy`) · ช่องประวัติที่แก้ผ่าน “แก้ไขข้อมูล” (`editedFields`) · รูป/แฟ้มเอกสาร/
  * วันหมดอายุบัตรที่กรอกไว้แล้ว — ไม่ถูกแตะ
  *
+ * ไฟล์สระบุรี (Bew 11 พ.ย. 2569) — ชีต “ทะเบียนประวัติ สระบุรี 2026” ของ Google Sheet IMPORTRANGE
+ * (`[Importrange ] ทะเบียนประวัติพจส. ลาดกระบัง&สระบุรี 2026.xlsx`) · ไม่มีคอลัมน์เบอร์รถ/สาขาบริษัท
+ * จึงไม่แตะ `vehicleCode` และคง `branch` เดิม (3 สระบุรี / 7 บางปะกง จาก ATMS) · คนใหม่ = 3 · source แยกเป็น
+ * `excel-2026-saraburi` ไม่ให้นับปนกับคนลาดกระบังตอนหา “เคยนำเข้าแต่ไม่อยู่ในไฟล์”
+ *
  * กันซ้ำ (Bew 2 พ.ย. 2569): รหัสพนักงานซ้ำในไฟล์ = ข้ามทุกแถวของรหัสนั้น · คนใหม่ (รหัสยังไม่อยู่ในระบบ)
  * ที่เลขบัตรประชาชนตรงกับ พจส. ที่ยังปฏิบัติงานอยู่ในระบบคนละรหัส = ข้าม (ฝ่ายบุคคลเช็กก่อน)
  */
@@ -69,15 +74,22 @@ const require = createRequire(import.meta.url);
 }
 const { default: ExcelJS } = await import("exceljs");
 
-const SOURCE = "excel-2026";
+/** ชีตที่อ่าน — ไฟล์ Excel ของฝ่ายบุคคล · แท็บของ Google Sheet · ชีตสระบุรี (ไฟล์ IMPORTRANGE) */
+const SHEETS = ["ทะเบียน 2026", "ทะเบียนประวัติ", "ทะเบียนประวัติ สระบุรี 2026"];
+/** ชีตสระบุรี+บางปะกง — รู้ตอนอ่านชีต (`readSheet()`) */
+const isSaraburi = () => /สระบุรี/.test(SHEET);
+const SOURCE_LKB = "excel-2026";
+const sourceOf = () => (isSaraburi() ? "excel-2026-saraburi" : SOURCE_LKB);
 const BY = "นำเข้าจาก Excel ทะเบียน 2026";
-/** ชีตที่อ่าน — ไฟล์ Excel ของฝ่ายบุคคล · แท็บของ Google Sheet */
-const SHEETS = ["ทะเบียน 2026", "ทะเบียนประวัติ"];
 /** แถวหัวตาราง = แถวแรกที่มีคอลัมน์ “รหัสพนักงาน” (Excel: แถว 3 · Google Sheet: แถว 1) */
 const HEADER_SCAN_ROWS = 5;
 let SHEET = SHEETS[0];
-/** หน้าทะเบียนแบ่งสาขาด้วยรหัส ATMS — ไฟล์นี้เป็นของลาดกระบังทั้งไฟล์ (`DRIVER_SITES`) */
-const BRANCH = "2";
+/** หน้าทะเบียนแบ่งสาขาด้วยรหัส ATMS (`DRIVER_SITES`) — ไฟล์ลาดกระบัง = 2 · ไฟล์สระบุรี = 3 (คนที่มีอยู่แล้วคง 3/7 เดิม) */
+const branchOf = (before) => {
+  if (!isSaraburi()) return "2";
+  const b = String(before?.branch ?? "").trim();
+  return b === "3" || b === "7" ? b : "3";
+};
 
 const ACTIVE = new Set(["ปกติ/วิ่งงาน", "ปกติ/ลาป่วยยาว", "ฝึกงาน"]);
 const RESIGNED = new Set(["ออก", "ย้ายเป็นรถร่วม", "คืนรถร่วม", "เกษียณ"]);
@@ -227,16 +239,17 @@ function vehicleOf(v) {
 
 /** หัวคอลัมน์ที่ใช้ — เทียบแบบตัดช่องว่าง/ขึ้นบรรทัดทิ้ง ไฟล์ขยับคอลัมน์ได้โดยไม่พัง */
 const COLUMNS = {
-  vehicle: "เบอร์รถ",
+  vehicle: "เบอร์รถ?",
   startDate: "วันเริ่มงาน",
   code: "รหัสพนักงาน",
   prefix: "คำนำหน้า",
   name: "ชื่อ-นามสกุล",
-  phone: "เบอร์ติดต่อ",
+  phone: ["เบอร์ติดต่อ", "เบอร์โทร"],
   dept: "ฝ่าย",
   position: "ตำแหน่ง",
   customer: "ลูกค้า",
-  plant: "แพล้น",
+  /* ชีตสระบุรีใช้ “สถานที่ทำงาน” (TDM บางวัว · SCCC งานปูน) แทนแพล้นท์ */
+  plant: ["แพล้น", "สถานที่ทำงาน"],
   /* หัวคอลัมน์จริงยาวกว่านี้ (“เลขที่ บัตรประชาชน (พิมพ์เลขติดกันได้เลย)”) — เทียบแค่ต้นคำ */
   nationalId: "เลขที่บัตรประชาชน*",
   idCardExpiry: "วันหมดอายุบัตรประชาชน",
@@ -252,8 +265,8 @@ const COLUMNS = {
   status: "สถานะ",
   resignDate: "วันที่พ้นสภาพ",
   reason: "สาเหตุการลาออก",
-  reasonDetail: "รายะละเอียดของสาเหตุการลาออก",
-  reasonGroup: "NewGroupลาออก",
+  reasonDetail: ["รายะละเอียดของสาเหตุการลาออก", "รายละเอียดสาเหตุการลาออก"],
+  reasonGroup: "NewGroupลาออก?",
 };
 
 const headerKey = (v) => str(v).replace(/\s+/g, "");
@@ -283,17 +296,24 @@ async function readSheet() {
         const at = new Map();
         cells.forEach((v, i) => at.set(headerKey(raw(v)), i));
         index = Object.fromEntries(
-          Object.entries(COLUMNS).map(([key, label]) => {
-            const i = label.endsWith("*")
-              ? [...at].find(([k]) => k.startsWith(label.slice(0, -1)))?.[1]
-              : at.get(label);
-            if (i === undefined) throw new Error(`ไม่พบคอลัมน์ “${label}” ในแถวหัวตาราง`);
-            return [key, i];
+          /* ชื่อหลายแบบ = ใช้ตัวแรกที่เจอ · ลงท้าย `*` = เทียบต้นคำ · ลงท้าย `?` = ไม่มีก็ได้ (ช่องนั้นว่าง) */
+          Object.entries(COLUMNS).map(([key, labels]) => {
+            let i;
+            let optional = false;
+            for (const label of [labels].flat()) {
+              optional ||= label.endsWith("?");
+              i = label.endsWith("*")
+                ? [...at].find(([k]) => k.startsWith(label.slice(0, -1)))?.[1]
+                : at.get(label.replace(/\?$/, ""));
+              if (i !== undefined) break;
+            }
+            if (i === undefined && !optional) throw new Error(`ไม่พบคอลัมน์ “${[labels].flat().join(" / ")}” ในแถวหัวตาราง`);
+            return [key, i ?? -1];
           }),
         );
         continue;
       }
-      const get = (key) => raw(cells[index[key]]);
+      const get = (key) => (index[key] < 0 ? null : raw(cells[index[key]]));
       if (!str(get("name")) && !str(get("code")) && !str(get("status"))) continue;
       rows.push({ row: row.number, get });
     }
@@ -324,7 +344,6 @@ function toEntry({ row, get }) {
     phone: phones.phone,
     phoneAlt: phones.phoneAlt,
     ownerType: ownerTypeOf(dept, position),
-    branch: BRANCH,
     vehicleCode: vehicleOf(get("vehicle")),
     startDate: dateOf(get("startDate")),
     nationalId: nationalIdOf(get("nationalId")),
@@ -336,7 +355,8 @@ function toEntry({ row, get }) {
     /* ผู้ติดต่อฉุกเฉินเก็บเบอร์เดียว — เบอร์ที่สองต่อท้ายไม่ได้ จึงรวมไว้ด้วยกันคั่นจุลภาค */
     emergencyContactPhone: [emergency.phone, emergency.phoneAlt].filter(Boolean).join(", "),
     bankAccountNo: bankAccountOf(get("bankAccountNo")),
-    bankBranch: blankIfPlaceholder(str(get("bankBranch"))),
+    /* ชีตสระบุรีใส่ “รถร่วม” ในช่องสาขาธนาคารของ พจร. (ไม่มีบัญชีกสิกร) — ไม่ใช่ชื่อสาขา */
+    bankBranch: blankIfPlaceholder(str(get("bankBranch"))).replace(/^รถร่วม$/, ""),
     customer: str(get("customer")),
     plant: str(get("plant")),
     position,
@@ -484,9 +504,12 @@ async function main() {
 
       const $set = {
         ...e.profile,
+        branch: branchOf(before),
         syncedAt: now,
-        registry: { source: SOURCE, sheet: SHEET, row: e.row, importedAt: now, by: BY },
+        registry: { source: sourceOf(), sheet: SHEET, row: e.row, importedAt: now, by: BY },
       };
+      /* ชีตสระบุรีไม่มีคอลัมน์เบอร์รถ — คงรถเดิมจาก ATMS ไว้ ไม่ล้างเป็นค่าว่าง */
+      if (isSaraburi()) delete $set.vehicleCode;
       /* เวลาเข้าทะเบียนครั้งแรก — `registry` ข้างบนถูกเขียนทับทุกรอบ ใช้นับ “ใหม่” ไม่ได้ */
       if (!before?.registry) $set.registeredAt = now;
       const $unset = {};
@@ -528,7 +551,7 @@ async function main() {
 
     const fileCodes = new Set(rows.map((e) => e.code));
     const orphaned = [...existing.values()].filter(
-      (d) => d.registry?.source === SOURCE && !fileCodes.has(String(d.drivercode).trim()),
+      (d) => d.registry?.source === sourceOf() && !fileCodes.has(String(d.drivercode).trim()),
     );
     const reqs = await db
       .collection(HR.requisitions.name)
