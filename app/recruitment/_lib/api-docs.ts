@@ -52,11 +52,20 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.10.0";
-export const API_DOCS_UPDATED = "2026-11-09";
+export const API_DOCS_VERSION = "4.11.0";
+export const API_DOCS_UPDATED = "2026-11-12";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-12",
+    version: "4.11.0",
+    changes: [
+      "`GET /api/drivers` · `GET /api/drivers/{drivercode}` เพิ่ม **สถานะหลัก** `mainStatus` (`working` ปฏิบัติงาน · `training` ฝึกงาน · `resigned` พ้นสภาพ · `transferred` ย้ายไปรถร่วม · `to_pjs` ย้ายไปพจส.) + `mainStatusLabel` — `status` เดิม (active/resigned) ยังส่งอยู่",
+      "เพิ่ม `recruitment` — `jr` · `requisitionId` · `requestedOn` (วันที่แจ้งสรรหา) · `trainingStartOn` (วันที่เริ่มฝึกงาน) · `handoverMarkedOn` (RC ลง `ร`) · `handoverOn` (วันที่รับรถแล้ว) จากคำขอสรรหาที่ผูกรหัส · ไม่ได้มาจากคำขอสรรหา = `null`",
+      "เติมช่องที่มีในไฟล์ Excel หน้าทะเบียนแต่ API ยังไม่มี — `birthDate` · `age` · `employment.tenureDays` · `vehicle` มีเลขรถ/ทะเบียนที่กรอกในทะเบียนเมื่อไม่พบรถใน ATMS และลูกค้า/แพล้นท์ของคนที่ไม่มีรถ (เดิม `vehicle: null` ทั้งก้อน)",
+    ],
+  },
   {
     date: "2026-11-09",
     version: "4.10.0",
@@ -323,14 +332,14 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/drivers",
         summary: "ทะเบียน พจส. ทั้งหมด (กรองปี/เดือนได้)",
         description:
-          "ข้อมูลชุดเดียวกับไฟล์ Excel ที่ส่งออกจากหน้าทะเบียน · เรียงตามรหัส · ไม่ส่งช่วง = ทุกคนในทะเบียน · ส่ง `year` / `month` = เฉพาะคนที่ **วันเริ่มงาน** อยู่ในช่วงนั้น · แต่ละแถวรูปเดียวกับ `GET /api/drivers/{drivercode}` ไม่มี `documents` · พ้นสภาพแล้ว `contact` `license` `idCard` `bank` เป็น `null`",
+          "ข้อมูลชุดเดียวกับไฟล์ Excel ที่ส่งออกจากหน้าทะเบียน (+ สถานะหลัก และวันแจ้งสรรหา/เริ่มฝึก/รับรถจากคำขอสรรหา) · เรียงตามรหัส · ไม่ส่งช่วง = ทุกคนในทะเบียน · ส่ง `year` / `month` = เฉพาะคนที่ **วันเริ่มงาน** อยู่ในช่วงนั้น · แต่ละแถวรูปเดียวกับ `GET /api/drivers/{drivercode}` ไม่มี `documents` · พ้นสภาพแล้ว `contact` `license` `idCard` `bank` เป็น `null`",
         access: "login",
         params: [
           { name: "year", in: "query", type: "number", desc: "ปี ค.ศ. หรือ พ.ศ. เช่น `2026` / `2569`" },
           { name: "month", in: "query", type: "1–12 | YYYY-MM", desc: "เดือน — เลขเดือนต้องคู่กับ `year` · หรือ `2026-10` ตัวเดียวจบ" },
         ],
         response:
-          "DriverListItem[] — { drivercode, name, photoUrl, status, personalHidden, employment, contact, license, idCard, vehicle, resignation, work, position, bank: { accountNo, branch }, lastEdit: { at, by }, registry: { source, at } }",
+          "DriverListItem[] — { drivercode, name, photoUrl, status, mainStatus, mainStatusLabel, birthDate, age, personalHidden, employment, recruitment, contact, license, idCard, vehicle, resignation, work, position, bank: { accountNo, branch }, lastEdit: { at, by }, registry: { source, at } }",
         errors: [{ status: 400, when: "`year` / `month` ผิดรูปแบบ หรือส่งเลขเดือนโดยไม่มี `year`" }],
       },
       {
@@ -353,11 +362,11 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/drivers/{drivercode}",
         summary: "ประวัติ พจส. หนึ่งคน",
         description:
-          "ข้อมูลชุดเดียวกับหน้าทะเบียนรายคน ในรูปมาตรฐาน: ค่าที่ไม่มีเป็น `null` · วันที่ `YYYY-MM-DD` · จัดกลุ่มตามเรื่อง · สถานะรายวัน/รายเดือนแยกไปที่ `…/work` · ถ้าพ้นสภาพแล้ว `contact`, `license`, `idCard` เป็น `null` และ `personalHidden: true`",
+          "ข้อมูลชุดเดียวกับหน้าทะเบียนรายคน ในรูปมาตรฐาน: ค่าที่ไม่มีเป็น `null` · วันที่ `YYYY-MM-DD` · จัดกลุ่มตามเรื่อง · สถานะรายวัน/รายเดือนแยกไปที่ `…/work` · ถ้าพ้นสภาพแล้ว `contact`, `license`, `idCard` เป็น `null` และ `personalHidden: true` · **สถานะหลัก `mainStatus`**: พ้นสภาพตาม `resignation.kind` (`resign` → `resigned` · `transfer` → `transferred` · `pjs` → `to_pjs`) · ยังอยู่ + คำขอสรรหายังไม่รับรถ (ขั้นฝึกงาน/รอรับรถ) = `training` · ไม่ได้มาจากคำขอสรรหาแต่ ATMS ล่าสุด `ฝ` = `training` · นอกนั้น `working` · `recruitment` = คำขอสรรหาที่ผูกรหัสนี้ (ไม่นับใบยกเลิก · แก้ล่าสุดชนะ)",
         access: "login",
         params: [P("drivercode", "รหัส พจส.")],
         response:
-          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths }, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { kind: \"resign\"|\"transfer\"|\"pjs\", date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
+          "{ drivercode, name, photoUrl, status: \"active\"|\"resigned\", mainStatus: \"working\"|\"training\"|\"resigned\"|\"transferred\"|\"to_pjs\", mainStatusLabel, birthDate, age, personalHidden, employment: { ownerType, branch, site, startDate, tenureMonths, tenureDays }, recruitment: { jr, requisitionId, requestedOn, trainingStartOn, handoverMarkedOn, handoverOn } | null, contact: { phone, phoneAlt, emergency: { name, relation, phone } }, license: { number, type, expiryDate, daysLeft }, idCard: { number, expiryDate, daysLeft }, vehicle: { code, plateNo, type, brand, model, customer, plant }, resignation: { kind: \"resign\"|\"transfer\"|\"pjs\", date, reasonCode, reasonLabel, category, exitType, note, recordedAt, recordedBy }, work: { latestStatus, latestStatusLabel, latestDate }, documents: [{ fileId, docType, docTypeLabel, name, contentType, size, uploadedAt, url }] }",
         errors: [{ status: 404, when: "ไม่พบรหัส พจส. ในทะเบียน" }],
       },
       {

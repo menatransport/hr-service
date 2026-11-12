@@ -10,6 +10,7 @@ import {
   type ManualDriverInput,
 } from "@/app/recruitment/_lib/drivers/registry";
 import { toDriverListItemDto } from "@/app/recruitment/_lib/drivers/api";
+import { getDriversOnboarding } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
@@ -17,6 +18,7 @@ import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
  *
  * `?year=2026` ทั้งปี · `?year=2569&month=10` หรือ `?month=2026-10` รายเดือน (ดู `readPeriod()`)
  * แต่ละแถวรูปเดียวกับ `GET /api/drivers/{drivercode}` ไม่มี `documents` · พ้นสภาพแล้วข้อมูลส่วนบุคคลเป็น `null`
+ * · `mainStatus` + `recruitment` (วันแจ้งสรรหา/เริ่มฝึก/รับรถ) จากคำขอสรรหาที่ผูกรหัส (`getDriversOnboarding()`)
  *
  * **บังคับล็อกอินเอง** — `proxy.ts` ปล่อย `GET` ผ่าน และเส้นนี้มีข้อมูลส่วนบุคคลทั้งทะเบียน
  */
@@ -28,8 +30,10 @@ export async function GET(request: NextRequest) {
 
     const period = readPeriod(request.nextUrl.searchParams);
     const rows = await getDriversForApi(period);
+    /* สถานะฝึกงาน + วันแจ้งสรรหา/เริ่มฝึก/รับรถ — อ่านไม่ได้ไม่ล้มทั้งเส้น (`recruitment` เป็น `null`) */
+    const onboarding = await getDriversOnboarding(rows.map((d) => d.drivercode)).catch(() => new Map());
 
-    const res = ok(rows.map(toDriverListItemDto));
+    const res = ok(rows.map((d) => toDriverListItemDto(d, onboarding.get(d.drivercode) ?? null)));
     res.headers.set("Cache-Control", "private, no-store");
     return res;
   } catch (err) {

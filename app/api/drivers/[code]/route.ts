@@ -9,6 +9,7 @@ import {
   updateDriverProfile,
 } from "@/app/recruitment/_lib/drivers/registry";
 import { toDriverDto } from "@/app/recruitment/_lib/drivers/api";
+import { getDriverOnboarding } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { registryWriteDenied } from "@/app/api/drivers/_lib/guard";
 
 /**
@@ -46,7 +47,8 @@ export async function GET(
       );
     }
 
-    const res = ok(toDriverDto(driver));
+    const onboarding = await getDriverOnboarding(drivercode).catch(() => null);
+    const res = ok(toDriverDto(driver, onboarding));
     res.headers.set("Cache-Control", "private, no-store");
     return res;
   } catch (err) {
@@ -92,8 +94,11 @@ export async function PATCH(
       );
     }
 
-    const profile = await getDriverProfile(drivercode);
-    return ok(profile ? toDriverDto(profile) : null);
+    const [profile, onboarding] = await Promise.all([
+      getDriverProfile(drivercode),
+      getDriverOnboarding(drivercode).catch(() => null),
+    ]);
+    return ok(profile ? toDriverDto(profile, onboarding) : null);
   } catch (err) {
     if (err instanceof DriverRegistryError) return badRequest(err.message);
     return fail(err);

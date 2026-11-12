@@ -496,6 +496,22 @@ export async function getDriverOnboarding(drivercode: string): Promise<Onboardin
   return record;
 }
 
+/**
+ * `getDriverOnboarding()` ทีละหลายรหัส — `GET /api/drivers` ใช้เติมสถานะฝึกงาน + วันแจ้งสรรหา/เริ่มฝึก/รับรถ
+ * · กติกาเดียวกัน (ไม่นับใบยกเลิก · แก้ล่าสุดชนะ) · รหัสที่ไม่ได้มาจากคำขอสรรหาไม่มีในผลลัพธ์
+ */
+export async function getDriversOnboarding(drivercodes: readonly string[]): Promise<Map<string, OnboardingRecord>> {
+  const codes = [...new Set(drivercodes.map((c) => c.trim()).filter(Boolean))];
+  if (!codes.length) return new Map();
+  const docs = await (await requisitions())
+    .find({ drivercode: { $in: codes }, status: { $ne: "cancelled" } }, { sort: { updatedAt: -1 } })
+    .toArray();
+  const latest = new Map<string, WithId<RequisitionDoc>>();
+  for (const doc of docs) if (!latest.has(doc.drivercode)) latest.set(doc.drivercode, doc);
+  const records = await toRecords([...latest.values()]);
+  return new Map(records.map((r) => [r.drivercode, r]));
+}
+
 export interface RcForm {
   record: OnboardingRecord;
   codeMatch: Journey["codeMatch"];
