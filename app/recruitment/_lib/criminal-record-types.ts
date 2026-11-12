@@ -22,6 +22,13 @@ export interface CriminalRecordResult {
   records: CriminalRecordEntry[];
 }
 
+/**
+ * ยังไม่มีผล = ไม่มีช่องผลตรวจ (F) และไม่มีคดี — ชื่อเข้าชีตแล้วแต่ยังไม่ได้ลงผล (Bew 12 พ.ย. 2569)
+ */
+export function hasCriminalResult(entry: CriminalRecordEntry): boolean {
+  return Boolean(entry.result.trim()) || hasCriminalCase(entry);
+}
+
 /** มีคดี = ช่องรายละเอียดคดีมีข้อความ หรือผลตรวจบอกว่า “พบ” (แต่ไม่ใช่ “ไม่พบ”) */
 export function hasCriminalCase(entry: CriminalRecordEntry): boolean {
   const detail = entry.detail.replace(/^[-–—\s]+$/, "");

@@ -41,6 +41,7 @@ import { CandidateDocumentsModal } from "@/app/recruitment/_components/admin/can
 import { CandidateRcForm, type RcTarget } from "@/app/recruitment/_components/admin/candidate-rc-form";
 import { SearchField } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/summary-panel";
+import { MixerTabs, PositionTag, mixerCounts, type MixerPick } from "@/app/recruitment/_components/admin/position-tag";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
 import { Nickname } from "@/app/recruitment/_components/admin/nickname";
 import { CriminalRecordButton, CriminalRecordHeadTip } from "@/app/recruitment/_components/admin/criminal-record";
@@ -985,6 +986,11 @@ export function CandidatesView({
   const searchBar = !view && !showDaily && (showPending || showWaiting);
   const needle = (showDaily && !dailyTab) || searchBar ? query.trim().toLowerCase() : "";
 
+  /** แท็บ ทั้งหมด | Mixer L | Mixer S — มุมมองรอฝึกงาน/ฝึกงานของลาดกระบัง (Bew 12 พ.ย. 2569) · แท็บซ่อน = ไม่กรองต่อเบื้องหลัง */
+  const showMixer = showTrainee && site === "latkrabang";
+  const [mixerPick, setMixerPick] = useState<MixerPick>("all");
+  const mixer = showMixer ? mixerPick : "all";
+
   const columns = useMemo(
     () =>
       showTrainee
@@ -1012,10 +1018,10 @@ export function CandidatesView({
         ? TRAINEE_SORT
         : DEFAULT_SORT;
 
-  const visible = useMemo(() => {
+  const [visible, mixerCount] = useMemo(() => {
     /* กรองด้วยคอลัมน์ที่เห็นอยู่จริงเท่านั้น — ตัวกรองของคอลัมน์เหตุผลที่ถูกซ่อนไป
        แล้วต้องไม่แอบกรองต่ออยู่เบื้องหลัง */
-    const matched = enriched.filter((a) => {
+    const filtered = enriched.filter((a) => {
       if (needle) {
         const rq = rqByApplication.get(a.id);
         const hay = [a.fullName, a.nickname, a.ref, a.phone, a.contactOwner, a.licenseType, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
@@ -1027,22 +1033,27 @@ export function CandidatesView({
       });
     });
 
+    /* ตัวเลขบนแท็บตำแหน่ง = หลังตัวกรองอื่น ก่อนกรองตำแหน่ง */
+    const counts = mixerCounts(filtered, (a) => a.trainee?.position ?? "");
+    const matched = mixer === "all" ? filtered : filtered.filter((a) => a.trainee?.position === mixer);
+
     const column = COLUMNS.find((c) => c.id === sort.column) ?? COLUMNS[0];
 
     const read = (a: Row) =>
       "key" in column ? column.key(a) : column.text(a);
 
-    return [...matched].sort((a, b) => {
+    const sorted = [...matched].sort((a, b) => {
       const order = thaiNumericCompare(read(a), read(b));
       return sort.dir === "asc" ? order : -order;
     });
-  }, [enriched, columns, filters, sort, needle, rqByApplication]);
+    return [sorted, counts] as const;
+  }, [enriched, columns, filters, sort, needle, rqByApplication, mixer]);
 
   /**
    * หน้าละ 25 แถว (2 พ.ย. 2569) — ตัดหลังกรอง/เรียงแล้ว · แถบสรุป ตัวเลขในหัวคอลัมน์
    * ปุ่ม Excel และตารางฝึกงานรายวันยังใช้ `visible` ทั้งชุดเหมือนเดิม
    */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort, needle]));
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort, needle, mixer]));
 
   /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
   const toPerson = (a: ApplicationSummary): TraineePerson => {
@@ -1156,6 +1167,21 @@ export function CandidatesView({
         ),
       );
       setDrafting((open) => (open && open.id === id ? next : open));
+      /* ยกเลิกใบที่ผูก JR — เซิร์ฟเวอร์ปลดการผูกแล้ว: คืน JR ไปสรรหา หรือยกเลิก JR ด้วย (`syncRequisitionForApplication`) */
+      if (next.status === "cancelled" && before.status !== "cancelled")
+        setRequisitions?.((prev) =>
+          prev.map((r) =>
+            r.match?.applicationId === id
+              ? {
+                  ...r,
+                  match: null,
+                  filledOn: "",
+                  status: patch.requisitionCancelReason ? "cancelled" : "open",
+                  cancelReason: patch.requisitionCancelReason ?? "",
+                }
+              : r,
+          ),
+        );
     } catch (err) {
       setRows((prev) => prev.map((a) => (a.id === id ? before : a)));
       if (rethrow) throw err;
@@ -1297,9 +1323,10 @@ export function CandidatesView({
               />
             </>
           )}
+          {showMixer ? <MixerTabs value={mixerPick} counts={mixerCount} onChange={setMixerPick} className="w-full sm:w-auto" /> : null}
         </div>
       ) : searchBar ? (
-        <div className="flex flex-none py-3">
+        <div className="flex flex-none flex-col gap-2 py-3 lg:flex-row lg:items-center lg:gap-3">
           <SearchField
             value={query}
             onChange={setQuery}
@@ -1308,6 +1335,7 @@ export function CandidatesView({
             tone="filled"
             className="w-full lg:max-w-sm"
           />
+          {showMixer ? <MixerTabs value={mixerPick} counts={mixerCount} onChange={setMixerPick} className="w-full sm:w-auto" /> : null}
         </div>
       ) : null}
 
@@ -1493,6 +1521,7 @@ export function CandidatesView({
                       </td>
                     );
                   case "position":
+                    return <td className="px-3 py-2 whitespace-nowrap">{t?.position ? <PositionTag value={t.position} /> : dash}</td>;
                   case "customer":
                   case "plant":
                   case "trainer":
@@ -1626,6 +1655,7 @@ export function CandidatesView({
                           /* เป็นรอฝึกงาน/ฝึกงานต้องผ่านฟอร์มข้อมูล RC (+ เลือก RQ) ก่อนเสมอ */
                           onStage={(to) => toStage(a, to)}
                           handover={a.waitHandover}
+                          jr={rqByApplication.get(a.id)?.code}
                         />
                       </td>
                     );

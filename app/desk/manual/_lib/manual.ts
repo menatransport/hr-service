@@ -65,6 +65,17 @@ export interface Manual {
 /** `time` = เวลาที่ขึ้นระบบ (HH:MM เวลาไทย) */
 export const CHANGELOG: { date: string; time: string; items: [string, string][] }[] = [
   {
+    date: "2026-11-12",
+    time: "11:48",
+    items: [
+      ["candidates", "ตำแหน่ง **Mixer L / Mixer S มีป้ายสี** · แท็บกรอง **ทั้งหมด | Mixer L | Mixer S** (ลาดกระบัง · รอฝึกงาน/ฝึกงาน)"],
+      ["candidates", "ยกเลิกใบที่ผูก JR — เลือกได้ว่า **คืน JR กลับไปสรรหา** หรือ **ยกเลิก JR ด้วย**"],
+      ["candidates", "ผลประวัติอาชญากรรม: มีชื่อในชีตแต่ยังไม่ลงผล = **ยังไม่มีผลตรวจ**"],
+      ["onboarding", "ป้ายสี **Mixer L / Mixer S** + แท็บกรองตำแหน่ง · คอลัมน์ตำแหน่งอยู่หน้าลูกค้า"],
+      ["onboarding", "คอลัมน์ประเภท **ทดแทน** แสดง **รหัส · ชื่อ** คนที่ถูกแทน (Excel ด้วย)"],
+    ],
+  },
+  {
     date: "2026-11-09",
     time: "16:00",
     items: [

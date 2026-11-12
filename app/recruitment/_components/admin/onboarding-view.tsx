@@ -66,6 +66,7 @@ import { RequisitionForm } from "@/app/recruitment/_components/admin/requisition
 import { RequisitionCancelModal } from "@/app/recruitment/_components/admin/requisition-cancel";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
 import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
+import { MixerTabs, PositionTag, isMixer, mixerCounts, type MixerPick } from "@/app/recruitment/_components/admin/position-tag";
 import { CheckMark, PhoneCell } from "@/app/recruitment/_components/admin/candidate-cells";
 import { TraineeDailySection, type TraineePerson } from "@/app/recruitment/_components/admin/trainee-daily-section";
 import { thaiNumericCompare } from "@/lib/thai-order";
@@ -158,7 +159,8 @@ const C = {
   /* สาขาที่ขออัตรา — ใบก่อน 3 พ.ย. 2569 ไม่มีค่า = — */
   branch: { id: "branch", label: "สาขา", width: "min-w-[100px]", text: (r) => r.branch || DASH },
   position: { id: "position", label: "ตำแหน่ง", width: "min-w-[80px]", text: (r) => positionLabel(r) },
-  hireType: { id: "hireType", label: "ประเภท", width: "min-w-[90px]", text: (r) => hireTypeLabel(r.hireType) },
+  /* ทดแทน = บรรทัดรอง รหัส · ชื่อ คนที่ถูกแทน (Bew 12 พ.ย. 2569) · ตัวกรอง/เรียงยังใช้ป้ายประเภท */
+  hireType: { id: "hireType", label: "ประเภท", width: "min-w-[150px]", text: (r) => hireTypeLabel(r.hireType) },
   vehicle: {
     id: "vehicle",
     label: "ทะเบียนรถ",
@@ -320,7 +322,8 @@ const C = {
 } satisfies Record<string, Col>;
 
 const COLUMNS: Record<Stage, Col[]> = {
-  open: [C.code, C.waiting, C.requested, C.customer, C.plant, C.position, C.hireType, C.vehicle, C.repair, C.trainer],
+  /* ตำแหน่งอยู่หน้าลูกค้าทุกแท็บ (Bew 12 พ.ย. 2569) */
+  open: [C.code, C.waiting, C.requested, C.position, C.customer, C.plant, C.hireType, C.vehicle, C.repair, C.trainer],
   /* รอฝึกงาน = คอลัมน์ชุดเดียวกับแท็บฝึกงาน ไม่มี ฝึกมา/ปฐมนิเทศ/ST (Bew 5 พ.ย. 2569) · สถานะ = สถานะใบสมัคร */
   recruiting: [
     C.trainee, C.jr, C.position, C.customer, C.plant, C.trainOwner, C.trainPhone, C.trainTrainer,
@@ -332,9 +335,9 @@ const COLUMNS: Record<Stage, Col[]> = {
     C.trainOn, C.trainDays, C.orientation, C.st, C.car, C.trainStatus,
   ],
   /* ข้อมูลคนอยู่ทะเบียน พจส. แล้ว — แท็บนี้เก็บแค่ผลของ onboarding
-     · คน → งาน (ตำแหน่ง สาขา ลูกค้า แพล้นท์ รถ ครูฝึก) → วันที่ → สถานะท้าย แบบแท็บฝึกงาน (Bew 10 พ.ย. 2569) */
+     · คน → งาน (สาขา ตำแหน่ง ลูกค้า แพล้นท์ รถ ครูฝึก) → วันที่ → สถานะท้าย แบบแท็บฝึกงาน (Bew 10 พ.ย. 2569) */
   working: [
-    C.driver, C.code, C.position, C.branch, C.customer, C.plant,
+    C.driver, C.code, C.branch, C.position, C.customer, C.plant,
     { ...C.vehicle, label: "ทะเบียนรถ/เบอร์รถ" }, C.trainer,
     C.start, C.handover, C.days, C.driverStatus,
   ],
@@ -394,7 +397,11 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   plant: [{ header: "แพล้นท์", width: 18, value: C.plant.text }],
   branch: [{ header: "สาขา", width: 12, value: C.branch.text }],
   position: [{ header: "ตำแหน่ง", width: 12, value: C.position.text }],
-  hireType: [{ header: "ประเภท", width: 14, value: C.hireType.text }],
+  hireType: [
+    { header: "ประเภท", width: 14, value: C.hireType.text },
+    { header: "ทดแทน รหัส", width: 12, kind: "code", value: (r) => r.replace?.drivercode },
+    { header: "ทดแทน ชื่อ", width: 24, value: (r) => r.replace?.name },
+  ],
   vehicle: [
     { header: "ทะเบียนรถ", width: 14, kind: "code", value: (r) => r.vehicle?.plateNo },
     { header: "เบอร์รถ", width: 10, kind: "code", value: (r) => r.vehicle?.code },
@@ -624,8 +631,14 @@ export function OnboardingView({
 
   /* ช่องค้นหาซ่อนในแท็บสถานะฝึกงาน (มีช่องค้นหาของตัวเอง) = ไม่กรองต่อเบื้องหลัง */
   const needle = dailyTab ? "" : query.trim().toLowerCase();
-  const visible = useMemo(() => {
-    const list = inStage.filter((row) => {
+
+  /** แท็บ ทั้งหมด | Mixer L | Mixer S (Bew 12 พ.ย. 2569) — แท็บที่มีคอลัมน์ตำแหน่ง + มีคำขอ Mixer · แท็บซ่อน = ไม่กรองต่อเบื้องหลัง */
+  const showMixer = columns.some((c) => c.id === "position") && rows.some((r) => isMixer(positionLabel(r)));
+  const [mixerPick, setMixerPick] = useState<MixerPick>("all");
+  const mixer = showMixer ? mixerPick : "all";
+
+  const [visible, mixerCount] = useMemo(() => {
+    const filtered = inStage.filter((row) => {
       if (
         needle &&
         ![row.name, row.code, row.applicant?.ref ?? "", row.app?.phone ?? "", row.drivercode, row.plant, row.trainer?.name ?? "", row.vehicle?.code ?? "", row.vehicle?.plateNo ?? ""].some((t) =>
@@ -635,16 +648,20 @@ export function OnboardingView({
         return false;
       return columns.every((c) => !filters[c.id]?.length || filters[c.id].includes(c.text(row)));
     });
+    /* ตัวเลขบนแท็บตำแหน่ง = หลังตัวกรองอื่น ก่อนกรองตำแหน่ง */
+    const counts = mixerCounts(filtered, positionLabel);
+    const list = mixer === "all" ? filtered : filtered.filter((r) => positionLabel(r) === mixer);
     const column = columns.find((c) => c.id === sort.column) ?? columns[0];
     const read = (r: Row) => (column.key ? column.key(r) : column.text(r));
-    return list.sort((a, b) => {
+    const sorted = list.sort((a, b) => {
       const order = thaiNumericCompare(read(a), read(b));
       return sort.dir === "asc" ? order : -order;
     });
-  }, [inStage, needle, columns, filters, sort]);
+    return [sorted, counts] as const;
+  }, [inStage, needle, columns, filters, sort, mixer]);
 
   /** หน้าละ 25 แถว — เปลี่ยนขั้น/คำค้น/ตัวกรอง/การเรียงแล้วกลับหน้า 1 */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([tab, needle, filters, sort, month]));
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([tab, needle, filters, sort, month, mixer]));
 
   const filtering = Boolean(needle) || Object.values(filters).some((p) => p?.length);
 
@@ -826,6 +843,7 @@ export function OnboardingView({
             tone="filled"
             className="lg:max-w-sm lg:flex-1"
           />
+          {showMixer ? <MixerTabs value={mixerPick} counts={mixerCount} onChange={setMixerPick} className="w-full sm:w-auto" /> : null}
           {shownNote?.length ? (
             <p className="text-12 leading-relaxed text-ink">
               <span className="font-medium">เงื่อนไข: </span>
@@ -1202,6 +1220,19 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
       ) : (
         <span className="text-mut">{DASH}</span>
       );
+    case "hireType":
+      return row.replace && (row.replace.drivercode || row.replace.name) ? (
+        <span className="flex flex-col leading-tight">
+          <span className="whitespace-nowrap">{text}</span>
+          <span className="text-11 whitespace-nowrap text-mut">
+            {row.replace.drivercode ? <span className="font-mono">{row.replace.drivercode}</span> : null}
+            {row.replace.drivercode && row.replace.name ? " · " : null}
+            {row.replace.name}
+          </span>
+        </span>
+      ) : (
+        <span>{text}</span>
+      );
     case "trainPhone":
       return row.app?.phone ? <PhoneCell phone={row.app.phone} /> : <span className="text-mut">{DASH}</span>;
     case "trainDays":
@@ -1281,6 +1312,8 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
       return text === DASH ? <span className="text-mut">{DASH}</span> : <span className="font-medium text-alert">{text}</span>;
     case "atms":
       return <span className={row.atms?.exited ? "text-alert" : text === DASH ? "text-mut" : ""}>{text}</span>;
+    case "position":
+      return <PositionTag value={text} />;
     default:
       return <span className={text === DASH ? "text-mut" : ""}>{text}</span>;
   }

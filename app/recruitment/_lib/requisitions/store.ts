@@ -894,6 +894,8 @@ export async function syncRequisitionForApplication(
   applicationId: string,
   status: ApplicationStatus,
   by: string,
+  /** ยกเลิกใบสมัคร + เลือก “ยกเลิก JR ไปด้วย” — มี = ปิดคำขอด้วยเหตุผลนี้แทนการเปิดรับใหม่ (Bew 12 พ.ย. 2569) */
+  cancelRequisition?: CancelReason,
 ): Promise<void> {
   try {
     const col = await requisitions();
@@ -905,6 +907,17 @@ export async function syncRequisitionForApplication(
 
     /* ผู้สมัครถอนตัว → ปลดการผูกและ**เปิดอัตรารับใหม่**
        ไม่มีขั้นนี้ อัตราที่หลุดจะค้างเป็น `matched` ตลอดกาลโดยไม่มีใครเห็น */
+    if (status === "cancelled" && cancelRequisition) {
+      const reason = CANCEL_REASONS.find((r) => r.value === cancelRequisition)!.label;
+      await apply(
+        col,
+        current,
+        { match: null, status: "cancelled", cancelReason: cancelRequisition, filledOn: "", ...archiveOnboarding(current) },
+        by,
+        `${current.match?.fullName ?? "ผู้สมัคร"} ยกเลิก — ยกเลิกคำขอด้วย (${reason})`,
+      );
+      return;
+    }
     if (status === "cancelled") {
       await apply(
         col,

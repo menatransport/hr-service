@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { daysUntil, formatPhone, thaiDate } from "@/app/recruitment/_lib/form";
+import { CANCEL_REASONS, type CancelReason } from "@/app/recruitment/_lib/requisitions/types";
 import {
   EXIT_REASONS,
   EXIT_REASON_NOTE_MAX,
@@ -61,6 +62,8 @@ export type CellPatch = {
   contactOwner?: string;
   /** ย้ายสาขา — ปุ่มในคอลัมน์จัดการ (ดู `sites.ts`) */
   site?: ApplicationSummary["site"];
+  /** ยกเลิกใบที่ผูก JR + เลือก “ยกเลิก JR ด้วย” — ไม่ส่ง = คืน JR กลับไปสรรหา */
+  requisitionCancelReason?: CancelReason;
   interview?: Partial<ApplicationSummary["interview"]>;
   /**
    * ข้อความที่ถูกบันทึกลงไทม์ไลน์พร้อมชื่อผู้แก้ไขและเวลา — ช่องในตารางไม่ได้ส่ง
@@ -188,7 +191,10 @@ export function StatusCell({
   locked,
   onStage,
   handover = false,
+  jr = "",
 }: CellProps & {
+  /** เลข JR ที่ผูกอยู่ — มี = กล่องยกเลิกถามว่าคืน JR กลับไปสรรหา หรือยกเลิก JR ด้วย */
+  jr?: string;
   /** มี = เลือก “รอฝึกงาน”/“ฝึกงาน” แล้วให้หน้าแม่จัดการ (เปิดฟอร์มข้อมูล RC + RQ) แทนการบันทึกตรง */
   onStage?: (to: "interview_passed" | "training") => void;
   /** ใบฝึกงานที่ RC ลง `ร` แล้ว — ป้ายม่วง “รอรับรถ” แทนป้ายฝึกงาน (ใบสมัครยังเป็นฝึกงาน · Bew 9 พ.ย. 2569) */
@@ -219,10 +225,21 @@ export function StatusCell({
     setSaving(false);
   }
 
-  async function cancelWith(exitReason: ExitReason, exitReasonNote: string, blacklist: boolean) {
+  async function cancelWith(
+    exitReason: ExitReason,
+    exitReasonNote: string,
+    blacklist: boolean,
+    requisitionCancelReason?: CancelReason,
+  ) {
     setAsking(false);
     setSaving(true);
-    await onPatch({ status: "cancelled", exitReason, exitReasonNote, blacklist });
+    await onPatch({
+      status: "cancelled",
+      exitReason,
+      exitReasonNote,
+      blacklist,
+      ...(requisitionCancelReason ? { requisitionCancelReason } : {}),
+    });
     setSaving(false);
   }
 
@@ -265,6 +282,7 @@ export function StatusCell({
       {asking ? (
         <CancelPrompt
           candidate={candidate}
+          jr={jr}
           onConfirm={cancelWith}
           onClose={() => setAsking(false)}
         />
@@ -288,19 +306,25 @@ export function StatusCell({
  */
 function CancelPrompt({
   candidate,
+  jr,
   onConfirm,
   onClose,
 }: {
   candidate: ApplicationSummary;
-  onConfirm: (reason: ExitReason, note: string, blacklist: boolean) => void;
+  jr: string;
+  onConfirm: (reason: ExitReason, note: string, blacklist: boolean, requisitionCancelReason?: CancelReason) => void;
   onClose: () => void;
 }) {
   const [reason, setReason] = useState<ExitReason>(candidate.exitReason);
   const [note, setNote] = useState(candidate.exitReasonNote);
   const [blacklist, setBlacklist] = useState(candidate.blacklist);
+  /* ใบที่ผูก JR — คืน JR กลับไปสรรหา (ตั้งต้น) หรือยกเลิก JR ไปด้วย + เหตุผลของ JR (Bew 12 พ.ย. 2569) */
+  const [jrAction, setJrAction] = useState<"reopen" | "cancel">("reopen");
+  const [jrReason, setJrReason] = useState<CancelReason | "">("");
+  const jrCancel = Boolean(jr) && jrAction === "cancel";
 
   const other = reason === OTHER_EXIT_REASON;
-  const ready = !other || note.trim().length > 0;
+  const ready = (!other || note.trim().length > 0) && (!jrCancel || Boolean(jrReason));
 
   return (
     <ModalShell
@@ -327,7 +351,7 @@ function CancelPrompt({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(reason, other ? note.trim() : "", blacklist)}
+            onClick={() => onConfirm(reason, other ? note.trim() : "", blacklist, jrCancel && jrReason ? jrReason : undefined)}
             disabled={!ready}
             className="btn-danger flex items-center gap-1.5 px-4 py-2 text-12-5 font-medium disabled:opacity-45"
           >
@@ -375,6 +399,56 @@ function CancelPrompt({
         ) : null}
       </div>
 
+      {jr ? (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-12-5 font-medium text-mut">
+            JR ที่ผูกอยู่ <span className="font-mono tracking-wider text-primary">{jr}</span>
+          </span>
+          <div
+            role="group"
+            aria-label="จัดการ JR ที่ผูกอยู่"
+            className="flex w-fit gap-1 rounded-full border border-line bg-base-100 p-1"
+          >
+            {JR_CHOICES.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setJrAction(option.value)}
+                aria-pressed={jrAction === option.value}
+                className={`cursor-pointer rounded-full px-3.5 py-1.5 text-12-5 transition-colors ${
+                  jrAction === option.value
+                    ? option.value === "cancel"
+                      ? "bg-alert font-medium text-ink-content"
+                      : "bg-ink font-medium text-ink-content"
+                    : "text-mut hover:text-ink"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {jrCancel ? (
+            <div role="group" aria-label="เหตุผลที่ยกเลิก JR" className="flex flex-wrap gap-1.5">
+              {CANCEL_REASONS.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => setJrReason(r.value)}
+                  aria-pressed={jrReason === r.value}
+                  className={`rounded-full border px-3 py-1 text-12-5 transition-colors ${
+                    jrReason === r.value
+                      ? "border-primary/50 bg-soft font-medium text-primary"
+                      : "border-line text-ink hover:border-primary/45 hover:bg-base-200"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-1.5">
         <span className="text-12-5 font-medium text-mut">เพิ่มเป็น Blacklist หรือไม่</span>
         <div
@@ -404,6 +478,11 @@ function CancelPrompt({
     </ModalShell>
   );
 }
+
+const JR_CHOICES = [
+  { value: "reopen", label: "คืน JR กลับไปสรรหา" },
+  { value: "cancel", label: "ยกเลิก JR ด้วย" },
+] as const;
 
 const BLACKLIST_CHOICES = [
   { value: false, label: "ไม่" },

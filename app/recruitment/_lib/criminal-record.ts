@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   CRIMINAL_DEPARTMENTS,
+  hasCriminalResult,
   type CriminalRecordResult,
 } from "@/app/recruitment/_lib/criminal-record-types";
 
@@ -106,7 +107,9 @@ export async function getCriminalRecord(rawName: string, site = ""): Promise<Cri
 
   const key = `${site.trim()}|${name}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < (hit.value.found ? FOUND_TTL : MISS_TTL)) return hit.value;
+  /* มีชื่อแต่ยังไม่ลงผล = จำสั้นแบบไม่มีชื่อ — ลงผลแล้วเห็นเร็ว */
+  const settled = hit?.value.found && hit.value.records.some(hasCriminalResult);
+  if (hit && Date.now() - hit.at < (settled ? FOUND_TTL : MISS_TTL)) return hit.value;
 
   const pending = inflight.get(key);
   if (pending) return pending;

@@ -739,7 +739,7 @@ export const API_GROUPS: ApiGroup[] = [
         path: "/api/recruitment/applications/{id}",
         summary: "จัดการผู้สมัคร",
         description:
-          "สถานะ ผู้ติดต่อกลับ แผน/ผลสัมภาษณ์ เหตุผลออก Blacklist และบันทึกภายใน ในคำขอเดียว · `exitReason: \"other\"` ต้องส่ง `exitReasonNote` มาด้วย · `blacklist` (boolean) มีผลเฉพาะใบที่ `cancelled` — สถานะอื่นถูกล้างเป็น `false` · ขึ้น/ถอดลงไทม์ไลน์ · `rating` = คะแนน Driver Rating ที่ฝ่ายบุคคลเลือก (เซิร์ฟเวอร์คิดคะแนนจาก master `driver-rating.json` เอง ไม่รับตัวเลข) ลงไทม์ไลน์ว่าประเมินกี่ข้อ",
+          "สถานะ ผู้ติดต่อกลับ แผน/ผลสัมภาษณ์ เหตุผลออก Blacklist และบันทึกภายใน ในคำขอเดียว · `exitReason: \"other\"` ต้องส่ง `exitReasonNote` มาด้วย · `blacklist` (boolean) มีผลเฉพาะใบที่ `cancelled` — สถานะอื่นถูกล้างเป็น `false` · ขึ้น/ถอดลงไทม์ไลน์ · `rating` = คะแนน Driver Rating ที่ฝ่ายบุคคลเลือก (เซิร์ฟเวอร์คิดคะแนนจาก master `driver-rating.json` เอง ไม่รับตัวเลข) ลงไทม์ไลน์ว่าประเมินกี่ข้อ · ยกเลิกใบที่ผูก JR: ส่ง `requisitionCancelReason` (ค่าจาก `CANCEL_REASONS`) = ยกเลิก JR ด้วย · ไม่ส่ง = คืน JR กลับไปสรรหา",
         access: "login",
         params: [
           P("id", "รหัสใบสมัคร"),

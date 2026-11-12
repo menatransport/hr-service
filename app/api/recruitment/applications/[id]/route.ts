@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { ok } from "@/app/api/_lib/respond";
+import { badRequest, ok } from "@/app/api/_lib/respond";
 import {
   editor,
   failRecruitment,
@@ -12,6 +12,7 @@ import {
   updateApplicationWithRegistry,
 } from "@/app/recruitment/_lib/drivers/application-registry";
 import { syncRequisitionForApplication } from "@/app/recruitment/_lib/requisitions/store";
+import { CANCEL_REASONS, type CancelReason } from "@/app/recruitment/_lib/requisitions/types";
 
 /**
  * `GET   /api/recruitment/applications/[id]` — ใบสมัครเต็มใบพร้อมคำตอบทุกข้อ
@@ -48,14 +49,19 @@ export async function PATCH(
     if (!who) return unauthorized();
 
     const { id } = await params;
-    const body = await readBody(request);
+    const { requisitionCancelReason, ...body } = await readBody(request);
+    /* ยกเลิกใบที่ผูก JR — ส่งเหตุผลมา = ยกเลิก JR ไปด้วย · ไม่ส่ง = คืน JR กลับไปสรรหา (Bew 12 พ.ย. 2569) */
+    const cancelRequisition = requisitionCancelReason
+      ? CANCEL_REASONS.find((r) => r.value === requisitionCancelReason)?.value
+      : undefined;
+    if (requisitionCancelReason && !cancelRequisition) return badRequest("เหตุผลที่ยกเลิก JR ไม่ถูกต้อง");
     const application = await updateApplicationWithRegistry(id, body, who);
 
     /* คำขอสรรหาที่ผูกใบนี้ไว้ต้องเดินตามสถานะใบสมัคร — เริ่มฝึกงาน = อัตราปิด ·
        ยกเลิก = ปลดการผูกแล้วเปิดรับใหม่ · ทำที่นี่จุดเดียว ไม่คำนวณตอนอ่าน
        ไม่งั้นการเปลี่ยนสถานะจะไม่ถูกบันทึกลงประวัติของคำขอ
        **ไม่โยน error ต่อ** — ดูเหตุผลใน `syncRequisitionForApplication()` */
-    await syncRequisitionForApplication(id, application.status, who);
+    await syncRequisitionForApplication(id, application.status, who, cancelRequisition as CancelReason | undefined);
 
     return ok(application);
   } catch (err) {

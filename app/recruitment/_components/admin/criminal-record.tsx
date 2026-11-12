@@ -8,6 +8,7 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { requestJson } from "@/lib/http";
 import {
   hasCriminalCase,
+  hasCriminalResult,
   type CriminalRecordEntry,
   type CriminalRecordResult,
 } from "@/app/recruitment/_lib/criminal-record-types";
@@ -74,9 +75,11 @@ function useCriminalRecord(name: string, site: string) {
 type Verdict = { tone: "alert" | "ok" | "mut"; label: string };
 
 function verdictOf(value: CriminalRecordResult): Verdict {
-  if (!value.found) return { tone: "mut", label: "ยังไม่มีผลตรวจ" };
   if (value.records.some(hasCriminalCase)) return { tone: "alert", label: value.records.find(hasCriminalCase)!.result || "พบประวัติ" };
-  return { tone: "ok", label: value.records[0]?.result || "ไม่พบประวัติ" };
+  /* ไม่มีชื่อในชีต หรือมีชื่อแล้วแต่ยังไม่ลงผล = ยังไม่มีผลตรวจ (Bew 12 พ.ย. 2569) */
+  const done = value.records.find(hasCriminalResult);
+  if (!value.found || !done) return { tone: "mut", label: "ยังไม่มีผลตรวจ" };
+  return { tone: "ok", label: done.result || "ไม่พบประวัติ" };
 }
 
 const TONE: Record<Verdict["tone"], string> = {
@@ -92,11 +95,12 @@ function Entries({ records }: { records: CriminalRecordEntry[] }) {
     <ul className="flex flex-col divide-y divide-line">
       {records.map((r, i) => {
         const bad = hasCriminalCase(r);
+        const pending = !hasCriminalResult(r);
         return (
           <li key={i} className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-selector px-1.5 py-0.5 text-11-5 font-medium ${bad ? TONE.alert : TONE.ok}`}>
-                {r.result || "ไม่ระบุผล"}
+              <span className={`rounded-selector px-1.5 py-0.5 text-11-5 font-medium ${bad ? TONE.alert : pending ? TONE.mut : TONE.ok}`}>
+                {r.result || (pending ? "ยังไม่มีผลตรวจ" : "ไม่ระบุผล")}
               </span>
               <span className="text-11 text-mut">{r.department}</span>
             </div>
@@ -190,7 +194,7 @@ export function CriminalRecordHeadTip() {
           <span className="text-ink">จัดส่ง สสบ</span> ถ้าไม่เจอจะลองฝ่ายอื่นต่อ (รวม TDM)
         </li>
         <li>
-          แก้ข้อมูลในชีตแล้ว รีเฟรชหน้าจึงจะเห็น — นานสุด 30 นาทีถ้าเคยมีผลอยู่แล้ว · 5 นาทีถ้ายังไม่มีผล
+          แก้ข้อมูลในชีตแล้ว รีเฟรชหน้าจึงจะเห็น — นานสุด 30 นาทีถ้าเคยมีผลอยู่แล้ว · 5 นาทีถ้ายังไม่มีผล (รวมมีชื่อแต่ยังไม่ลงผล)
         </li>
         <li>
           ป้าย<span className="text-alert">แดง</span> = มีคดี · <span className="text-st-live-ink">เขียว</span> = ผ่าน · เทา =
