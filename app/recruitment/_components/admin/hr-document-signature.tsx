@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eraser, ImageUp, PenLine, UserPen, UserRound, X } from "lucide-react";
+import { CalendarClock, Eraser, ImageUp, PenLine, UserPen, UserRound, X } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
@@ -9,6 +9,11 @@ import {
   SignatureLoaderOverlay,
 } from "@/app/recruitment/_components/signature-loader";
 import { SegmentedControl } from "@/components/ui/summary-panel";
+import {
+  SignedAtModal,
+  SignedAtPicker,
+  resolveSignedAt,
+} from "@/app/recruitment/_components/admin/signed-at-picker";
 import { requestJson } from "@/lib/http";
 import { alertError, confirm, runAction } from "@/lib/swal";
 import { thaiShortDateTime } from "@/app/recruitment/_lib/hr-documents";
@@ -30,6 +35,8 @@ import type { HrDocId } from "@/app/recruitment/_lib/hr-documents";
  * - `useMySignature()` ลายเซ็นของเจ้าหน้าที่ตาม session (โหลดครั้งเดียวตอนเปิดกล่อง)
  * - `SignaturePanel` แผงซ้าย: ทุกช่องลงนามของฉบับที่เลือก (ตั้งลายเซ็นของฉันผ่านช่องเจ้าหน้าที่)
  * - `SignaturePadModal` เขียนเซ็นบนจอ หรืออัปโหลดรูปลายเซ็น (ตัดพื้นขาวให้เอง)
+ * - วันเวลาที่ลงนามเลือกย้อนหลังได้ (ค่าตั้งต้น = ตอนนี้) ในตัวเขียน และแก้ทีหลังได้ที่ “เซ็นเมื่อ …”
+ *   ของแต่ละแถว — `signed-at-picker.tsx` (Bew 12 พ.ย. 2569)
  */
 
 const MY_SIGNATURE = "/api/recruitment/my-signature";
@@ -121,6 +128,8 @@ export function SignaturePanel({
 }) {
   const slots = DOC_SIGN_SLOTS[doc];
   const [pad, setPad] = useState<PadTarget | null>(null);
+  /** แถวที่เปิดกล่องแก้วันเวลาที่ลงนามอยู่ */
+  const [dating, setDating] = useState<SignSlot | null>(null);
   /** แถวที่เปิดช่องพิมพ์ชื่ออยู่ */
   const [naming, setNaming] = useState<SignSlot["role"] | null>(null);
   const [savingMine, setSavingMine] = useState(false);
@@ -136,12 +145,16 @@ export function SignaturePanel({
   const signerName = (slot: SignSlot) =>
     staffNames[slot.role]?.trim() || me?.name || "";
 
-  const staffSignature = (slot: SignSlot, image: string): DocSignature => ({
+  const staffSignature = (
+    slot: SignSlot,
+    image: string,
+    signedAt = new Date().toISOString(),
+  ): DocSignature => ({
     image,
     name: signerName(slot),
     by: "staff",
     employeeId: me?.employeeId ?? "",
-    signedAt: new Date().toISOString(),
+    signedAt,
   });
 
   /** ช่องเจ้าหน้าที่: มีลายเซ็นของฉันแล้ว = ลงทันที · ยังไม่มี = เปิดตัวเขียนพร้อมจำไว้ */
@@ -166,7 +179,7 @@ export function SignaturePanel({
     else setPad({ kind: "slot", slot });
   }
 
-  async function finishPad(image: string, remember: boolean) {
+  async function finishPad(image: string, remember: boolean, signedAt: string) {
     const target = pad;
     if (!target) return;
 
@@ -190,13 +203,13 @@ export function SignaturePanel({
     onSign(
       signKey(doc, target.slot.role),
       target.slot.staff
-        ? staffSignature(target.slot, image)
+        ? staffSignature(target.slot, image, signedAt)
         : {
             image,
             name: applicantName,
             by: "applicant",
             employeeId: "",
-            signedAt: new Date().toISOString(),
+            signedAt,
           },
     );
     setPad(null);
@@ -257,9 +270,20 @@ export function SignaturePanel({
                     {name ? `(${name})` : "ยังไม่ระบุชื่อ"}
                   </span>
                   {sig ? (
-                    <span className="text-10-5 text-mut">
+                    <button
+                      type="button"
+                      onClick={() => setDating(slot)}
+                      title="แก้วันเวลาที่ลงนาม"
+                      className="group flex w-fit items-center gap-1 text-10-5 text-mut tabular-nums transition-colors hover:text-primary"
+                    >
                       เซ็นเมื่อ {thaiShortDateTime(sig.signedAt)}
-                    </span>
+                      <CalendarClock
+                        size={11}
+                        strokeWidth={2}
+                        aria-hidden
+                        className="opacity-60 group-hover:opacity-100"
+                      />
+                    </button>
                   ) : null}
                 </div>
                 {setName ? (
@@ -365,8 +389,22 @@ export function SignaturePanel({
           }
           /* ช่องเจ้าหน้าที่ที่ยังไม่มีลายเซ็นของฉัน: ติ๊กจำไว้ให้ตั้งต้น */
           remember={pad.slot.staff ? (me?.image ? "off" : "on") : "hidden"}
-          onDone={(image, remember) => void finishPad(image, remember)}
+          pickSignedAt
+          onDone={(image, remember, signedAt) => void finishPad(image, remember, signedAt)}
           onClose={() => setPad(null)}
+        />
+      ) : null}
+      {dating && signatures?.[signKey(doc, dating.role)] ? (
+        <SignedAtModal
+          title={`วันเวลาที่ลงนาม · ${slotLabel(dating)}`}
+          subtitle={`${signatures[signKey(doc, dating.role)]!.name || "ไม่ระบุชื่อ"} — วันที่นี้ขึ้นใต้ลายเซ็นบนเอกสาร`}
+          value={signatures[signKey(doc, dating.role)]!.signedAt}
+          onSave={(signedAt) => {
+            const key = signKey(doc, dating.role);
+            onSign(key, { ...signatures[key]!, signedAt });
+            setDating(null);
+          }}
+          onClose={() => setDating(null)}
         />
       ) : null}
       {savingMine ? <SignatureLoaderOverlay label="กำลังบันทึกลายเซ็นของฉัน…" /> : null}
@@ -411,6 +449,7 @@ export function SignaturePadModal({
   title,
   subtitle,
   remember: rememberMode,
+  pickSignedAt = false,
   onDone,
   onClose,
 }: {
@@ -418,7 +457,13 @@ export function SignaturePadModal({
   subtitle: string;
   /** ช่องติ๊ก “จำเป็นลายเซ็นของฉัน” — `hidden` = ไม่มี (ผู้สมัคร / ตั้งลายเซ็นของฉันอยู่แล้ว) */
   remember: "on" | "off" | "hidden";
-  onDone: (image: string, remember: boolean) => void;
+  /**
+   * ให้เลือกวันเวลาที่ลงนาม (ค่าตั้งต้น = ตอนนี้) · ลิงก์ให้ผู้สมัครเซ็นเองไม่มี —
+   * ฝั่งนั้นเซิร์ฟเวอร์ลงเวลาที่รับลายเซ็นจริง
+   */
+  pickSignedAt?: boolean;
+  /** `signedAt` = วันเวลาที่เลือก (ISO) หรือเวลาที่กดยืนยันถ้าไม่ได้เลือก */
+  onDone: (image: string, remember: boolean, signedAt: string) => void;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<"draw" | "upload">("draw");
@@ -426,6 +471,8 @@ export function SignaturePadModal({
   const [uploaded, setUploaded] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [remember, setRemember] = useState(rememberMode === "on");
+  /** `null` = ตอนนี้ (อ่านนาฬิกาตอนกดยืนยัน) */
+  const [signedAt, setSignedAt] = useState<string | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const last = useRef<{ x: number; y: number } | null>(null);
 
@@ -528,7 +575,7 @@ export function SignaturePadModal({
       alertError("รูปลายเซ็นใหญ่เกินไป", "ลองใช้รูปที่ครอปมาเฉพาะลายเซ็น");
       return;
     }
-    onDone(image, rememberMode !== "hidden" && remember);
+    onDone(image, rememberMode !== "hidden" && remember, resolveSignedAt(signedAt));
   }
 
   const ready = mode === "draw" ? drawn : Boolean(uploaded);
@@ -585,6 +632,8 @@ export function SignaturePadModal({
             { value: "upload", label: "อัปโหลดรูปลายเซ็น" },
           ]}
         />
+
+        {pickSignedAt ? <SignedAtPicker value={signedAt} onChange={setSignedAt} /> : null}
 
         {mode === "draw" ? (
           <div className="flex flex-col gap-1.5">
