@@ -262,6 +262,8 @@ export interface CancelledApplicant {
   reason: string;
   cancelledOn: string;
   requisitionId: string;
+  /** รหัส พจส. ตอนหลุดจากอัตรา (`pastOnboarding.drivercode` · ใบเก่าก่อนเก็บ = รหัสบนคำขอถ้ายังไม่มีใครมาแทน) */
+  drivercode: string;
 }
 
 /** สถานะในทะเบียน พจส. (ที่ sync จาก Google Sheet / หน้าทะเบียน) — `statusOverride` ชนะ `active` */

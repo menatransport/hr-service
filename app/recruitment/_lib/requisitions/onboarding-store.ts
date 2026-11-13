@@ -272,9 +272,17 @@ const bangkokDay = (iso: string) => {
  */
 function cancelledRows(apps: ApplicationSummary[], docs: WithId<RequisitionDoc>[]): OnboardingRecord[] {
   const linked = new Set(docs.map((d) => d.match?.applicationId).filter(Boolean));
-  const archived = new Map<string, { doc: WithId<RequisitionDoc>; past: NonNullable<RequisitionDoc["pastOnboarding"]>[number] }>();
+  const archived = new Map<
+    string,
+    { doc: WithId<RequisitionDoc>; past: NonNullable<RequisitionDoc["pastOnboarding"]>[number]; latest: boolean }
+  >();
   for (const doc of docs)
-    for (const past of doc.pastOnboarding ?? []) if (past.applicationId) archived.set(past.applicationId, { doc, past });
+    (doc.pastOnboarding ?? []).forEach((past, i, all) => {
+      if (past.applicationId) archived.set(past.applicationId, { doc, past, latest: i === all.length - 1 });
+    });
+  /* ใบเก่าที่เก็บก่อนมี `past.drivercode` — รหัสบนคำขอยังเป็นของเขาถ้าเป็นคนล่าสุดที่หลุดและยังไม่มีใครมาผูกแทน */
+  const exitCode = (hit: ReturnType<typeof archived.get>) =>
+    hit ? hit.past.drivercode || (hit.latest && !hit.doc.match ? hit.doc.drivercode || "" : "") : "";
 
   return apps
     .filter((a) => a.status === "cancelled" && !linked.has(a.id))
@@ -327,8 +335,9 @@ function cancelledRows(apps: ApplicationSummary[], docs: WithId<RequisitionDoc>[
           applicationId: a.id,
           ref: a.ref,
           reason: a.exitReason ? exitReasonText(a) : "",
-          cancelledOn: bangkokDay(a.updatedAt),
+          cancelledOn: bangkokDay(a.cancelledAt || a.updatedAt),
           requisitionId: hit ? hit.doc._id.toHexString() : "",
+          drivercode: exitCode(hit),
         },
       };
     });

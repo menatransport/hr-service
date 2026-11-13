@@ -172,6 +172,8 @@ type Row = ApplicationSummary & {
   jrCode: string;
   /** ข้อมูลผู้ฝึกงานของมุมมองฝึกงาน (`traineeOf`) — ไม่ผูก RQ = `null` */
   trainee: Trainee | null;
+  /** รหัส พจส. ของใบที่ยกเลิกหลังหลุดจากอัตรา (`CancelledApplicant.drivercode`) — ว่าง = ไม่เคยมีรหัส */
+  exitDrivercode: string;
   /** ใบฝึกงานที่ RC ลง `ร` แล้ว (`awaitingHandover`) — คอลัมน์สถานะเป็น “รอรับรถ” สีม่วง */
   waitHandover: boolean;
 };
@@ -253,8 +255,8 @@ const COLUMNS = [
     width: "min-w-[100px]",
     asc: "น้อย → มาก",
     desc: "มาก → น้อย",
-    text: (a: Row) => a.trainee?.drivercode || "—",
-    key: (a: Row) => a.trainee?.drivercode || "zzzz",
+    text: (a: Row) => a.trainee?.drivercode || a.exitDrivercode || "—",
+    key: (a: Row) => a.trainee?.drivercode || a.exitDrivercode || "zzzz",
   },
   {
     /* แยกจากใต้ชื่อมาเป็นคอลัมน์ในมุมมองรอฝึกงาน/ฝึกงาน — คัดลอกหรือกดเปิดฟอร์ม JR (Bew 4 พ.ย. 2569) */
@@ -407,6 +409,17 @@ const COLUMNS = [
     text: statusText,
   },
   {
+    /* มุมมองยกเลิก — เรียงตั้งต้นตามคอลัมน์นี้ ใหม่ → เก่า (`CANCELLED_SORT` · Bew 13 พ.ย. 2569) */
+    id: "cancelledAt",
+    label: "วันที่ยกเลิก",
+    width: "min-w-[130px]",
+    asc: "เก่า → ใหม่",
+    desc: "ใหม่ → เก่า",
+    text: (a: Row) => (a.cancelledAt ? stamp.format(new Date(a.cancelledAt)) : "—"),
+    facet: (a: Row) => (a.cancelledAt ? stampDay.format(new Date(a.cancelledAt)) : "—"),
+    key: (a: Row) => a.cancelledAt,
+  },
+  {
     id: "exitReason",
     label: "เหตุผลที่ยกเลิก",
     width: "min-w-[170px]",
@@ -454,6 +467,8 @@ const COLUMNS = [
  * คอลัมน์ที่มีแต่ขีดกลางกินความกว้างไปเปล่า ๆ และดันคอลัมน์ที่ใช้จริงให้ต้องเลื่อน
  */
 const REASON_COLUMN: ColumnId = "exitReason";
+/** โผล่พร้อมคอลัมน์เหตุผล — วันที่ยกเลิก + รหัสพนักงาน (คนที่หลุดจากอัตรา · Bew 13 พ.ย. 2569) */
+const CANCELLED_COLUMNS: ColumnId[] = ["cancelledAt", "drivercode"];
 
 /**
  * คอลัมน์ Blacklist โผล่เฉพาะสองมุมมองนี้ (29 ก.ย. 2026) — ใบที่ยังเดินอยู่ในสาย
@@ -525,6 +540,9 @@ const DEFAULT_SORT: TableSort = { column: "createdAt", dir: "desc" };
 
 /** ลำดับตั้งต้นของมุมมองฝึกงาน — รหัสพนักงาน น้อย → มาก (Bew 5 พ.ย. 2569) */
 const TRAINEE_SORT: TableSort = { column: "drivercode", dir: "asc" };
+
+/** ลำดับตั้งต้นของมุมมองยกเลิก — คนที่ยกเลิก/ออกล่าสุดอยู่บนสุด (Bew 13 พ.ย. 2569) */
+const CANCELLED_SORT: TableSort = { column: "cancelledAt", dir: "desc" };
 
 /**
  * คอลัมน์ Excel — ตามคอลัมน์บนจอ (เหตุผล/Blacklist โผล่ตามมุมมองเดียวกัน) + ของที่จอซ่อนไว้ใน
@@ -613,7 +631,11 @@ function candidateXlsxColumns(
       tone: (a) => (a.status === "cancelled" ? "alert" : a.waitHandover ? "mut" : a.status === "working" || a.status === "training" ? "ok" : null),
     },
     ...(showReason
-      ? [{ header: "เหตุผลที่ยกเลิก", width: 26, value: text("exitReason") } satisfies XlsxColumn<Row>]
+      ? ([
+          { header: "รหัสพนักงาน", width: 12, kind: "code", value: (a) => a.exitDrivercode },
+          { header: "วันที่ยกเลิก", width: 13, kind: "date", value: (a) => xlsxDate(a.cancelledAt) },
+          { header: "เหตุผลที่ยกเลิก", width: 26, value: text("exitReason") },
+        ] satisfies XlsxColumn<Row>[])
       : []),
     ...(showBlacklist
       ? [
@@ -827,6 +849,11 @@ export function CandidatesView({
   }, [hub, requisitions, rows, dayEdits]);
   const hubList = useMemo(() => (hub ? hubRows(hubRecords, hub.repairs) : []), [hub, hubRecords]);
   const hubById = useMemo(() => new Map(hubList.map((r) => [r.id, r])), [hubList]);
+  /** ใบที่ยกเลิก → รหัส พจส. ตอนหลุดจากอัตรา (แถวยกเลิกของหน้าติดตาม) */
+  const exitCodes = useMemo(
+    () => new Map((hub?.records ?? []).flatMap((r) => (r.applicant?.drivercode ? [[r.applicant.applicationId, r.applicant.drivercode] as const] : []))),
+    [hub],
+  );
   /** การ์ดรับรถแล้ว = เดือนนี้ ตรงกับเดือนตั้งต้นของตาราง */
   const hubCounts = useMemo(() => {
     if (!hub) return null;
@@ -877,10 +904,11 @@ export function CandidatesView({
           trainingStartOn: rq?.trainingStartOn ?? "",
           jrCode: rq?.code ?? "",
           trainee: traineeOf(rq, row, hub?.repairs),
+          exitDrivercode: a.status === "cancelled" ? (exitCodes.get(a.id) ?? "") : "",
           waitHandover: a.status === "training" && Boolean(row?.waitHandover),
         };
       }),
-    [rows, blacklistIndex, rqByApplication, hubById, hub],
+    [rows, blacklistIndex, rqByApplication, hubById, hub, exitCodes],
   );
 
   /** ครึ่งขวาของการ์ดฝึกงาน — นับจากแถวชุดเดียวกับตาราง */
@@ -982,8 +1010,8 @@ export function CandidatesView({
   /** ช่องค้นหา — มีเฉพาะแท็บตารางของมุมมองฝึกงาน (Bew 5 พ.ย. 2569) · ช่องซ่อน = ไม่กรองต่อเบื้องหลัง
    *  (แท็บสถานะฝึกงานมีช่องค้นหาของตัวเอง) */
   const [query, setQuery] = useState("");
-  /* รอการติดต่อ · นัดสัมภาษณ์ · รอฝึกงาน ก็มีช่องค้นหาเหนือตาราง (Bew 11 พ.ย. 2569) */
-  const searchBar = !view && !showDaily && (showPending || showWaiting);
+  /* รอการติดต่อ · นัดสัมภาษณ์ · รอฝึกงาน ก็มีช่องค้นหาเหนือตาราง (Bew 11 พ.ย. 2569) · ยกเลิก (13 พ.ย. 2569) */
+  const searchBar = !view && !showDaily && (showPending || showWaiting || showReason);
   const needle = (showDaily && !dailyTab) || searchBar ? query.trim().toLowerCase() : "";
 
   /** แท็บ ทั้งหมด | Mixer L | Mixer S — มุมมองรอฝึกงาน/ฝึกงานของลาดกระบัง (Bew 12 พ.ย. 2569) · แท็บซ่อน = ไม่กรองต่อเบื้องหลัง */
@@ -998,10 +1026,11 @@ export function CandidatesView({
         : COLUMNS.filter(
             (c) =>
               (c.id !== REASON_COLUMN || showReason) &&
+              (!CANCELLED_COLUMNS.includes(c.id) || showReason) &&
               (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
               (!PENDING_COLUMNS.includes(c.id) || showPending) &&
               (!TRAINING_COLUMNS.includes(c.id) || showTraining) &&
-              !TRAINEE_COLUMNS.includes(c.id),
+              (!TRAINEE_COLUMNS.includes(c.id) || (showReason && CANCELLED_COLUMNS.includes(c.id))),
           ),
     [showReason, showBlacklist, showPending, showTraining, showTrainee, showWaiting],
   );
@@ -1016,7 +1045,9 @@ export function CandidatesView({
       ? pickedSort
       : showTrainee
         ? TRAINEE_SORT
-        : DEFAULT_SORT;
+        : showReason
+          ? CANCELLED_SORT
+          : DEFAULT_SORT;
 
   const [visible, mixerCount] = useMemo(() => {
     /* กรองด้วยคอลัมน์ที่เห็นอยู่จริงเท่านั้น — ตัวกรองของคอลัมน์เหตุผลที่ถูกซ่อนไป
@@ -1024,7 +1055,7 @@ export function CandidatesView({
     const filtered = enriched.filter((a) => {
       if (needle) {
         const rq = rqByApplication.get(a.id);
-        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.contactOwner, a.licenseType, a.jrCode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
+        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.contactOwner, a.licenseType, a.jrCode, a.exitDrivercode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
         if (!hay.some((t) => t?.toLowerCase().includes(needle))) return false;
       }
       return columns.every((column) => {
@@ -1139,6 +1170,7 @@ export function CandidatesView({
                 exitReason: next.exitReason,
                 exitReasonNote: next.exitReasonNote,
                 blacklist: next.blacklist,
+                cancelledAt: next.status !== "cancelled" ? "" : a.status === "cancelled" ? a.cancelledAt : next.updatedAt,
                 updatedAt: next.updatedAt,
                 /* แก้คำตอบในใบแล้วชื่อ เบอร์ เขต และวันพร้อมเริ่มงานในแถวเปลี่ยนตาม
                    — สี่ค่านี้เป็นคำตอบในฟอร์มที่ตารางหยิบมาโชว์ ไม่ใช่ค่าของตัวเอง
@@ -1331,7 +1363,13 @@ export function CandidatesView({
             value={query}
             onChange={setQuery}
             label="ค้นหา"
-            placeholder={showWaiting ? "ชื่อ เลขที่ เบอร์ JR แพล้นท์ ครูฝึก…" : "ชื่อ เลขที่ เบอร์โทร ผู้ติดต่อกลับ ใบขับขี่…"}
+            placeholder={
+              showWaiting
+                ? "ชื่อ เลขที่ เบอร์ JR แพล้นท์ ครูฝึก…"
+                : showReason
+                  ? "ชื่อ รหัสพนักงาน เลขที่ เบอร์โทร…"
+                  : "ชื่อ เลขที่ เบอร์โทร ผู้ติดต่อกลับ ใบขับขี่…"
+            }
             tone="filled"
             className="w-full lg:max-w-sm"
           />
@@ -1507,7 +1545,7 @@ export function CandidatesView({
                   case "drivercode":
                     return (
                       <td className="px-3 py-2 font-mono text-12 whitespace-nowrap tabular-nums">
-                        {t?.drivercode || dash}
+                        {t?.drivercode || a.exitDrivercode || dash}
                       </td>
                     );
                   case "jr":
@@ -1601,6 +1639,12 @@ export function CandidatesView({
                     return (
                       <td className="px-2 py-1.5">
                         <OwnerCell {...cell} options={contactOptions} />
+                      </td>
+                    );
+                  case "cancelledAt":
+                    return (
+                      <td className="px-3 py-2 font-mono text-11 whitespace-nowrap text-mut tabular-nums">
+                        {a.cancelledAt ? stamp.format(new Date(a.cancelledAt)) : dash}
                       </td>
                     );
                   case "createdAt":

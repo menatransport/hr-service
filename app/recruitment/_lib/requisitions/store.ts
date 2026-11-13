@@ -105,7 +105,7 @@ export interface RequisitionDoc {
    * Onboarding ของคนก่อนหน้าที่หลุดจากอัตรานี้ (ปลดการผูก/ผู้สมัครยกเลิก) — ย้ายมาเก็บไว้
    * ไม่ลบทิ้ง และไม่ปล่อยค้างให้คนใหม่ที่มารับอัตราเดียวกันได้ผล Day 1 ของคนเก่าไปด้วย
    */
-  pastOnboarding?: (Onboarding & { applicationId?: string; fullName: string; archivedAt: string })[];
+  pastOnboarding?: (Onboarding & { applicationId?: string; fullName: string; drivercode?: string; archivedAt: string })[];
   /** ร่องรอยการนำเข้าจากไฟล์ — `import_onboarding_xlsx.mjs` ใช้กันนำเข้าซ้ำ/ลบเฉพาะชุดที่นำเข้า */
   import?: { source: string; key: string; row: number };
 
@@ -817,6 +817,8 @@ function archiveOnboarding(current: WithId<RequisitionDoc>): Partial<Requisition
         ...onboarding,
         applicationId: current.match?.applicationId ?? "",
         fullName: current.match?.fullName || onboarding.rc?.values.fullName || "",
+        /* รหัส พจส. ของคนที่หลุด — แท็บยกเลิกของหน้าผู้สมัครค้นด้วยรหัสได้ (13 พ.ย. 2569) */
+        drivercode: current.drivercode ?? "",
         archivedAt: new Date().toISOString(),
       },
     ],

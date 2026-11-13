@@ -1198,7 +1198,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
     Omit<
       ApplicationDoc,
       "files" | "documents" | "documentMeta" | "consent" | "timeline" | "questionSnapshot"
-    > & { fileCount: number; portrait: { url?: string }[]; licenseType?: string; hasLicenseImage?: boolean }
+    > & { fileCount: number; portrait: { url?: string }[]; licenseType?: string; hasLicenseImage?: boolean; cancelledAt?: string | null }
   >(
     range
       ? [{ $match: { createdAt: { $gte: range.gte, $lt: range.lt } } }, { $sort: { createdAt: -1 } }]
@@ -1213,39 +1213,52 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
       /* คอลัมน์ อายุ · ประเภทใบขับขี่ ในแท็บรอการติดต่อ (Bew 11 พ.ย. 2569) — ไม่ลากทั้งก้อนเอกสาร/ไฟล์มา */
       licenseType: "$documents.licenseType",
       hasLicenseImage: { $in: ["license_front", { $ifNull: ["$files.slot", []] }] },
+      /* แท็บยกเลิกเรียงคนที่ออกล่าสุดก่อน (Bew 13 พ.ย. 2569) — เอาแค่เวลาจากไทม์ไลน์ ไม่ลากทั้งไทม์ไลน์มา */
+      cancelledAt: {
+        $max: {
+          $map: {
+            input: { $filter: { input: { $ifNull: ["$timeline", []] }, cond: { $eq: ["$$this.to", "cancelled"] } } },
+            in: "$$this.at",
+          },
+        },
+      },
     },
   );
   const today = todayInBangkok();
 
-  return docs.map<ApplicationSummary>((doc) => ({
-    id: doc._id.toHexString(),
-    ref: doc.ref,
-    status: normalizeStatus(doc.status),
-    fullName: fullNameOf(doc),
-    nickname: erasedOf(doc) ? "" : nicknameAnswer(doc),
-    phone: doc.phone,
-    workZone: roleAnswer(doc, "work_zone"),
-    readyToStart: roleAnswer(doc, "ready_date"),
-    contactOwner: doc.contactOwner || declaredContact(doc),
-    site: siteOf(doc),
-    interview: interviewOf(doc),
-    exitReason: isExitReason(doc.exitReason) ? doc.exitReason : "",
-    exitReasonNote: exitNoteOf(doc),
-    blacklist: blacklistOf(doc),
-    rating: summarizeRating({
-      questionSnapshot: doc.questionSnapshot,
-      answers: doc.answers ?? {},
-      rating: ratingOf(doc),
-    }),
-    fileCount: doc.fileCount,
-    photoUrl: erasedOf(doc) ? null : doc.portrait?.[0]?.url || null,
-    erased: erasedOf(doc),
-    age: erasedOf(doc) ? null : applicantAge(doc, today),
-    licenseType: erasedOf(doc) ? "" : doc.licenseType || "",
-    hasLicenseImage: !erasedOf(doc) && Boolean(doc.hasLicenseImage),
-    createdAt: doc.createdAt,
-    updatedAt: doc.updatedAt,
-  }));
+  return docs.map<ApplicationSummary>((doc) => {
+    const status = normalizeStatus(doc.status);
+    return {
+      id: doc._id.toHexString(),
+      ref: doc.ref,
+      status,
+      fullName: fullNameOf(doc),
+      nickname: erasedOf(doc) ? "" : nicknameAnswer(doc),
+      phone: doc.phone,
+      workZone: roleAnswer(doc, "work_zone"),
+      readyToStart: roleAnswer(doc, "ready_date"),
+      contactOwner: doc.contactOwner || declaredContact(doc),
+      site: siteOf(doc),
+      interview: interviewOf(doc),
+      exitReason: isExitReason(doc.exitReason) ? doc.exitReason : "",
+      exitReasonNote: exitNoteOf(doc),
+      blacklist: blacklistOf(doc),
+      rating: summarizeRating({
+        questionSnapshot: doc.questionSnapshot,
+        answers: doc.answers ?? {},
+        rating: ratingOf(doc),
+      }),
+      fileCount: doc.fileCount,
+      photoUrl: erasedOf(doc) ? null : doc.portrait?.[0]?.url || null,
+      erased: erasedOf(doc),
+      age: erasedOf(doc) ? null : applicantAge(doc, today),
+      licenseType: erasedOf(doc) ? "" : doc.licenseType || "",
+      hasLicenseImage: !erasedOf(doc) && Boolean(doc.hasLicenseImage),
+      cancelledAt: status === "cancelled" ? doc.cancelledAt || doc.updatedAt : "",
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  });
 }
 
 /**

@@ -666,6 +666,8 @@ export interface ApplicationSummary {
   licenseType: string;
   /** แนบรูปใบขับขี่ (ช่อง `license_front`) แล้วหรือยัง */
   hasLicenseImage: boolean;
+  /** เวลาที่เปลี่ยนเป็นยกเลิกครั้งล่าสุด (ไทม์ไลน์ · ไม่มีในไทม์ไลน์ = `updatedAt`) · ว่าง = ไม่ได้ยกเลิก */
+  cancelledAt: string;
   createdAt: string;
   updatedAt: string;
 }
