@@ -24,6 +24,8 @@ import { alertError } from "@/lib/swal";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { formatPhone, thaiDate } from "@/app/recruitment/_lib/form";
 import { ADMIN_ROOT } from "@/app/recruitment/_lib/admin-nav";
+import { SiteNav } from "@/app/recruitment/_components/admin/site-nav";
+import { RECRUIT_SITE_BRANCHES, recruitSiteOf, type RecruitSite } from "@/app/recruitment/_lib/sites";
 import { STATUS_LABEL, type ApplicationStatus, type ApplicationSummary } from "@/app/recruitment/_lib/types";
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import type { RepairStatus } from "@/app/recruitment/_lib/requisitions/repair-status";
@@ -499,6 +501,8 @@ export function OnboardingView({
   embedded = false,
   note,
   branches,
+  sites,
+  initialSite,
   onCreated,
   onUpdated,
 }: {
@@ -522,18 +526,53 @@ export function OnboardingView({
   note?: string[];
   /** สาขาที่ฟอร์มขอสรรหาเลือกได้ — หน้าผู้สมัครส่งตามแท็บสาขาที่เปิดอยู่ · ไม่ส่ง = ทุกสาขา */
   branches?: readonly string[];
+  /** แท็บสาขาที่ผู้ใช้เห็นได้ (หน้าเต็มเท่านั้น · `visibleRecruitSites`) — ไม่ส่ง = ไม่มีแท็บสาขา ทุกแถว */
+  sites?: readonly RecruitSite[];
+  /** แท็บสาขาตั้งต้น — `?site=` หรือ site ของผู้ใช้ */
+  initialSite?: RecruitSite;
   /** ฝังอยู่ = หน้าแม่ถือแถวเอง — คำขอที่เพิ่งสร้างส่งกลับไปให้หน้าแม่ต่อเข้ารายการ */
   onCreated?: (created: Requisition[]) => void;
   /** ฝังอยู่ = คำขอที่เพิ่งแก้ (ฟอร์มคำขอ · KA / dialog) ส่งกลับให้หน้าแม่ทับแถวเดิม */
   onUpdated?: (updated: Requisition) => void;
 }) {
   const [own, setRecords] = useState(initial);
-  const records = embedded ? initial : own;
+  const allRecords = embedded ? initial : own;
   /* เปิดจากลิงก์ `?open=` — ไปแท็บของคนนั้นเลย */
   const [startTab] = useState<Tab>(() => {
     const hit = initialOpen ? initial.find((r) => r.id === initialOpen) : undefined;
     return hit ? stageOf(hit) : initialStage;
   });
+
+  /**
+   * แท็บสาขาบนสุด (Bew 13 พ.ย. 2569) — สาขา = สาขาของคำขอ (ว่าง = ลาดกระบัง) · ซ่อนแท็บเท่านั้น
+   * ข้อมูลอีกสาขายังมากับหน้า (กรองฝั่ง client แบบหน้าผู้สมัคร)
+   */
+  const siteTabs = !embedded && sites?.length ? sites : null;
+  const [site, setSite] = useState<RecruitSite | null>(() => {
+    if (!siteTabs) return null;
+    const hit = initialOpen ? initial.find((r) => r.id === initialOpen) : undefined;
+    const hitSite = hit ? recruitSiteOf(hit.branch) : null;
+    return hitSite && siteTabs.includes(hitSite) ? hitSite : (initialSite ?? siteTabs[0]);
+  });
+  const siteCounts = useMemo(() => {
+    const n: Record<RecruitSite, number> = { latkrabang: 0, "saraburi-bangpakong": 0 };
+    for (const r of allRecords) n[recruitSiteOf(r.branch)] += 1;
+    return n;
+  }, [allRecords]);
+  const records = useMemo(
+    () => (site ? allRecords.filter((r) => recruitSiteOf(r.branch) === site) : allRecords),
+    [allRecords, site],
+  );
+  const formBranches = branches ?? (site ? RECRUIT_SITE_BRANCHES[site] : undefined);
+  function pickSite(next: RecruitSite) {
+    setSite(next);
+    setFilters({});
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("site", next);
+      window.history.replaceState(null, "", url);
+    } catch {}
+  }
   const [tab, setTab] = useState<Tab>(startTab);
   const stage = tabStage(tab);
   const [sort, setSort] = useState(DEFAULT_SORT[tabStage(startTab)]);
@@ -777,6 +816,10 @@ export function OnboardingView({
     /* หน้าเต็ม = สูงเท่าจอแบบหน้าผู้สมัคร: ตารางยืดเต็มที่เหลือ แถบเลขหน้าชิดล่างเสมอ */
     <div className={embedded || dailyTab ? "flex flex-col gap-3" : "flex flex-col gap-3 lg:h-[calc(100dvh-4rem)]"}>
       {embedded ? null : <h1 className="sr-only">ติดตามพนักงานใหม่</h1>}
+
+      {siteTabs && site ? (
+        <SiteNav value={site} sites={siteTabs} counts={siteCounts} noun="รายการ" onChange={pickSite} />
+      ) : null}
 
       <SummaryPanel
         label={embedded ? TAB_LABEL[tab] : "ขั้นของพนักงานใหม่"}
@@ -1070,7 +1113,7 @@ export function OnboardingView({
       {creating && formOptions ? (
         <RequisitionForm
           options={formOptions}
-          branches={branches}
+          branches={formBranches}
           onClose={() => setCreating(false)}
           onCreated={(created) =>
             embedded

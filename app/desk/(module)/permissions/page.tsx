@@ -1,6 +1,7 @@
 import { DataError } from "@/components/ui/data-error";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getDeskIdentity } from "@/lib/auth/session";
-import { getMenuScopes, getOrgTree } from "@/lib/menu-permissions";
+import { canAccessMenu, getMenuScopes, getOrgTree } from "@/lib/menu-permissions";
 
 import { PermissionsView } from "./_components/permissions-view";
 
@@ -14,7 +15,10 @@ export const dynamic = "force-dynamic";
  * ฝ่าย/แผนกมาจาก NCAC · สิทธิ์เก็บใน MongoDB `menu_permissions` (ดู `lib/menu-permissions.ts`)
  */
 export default async function PermissionsPage() {
-  const identity = await getDeskIdentity();
+  const [identity, allowed] = await Promise.all([getDeskIdentity(), canAccessMenu("permissions")]);
+  // ถูกซ่อนเมนูนี้ = เข้าหน้านี้ไม่ได้ (เซิร์ฟเวอร์ก็ปฏิเสธการบันทึกอยู่แล้ว)
+  if (!allowed) return <EmptyState title="ไม่มีสิทธิ์เข้าหน้านี้" className="py-24" />;
+
   let data: Awaited<ReturnType<typeof load>>;
   try {
     data = await load();

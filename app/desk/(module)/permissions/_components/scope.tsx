@@ -1,4 +1,4 @@
-import { Eye, Minus } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { baseDefault, canSeeMenu, type MenuScopes, type ScopeKind, type Visibility } from "@/lib/menu-access";
 import type { OrgDepartment, OrgDivision } from "@/lib/menu-permissions";
@@ -67,18 +67,25 @@ export function effectiveOf(scopes: MenuScopes, unit: Unit, menuId: string): boo
 export const parentLabel = (kind: ScopeKind) =>
   kind === "department" ? "ฝ่าย" : kind === "division" ? "ค่าเริ่มต้น" : "ระบบ";
 
-export const sameUnit = (a: Unit | null, b: Unit) => a !== null && a.kind === b.kind && a.id === b.id;
-
-/** ช่องสิทธิ์หนึ่งเมนู — ตาเขียว = เห็น · ขีดจาง = ไม่เห็น (ท่าเดียวกับ `LevelCell` ของ mena-wms) */
-export function VisCell({ visible, title }: { visible: boolean; title?: string }) {
+/** ช่องสิทธิ์หนึ่งเมนู — เขียว = เห็น · แดง = ไม่เห็น · จุดส้มมุมขวาบน = หน่วยนี้ตั้งเอง (ไม่ได้ตามชั้นบน) */
+export function VisCell({ visible, own = false, title }: { visible: boolean; own?: boolean; title?: string }) {
   return (
     <span
       title={title}
-      className={`inline-flex size-6 flex-none items-center justify-center rounded-[6px] ${
-        visible ? "bg-primary/12 text-primary" : "text-mut/60"
+      className={`relative inline-flex size-6 flex-none items-center justify-center rounded-[6px] ${
+        visible ? "bg-primary/14 text-primary" : "bg-alert-soft text-alert"
       }`}
     >
-      {visible ? <Eye size={13} strokeWidth={2} aria-hidden /> : <Minus size={13} strokeWidth={2} aria-hidden />}
+      {visible ? <Eye size={13} strokeWidth={2.2} aria-hidden /> : <EyeOff size={13} strokeWidth={2.2} aria-hidden />}
+      {own ? (
+        <span
+          aria-hidden
+          className="absolute -top-1 -right-1 size-2.5 rounded-full bg-warning ring-2 ring-base-100"
+        />
+      ) : null}
     </span>
   );
 }
+
+/** หน่วยนี้ตั้งเองกี่เมนู */
+export const ownCount = (scopes: MenuScopes, unit: Unit) => Object.keys(ownOf(scopes, unit)).length;

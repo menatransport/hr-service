@@ -59,6 +59,15 @@ export function visibleRecruitSites(user: SiteViewer | null | undefined, allSite
   return allSites || !own ? all : [own];
 }
 
+/**
+ * หน้าติดตามพนักงานใหม่ (Bew 13 พ.ย. 2569): NCAC site 3 สระบุรี · 4 ระยอง · 6 บางปะกง → สระบุรี+บางปะกงอย่างเดียว
+ * · 2 ลาดกระบัง → ลาดกระบังอย่างเดียว · หน้าผู้สมัคร/ทะเบียน พจส. ระยองยังเห็นทุกแท็บ
+ */
+export function onboardingViewer(user: SiteViewer | null | undefined): SiteViewer | null {
+  if (!user) return null;
+  return /rayong|ระยอง/i.test(user.site ?? "") ? { site: "Saraburi" } : user;
+}
+
 /** แท็บตั้งต้น — ค่าที่ขอมา (`?site=` · คุกกี้) ตัวแรกที่ผู้ใช้เห็นได้ → แท็บของตัวเอง → แท็บแรกที่เห็นได้ */
 export function pickRecruitSite(
   user: SiteViewer | null | undefined,

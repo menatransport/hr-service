@@ -14,12 +14,15 @@ export function SiteNav({
   value,
   sites,
   counts,
+  noun = "ใบสมัคร",
   onChange,
 }: {
   value: RecruitSite;
   /** แท็บที่ผู้ใช้เห็นได้ — ลาดกระบัง/สระบุรี+บางปะกงเห็นแค่สาขาตัวเอง (`visibleRecruitSites`) */
   sites: readonly RecruitSite[];
   counts: Record<RecruitSite, number>;
+  /** ตัวเลขนับอะไร — ข้อความชี้เมาส์ */
+  noun?: string;
   onChange: (v: RecruitSite) => void;
 }) {
   return (
@@ -33,7 +36,7 @@ export function SiteNav({
           label: s.label,
           icon: MapPin,
           count: counts[s.key],
-          countTitle: `ใบสมัครทั้งหมดของ${s.label}`,
+          countTitle: `${noun}ทั้งหมดของ${s.label}`,
         }))}
       />
     </div>

@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Globe, History, Info, RefreshCw, Search, Users } from "lucide-react";
+import { Globe, History, RefreshCw, Search, Users } from "lucide-react";
 
 import { PageHead } from "@/components/desk/page-head";
 import { requestJson } from "@/lib/http";
@@ -16,6 +16,7 @@ import {
   departmentUnit,
   divisionUnit,
   effectiveOf,
+  ownCount,
   ownOf,
   parentLabel,
   type Unit,
@@ -24,8 +25,8 @@ import {
 /**
  * หน้า “กำหนดสิทธิ์” — หน้าตาตาม mena-wms `/admin/users` (ผู้ใช้และสิทธิ์) แต่แถวเป็นฝ่าย/แผนกแทนคน
  *
- * - ตารางภาพรวม **อ่านอย่างเดียว**: แถว = ค่าเริ่มต้น · ฝ่าย · แผนกใต้ฝ่าย · คอลัมน์ = เมนู (ป้ายย่อ ชื่อเต็มใน tooltip)
- *   ช่องแสดงสิทธิ์ที่ได้จริง (รวมที่สืบทอดจากชั้นบนแล้ว)
+ * - ตารางภาพรวม **อ่านอย่างเดียว**: แถว = ค่าเริ่มต้น · ฝ่าย · แผนกใต้ฝ่าย · คอลัมน์ = เมนูจัดตามกลุ่มงาน
+ *   ช่องแสดงสิทธิ์ที่ได้จริง (รวมที่สืบทอดแล้ว) · จุดส้ม = หน่วยนั้นตั้งเอง
  * - คลิกแถว → แผงขวา (`AccessDrawer`) ตั้ง “ตามชั้นบน / เห็น / ไม่เห็น” รายเมนู แล้วบันทึกทีละหน่วย
  * - แท็บ “ประวัติการเปลี่ยนสิทธิ์” โหลดเมื่อเปิดครั้งแรก
  */
@@ -65,7 +66,9 @@ export function PermissionsView({
   const [tab, setTab] = useState<"units" | "log">("units");
   const [q, setQ] = useState("");
   const [divFilter, setDivFilter] = useState("");
-  const [selected, setSelected] = useState<Unit | null>(null);
+  const [ownOnly, setOwnOnly] = useState(false);
+  const [selected, setSelected] = useState<(Unit & { focus?: string }) | null>(null);
+  const pick = (unit: Unit, focus?: string) => setSelected({ ...unit, focus });
   const [log, setLog] = useState<MenuPermissionLogEntry[] | null>(null);
   const [logError, setLogError] = useState("");
 
@@ -87,14 +90,44 @@ export function PermissionsView({
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const hit = (s: string) => s.toLowerCase().includes(needle);
+    const keep = (div: OrgDivision, deps: OrgDivision["departments"]) => {
+      if (!ownOnly) return [{ div, deps }];
+      // เฉพาะที่ตั้งเอง — ฝ่ายโชว์เมื่อตัวมันเองหรือแผนกใดแผนกหนึ่งตั้งเอง
+      const own = deps.filter((d) => ownCount(scopes, departmentUnit(div, d)) > 0);
+      return own.length || (div.id && ownCount(scopes, divisionUnit(div)) > 0) ? [{ div, deps: own }] : [];
+    };
     return org
       .filter((div) => !divFilter || String(div.id) === divFilter)
       .flatMap((div) => {
-        if (!needle || hit(`${div.name} ${div.nameEn} ${div.code}`)) return [{ div, deps: div.departments }];
+        if (!needle || hit(`${div.name} ${div.nameEn} ${div.code}`)) return keep(div, div.departments);
         const deps = div.departments.filter((d) => hit(`${d.name} ${d.nameEn}`));
-        return deps.length ? [{ div, deps }] : [];
+        return deps.length ? keep(div, deps) : [];
       });
-  }, [org, q, divFilter]);
+  }, [org, q, divFilter, ownOnly, scopes]);
+
+  /* หัวตารางสองชั้น — กลุ่มงาน (พนักงานจัดส่ง / HR MASTER …) ครอบเมนูของกลุ่ม */
+  const groups = useMemo(
+    () =>
+      menus.reduce<{ id: string; label: string; count: number }[]>((acc, m) => {
+        const last = acc.at(-1);
+        if (last?.id === m.group.id) last.count++;
+        else acc.push({ id: m.group.id, label: m.group.label, count: 1 });
+        return acc;
+      }, []),
+    [menus],
+  );
+  const groupStart = useMemo(
+    () => new Set(menus.filter((m, i) => i === 0 || menus[i - 1].group.id !== m.group.id).map((m) => m.id)),
+    [menus],
+  );
+  const overrides = useMemo(
+    () =>
+      [scopes.base, ...Object.values(scopes.divisions), ...Object.values(scopes.departments)].reduce(
+        (n, v) => n + Object.keys(v).length,
+        0,
+      ),
+    [scopes],
+  );
 
   const nameOf = useMemo(() => {
     const divs = new Map(org.map((d) => [d.id, d.name]));
@@ -110,7 +143,6 @@ export function PermissionsView({
     <div className="flex animate-rise flex-col gap-4 pb-6">
       <PageHead
         title="กำหนดสิทธิ์"
-        subtitle="สิทธิ์มองเห็นเมนูไล่จาก ค่าเริ่มต้น → ฝ่าย → แผนก · ตั้งทับได้ทุกชั้น · มีผลเมื่อผู้ใช้เปิดหน้าใหม่"
         actions={
           <button
             type="button"
@@ -150,9 +182,7 @@ export function PermissionsView({
 
       {tab === "units" ? (
         <>
-          <Legend />
-
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <label className="field-ring flex h-9 flex-1 items-center gap-2 rounded-field border border-line bg-base-100 px-3">
               <Search size={15} aria-hidden className="flex-none text-mut" />
               <input
@@ -167,7 +197,7 @@ export function PermissionsView({
               value={divFilter}
               onChange={(e) => setDivFilter(e.target.value)}
               aria-label="กรองตามฝ่าย"
-              className="field-ring h-9 rounded-field border border-line bg-base-100 px-3 text-13 sm:w-[280px]"
+              className="field-ring h-9 rounded-field border border-line bg-base-100 px-3 text-13 lg:w-[260px]"
             >
               <option value="">ทุกฝ่าย</option>
               {org.map((d) => (
@@ -176,6 +206,28 @@ export function PermissionsView({
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              aria-pressed={ownOnly}
+              onClick={() => setOwnOnly((v) => !v)}
+              className={`inline-flex h-9 flex-none items-center gap-2 rounded-field border px-3 text-13 font-medium transition-colors ${
+                ownOnly
+                  ? "border-warning bg-warning/12 text-warning"
+                  : "border-line bg-base-100 text-ink hover:border-warning/60"
+              }`}
+            >
+              <span aria-hidden className="size-2.5 rounded-full bg-warning" />
+              เฉพาะที่ตั้งเอง
+              <span className="text-mut tabular-nums">{overrides}</span>
+            </button>
+            <div className="flex flex-none items-center gap-3 text-12 text-mut lg:ml-2">
+              <span className="inline-flex items-center gap-1.5">
+                <VisCell visible /> เห็น
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <VisCell visible={false} /> ไม่เห็น
+              </span>
+            </div>
           </div>
 
           {/* เลื่อนในกล่อง (ไม่ใช่ทั้งหน้า) — แถบเลื่อนแนวนอนอยู่ในจอเสมอ · หัวตาราง + คอลัมน์ชื่อหน่วยติดขอบ */}
@@ -183,15 +235,27 @@ export function PermissionsView({
             <table className="w-full border-separate border-spacing-0 text-13">
               <thead>
                 <tr>
-                  <Th className="left-0 z-30 min-w-56 pl-4 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line">
+                  <Th
+                    rowSpan={2}
+                    className="left-0 z-30 min-w-56 pl-4 align-bottom after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line"
+                  >
                     ฝ่าย / แผนก
                   </Th>
-                  <Th className="text-right">คน</Th>
+                  <Th rowSpan={2} className="text-right align-bottom">
+                    คน
+                  </Th>
+                  {groups.map((g) => (
+                    <Th key={g.id} colSpan={g.count} className="h-8 border-l border-line py-1.5 text-center text-11 text-ink">
+                      {g.label}
+                    </Th>
+                  ))}
+                </tr>
+                <tr>
                   {menus.map((m) => (
                     <Th
                       key={m.id}
-                      className="px-0.5 text-center"
-                      title={`${m.group.label} · ${m.parentLabel ? `${m.parentLabel} · ` : ""}${m.label}`}
+                      className={`top-8 px-0.5 text-center ${groupStart.has(m.id) ? "border-l border-line" : ""}`}
+                      title={`${m.parentLabel ? `${m.parentLabel} · ` : ""}${m.label}`}
                     >
                       {SHORT[m.id] ?? m.label}
                     </Th>
@@ -199,8 +263,16 @@ export function PermissionsView({
                 </tr>
               </thead>
               <tbody>
-                {!q && !divFilter ? (
-                  <UnitRow unit={BASE_UNIT} scopes={scopes} menus={menus} onPick={setSelected} tone="base" />
+                {!q && !divFilter && (!ownOnly || ownCount(scopes, BASE_UNIT) > 0) ? (
+                  <UnitRow
+                    unit={BASE_UNIT}
+                    scopes={scopes}
+                    menus={menus}
+                    groupStart={groupStart}
+                    onPick={pick}
+                    active={selected?.kind === "base"}
+                    tone="base"
+                  />
                 ) : null}
                 {rows.map(({ div, deps }) => (
                   <Fragment key={div.id}>
@@ -208,7 +280,10 @@ export function PermissionsView({
                       unit={divisionUnit(div)}
                       scopes={scopes}
                       menus={menus}
-                      onPick={div.id ? setSelected : undefined}
+                      groupStart={groupStart}
+                      onPick={div.id ? pick : undefined}
+                      active={selected?.kind === "division" && selected.id === div.id}
+                      focus={selected?.focus}
                       tone="division"
                       mine={me.divisionId === div.id}
                     />
@@ -218,7 +293,10 @@ export function PermissionsView({
                         unit={departmentUnit(div, dep)}
                         scopes={scopes}
                         menus={menus}
-                        onPick={setSelected}
+                        groupStart={groupStart}
+                        onPick={pick}
+                        active={selected?.kind === "department" && selected.id === dep.id}
+                        focus={selected?.focus}
                         tone="department"
                         mine={me.departmentId === dep.id}
                       />
@@ -228,7 +306,7 @@ export function PermissionsView({
                 {!rows.length ? (
                   <tr>
                     <td colSpan={2 + menus.length} className="px-4 py-12 text-center text-13 text-mut">
-                      ไม่พบฝ่าย/แผนกตามเงื่อนไข
+                      {ownOnly ? "ยังไม่มีฝ่าย/แผนกที่ตั้งเอง" : "ไม่พบฝ่าย/แผนกตามเงื่อนไข"}
                     </td>
                   </tr>
                 ) : null}
@@ -244,6 +322,7 @@ export function PermissionsView({
         <AccessDrawer
           key={`${selected.kind}:${selected.id}`}
           unit={selected}
+          focus={selected.focus}
           menus={menus}
           scopes={scopes}
           me={me}
@@ -261,11 +340,25 @@ export function PermissionsView({
   );
 }
 
-function Th({ className = "", title, children }: { className?: string; title?: string; children: React.ReactNode }) {
+function Th({
+  className = "",
+  title,
+  rowSpan,
+  colSpan,
+  children,
+}: {
+  className?: string;
+  title?: string;
+  rowSpan?: number;
+  colSpan?: number;
+  children: React.ReactNode;
+}) {
   return (
     <th
       scope="col"
       title={title}
+      rowSpan={rowSpan}
+      colSpan={colSpan}
       className={`sticky top-0 z-20 bg-base-200 px-2.5 py-2.5 text-left text-10-5 font-semibold tracking-[0.04em] whitespace-nowrap text-mut shadow-[inset_0_-1px_0_var(--color-line)] ${className}`}
     >
       {children}
@@ -277,24 +370,33 @@ function UnitRow({
   unit,
   scopes,
   menus,
+  groupStart,
   onPick,
+  active = false,
+  focus,
   tone,
   mine = false,
 }: {
   unit: Unit;
   scopes: MenuScopes;
   menus: ReturnType<typeof leafMenus>;
-  onPick?: (unit: Unit) => void;
+  groupStart: ReadonlySet<string>;
+  onPick?: (unit: Unit, focus?: string) => void;
+  /** แถวที่เปิดแผงขวาอยู่ */
+  active?: boolean;
+  /** เมนูที่กดเข้ามา — ไฮไลต์ช่องนั้นในแถวที่เปิดอยู่ */
+  focus?: string;
   tone: "base" | "division" | "department";
   mine?: boolean;
 }) {
   const own = ownOf(scopes, unit);
-  const parent = parentLabel(unit.kind);
+  const ownN = Object.keys(own).length;
   return (
     <tr
       onClick={onPick ? () => onPick(unit) : undefined}
+      aria-selected={active}
       className={`group [&>td]:border-b [&>td]:border-line/70 ${onPick ? "cursor-pointer hover:bg-soft" : ""} ${
-        tone === "department" ? "" : "bg-base-200/35"
+        active ? "bg-soft" : tone === "department" ? "" : "bg-base-200/35"
       }`}
     >
       {/* คอลัมน์ติดซ้ายต้องทึบ — สีเดียวกับแถว (base-200/35 ทับ base-100) ไม่งั้นเห็นช่องที่เลื่อนลอดใต้ */}
@@ -303,7 +405,7 @@ function UnitRow({
           tone === "department"
             ? "bg-base-100 pl-9"
             : "bg-[color-mix(in_oklab,var(--color-base-200)_35%,var(--color-base-100))] pl-4"
-        } ${onPick ? "group-hover:bg-soft" : ""}`}
+        } ${onPick ? "group-hover:bg-soft" : ""} ${active ? "bg-soft! shadow-[inset_3px_0_0_var(--color-primary)]" : ""}`}
       >
         <div className="flex min-w-0 items-center gap-2">
           {tone === "base" ? <Globe size={15} aria-hidden className="flex-none text-primary" /> : null}
@@ -314,44 +416,43 @@ function UnitRow({
             {unit.name}
           </span>
           {mine ? <span className="chip chip-on flex-none px-1.5 py-0 text-10-5">คุณ</span> : null}
-          {tone !== "department" && unit.sub ? (
-            <span className="flex-none text-11 text-mut">{unit.sub}</span>
+          {tone === "division" && unit.sub ? <span className="flex-none text-11 text-mut">{unit.sub}</span> : null}
+          {ownN ? (
+            <span className="flex-none rounded-full bg-warning/14 px-1.5 text-10-5 font-semibold text-warning tabular-nums">
+              ตั้งเอง {ownN}
+            </span>
           ) : null}
         </div>
       </td>
       <td className="px-2.5 py-2 text-right text-12 text-mut tabular-nums">{unit.headcount ?? "—"}</td>
       {menus.map((m) => {
         const visible = effectiveOf(scopes, unit, m.id);
+        const isOwn = m.id in own;
+        const focused = active && focus === m.id;
         return (
-          <td key={m.id} className="px-0.5 py-1.5 text-center">
+          <td
+            key={m.id}
+            onClick={
+              onPick
+                ? (e) => {
+                    e.stopPropagation();
+                    onPick(unit, m.id);
+                  }
+                : undefined
+            }
+            className={`px-0.5 py-1.5 text-center ${groupStart.has(m.id) ? "border-l border-line/70" : ""} ${
+              focused ? "bg-primary/15 shadow-[inset_0_0_0_2px_var(--color-primary)]" : ""
+            }`}
+          >
             <VisCell
               visible={visible}
-              title={`${m.label}: ${visible ? "เห็น" : "ไม่เห็น"}${m.id in own && unit.kind !== "base" ? ` · ตั้งเอง (ไม่ได้ตาม${parent})` : ""}`}
+              own={isOwn}
+              title={`${m.label}: ${visible ? "เห็น" : "ไม่เห็น"}${isOwn ? " · ตั้งเอง" : ""}`}
             />
           </td>
         );
       })}
     </tr>
-  );
-}
-
-function Legend() {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-2.5 text-12 text-mut">
-      <span className="inline-flex items-center gap-1.5">
-        <VisCell visible />
-        <b className="font-semibold text-ink">เห็น</b> เมนูขึ้นบนหน้าหลักและแถบเมนู
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <VisCell visible={false} />
-        <b className="font-semibold text-ink">ไม่เห็น</b> ซ่อนเมนู
-      </span>
-      <span className="inline-flex basis-full items-center gap-1.5">
-        <Info size={13} aria-hidden className="flex-none" />
-        คลิกแถวเพื่อตั้งสิทธิ์ · ตั้งที่ฝ่าย = ทุกแผนกในฝ่ายรวมแผนกที่ตั้งทีหลัง · ตอนนี้คุมแค่การมองเห็นเมนู
-        (พิมพ์ URL ตรงยังเปิดได้)
-      </span>
-    </div>
   );
 }
 
@@ -381,7 +482,6 @@ function LogList({
   if (!log.length) return <p className="py-10 text-center text-13 text-mut">ยังไม่มีการเปลี่ยนสิทธิ์</p>;
 
   const label = new Map(menus.map((m) => [m.id, m.label]));
-  const word = (v: boolean | undefined, parent: string) => (v === undefined ? `ตาม${parent}` : v ? "เห็น" : "ไม่เห็น");
 
   return (
     <div className="flex flex-col">
@@ -403,7 +503,8 @@ function LogList({
                 {ids.length ? (
                   ids.map((id) => (
                     <li key={id} className="text-12 text-mut">
-                      • {label.get(id) ?? id}: {word(e.before[id], parent)} → {word(e.after[id], parent)}
+                      {label.get(id) ?? id}: <Word v={e.before[id]} parent={parent} /> →{" "}
+                      <Word v={e.after[id]} parent={parent} />
                     </li>
                   ))
                 ) : (
@@ -417,4 +518,9 @@ function LogList({
       })}
     </div>
   );
+}
+
+function Word({ v, parent }: { v: boolean | undefined; parent: string }) {
+  if (v === undefined) return <span className="text-mut">ตาม{parent}</span>;
+  return <b className={`font-semibold ${v ? "text-primary" : "text-alert"}`}>{v ? "เห็น" : "ไม่เห็น"}</b>;
 }

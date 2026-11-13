@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Info, Save, TriangleAlert, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, EyeOff, Save, TriangleAlert, X } from "lucide-react";
 
 import { requestJson } from "@/lib/http";
 import {
@@ -13,21 +13,20 @@ import {
   type OrgUnit,
   type Visibility,
 } from "@/lib/menu-access";
-import { runAction } from "@/lib/swal";
+import { confirm, runAction } from "@/lib/swal";
 
-import { VisCell, ownOf, parentLabel, type Unit } from "./scope";
+import { VisCell, ownOf, type Unit } from "./scope";
 
 /**
  * แผงขวาตั้งสิทธิ์ของหน่วยเดียว (ค่าเริ่มต้น / ฝ่าย / แผนก) — ท่าเดียวกับ `AccessDrawer` ของ mena-wms
  *
- * แต่ละเมนูเลือกได้ “ตาม<ชั้นบน>” · เห็น · ไม่เห็น — เลือกค่าเดียวกับชั้นบนจะถูกนับเป็น “ตาม…”
- * (เก็บเฉพาะข้อยกเว้น เหมือนฝั่งเซิร์ฟเวอร์) · หัวกลุ่มงานมีปุ่มตั้งทั้งกลุ่มในทีเดียว
+ * แต่ละเมนูกดเลือก เห็น / ไม่เห็น — เลือกค่าเดียวกับชั้นบนถูกนับเป็น “ตามชั้นบน” เอง (เก็บเฉพาะข้อยกเว้น
+ * เหมือนฝั่งเซิร์ฟเวอร์) · หัวกลุ่มงานมีปุ่มตั้งทั้งกลุ่มในทีเดียว · `focus` = เมนูที่กดมาจากช่องในตาราง (ไฮไลต์ + เลื่อนไปหา)
  */
-
-type Choice = "" | "show" | "hide";
 
 export function AccessDrawer({
   unit,
+  focus,
   menus,
   scopes,
   me,
@@ -35,6 +34,7 @@ export function AccessDrawer({
   onSaved,
 }: {
   unit: Unit;
+  focus?: string;
   menus: LeafMenu[];
   scopes: MenuScopes;
   me: OrgUnit;
@@ -44,17 +44,17 @@ export function AccessDrawer({
   const own = ownOf(scopes, unit);
   const [draft, setDraft] = useState<Visibility>(own);
   const [saving, setSaving] = useState(false);
-  const parent = parentLabel(unit.kind);
+  const isBase = unit.kind === "base";
+  const focusRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [onClose]);
+    focusRef.current?.scrollIntoView({ block: "center" });
+  }, []);
 
   const inherited = (menuId: string) => parentValue(scopes, menuId, unit.kind, unit.divisionId);
   const clean = stripInherited(scopes, unit.kind, unit.divisionId, draft);
-  const dirty = JSON.stringify(sortKeys(clean)) !== JSON.stringify(sortKeys(own));
+  const changed = menus.filter((m) => clean[m.id] !== own[m.id]).length;
+  const dirty = changed > 0;
 
   // สิทธิ์ทั้งระบบหลังบันทึก — ไว้เตือนก่อนว่ากำลังจะล็อกตัวเองออกจากหน้านี้
   const lockout = useMemo(() => {
@@ -64,11 +64,23 @@ export function AccessDrawer({
     return !canSeeMenu(next, "permissions", me);
   }, [scopes, unit, clean, me]);
 
-  const setChoice = (menuId: string, choice: Choice) =>
+  const close = useCallback(async () => {
+    if (saving) return;
+    if (dirty && !(await confirm({ title: "ทิ้งการแก้ไข?", confirmText: "ทิ้ง", cancelText: "แก้ต่อ", tone: "warn" })))
+      return;
+    onClose();
+  }, [dirty, saving, onClose]);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && void close();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [close]);
+
+  const setChoice = (menuId: string, value: boolean) =>
     setDraft((d) => {
       const next = { ...d };
-      const value = choice === "show" ? true : choice === "hide" ? false : undefined;
-      if (value === undefined || value === inherited(menuId)) delete next[menuId];
+      if (value === inherited(menuId)) delete next[menuId];
       else next[menuId] = value;
       return next;
     });
@@ -77,7 +89,6 @@ export function AccessDrawer({
     setSaving(true);
     const out = await runAction({
       success: "บันทึกสิทธิ์แล้ว",
-      successDetail: "มีผลเมื่อผู้ใช้เปิดหน้าใหม่",
       failureTitle: "บันทึกสิทธิ์ไม่สำเร็จ",
       run: () =>
         requestJson<MenuScopes>("/api/menu-permissions", {
@@ -98,128 +109,91 @@ export function AccessDrawer({
 
   return (
     <>
-      <div onClick={onClose} aria-hidden className="fixed inset-0 z-[60] bg-ink/30" />
+      <div onClick={() => void close()} aria-hidden className="fixed inset-0 z-[60] bg-ink/30" />
       <aside
         role="dialog"
         aria-label={`ตั้งสิทธิ์ ${unit.name}`}
-        className="elev-pop fixed top-0 right-0 bottom-0 z-[61] flex w-[min(520px,100vw)] flex-col bg-base-100 text-ink"
+        className="elev-pop fixed top-0 right-0 bottom-0 z-[61] flex w-[min(560px,100vw)] flex-col bg-base-100 text-ink"
       >
-        <header className="flex items-start gap-3 border-b border-line px-4 py-3.5">
+        <header className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
-            <p className="text-11 font-semibold tracking-[0.04em] text-mut">
-              {unit.kind === "base" ? "ค่าเริ่มต้น" : unit.kind === "division" ? "ฝ่าย" : "แผนก"}
+            <p className="text-11 font-semibold tracking-[0.04em] text-primary">
+              {isBase ? "ค่าเริ่มต้น" : unit.kind === "division" ? "ฝ่าย" : "แผนก"}
             </p>
-            <h2 className="text-15 font-semibold text-pretty">{unit.name}</h2>
+            <h2 className="text-16 font-semibold text-pretty">{unit.name}</h2>
             <p className="text-12 text-mut">
-              {unit.sub}
+              {isBase ? "ทุกคน" : unit.sub}
               {unit.headcount !== null ? ` · ${unit.headcount} คน` : ""}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="ปิด" className="rounded-field p-1 text-mut hover:text-ink">
+          <button
+            type="button"
+            onClick={() => void close()}
+            aria-label="ปิด"
+            className="rounded-field p-1 text-mut hover:text-ink"
+          >
             <X size={18} />
           </button>
         </header>
 
-        <div className="flex-1 overflow-auto px-4 py-3">
-          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 text-13">
-            <div className="pb-1 text-10-5 font-semibold tracking-[0.05em] text-mut">เมนู</div>
-            <div className="pb-1 text-10-5 font-semibold tracking-[0.05em] text-mut">
-              {unit.kind === "base" ? "ระบบ" : `ตาม${parent}`}
-            </div>
-            <div className="pb-1 text-10-5 font-semibold tracking-[0.05em] text-mut">ตั้งเป็น</div>
-
-            {groups.map((g) => (
-              <div key={g.id} className="contents">
-                <div className="col-span-3 mt-2 flex items-center gap-2 border-t border-line-strong/60 pt-2.5 pb-1">
-                  <span className="min-w-0 flex-1 truncate text-12 font-semibold">{g.label}</span>
-                  <GroupButton onClick={() => g.items.forEach((m) => setChoice(m.id, "show"))}>เห็นทั้งกลุ่ม</GroupButton>
-                  <GroupButton onClick={() => g.items.forEach((m) => setChoice(m.id, "hide"))}>ซ่อนทั้งกลุ่ม</GroupButton>
-                  {unit.kind !== "base" ? (
-                    <GroupButton onClick={() => g.items.forEach((m) => setChoice(m.id, ""))}>ตาม{parent}</GroupButton>
-                  ) : null}
-                </div>
-                {g.items.map((m) => {
-                  const value = draft[m.id];
-                  const choice: Choice = value === undefined ? "" : value ? "show" : "hide";
-                  const effective = value ?? inherited(m.id);
-                  const overridden = value !== undefined;
-                  return (
-                    <div key={m.id} className="contents">
-                      <div className="flex min-w-0 items-center gap-2 border-t border-line py-1.5">
-                        <VisCell visible={effective} />
-                        <span className="flex min-w-0 flex-col">
-                          <span className="min-w-0 truncate" title={m.item.desc}>
-                            {m.parentLabel ? <span className="text-mut">{m.parentLabel} · </span> : null}
-                            {m.label}
-                            {m.action ? (
-                              <span className="ml-1.5 rounded-full border border-line px-1.5 py-px text-10-5 text-mut">
-                                สิทธิ์ในหน้า
-                              </span>
-                            ) : null}
-                          </span>
-                          {/* สิทธิ์ในหน้าอ่านจากชื่ออย่างเดียวไม่ออกว่า “ไม่เห็น” แล้วเกิดอะไร — โชว์คำอธิบายไว้ใต้ชื่อ */}
-                          {m.action && m.item.desc ? (
-                            <span className="text-11 leading-snug text-mut text-pretty">{m.item.desc}</span>
-                          ) : null}
-                        </span>
-                      </div>
-                      <div
-                        className={`border-t border-line py-1.5 text-12 whitespace-nowrap ${inherited(m.id) ? "text-primary" : "text-mut"}`}
-                      >
-                        {inherited(m.id) ? "เห็น" : "ไม่เห็น"}
-                      </div>
-                      <div className="border-t border-line py-1.5">
-                        <select
-                          value={choice}
-                          disabled={saving}
-                          onChange={(e) => setChoice(m.id, e.target.value as Choice)}
-                          aria-label={`สิทธิ์เมนู ${m.label}`}
-                          className={`rounded-field border px-2 py-1 text-12 outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 ${
-                            overridden
-                              ? "border-warning bg-warning/10 font-semibold text-ink"
-                              : "border-line bg-base-100 text-ink"
-                          }`}
-                        >
-                          <option value="">{unit.kind === "base" ? "ค่าระบบ (เห็น)" : `ตาม${parent}`}</option>
-                          <option value="show">เห็น</option>
-                          <option value="hide">ไม่เห็น</option>
-                        </select>
-                      </div>
-                    </div>
-                  );
-                })}
+        <div className="flex-1 overflow-auto px-5 pb-4">
+          {groups.map((g) => (
+            <section key={g.id}>
+              <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-line bg-base-100 pt-4 pb-2">
+                <h3 className="min-w-0 flex-1 truncate text-13 font-semibold">{g.label}</h3>
+                <GroupButton tone onClick={() => g.items.forEach((m) => setChoice(m.id, true))}>
+                  เห็นทั้งหมด
+                </GroupButton>
+                <GroupButton tone={false} onClick={() => g.items.forEach((m) => setChoice(m.id, false))}>
+                  ซ่อนทั้งหมด
+                </GroupButton>
               </div>
-            ))}
-          </div>
-
-          <p className="mt-4 flex items-start gap-1.5 text-11-5 leading-relaxed text-mut">
-            <Info size={12} className="mt-0.5 flex-none" aria-hidden />
-            {unit.kind === "department"
-              ? "เลือกค่าเดียวกับฝ่าย = ตามฝ่าย (ระบบเก็บเฉพาะข้อยกเว้น) · ถ้าฝ่ายเปลี่ยนสิทธิ์ เมนูที่ “ตามฝ่าย” จะเปลี่ยนตาม แต่ค่าที่ตั้งทับยังอยู่"
-              : unit.kind === "division"
-                ? "ตั้งที่ฝ่าย = มีผลกับทุกแผนกในฝ่าย รวมแผนกที่ตั้งขึ้นทีหลัง · แผนกที่ตั้งทับเมนูนั้นไว้เองไม่เปลี่ยนตาม"
-                : "ค่าเริ่มต้นใช้กับทุกคน รวมผู้ที่ไม่มีแผนกใน NCAC · ฝ่าย/แผนกที่ตั้งทับไว้ไม่เปลี่ยนตาม"}
-          </p>
+              {g.items.map((m) => {
+                const value = draft[m.id];
+                const effective = value ?? inherited(m.id);
+                const touched = clean[m.id] !== own[m.id];
+                const focused = m.id === focus;
+                return (
+                  <div
+                    key={m.id}
+                    ref={focused ? focusRef : undefined}
+                    className={`flex items-center gap-3 border-b border-line/70 py-2 ${m.action ? "pl-6" : ""} ${
+                      focused ? "-mx-5 bg-soft px-5 shadow-[inset_3px_0_0_var(--color-primary)]" : ""
+                    } ${focused && m.action ? "pl-11" : ""}`}
+                  >
+                    <VisCell visible={effective} own={value !== undefined} />
+                    <span className="min-w-0 flex-1 text-13" title={m.item.desc}>
+                      <span className={`block truncate ${focused ? "font-semibold" : ""}`}>
+                        {m.parentLabel && !m.action ? <span className="text-mut">{m.parentLabel} · </span> : null}
+                        {m.label}
+                      </span>
+                      {m.action ? <span className="block text-11 text-mut">สิทธิ์ในหน้า {m.parentLabel}</span> : null}
+                    </span>
+                    {touched ? <span aria-label="แก้แล้ว" className="size-1.5 flex-none rounded-full bg-primary" /> : null}
+                    <Segmented
+                      value={effective}
+                      disabled={saving}
+                      label={m.label}
+                      onChange={(v) => setChoice(m.id, v)}
+                    />
+                  </div>
+                );
+              })}
+            </section>
+          ))}
         </div>
 
-        <footer className="flex flex-col gap-2 border-t border-line px-4 py-3">
+        <footer className="flex flex-col gap-2 border-t border-line px-5 py-3">
           {lockout ? (
             <p className="flex items-start gap-1.5 text-12 text-alert">
               <TriangleAlert size={13} className="mt-0.5 flex-none" aria-hidden />
-              แผนกของคุณจะมองไม่เห็นเมนู “กำหนดสิทธิ์” แล้วจะกลับมาแก้ไม่ได้ — บันทึกแบบนี้ไม่ได้
+              แผนกของคุณจะมองไม่เห็นเมนู “กำหนดสิทธิ์” — บันทึกแบบนี้ไม่ได้
             </p>
           ) : null}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDraft({})}
-              disabled={saving || !Object.keys(draft).length}
-              className="rounded-field px-2 py-2 text-12 font-medium text-mut hover:text-alert disabled:opacity-40"
-            >
-              {unit.kind === "base" ? "คืนค่าระบบทั้งหมด" : `คืนค่าตาม${parent}ทั้งหมด`}
-            </button>
             <div className="flex-1" />
-            <button type="button" onClick={onClose} disabled={saving} className="btn-ghost px-3.5 py-2 text-12-5">
+            {dirty ? <span className="text-12 text-mut tabular-nums">แก้ {changed} เมนู</span> : null}
+            <button type="button" onClick={() => void close()} disabled={saving} className="btn-ghost px-3.5 py-2 text-12-5">
               ยกเลิก
             </button>
             <button
@@ -238,16 +212,69 @@ export function AccessDrawer({
   );
 }
 
-function GroupButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+/** ปุ่มเลือก เห็น (เขียว) · ไม่เห็น (แดง) */
+function Segmented({
+  value,
+  label,
+  disabled,
+  onChange,
+}: {
+  value: boolean;
+  label: string;
+  disabled: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={`สิทธิ์เมนู ${label}`}
+      className="flex flex-none overflow-hidden rounded-field border border-line text-12"
+    >
+      {([true, false] as const).map((v) => {
+        const on = value === v;
+        const tone = on
+          ? v
+            ? "bg-primary font-semibold text-primary-content"
+            : "bg-alert font-semibold text-white"
+          : "bg-base-100 text-mut hover:bg-base-200/60 hover:text-ink";
+        return (
+          <button
+            key={String(v)}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            disabled={disabled}
+            onClick={() => onChange(v)}
+            className={`inline-flex items-center gap-1 border-l border-line px-3 py-1 whitespace-nowrap transition-colors first:border-l-0 disabled:opacity-60 ${tone}`}
+          >
+            {v ? <Eye size={12} aria-hidden /> : <EyeOff size={12} aria-hidden />}
+            {v ? "เห็น" : "ไม่เห็น"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function GroupButton({
+  tone,
+  onClick,
+  children,
+}: {
+  tone: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const color = tone
+    ? "hover:border-primary/50 hover:bg-primary/8 hover:text-primary"
+    : "hover:border-alert/50 hover:bg-alert-soft hover:text-alert";
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex-none rounded-full border border-line px-2 py-0.5 text-10-5 text-mut transition-colors hover:border-primary/40 hover:text-primary"
+      className={`flex-none rounded-full border border-line px-2.5 py-0.5 text-11 text-mut transition-colors ${color}`}
     >
       {children}
     </button>
   );
 }
-
-const sortKeys = (v: Visibility) => Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)));

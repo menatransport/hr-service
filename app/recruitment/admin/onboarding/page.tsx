@@ -4,6 +4,9 @@ import { DataError } from "@/components/ui/data-error";
 import { getHub, type Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
 import { OnboardingView } from "@/app/recruitment/_components/admin/onboarding-view";
 import { TABS, type Tab } from "@/app/recruitment/_lib/requisitions/onboarding";
+import { onboardingViewer, pickRecruitSite, visibleRecruitSites } from "@/app/recruitment/_lib/sites";
+import { readSessionUser } from "@/lib/auth/session";
+import { canAccessMenu } from "@/lib/menu-permissions";
 
 /**
  * ติดตามพนักงานใหม่ — หน้าเดียวของ ขออัตรา → ฝึกงาน → รับรถ (`?tab=` = ขั้นที่เปิด)
@@ -20,8 +23,13 @@ function linkedApplications(hub: Hub) {
 }
 
 export default async function OnboardingPage({ searchParams }: PageProps<"/recruitment/admin/onboarding">) {
-  const { tab, open } = await searchParams;
+  const { tab, open, site: wanted } = await searchParams;
   const stage = (TABS as readonly string[]).includes(String(tab)) ? (tab as Tab) : "training";
+  /* แท็บสาขา: ลาดกระบังเห็นลาดกระบัง · สระบุรี/ระยอง/บางปะกงเห็นสระบุรี+บางปะกง · สิทธิ์ “ดูทุกสาขา” / site อื่นเห็นทั้งหมด */
+  const [user, allSites] = await Promise.all([readSessionUser(), canAccessMenu("recruit-all-sites")]);
+  const viewer = onboardingViewer(user);
+  const sites = visibleRecruitSites(viewer, allSites);
+  const site = pickRecruitSite(viewer, allSites, typeof wanted === "string" ? wanted : null);
 
   let hub: Hub | null = null;
   let error: string | null = null;
@@ -40,6 +48,8 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/recru
           applications={linkedApplications(hub)}
           initialStage={stage}
           initialOpen={typeof open === "string" ? open : ""}
+          sites={sites}
+          initialSite={site}
         />
       ) : (
         <div className="mx-auto max-w-xl py-6">
