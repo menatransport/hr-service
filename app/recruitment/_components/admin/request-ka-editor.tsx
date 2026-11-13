@@ -249,7 +249,7 @@ export function RequestKaEditor({
               searchPlaceholder="ค้นชื่อลูกค้า…"
             />
           ) : (
-            /* อ่านรายชื่อลูกค้าจาก NCAC ไม่ได้ — พิมพ์เอง (เซิร์ฟเวอร์รับชื่อเมื่อ NCAC ล่ม) */
+            /* อ่านรายชื่อลูกค้าจากทะเบียนไม่ได้ — พิมพ์เอง (เซิร์ฟเวอร์รับชื่อเมื่ออ่านทะเบียนไม่ได้) */
             <TextField id="rk-customer" label="ลูกค้า" value={customer} onChange={setCustomer} />
           )}
           {customer === OTHER ? (

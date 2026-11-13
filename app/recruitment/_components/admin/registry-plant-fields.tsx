@@ -28,7 +28,7 @@ export function RegistryPlantFields({
 }: {
   idPrefix: string;
   rows: RegistryPlant[];
-  /** ชื่อลูกค้าตาม NCAC ที่เลือกไว้ */
+  /** ชื่อลูกค้าที่เลือกไว้ (ชื่อตามทะเบียน · คำขอเก่า = ชื่อเต็มของ NCAC) */
   customer: string;
   plant: string;
   plantOther: string;
@@ -99,8 +99,8 @@ export function RegistryPlantFields({
 }
 
 /**
- * ลูกค้าในทะเบียนเป็นชื่อย่อ (TDM · SCCC …) ส่วนช่องลูกค้าเป็นชื่อเต็มของ NCAC — จับคู่ด้วยคำในชื่อ
- * · ชื่อย่อที่ไม่อยู่ในตารางนี้เทียบแบบมีคำนี้อยู่ในชื่อ
+ * ลูกค้าในทะเบียนเป็นชื่อย่อ (TDM · SCCC …) — ช่องลูกค้าใช้ชื่อเดียวกันแล้ว (13 พ.ย. 2569) จึงเทียบตรงก่อน
+ * · คำขอเก่าเก็บชื่อเต็มของ NCAC — จับคู่ด้วยคำในชื่อ · ชื่อย่อที่ไม่อยู่ในตารางนี้เทียบแบบมีคำนี้อยู่ในชื่อ
  */
 const CUSTOMER_HINT: Record<string, RegExp> = {
   TDM: /ทีดี\s*เอ็ม/,
@@ -114,6 +114,7 @@ const CUSTOMER_HINT: Record<string, RegExp> = {
 
 export function isSameCustomer(ncac: string, registry: string): boolean {
   if (!ncac || !registry) return false;
+  if (ncac.trim().toLowerCase() === registry.trim().toLowerCase()) return true;
   const hint = CUSTOMER_HINT[registry];
   return hint ? hint.test(ncac) : ncac.toLowerCase().includes(registry.toLowerCase());
 }

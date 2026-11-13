@@ -233,8 +233,8 @@ function branch(value: unknown): string {
 }
 
 /**
- * ลูกค้าสระบุรี/บางปะกง — ต้องอยู่ในรายชื่อจาก master NCAC (`loadBranchCustomers()`)
- * · อ่าน NCAC ไม่ได้ = รับชื่อที่ส่งมา ไม่ให้แจ้งสรรหาค้างเพราะ NCAC ล่ม
+ * ลูกค้าสระบุรี/บางปะกง — ต้องอยู่ในรายชื่อลูกค้าของทะเบียน พจส. สาขานั้น (`loadBranchCustomers()`)
+ * · อ่านทะเบียนไม่ได้ = รับชื่อที่ส่งมา ไม่ให้แจ้งสรรหาค้างเพราะฐานข้อมูลสะดุด
  */
 async function branchCustomer(
   branchName: string,

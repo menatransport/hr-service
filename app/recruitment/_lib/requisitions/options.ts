@@ -1,5 +1,4 @@
 import { etlCol } from "@/lib/db";
-import { listClients } from "@/lib/ncac/client";
 import { readDrivers } from "@/app/recruitment/_lib/drivers/master";
 import { siteLabel, siteOfBranch } from "@/app/recruitment/_lib/drivers/types";
 import { normalizeStatus, type AnswerMap } from "@/app/recruitment/_lib/types";
@@ -7,7 +6,7 @@ import {
   fullNameOf,
   readApplicationsWithSnapshot,
 } from "@/app/recruitment/_lib/applications";
-import { BANGPAKONG_CUSTOMERS, LINKABLE_STATUSES } from "./types";
+import { LINKABLE_STATUSES } from "./types";
 import { getRepairStatuses, type RepairStatus } from "./repair-status";
 
 /**
@@ -83,7 +82,7 @@ export interface RequisitionOptions {
    * คำขอที่บันทึกไว้แล้วไม่ได้ขึ้นกับตัวเลือกพวกนี้เลย
    */
   failed: string[];
-  /** ลูกค้าของสาขาที่ไม่ใช่งานโม่ (สระบุรี/บางปะกง) → รายชื่อ — ดู `loadBranchCustomers()` */
+  /** ลูกค้าของสาขาที่ไม่ใช่งานโม่ (สระบุรี/บางปะกง) → ชื่อลูกค้าในทะเบียน — ดู `loadBranchCustomers()` */
   branchCustomers: Record<string, string[]>;
   /** แพล้นท์/ตำแหน่งของสระบุรี+บางปะกง — ดู `loadRegistryPlants()` */
   registryPlants: RegistryPlant[];
@@ -247,24 +246,33 @@ async function loadCandidates(): Promise<PickOption[]> {
     });
 }
 
-/** `site_id` ของ NCAC — 3 = สสบ. (สระบุรี) ดู `GET /sites/` */
-const NCAC_SARABURI_SITE = 3;
+/** สาขาในฟอร์มขออัตรา ↔ แท็บสาขาของทะเบียน พจส. (`DRIVER_SITES`) */
+const BRANCH_SITE = { สระบุรี: "saraburi", บางปะกง: "bangpakong" } as const;
 
 /**
- * ลูกค้าสระบุรี = master ลูกค้า NCAC หน่วยงาน สสบ. ตัด "ไม่มี (พนักงานบริษัท)" ออก
- * · บางปะกง = `BANGPAKONG_CUSTOMERS` ตายตัว — ตามคำสั่ง 3 พ.ย. 2026
+ * ลูกค้าสระบุรี/บางปะกง = ชื่อลูกค้าในทะเบียนประวัติ พจส. ของสาขานั้น (TDM · SCCC …) เรียงตามจำนวนคน
+ * · Bew 13 พ.ย. 2569 — แทนชื่อบริษัทเต็มจาก master NCAC / `BANGPAKONG_CUSTOMERS` เดิม
+ * · นับรวมคนพ้นสภาพ (หลักเดียวกับ `loadRegistryPlants()`)
  */
 export async function loadBranchCustomers(): Promise<Record<string, string[]>> {
-  const clients = await listClients();
-  const saraburi = [
-    ...new Set(
-      clients
-        .filter((c) => c.site_id === NCAC_SARABURI_SITE)
-        .map((c) => (c.client_name ?? "").trim())
-        .filter((n) => n && !n.startsWith("ไม่มี")),
-    ),
-  ].sort((a, b) => THAI_ORDER.compare(a, b));
-  return { สระบุรี: saraburi, บางปะกง: BANGPAKONG_CUSTOMERS };
+  const docs = await readDrivers<{ branch?: string; customer?: string }>(["branch", "customer"]);
+  const count = new Map<string, Map<string, number>>();
+  for (const d of docs) {
+    const site = siteOfBranch(String(d.branch ?? ""));
+    const customer = (d.customer ?? "").trim();
+    if (!customer || !site) continue;
+    const row = count.get(site) ?? new Map<string, number>();
+    row.set(customer, (row.get(customer) ?? 0) + 1);
+    count.set(site, row);
+  }
+  return Object.fromEntries(
+    Object.entries(BRANCH_SITE).map(([branch, site]) => [
+      branch,
+      [...(count.get(site) ?? new Map<string, number>()).entries()]
+        .sort((a, b) => b[1] - a[1] || THAI_ORDER.compare(a[0], b[0]))
+        .map(([name]) => name),
+    ]),
+  );
 }
 
 /**
@@ -311,7 +319,7 @@ export async function getRequisitionOptions(): Promise<RequisitionOptions> {
   if (drivers.status === "rejected") failed.push("ทะเบียนประวัติ พจส.");
   if (vehicles.status === "rejected") failed.push("ทะเบียนรถ");
   if (candidates.status === "rejected") failed.push("รายชื่อผู้สมัคร");
-  if (branchCustomers.status === "rejected") failed.push("ลูกค้าสาขาสระบุรี (NCAC)");
+  if (branchCustomers.status === "rejected") failed.push("ลูกค้าสระบุรี/บางปะกง (ทะเบียนประวัติ พจส.)");
 
   return {
     ...EMPTY,
@@ -321,10 +329,8 @@ export async function getRequisitionOptions(): Promise<RequisitionOptions> {
     candidates: candidates.status === "fulfilled" ? candidates.value : [],
     /* อ่านสถานะซ่อมไม่ได้ = ทุกคันขึ้นเป็นปกติ ไม่ใช่เรื่องที่ต้องขึ้นแถบเตือน */
     repairs: repairs.status === "fulfilled" ? repairs.value : {},
-    branchCustomers:
-      branchCustomers.status === "fulfilled"
-        ? branchCustomers.value
-        : { บางปะกง: BANGPAKONG_CUSTOMERS },
+    /* อ่านไม่ได้ = ไม่มีรายการ ฟอร์มให้พิมพ์ชื่อลูกค้าเอง */
+    branchCustomers: branchCustomers.status === "fulfilled" ? branchCustomers.value : {},
     /* อ่านไม่ได้ = รายการว่าง ฟอร์มยังพิมพ์เองได้ (ทะเบียนล่มขึ้นแถบเตือนจาก `drivers` อยู่แล้ว) */
     registryPlants: registryPlants.status === "fulfilled" ? registryPlants.value : [],
     failed,
