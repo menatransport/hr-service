@@ -43,8 +43,9 @@ function connect(): Promise<MongoClient> {
     maxPoolSize: 10,
     // ไม่อุ่น connection ไว้ล่วงหน้า — instance ส่วนใหญ่นิ่ง ถือไว้ก็กิน RAM ฝั่ง Atlas (~1 MB/ตัว) เปล่า ๆ
     minPoolSize: 0,
-    // คืน connection ที่ว่างเกิน 1 นาที — ช่วงคลิกต่อเนื่องยังได้ใช้ซ้ำ แต่ไม่ค้างตอน instance ถูกแช่
-    maxIdleTimeMS: 60_000,
+    // คืน connection ที่ว่างเกิน 5 นาที — ต่อใหม่แต่ละครั้งเสีย TLS + SCRAM (PBKDF2) ซึ่งกิน Active CPU
+    // บน Vercel · 1 นาทีเดิมทำให้คนที่อ่านหน้าจอนานกว่านั้นต้องต่อใหม่แทบทุกคลิก
+    maxIdleTimeMS: 300_000,
     serverSelectionTimeoutMS: CONNECT_TIMEOUT_MS,
     connectTimeoutMS: CONNECT_TIMEOUT_MS,
     /*
