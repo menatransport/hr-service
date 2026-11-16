@@ -12,6 +12,25 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/desk", destination: "/home", permanent: false }];
   },
+  /* ตั้ง `HR_API_URL` (เช่น URL ของ mena-backend-services) เมื่อไหร่ `/api/**` ทั้งหมดจะถูกส่งต่อไปที่
+     `${HR_API_URL}/api/v1/hr/**` แทน route ใน `app/api` · ยกเว้นล็อกอิน Google (`/api/auth/**`),
+     cron ของ Vercel (`/api/cron/**`) และ `/api/drivers/excel-sync` (ใช้ตอน dev) ที่ยังทำงานที่นี่
+     · `proxy.ts` ยังทำงานก่อน (ลำดับ: proxy → beforeFiles) · ไม่ตั้ง = ทุกอย่างเหมือนเดิม
+     ถอยกลับ = ลบ env นี้แล้ว redeploy */
+  async rewrites() {
+    const target = process.env.HR_API_URL?.trim().replace(/\/+$/, "");
+    if (!target) return [];
+    return {
+      beforeFiles: [
+        {
+          source: "/api/:path((?!(?:auth|cron)(?:/|$)|drivers/excel-sync(?:/|$)).+)",
+          destination: `${target}/api/v1/hr/:path`,
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
 };
 
 export default nextConfig;
