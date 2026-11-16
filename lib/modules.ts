@@ -179,6 +179,14 @@ export const MODULES: ModuleGroup[] = [
         desc: "กราฟกำลังคน พจส. รายลูกค้าและแพล้นท์",
         href: "/recruitment/admin/dashboard",
         icon: ChartColumn,
+        actions: [
+          {
+            /* Bew 15 พ.ย. 2569 — RC Owner · Target Truck ของหมวด Manpower ตั้งเอง */
+            id: "dashboard-targets",
+            label: "แก้เป้า Manpower",
+            desc: "ไม่เห็น = ดูแดชบอร์ดได้อย่างเดียว · ตั้ง RC Owner / Target Truck ต่อกลุ่มงาน × ลูกค้าไม่ได้",
+          },
+        ],
       },
     ],
   },

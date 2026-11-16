@@ -1080,6 +1080,11 @@ export function CandidatesView({
     return [sorted, counts] as const;
   }, [enriched, columns, filters, sort, needle, rqByApplication, mixer]);
 
+  /* ทั้งหมด | Mixer L | Mixer S — แท็บตาราง: ต่อจากช่องค้นหา · แท็บสถานะฝึกงาน: ต่อจากแท็บสาขา (Bew 16 พ.ย. 2569) */
+  const mixerTabs = showMixer ? (
+    <MixerTabs value={mixerPick} counts={mixerCount} onChange={setMixerPick} className="w-full sm:w-auto" />
+  ) : null;
+
   /**
    * หน้าละ 25 แถว (2 พ.ย. 2569) — ตัดหลังกรอง/เรียงแล้ว · แถบสรุป ตัวเลขในหัวคอลัมน์
    * ปุ่ม Excel และตารางฝึกงานรายวันยังใช้ `visible` ทั้งชุดเหมือนเดิม
@@ -1353,9 +1358,9 @@ export function CandidatesView({
                 tone="filled"
                 className="lg:max-w-sm lg:flex-1"
               />
+              {mixerTabs}
             </>
           )}
-          {showMixer ? <MixerTabs value={mixerPick} counts={mixerCount} onChange={setMixerPick} className="w-full sm:w-auto" /> : null}
         </div>
       ) : searchBar ? (
         <div className="flex flex-none flex-col gap-2 py-3 lg:flex-row lg:items-center lg:gap-3">
@@ -1385,6 +1390,7 @@ export function CandidatesView({
             people={dailyPeople}
             onAlerts={onDailyAlerts}
             toolbarSlot={dailyToolbar}
+            filters={mixerTabs}
             onDaySaved={onDaySaved}
           />
         </div>

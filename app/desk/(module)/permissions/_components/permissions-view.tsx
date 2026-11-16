@@ -41,6 +41,7 @@ const SHORT: Record<string, string> = {
   "recruit-all-sites": "↳ ทุกสาขา",
   trucks: "สถานะรถ",
   dashboard: "แดชบอร์ด",
+  "dashboard-targets": "↳ แก้เป้า",
   employee: "ข้อมูลพนง.",
   "payroll-overview": "รอบจ่าย",
   "payroll-intake": "รับข้อมูล",

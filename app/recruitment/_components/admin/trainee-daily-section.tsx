@@ -71,6 +71,7 @@ export function TraineeDailySection({
   people,
   onAlerts,
   toolbarSlot,
+  filters,
   onDaySaved,
 }: {
   pool: TraineePerson[];
@@ -79,6 +80,8 @@ export function TraineeDailySection({
   /** แถบของหน้าผู้สมัครที่ให้เครื่องมือของตาราง (เดือน · ค้นหา · สาขา · RC Alert · Excel) ไปอยู่ —
       ดู `toolbarSlot` ของ `TraineeMatrix` */
   toolbarSlot?: HTMLElement | null;
+  /** ตัวกรองเพิ่มต่อจากแท็บสาขา — ดู `filters` ของ `TraineeMatrix` */
+  filters?: React.ReactNode;
   people: TraineePerson[];
   /** จำนวนคนที่วันนี้ขึ้นหัวข้อ Issue — ให้แท็บข้างบนขึ้นป้าย */
   onAlerts?: (count: number) => void;
@@ -197,6 +200,7 @@ export function TraineeDailySection({
           onMonth={load}
           actions={alertButton}
           toolbarSlot={toolbarSlot}
+          filters={filters}
           onDaySaved={onDaySaved}
         />
       ) : (

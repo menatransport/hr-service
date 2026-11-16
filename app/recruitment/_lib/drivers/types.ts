@@ -140,6 +140,8 @@ export const WORK_STATUS_LABELS: Record<string, string> = {
   "ฝ": "พจส.ฝึกงาน",
   /* ไม่ใช่รหัสของ ATMS — RC กรอกเองในตารางสถานะฝึกงาน = ฝึกจบ รอรับรถ (`HANDOVER_CODE` · Bew 9 พ.ย. 2569) */
   "ร": "พจส.รอรับรถ",
+  /* ไม่ใช่รหัสของ ATMS — RC กรอกเองในตารางสถานะฝึกงาน (Bew 16 พ.ย. 2569) */
+  "ข": "พจส.ขาดงาน",
   "ล": "พจส.จองลาล่วงหน้า",
   "ก": "พจส.ลากิจฉุกเฉิน",
   "ป": "พจส.ลาป่วยฉุกเฉิน",
@@ -229,8 +231,8 @@ export interface WorkStatusGroup {
  * ทั้งหน้าคือเรื่องการฝึก `ฝ` จึงอยู่บนสุดและเป็นกลุ่มของตัวเอง
  */
 export const WORK_STATUS_GROUPS: WorkStatusGroup[] = [
-  { label: "ฝึกงาน", options: [opt("ฝ")] },
-  { label: "รับรถ", options: [opt(HANDOVER_CODE)] },
+  /* `ฝ` · `ร` · `ข` อยู่กลุ่มเดียว — ชุดที่ RC ใช้ทุกวันกับคนฝึกงาน (Bew 16 พ.ย. 2569) */
+  { label: "ฝึกงาน", options: ["ฝ", HANDOVER_CODE, "ข"].map(opt) },
   {
     label: "มาทำงาน",
     options: ["A", "A75", "A50", "A25", "AX", "Aค", "Aซ", "Aล", "Aส", "Aป", "Aน", "Aด"].map(opt),

@@ -93,6 +93,7 @@ export function TraineeMatrix({
   vehicles,
   onMonth,
   actions,
+  filters,
   toolbarSlot,
   onDaySaved,
 }: {
@@ -106,6 +107,8 @@ export function TraineeMatrix({
   toolbarSlot?: HTMLElement | null;
   /** ปุ่มเพิ่มท้ายแถบเครื่องมือ (ชิดขวา) — เช่น RC Alert ของหน้าผู้สมัคร */
   actions?: React.ReactNode;
+  /** ตัวกรองเพิ่มต่อจากแท็บสาขา — เช่น ทั้งหมด | Mixer L | Mixer S ของหน้าผู้สมัคร */
+  filters?: React.ReactNode;
   /** ฝังในหน้าอื่น = โหลดเดือนใหม่เอง แทนการเปลี่ยน `?m=` ของ URL */
   onMonth?: (month: string) => Promise<void>;
   /** รายชื่อรถให้เลือกตอนผูกทะเบียนรถ — ว่าง = อ่านทะเบียนรถไม่สำเร็จตอนโหลดหน้า */
@@ -263,6 +266,7 @@ export function TraineeMatrix({
         ].map((value) => ({ value, label: siteFilterLabel(value) }))}
         className="w-full sm:w-auto sm:self-start lg:self-auto"
       />
+      {filters}
 
       {/* RC Alert + Excel ชิดขวา · ในแถบของหน้าผู้สมัครจะอยู่ก่อนปุ่มสลับมุมมองที่ท้ายแถว */}
       <div className="flex items-center gap-2 lg:ml-auto">
@@ -363,7 +367,7 @@ export function TraineeMatrix({
                   <th
                     colSpan={SUM_TONES.length}
                     scope="colgroup"
-                    title={`ยอดวันรวม ${totalsRange} (เดือนที่เปิด + ย้อนหลัง ${TOTAL_PRIOR_MONTHS} เดือน)`}
+                    title={`ยอดวันรวม ${totalsRange} (เดือนที่เปิด + ย้อนหลัง ${TOTAL_PRIOR_MONTHS} เดือน) · นับจากที่ RC กรอกเอง (ครึ่งล่าง)`}
                     className="border-r border-line bg-head px-1 pt-1.5 pb-0.5 text-center text-10-5 font-medium whitespace-nowrap text-mut"
                   >
                     รวม {totalsRange}
@@ -890,7 +894,7 @@ const XLSX_TONE: Record<CellTone, XlsxTone> = { work: "ok", handover: "mut", lea
  *
  * ช่องวัน = รหัสของวันนั้น · ATMS กับที่กรอกเองไม่ตรงกัน = `ATMS / กรอกเอง` (เช่น `ฝ / ก`)
  * ไม่ทิ้งค่าใดค่าหนึ่ง เหตุผลเดียวกับช่องผ่าทแยงบนจอ · สีตัวหนังสือตามรหัสที่ใช้นับ
- * (ATMS ก่อน — `effectiveCode`) · เหตุผลที่ RC กรอกรวมในคอลัมน์ “หมายเหตุ” ท้ายแถว
+ * (ที่กรอกเองก่อน ไม่มีค่อยใช้ ATMS) · เหตุผลที่ RC กรอกรวมในคอลัมน์ “หมายเหตุ” ท้ายแถว
  * · ส่งออกตามตัวกรองที่ใช้อยู่ รวมคนที่พ้นสภาพในเดือนนี้ (แม้กลุ่มนั้นพับไว้บนจอ)
  */
 function traineeXlsx(
@@ -921,7 +925,7 @@ function traineeXlsx(
       value: (r) => codeOf(r, day),
       tone: (r) => {
         const cell = r.byDay.get(day);
-        const code = cell ? cell.atms || cell.manual : "";
+        const code = cell ? cell.manual || cell.atms : "";
         return code ? XLSX_TONE[cellTone(code)] : null;
       },
     })),

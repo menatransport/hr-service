@@ -58,7 +58,7 @@ export const TONE_DOT: Record<CellTone, string> = {
 export const TONE_LABEL: Record<CellTone, string> = {
   work: "ฝึกงาน",
   handover: "รับรถ",
-  leave: "ลา",
+  leave: "ลา/ขาด",
   exit: "พ้นสภาพ",
 };
 
@@ -92,7 +92,7 @@ export function cellTone(code: string): CellTone {
 export const REPORT_ISSUES = [
   { key: "personal", label: "ลากิจ", codes: ["ก", "ล"], reason: "required" },
   { key: "sick", label: "ลาป่วย", codes: ["ป"], reason: "optional" },
-  { key: "absent", label: "ขาดงาน", codes: ["ลข", "ย"], reason: "required" },
+  { key: "absent", label: "ขาดงาน", codes: ["ข", "ลข", "ย"], reason: "required" },
   { key: "trial", label: "ฝึกงาน 1-2 วัน", codes: [], reason: "required" },
   { key: "dismissed", label: "ปลด", codes: ["ปอ"], reason: "required" },
   { key: "resigned", label: "ลาออก", codes: ["ลอ"], reason: "required" },
@@ -129,8 +129,11 @@ export interface DayCell {
   trial: boolean;
 }
 
-/** รหัสที่ใช้นับยอดรวมของแถว — ของระบบมาก่อนเสมอ เพราะตัวนั้นคือชุดที่ผูกกับค่าแรง */
-export const effectiveCode = (cell: DayCell): string => cell.atms || cell.manual;
+/**
+ * รหัสที่ใช้นับยอดรวมของแถว (ฝึกงาน · รอรับรถ · ลา) — **เฉพาะครึ่งล่างที่ RC กรอกเอง**
+ * (Bew 16 พ.ย. 2569) · ครึ่งบน ATMS ยังแสดงในช่องให้เทียบ แต่ไม่นับ
+ */
+export const effectiveCode = (cell: DayCell): string => cell.manual;
 
 export interface TraineeRow {
   driver: TraineeBoardDriver;

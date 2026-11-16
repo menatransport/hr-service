@@ -348,28 +348,14 @@ export async function getTraineeBoard(requestedMonth: string, onlyCodes?: string
 
 /**
  * ยอดวันของเดือนก่อนหน้า ต่อคน — **กติกาเดียวกับยอดของเดือนที่เปิด** (`buildTraineeRows()`):
- * ต่อวันใช้รหัส ATMS ก่อน ไม่มีค่อยใช้ที่กรอกเอง (`effectiveCode`) แล้วจัดกองด้วย `cellTone()`
+ * ต่อวันนับเฉพาะรหัสที่ RC กรอกเอง (`effectiveCode`) แล้วจัดกองด้วย `cellTone()`
  * · ไม่นับวันพ้นสภาพ (ตารางไม่มีคอลัมน์นั้นแล้ว)
  */
 async function loadPriorTotals(codes: string[], priorMonths: string[]): Promise<Map<string, PriorTotals>> {
   const totals = new Map<string, PriorTotals>();
   if (!codes.length || !priorMonths.length) return totals;
 
-  const [atmsDocs, manualByMonth] = await Promise.all([
-    etlCol("workStatus").then((col) =>
-      col
-        .find(
-          { employee_code: { $in: codes } },
-          { projection: { employee_code: 1, ...Object.fromEntries(priorMonths.map((m) => [`months.${m}`, 1])) } },
-        )
-        .toArray(),
-    ),
-    Promise.all(priorMonths.map((m) => loadManualDays(codes, m))),
-  ]);
-
-  const atmsByCode = new Map(
-    atmsDocs.map((doc) => [str(doc.employee_code), (doc.months ?? {}) as Record<string, unknown>]),
-  );
+  const manualByMonth = await Promise.all(priorMonths.map((m) => loadManualDays(codes, m)));
 
   for (const code of codes) {
     const merged: Record<string, string> = {};
@@ -377,8 +363,6 @@ async function loadPriorTotals(codes: string[], priorMonths: string[]): Promise<
       for (const [iso, entry] of Object.entries(manualByMonth[i].get(code) ?? {})) {
         if (entry.code.trim()) merged[iso] = entry.code;
       }
-      /* ATMS ทับที่กรอกเอง — ตัวนั้นคือชุดที่ผูกกับค่าแรง (เหมือน `effectiveCode`) */
-      Object.assign(merged, daysOfMonth(atmsByCode.get(code)?.[m], m));
     });
 
     const sum = emptyTotals();
