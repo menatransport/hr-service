@@ -82,7 +82,7 @@ export function Avatar({
     <span
       // ชื่อเต็มอยู่ข้าง ๆ เสมอ — รูป/ตัวย่อจึงเป็นแค่ภาพ ไม่ต้องให้ screen reader อ่านซ้ำ
       aria-hidden
-      className={`inline-flex flex-none items-center justify-center overflow-hidden rounded-full font-semibold ring-1 transition duration-200 ring-inset select-none group-hover:-translate-y-px ${tones[tone]} ${sizes[size]} ${className}`}
+      className={`initials-avatar ${tones[tone]} ${sizes[size]} ${className}`}
     >
       {src ? (
         /* `<img>` ธรรมดา ไม่ใช่ `next/image` — โฮสต์ของรูปยังไม่รู้ จึงประกาศ

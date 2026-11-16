@@ -1510,6 +1510,22 @@
 }
 
 /**
+ * วงรูป/ตัวย่อของ `Avatar` — รวมคลาสยาวไว้ชื่อเดียว เพราะหน้าตารางวาดวงนี้หลายร้อยวง
+ * (ห้องเช่า 214 วง · ค้นหาพนักงาน 147 วง) สตริงคลาสเต็มทุกวงทำให้ HTML หนักขึ้นหลายสิบ KB
+ * · โทนสี/ขนาดยังอยู่ใน `components/ui/avatar.tsx` · ชื่อไม่ใช่ `avatar` เพราะชนกับคอมโพเนนต์ของ daisyUI
+ */
+@utility initials-avatar {
+  @apply inline-flex flex-none items-center justify-center overflow-hidden rounded-full font-semibold ring-1 transition duration-200 ring-inset select-none group-hover:-translate-y-px;
+}
+
+/**
+ * ช่องกรอกเงินในตารางห้องเช่า (`MoneyCell`) — ตารางหนึ่งเดือนมีราว 350 ช่อง เหตุผลเดียวกับ `initials-avatar`
+ */
+@utility bill-cell {
+  @apply h-8 w-full min-w-0 rounded-field border border-transparent bg-transparent px-2 text-right text-13 tabular-nums transition-colors placeholder:text-mut/60 hover:border-line hover:bg-base-100 focus:border-primary/60 focus:bg-base-100 disabled:opacity-50;
+}
+
+/**
  * การ์ดที่กดได้ — ยกขึ้นเล็กน้อยตอนเอาเมาส์วาง แล้วกดลงจนสุดตอนคลิก
  *
  * `translateY` แค่ 2px โดยตั้งใจ · การ์ดในระบบนี้เรียงกันเป็นตารางหลายใบ

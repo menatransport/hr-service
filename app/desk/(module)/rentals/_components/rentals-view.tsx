@@ -29,6 +29,7 @@ import {
   SummaryToolbar,
 } from "@/components/ui/summary-panel";
 import { XlsxExportButton } from "@/components/ui/xlsx-export-button";
+import { useIsDesktop } from "@/lib/use-is-desktop";
 import {
   DEFAULT_CAP,
   EXIT_KIND_LABEL,
@@ -106,11 +107,15 @@ function searchText(r: BoardRoom): string {
 export function RentalsView({
   board,
   monthTotals,
+  initialDesktop,
 }: {
   board: RentalBoard;
   /** ยอดจ่ายรวมรายเดือนของปีนั้น (ม.ค.–เดือนที่เปิด) — แถวสรุปในบันทึกขออนุมัติ */
   monthTotals: Record<string, number | null>;
+  /** จอ ≥lg ไหม ตามที่หน้า server เดาจาก request (`guessDesktop`) — วาดตารางหรือรายการมือถือชุดเดียว */
+  initialDesktop: boolean;
 }) {
+  const desktop = useIsDesktop(initialDesktop);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<Tab>("rooms");
@@ -398,7 +403,7 @@ export function RentalsView({
               />
             )}
           </SummaryBody>
-        ) : (
+        ) : desktop ? (
           <>
             {/* จอ ≥lg — ตารางเต็ม เลื่อนในกล่องของมันเอง หัวตาราง + คอลัมน์ห้องติดขอบ */}
             <div className="relative hidden max-h-[calc(100dvh-10.5rem)] overflow-auto border-t border-line bg-base-100 lg:block">
@@ -440,7 +445,9 @@ export function RentalsView({
                 </tbody>
               </table>
             </div>
-
+          </>
+        ) : (
+          <>
             {/* จอ <lg — แถวละห้อง คั่นเส้น */}
             <SummaryBody className="lg:hidden">
               <ul className="divide-y divide-line">

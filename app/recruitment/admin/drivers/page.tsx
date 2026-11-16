@@ -7,6 +7,7 @@ import { DriverRegistryView } from "@/app/recruitment/_components/admin/driver-r
 import { DataError } from "@/components/ui/data-error";
 import { readSessionUser } from "@/lib/auth/session";
 import { canAccessMenu } from "@/lib/menu-permissions";
+import { guessDesktop } from "@/lib/viewport";
 import { getDriverList } from "@/app/recruitment/_lib/drivers/registry";
 import { DRIVER_SITE_COOKIE, formatThaiDateTime } from "@/app/recruitment/_lib/drivers/types";
 import type { DriverListRegistry } from "@/app/recruitment/_lib/drivers/types";
@@ -46,6 +47,8 @@ export default async function DriversRegistryPage({ searchParams }: PageProps<"/
   const initialSite =
     (wanted ?? savedSite) === "other" && sites.length > 1 ? "other" : pickRecruitSite(user, allSites, wanted, savedSite);
 
+  const initialDesktop = await guessDesktop();
+
   try {
     registry = await getDriverList();
   } catch (err) {
@@ -58,7 +61,12 @@ export default async function DriversRegistryPage({ searchParams }: PageProps<"/
         registry.drivers.length ? (
           <>
             <ReadOnlyNotice enrichmentFailed={registry.enrichmentFailed} />
-            <DriverRegistryView registry={registry} sites={sites} initialSite={initialSite} />
+            <DriverRegistryView
+              registry={registry}
+              sites={sites}
+              initialSite={initialSite}
+              initialDesktop={initialDesktop}
+            />
           </>
         ) : (
           <EmptyRegistry />

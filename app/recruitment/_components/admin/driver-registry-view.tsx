@@ -23,6 +23,7 @@ import { SearchField } from "@/components/ui/field";
 import { XlsxExportButton, type XlsxExportProps } from "@/components/ui/xlsx-export-button";
 import { xlsxDate, type XlsxColumn, type XlsxSheet } from "@/lib/xlsx-table";
 import { requestJson } from "@/lib/http";
+import { useIsDesktop } from "@/lib/use-is-desktop";
 import { MascotLoader } from "@/components/ui/mascot";
 import type { DriverExportRow } from "@/app/recruitment/_lib/drivers/registry";
 import {
@@ -455,13 +456,17 @@ export function DriverRegistryView({
   registry,
   sites,
   initialSite,
+  initialDesktop,
 }: {
   registry: DriverListRegistry;
   /** แท็บสาขาที่ผู้ใช้เห็นได้ (`visibleRecruitSites`) */
   sites: readonly RecruitSite[];
   /** แท็บตั้งต้น — `?site=` → คุกกี้ `DRIVER_SITE_COOKIE` → สาขาของผู้ใช้ (หน้า server เลือกให้) */
   initialSite: string;
+  /** จอ ≥lg ไหม ตามที่หน้า server เดาจาก request (`guessDesktop`) — วาดตารางหรือรายการมือถือชุดเดียว */
+  initialDesktop: boolean;
 }) {
+  const desktop = useIsDesktop(initialDesktop);
   /**
    * สิทธิ์ย่อย “↳ ประวัติ” (/desk/permissions) — ไม่เห็น = ทะเบียน**อ่านอย่างเดียว**: ไม่มี
    * นำเข้า/Sync เปลี่ยนรูป (Bew 5 พ.ย. 2569) · ส่งออก Excel ยังได้ · API กันซ้ำฝั่งเซิร์ฟเวอร์
@@ -1018,6 +1023,7 @@ export function DriverRegistryView({
             ภายในหน้าเดียว แต่ไม่ต้องวาดทั้งพันแถวอีกต่อไป · แถบเลขหน้าอยู่ใต้กล่อง
             ชิดขวา ใช้ `Pager` ตัวเดียวกับคิวคำร้อง **อย่าเขียนแถบเลขหน้าขึ้นใหม่**
           */}
+          {desktop ? (
           <div
             ref={tableBox}
             className="relative hidden max-h-[calc(100dvh-10.5rem)] overflow-auto border-t border-line bg-base-100 lg:block"
@@ -1062,8 +1068,8 @@ export function DriverRegistryView({
               </tbody>
             </table>
           </div>
-
-          {/* ── จอ <lg: แถวละคน (แถวแบนคั่นเส้น ไม่ใช่การ์ด) ตารางแนวนอนใช้บนจอแคบไม่ได้ ── */}
+          ) : (
+          /* ── จอ <lg: แถวละคน (แถวแบนคั่นเส้น ไม่ใช่การ์ด) ตารางแนวนอนใช้บนจอแคบไม่ได้ ── */
           <SummaryBody className="lg:hidden">
           <ul key={`${current}-${results.length}`} className="divide-y divide-line">
             {pageRows.map((d, i) => (
@@ -1073,6 +1079,7 @@ export function DriverRegistryView({
             ))}
           </ul>
           </SummaryBody>
+          )}
 
           <SummaryFooter>
           <PageBar

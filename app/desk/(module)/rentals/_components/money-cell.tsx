@@ -91,7 +91,7 @@ export function MoneyCell({
         }
       }}
       disabled={saving}
-      className={`field-ring h-8 w-full min-w-0 rounded-field border border-transparent bg-transparent px-2 text-right text-13 tabular-nums transition-colors placeholder:text-mut/60 hover:border-line hover:bg-base-100 focus:border-primary/60 focus:bg-base-100 disabled:opacity-50 ${className}`}
+      className={`field-ring bill-cell ${className}`}
     />
   );
 }

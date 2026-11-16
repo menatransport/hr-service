@@ -2,6 +2,7 @@ import { DataError } from "@/components/ui/data-error";
 import { getMonthTotals, getRentalBoard } from "@/lib/rentals/store";
 import { isMonth } from "@/lib/rentals/types";
 import { todayInBangkok } from "@/app/recruitment/_lib/drivers/registry";
+import { guessDesktop } from "@/lib/viewport";
 
 import { RentalsView } from "./_components/rentals-view";
 
@@ -22,6 +23,7 @@ export default async function RentalsPage(props: PageProps<"/desk/rentals">) {
   const year = month.slice(0, 4);
   const months = Array.from({ length: Number(month.slice(5)) }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
 
+  const initialDesktop = await guessDesktop();
   let board;
   let monthTotals: Record<string, number | null> = {};
   try {
@@ -35,5 +37,5 @@ export default async function RentalsPage(props: PageProps<"/desk/rentals">) {
       />
     );
   }
-  return <RentalsView board={board} monthTotals={monthTotals} />;
+  return <RentalsView board={board} monthTotals={monthTotals} initialDesktop={initialDesktop} />;
 }
