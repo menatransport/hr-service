@@ -356,6 +356,11 @@ async function byId(col: Collection<RequisitionDoc>, id: string) {
   return doc;
 }
 
+/** รหัสพนักงานผู้ขอ — ด่านสิทธิ์ลบคำขอ (`cancel-rights.ts`) · ว่าง = นำเข้าจาก Excel */
+export async function requesterIdOf(id: string): Promise<string> {
+  return (await byId(await requisitions(), id)).requester?.employeeId ?? "";
+}
+
 /* -------------------------------------------------------------------- สร้าง */
 
 export interface RequisitionInput {

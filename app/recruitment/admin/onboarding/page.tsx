@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { DataError } from "@/components/ui/data-error";
 import { getHub, type Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
+import { cancelRights, withCancelRights } from "@/app/recruitment/_lib/requisitions/cancel-rights";
 import { OnboardingView } from "@/app/recruitment/_components/admin/onboarding-view";
 import { TABS, type Tab } from "@/app/recruitment/_lib/requisitions/onboarding";
 import { onboardingViewer, pickRecruitSite, visibleRecruitSites } from "@/app/recruitment/_lib/sites";
@@ -34,7 +35,8 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/recru
   let hub: Hub | null = null;
   let error: string | null = null;
   try {
-    hub = await getHub();
+    const [raw, rights] = await Promise.all([getHub(), cancelRights(user)]);
+    hub = { ...raw, records: withCancelRights(raw.records, rights) };
   } catch (err) {
     error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
   }

@@ -36,7 +36,14 @@ export async function POST(request: NextRequest) {
       employeeId: user.employeeId,
       name: user.name || user.employeeId,
     });
-    return ok(created);
+    /* ผู้ขอ = คนที่ล็อกอิน → ลบเองได้เสมอ (`cancel-rights.ts`) */
+    return ok(
+      created.map((r) => ({
+        ...r,
+        requester: { ...r.requester, username: user.username || undefined },
+        canCancel: true,
+      })),
+    );
   } catch (err) {
     return failRequisition(err);
   }

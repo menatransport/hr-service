@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { DataError } from "@/components/ui/data-error";
 import { CandidatesScreen } from "@/app/recruitment/_components/admin/recruitment-screens";
 import { getHub, type Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
+import { cancelRights, withCancelRights, type CancelRights } from "@/app/recruitment/_lib/requisitions/cancel-rights";
 import { listBlacklist, listContactOwners } from "@/app/recruitment/_lib/applications";
 import { listDocSlots } from "@/app/recruitment/_lib/doc-slots";
 import type { DocSlot } from "@/app/recruitment/_lib/form";
@@ -45,12 +46,15 @@ export default async function CandidatesPage({
   let error: string | null = null;
 
   try {
-    [hub, contactOptions, docSlots, blacklist] = await Promise.all([
+    let rights: CancelRights;
+    [hub, contactOptions, docSlots, blacklist, rights] = await Promise.all([
       getHub(),
       listContactOwners(),
       listDocSlots(),
       listBlacklist(),
+      cancelRights(user),
     ]);
+    hub = { ...hub, records: withCancelRights(hub.records, rights) };
   } catch (err) {
     error = err instanceof Error ? err.message : "เชื่อมต่อฐานข้อมูลไม่สำเร็จ";
   }

@@ -270,7 +270,10 @@ export interface Requisition {
   trainingStartOn: string;
 
   note: string;
-  requester: { employeeId: string; name: string };
+  /** `username` (เช่น kittaboon.l) ไม่ได้เก็บในฐาน — เติมจาก NCAC ตอนโหลดหน้า (`cancel-rights.ts`) */
+  requester: { employeeId: string; name: string; username?: string };
+  /** ผู้ใช้ที่ล็อกอินลบ (ยกเลิก) คำขอนี้ได้ไหม — ฝ่ายเดียวกับผู้ขอ (`cancel-rights.ts`) · ไม่ได้เก็บในฐาน */
+  canCancel?: boolean;
   history: RequisitionHistory[];
   createdAt: string;
   updatedAt: string;

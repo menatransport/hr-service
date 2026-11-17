@@ -156,6 +156,14 @@ const C = {
     key: (r) => String(waitingDays(r) ?? 0).padStart(5, "0"),
   },
   requested: { id: "requested", label: "วันที่แจ้ง", width: "min-w-[110px]", text: (r) => date(r.requestedOn), key: (r) => r.requestedOn },
+  /* ผู้ขอ = username ของ user ที่ล็อกอินตอนสร้างคำขอ เช่น kittaboon.l (Bew 17 พ.ย. 2569)
+     · ไม่มีรหัสพนักงาน (นำเข้าจากไฟล์) = — · NCAC ไม่มี username = ชื่อ */
+  requester: {
+    id: "requester",
+    label: "ผู้ขอ",
+    width: "min-w-[110px]",
+    text: (r) => (r.requester?.employeeId ? r.requester.username || r.requester.name || DASH : DASH),
+  },
   customer: { id: "customer", label: "ลูกค้า", width: "min-w-[100px]", text: (r) => customerLabel(r) || DASH },
   plant: { id: "plant", label: "แพล้นท์", width: "min-w-[120px]", text: (r) => r.plant || DASH },
   /* สาขาที่ขออัตรา — ใบก่อน 3 พ.ย. 2569 ไม่มีค่า = — */
@@ -325,7 +333,7 @@ const C = {
 
 const COLUMNS: Record<Stage, Col[]> = {
   /* ตำแหน่งอยู่หน้าลูกค้าทุกแท็บ (Bew 12 พ.ย. 2569) */
-  open: [C.code, C.waiting, C.requested, C.position, C.customer, C.plant, C.hireType, C.vehicle, C.repair, C.trainer],
+  open: [C.code, C.waiting, C.requested, C.requester, C.position, C.customer, C.plant, C.hireType, C.vehicle, C.repair, C.trainer],
   /* รอฝึกงาน = คอลัมน์ชุดเดียวกับแท็บฝึกงาน ไม่มี ฝึกมา/ปฐมนิเทศ/ST (Bew 5 พ.ย. 2569) · สถานะ = สถานะใบสมัคร */
   recruiting: [
     C.trainee, C.jr, C.position, C.customer, C.plant, C.trainOwner, C.trainPhone, C.trainTrainer,
@@ -395,6 +403,7 @@ const XLSX: Record<string, XlsxColumn<Row>[]> = {
   ],
   waiting: [{ header: "รอมาแล้ว (วัน)", width: 11, kind: "int", value: (r) => waitingDays(r) ?? 0 }],
   requested: [{ header: "วันที่แจ้ง", width: 13, kind: "date", value: (r) => xlsxDate(r.requestedOn) }],
+  requester: [{ header: "ผู้ขอ", width: 22, value: C.requester.text }],
   customer: [{ header: "ลูกค้า", width: 14, value: C.customer.text }],
   plant: [{ header: "แพล้นท์", width: 18, value: C.plant.text }],
   branch: [{ header: "สาขา", width: 12, value: C.branch.text }],
@@ -1075,14 +1084,23 @@ export function OnboardingView({
                           <Eye size={15} strokeWidth={1.8} aria-hidden />
                         </IconButton>
                       ) : null}
-                      {embedded ? null : row.status === "cancelled" && stage === "ended" && !row.match && !row.hireName && !row.applicant ? (
+                      {!embedded && row.status === "cancelled" && stage === "ended" && !row.match && !row.hireName && !row.applicant ? (
                         <IconButton label={`เปิดรับอีกครั้ง ${row.code}`} disabled={busyId === row.id} onClick={() => reopen(row)}>
                           <RotateCcw size={14} strokeWidth={1.8} aria-hidden />
                         </IconButton>
                       ) : stage === "open" ? (
-                        <IconButton label={`ยกเลิกคำขอ ${row.code}`} danger onClick={() => setCancelling(row)}>
-                          <Trash2 size={14} strokeWidth={1.8} aria-hidden />
-                        </IconButton>
+                        /* ลบ = ยกเลิกพร้อมเหตุผล · เฉพาะฝ่ายเดียวกับผู้ขอ (`canCancel` จาก server · Bew 17 พ.ย. 2569) */
+                        row.canCancel ? (
+                          <IconButton label={`ลบคำขอ ${row.code}`} danger onClick={() => setCancelling(row)}>
+                            <Trash2 size={14} strokeWidth={1.8} aria-hidden />
+                          </IconButton>
+                        ) : (
+                          <span title="ลบได้เฉพาะคำขอของฝ่ายตัวเอง" className="inline-flex">
+                            <IconButton label={`ลบคำขอ ${row.code} ไม่ได้ — คนละฝ่ายกับผู้ขอ`} disabled onClick={() => {}}>
+                              <Trash2 size={14} strokeWidth={1.8} aria-hidden />
+                            </IconButton>
+                          </span>
+                        )
                       ) : null}
                     </span>
                   </td>
@@ -1123,7 +1141,11 @@ export function OnboardingView({
         />
       ) : null}
       {cancelling ? (
-        <RequisitionCancelModal row={cancelling} onClose={() => setCancelling(null)} onCancelled={merge} />
+        <RequisitionCancelModal
+          row={cancelling}
+          onClose={() => setCancelling(null)}
+          onCancelled={(updated) => (embedded ? onUpdated?.(updated) : merge(updated))}
+        />
       ) : null}
       {viewing ? (
         <OnboardingDialog id={viewing} onClose={closeDialog} onSaved={saved} />
@@ -1193,6 +1215,14 @@ function Cell({ column, row, onOpen }: { column: Col; row: Row; onOpen: () => vo
       return <CriminalRecordButton name={row.name} site={row.branch} />;
     case "code":
       return <span className="font-mono text-11 tracking-wider text-primary">{row.code}</span>;
+    case "requester":
+      return text === DASH ? (
+        <span className="text-mut">{DASH}</span>
+      ) : (
+        <span title={row.requester.name} className="font-mono text-11 tracking-wide text-info">
+          {text}
+        </span>
+      );
     case "name":
       return <span className="font-medium">{row.name}</span>;
     case "driver":
