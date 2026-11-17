@@ -12,7 +12,8 @@ import { getDriversForExport } from "@/app/recruitment/_lib/drivers/registry";
  * ```
  *
  * เป็น `POST` เพราะรหัสทั้งทะเบียน (~1,000 ตัว) ยาวเกิน query string · ตรวจล็อกอินซ้ำเอง (มีเลขบัตร/บัญชี)
- * · พ้นสภาพแล้ว = ข้อมูลส่วนบุคคลถูกล้างตามกติกาเดียวกับหน้าประวัติ (`getDriversForExport()`)
+ * · พ้นสภาพแล้ว = ข้อมูลส่วนบุคคลถูกล้างตามกติกาเดียวกับหน้าประวัติ (`getDriversForExport()`) ยกเว้นเบอร์โทรหลัก
+ *   — ไฟล์แท็บพ้นสภาพมีคอลัมน์เบอร์โทร (Bew 17 พ.ย. 2569)
  */
 
 export const runtime = "nodejs";
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (!codes.length) return badRequest("ไม่มีรายชื่อให้ส่งออก");
     if (codes.length > MAX_CODES) return badRequest("รายชื่อมากเกินไป");
 
-    return ok(await getDriversForExport(codes));
+    return ok(await getDriversForExport(codes, { keepPhone: true }));
   } catch (err) {
     return fail(err);
   }

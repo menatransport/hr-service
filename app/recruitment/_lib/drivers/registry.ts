@@ -1032,12 +1032,15 @@ export async function getDriverProfile(code: string): Promise<DriverProfileRecor
   return driver ? withPersonalRule(driver) : null;
 }
 
-/** กติกาข้อมูลส่วนบุคคลของ `getDriverProfile()` — ใช้ร่วมกับไฟล์ Excel ทะเบียนเต็ม (`getDriversForExport()`) */
-function withPersonalRule(driver: DriverRecord): DriverProfileRecord {
+/**
+ * กติกาข้อมูลส่วนบุคคลของ `getDriverProfile()` — ใช้ร่วมกับไฟล์ Excel ทะเบียนเต็ม (`getDriversForExport()`)
+ * · `keepPhone` = ไม่ล้างเบอร์โทรหลัก — เฉพาะไฟล์ Excel แท็บพ้นสภาพ (Bew 17 พ.ย. 2569)
+ */
+function withPersonalRule(driver: DriverRecord, { keepPhone = false } = {}): DriverProfileRecord {
   if (driver.active) return { ...driver, personalHidden: false };
   return {
     ...driver,
-    phone: "",
+    phone: keepPhone ? driver.phone : "",
     phoneAlt: "",
     licenseNo: "",
     licenseType: "",
@@ -1068,7 +1071,10 @@ export type DriverExportRow = DriverProfileRecord & { source: string; sourceAt: 
  * แต่ **ผ่านกติกาเดียวกับหน้าประวัติ** — คนที่พ้นสภาพแล้วถูกล้างข้อมูลส่วนบุคคลก่อนออกจากเซิร์ฟเวอร์
  * · คืนตามลำดับของ `codes` (ลำดับที่ตารางเรียงอยู่)
  */
-export async function getDriversForExport(codes: readonly string[]): Promise<DriverExportRow[]> {
+export async function getDriversForExport(
+  codes: readonly string[],
+  { keepPhone = false } = {},
+): Promise<DriverExportRow[]> {
   const wanted = uniq(codes.map((c) => c.trim()));
   if (!wanted.length) return [];
 
@@ -1092,7 +1098,7 @@ export async function getDriversForExport(codes: readonly string[]): Promise<Dri
       const reg = (doc.registry ?? {}) as Record<string, unknown>;
       const at = reg.importedAt ?? reg.at;
       const row: DriverExportRow = {
-        ...withPersonalRule(toRecord(doc, today, vehicles, work, new Map())),
+        ...withPersonalRule(toRecord(doc, today, vehicles, work, new Map()), { keepPhone }),
         source:
           reg.source === "onboarding"
             ? `ติดตามพนักงานใหม่${reg.requisitionCode ? ` ${str(reg.requisitionCode)}` : ""}`
