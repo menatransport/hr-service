@@ -69,6 +69,11 @@ export interface ModuleItem {
    * หรือแถบข้าง · `id` ห้ามซ้ำกับเมนูใดทั้งไฟล์ · หน้าที่ใช้ต้องเช็กเอง (`canSeeMenu` / `useCanSee`)
    */
   actions?: ModuleAction[];
+  /**
+   * หมวดย่อยบนหน้า Home (`id` ใน `ModuleGroup.sections`) — ไม่ใส่ = หมวดแรกของกลุ่ม · ไม่มีผลกับแถบข้าง
+   * เมนูที่มี `children` แตกลูกออกเป็นไอคอนแอปในหมวดนี้
+   */
+  section?: string;
 }
 
 export interface ModuleAction {
@@ -95,6 +100,8 @@ export interface ModuleGroup {
   caption: string;
   icon: LucideIcon;
   items: ModuleItem[];
+  /** หมวดย่อยของไอคอนแอปบนหน้า Home เรียงตามลำดับนี้ (`ModuleItem.section`) · หมวดที่ไม่เหลือเมนูไม่แสดง */
+  sections?: { id: string; label: string }[];
   /**
    * ซ่อนจากหน้า Home และ “กลุ่มงานอื่น” ในแถบข้าง — หน้าในยังเปิดตรงด้วย URL ได้ และ
    * `findModule` ยังหาเจอ (แถบข้างของหน้านั้นไม่หาย)
@@ -109,12 +116,18 @@ export const MODULES: ModuleGroup[] = [
     tagline: "พจส. · คำร้องเรียน · สรรหาและฝึกงานคนขับ · สถานะรถ",
     caption: "งานบุคคลของพนักงานจัดส่ง ตั้งแต่สรรหาจนถึงคำร้องเรียน",
     icon: Truck,
+    sections: [
+      // 18 พ.ย. 2569 · Bew — ทะเบียน / สถานะรถ / แดชบอร์ด ย้ายมาอยู่ใต้ “สรรหาและพนักงาน” · ร้องเรียนแยกเป็น “ข้อมูลตอบกลับ”
+      { id: "recruit", label: "สรรหาและพนักงาน" },
+      { id: "feedback", label: "ข้อมูลตอบกลับ" },
+    ],
     items: [
       {
         id: "cases",
         label: "แจ้งข้อร้องเรียน",
         desc: "คิวคำร้องจาก พจส. · มอบหมาย · อนุมัติ · ปิดเรื่อง",
         href: "/desk/cases",
+        section: "feedback",
         icon: ClipboardList,
       },
       {
@@ -123,6 +136,7 @@ export const MODULES: ModuleGroup[] = [
         desc: "อัตราว่าง · ผู้สมัคร · ฝึกงาน · รับรถ",
         href: "/recruitment/admin/onboarding",
         icon: UserPlus,
+        section: "recruit",
         children: [
           {
             /* หน้าเดียวแทน ขออัตราสรรหา + Onboarding + ติดตามฝึกงาน (14 ต.ค. 2026) —
@@ -157,6 +171,7 @@ export const MODULES: ModuleGroup[] = [
         label: "ทะเบียนประวัติ พจส.",
         desc: "ประวัติพนักงานขับรถทุกคน",
         href: "/recruitment/admin/drivers",
+        section: "recruit",
         icon: BookUser,
         actions: [
           {
@@ -171,6 +186,7 @@ export const MODULES: ModuleGroup[] = [
         label: "สถานะรถ",
         desc: "รถทุกคัน · คนขับวันนี้ · งานซ่อม ในภาพเดียว",
         href: "/recruitment/admin/trucks",
+        section: "recruit",
         icon: Container,
       },
       {
@@ -178,6 +194,7 @@ export const MODULES: ModuleGroup[] = [
         label: "แดชบอร์ด",
         desc: "กราฟกำลังคน พจส. รายลูกค้าและแพล้นท์",
         href: "/recruitment/admin/dashboard",
+        section: "recruit",
         icon: ChartColumn,
         actions: [
           {
@@ -214,6 +231,10 @@ export const MODULES: ModuleGroup[] = [
     tagline: "สิทธิ์การใช้งาน · การเชื่อมต่อระบบ",
     caption: "ค่าตั้งต้นที่ทุกโมดูลใช้ร่วมกัน",
     icon: Database,
+    sections: [
+      { id: "service", label: "จัดการงาน HR" },
+      { id: "settings", label: "ตั้งค่าระบบ" },
+    ],
     items: [
       {
         id: "payroll",
@@ -221,6 +242,7 @@ export const MODULES: ModuleGroup[] = [
         desc: "รอบเงินเดือน · นำเข้าข้อมูลค่าจ้าง",
         href: "/payroll",
         icon: Wallet,
+        section: "service",
         soon: SOON,
         // เมนูของระบบค่าจ้างเอง — ตรงกับ `lib/payroll/nav.ts` (เพิ่มที่นั่นเมื่อไหร่ ต้องเพิ่มที่นี่ด้วย)
         children: [
@@ -245,6 +267,7 @@ export const MODULES: ModuleGroup[] = [
         label: "บันทึกเคส",
         desc: "เรื่องที่ HR รับแจ้งเอง แยกตามประเภท",
         href: "/desk/record-cases",
+        section: "service",
         icon: Bookmark,
       },
       {
@@ -252,6 +275,7 @@ export const MODULES: ModuleGroup[] = [
         label: "แบบสอบถาม",
         desc: "ผลแบบสำรวจความเห็น พจส.",
         href: "/desk/survey",
+        section: "service",
         icon: ClipboardPenLine,
       },
       {
@@ -260,6 +284,7 @@ export const MODULES: ModuleGroup[] = [
         label: "จัดการห้องเช่า",
         desc: "ห้องเช่าบริษัท · ผู้พัก · ค่าเช่ารายเดือน",
         href: "/desk/rentals",
+        section: "service",
         icon: House,
       },
       {
@@ -267,6 +292,7 @@ export const MODULES: ModuleGroup[] = [
         label: "กำหนดสิทธิ์",
         desc: "ใครเข้าเมนูไหนได้บ้าง",
         href: "/desk/permissions",
+        section: "settings",
         icon: ShieldCheck,
       },
       {
@@ -274,11 +300,32 @@ export const MODULES: ModuleGroup[] = [
         label: "Docs API",
         desc: "เอกสาร API และคอนโซลทดสอบ",
         href: "/recruitment/admin/settings/api-docs",
+        section: "settings",
         icon: Code2,
       },
     ],
   },
 ];
+
+/** หมวดย่อยของกลุ่ม → ไอคอนแอป · เมนูที่มี subgroup แตกลูกเป็นแอปในหมวดเดียวกัน (ยกเว้นตอน `soon` = ไอคอนเดียว) */
+export type ModuleSection = { id: string; label?: string; apps: { item: ModuleItem; parent?: ModuleItem }[] };
+
+/**
+ * หมวดย่อยตามที่แสดงบนหน้า Home — ใช้ทั้งการ์ดกลุ่มบน Home และเมนูสลับหน้าบนแถบบนของหน้าใน
+ * (`ShellHeader`) สองที่จึงเรียงเมนูตรงกันเสมอ · ส่งกลุ่มที่กรองสิทธิ์แล้วเข้ามา
+ */
+export function moduleSections(group: ModuleGroup): ModuleSection[] {
+  const defs = group.sections?.length ? group.sections : [{ id: "", label: undefined }];
+  const out: ModuleSection[] = defs.map((d) => ({ id: d.id, label: d.label, apps: [] }));
+  for (const item of group.items) {
+    const target = out.find((sec) => sec.id === item.section) ?? out[0];
+    if (item.children && !item.soon) target.apps.push(...item.children.map((child) => ({ item: child, parent: item })));
+    else target.apps.push({ item });
+  }
+  // เมนูที่ยังไม่เปิดไปอยู่ท้ายหมวด · หมวดที่ไม่เหลือเมนู (ถูกซ่อนสิทธิ์หมด) ไม่แสดง
+  for (const sec of out) sec.apps.sort((x, y) => Number(Boolean(x.item.soon)) - Number(Boolean(y.item.soon)));
+  return out.filter((sec) => sec.apps.length > 0);
+}
 
 /** กลุ่มที่แสดงบนหน้า Home และในลิงก์ “กลุ่มงานอื่น” (ไม่รวม `hidden`) */
 export const VISIBLE_MODULES = MODULES.filter((m) => !m.hidden);

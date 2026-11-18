@@ -5,16 +5,13 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronDown, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, Search, Sparkles, X } from "lucide-react";
 
 import { useVisibleModules } from "@/components/auth/menu-access-provider";
 import { Mascot } from "@/components/ui/mascot";
 import { ManualButton } from "@/components/shell/manual-button";
 import { UserMenu, type ShellUser } from "@/components/shell/user-menu";
-import { type ModuleGroup, type ModuleId, type ModuleItem } from "@/lib/modules";
-
-/** ทางลัดใต้คำทักทาย (ชิปกระจก) — เมนูที่ใช้บ่อยที่สุด อ้างด้วย id ใน `lib/modules.ts` */
-const QUICK_IDS = ["cases", "requisitions", "trainees", "registry"];
+import { moduleSections, type ModuleGroup, type ModuleId, type ModuleItem } from "@/lib/modules";
 
 /** ทุกเมนูที่เปิดได้จริง — เมนูที่มี subgroup แตกเป็นลูกแต่ละตัว (`parent` = หัวข้อ) */
 type Entry = { group: ModuleGroup; item: ModuleItem; parent?: ModuleItem };
@@ -35,8 +32,8 @@ function useEntries() {
 /**
  * หน้าหลัก — โครงเดียวกับหน้า Home ของ menaIT V.2 ในโทน teal ของ HR
  *
- * - **เดสก์ท็อป “Assistant-first”**: ฮีโร่ไล่สี + น้องมีนากลางจอ + คำทักทาย + ชิปทางลัด (ไม่มีช่องค้นหา)
- *   แล้วการ์ดกลุ่มงานสามคอลัมน์กว้าง 80% ของจอ (หัวเว็บกับการ์ดชิดแนวเดียวกัน) · หน้าเดียวจบ ไม่มี scroll ของหน้า
+ * - **เดสก์ท็อป “ไอคอนแอปจัดหมวด”** (แบบ A · 18 พ.ย. 2569): ฮีโร่เตี้ย + การ์ดกลุ่มงานกว้าง 80% ของจอ
+ *   ในการ์ดแบ่งหมวดย่อย (`ModuleGroup.sections`) ไอคอนแอปสี่เหลี่ยม + ชื่อ (ไม่มีช่องค้นหา)
  * - **มือถือ “App Launcher”**: แท็บกลุ่ม + ไอคอนแอปสี่คอลัมน์
  *
  * แถวเมนูบนเดสก์ท็อปห่อด้วย `<ViewTransition name="menu-<id>">` ชื่อเดียวกับแถวในแถบข้าง
@@ -80,231 +77,140 @@ interface LayoutProps {
   searchRef: React.RefObject<HTMLInputElement | null>;
 }
 
-/* ───────────────────────────────────────── เดสก์ท็อป · Assistant-first */
+/* ───────────────────────────────────────── เดสก์ท็อป · ไอคอนแอปจัดหมวด */
 
 /**
- * หน้าเดียวจบ ไม่มี scroll ของหน้า — ฮีโร่กับการ์ดสามคอลัมน์ย่อ/ขยายตามความสูงจอ
- * (`clamp(…vh…)`) · ถ้าจอเตี้ยจนเมนูของกลุ่มไหนล้น การ์ดนั้นเลื่อนในตัวเอง ไม่ดันทั้งหน้า
- * · จอเตี้ยมาก (`max-height`) ซ่อนบรรทัดรองทีละชั้น: คำอธิบายใต้หัว → คำอธิบายเมนู
+ * แบบ A ของ canvas “HR Service Home — App Icons” (18 พ.ย. 2569 · Bew) — ฮีโร่เตี้ย (น้องมีนา + คำทักทาย)
+ * แล้วการ์ดกลุ่มงานเรียงข้างกัน ในการ์ดแบ่งหมวดย่อย ไอคอนแอปสี่เหลี่ยม + ชื่อใต้ไอคอน
+ * · แสดงเฉพาะเมนูที่ผู้ใช้มีสิทธิ์ (`useVisibleModules`) · จอเตี้ยเลื่อนทั้งหน้าได้
  */
 function DesktopHome({ user, firstName }: Omit<LayoutProps, "searchRef">) {
-  const { modules, all } = useEntries();
-  const quick = QUICK_IDS.map((id) => all.find((e) => e.item.id === id)).filter((e): e is Entry =>
-    Boolean(e),
-  );
+  const { modules } = useEntries();
 
   return (
-    <div className="home-canvas hidden h-dvh flex-col overflow-hidden lg:flex">
+    <div className="home-canvas hidden h-dvh flex-col overflow-y-auto pb-8 lg:flex">
       {/* ฮีโร่ — ไม่ใส่ overflow-hidden และไม่ตั้ง z-index ที่ตัวนี้: การ์ดด้านล่าง (z-10) ต้องทับขอบล่าง
           ของฮีโร่ได้ ส่วนเมนูผู้ใช้ (z-40) ยังกางทับการ์ดได้ */}
-      <section className="app-shell relative shrink-0 rounded-b-[48px] pb-[clamp(36px,6vh,96px)] text-white">
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-b-[48px]">
+      <section className="app-shell relative shrink-0 rounded-b-[40px] pb-[clamp(72px,11vh,104px)] text-white">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-b-[40px]">
           <span className="shell-orb shell-orb-float absolute -bottom-[260px] -left-[170px] size-[420px] opacity-90" />
           <span className="absolute -top-20 -right-16 size-[260px] rounded-full bg-white/10" />
         </div>
 
         <HomeHeader user={user} />
 
-        {/* กลางจอ: น้องมีนา → คำทักทาย → ทางลัด */}
-        <div className="relative flex animate-lift-in flex-col items-center gap-[clamp(4px,1vh,10px)] px-[clamp(24px,5vw,72px)] text-center">
-          <Mascot size={150} label="น้องมีนา" className="home-mascot -mt-[clamp(8px,3vh,28px)]" />
-          <h1 className="text-[clamp(24px,4vh,42px)] leading-tight font-bold text-pretty">
-            สวัสดีค่ะ{" "}
-            <span className="bg-linear-to-r from-[#fff4c7] to-[#f8b545] bg-clip-text text-transparent drop-shadow-[0_2px_8px_rgba(4,30,27,0.25)]">
-              คุณ{firstName}
-            </span>{" "}
-            ให้น้องมีนาช่วยอะไรดี?
-          </h1>
-          <p className="text-[clamp(13px,1.9vh,17px)] text-white/90 [@media(max-height:700px)]:hidden">
-            เลือกเมนูที่ต้องการจากด้านล่างได้เลย
-          </p>
-        </div>
-
-        <div className="relative mt-[clamp(10px,2.2vh,24px)] flex flex-wrap justify-center gap-2.5 px-6">
-          {quick.map(({ group, item }) => (
-            <Link
-              key={item.id}
-              href={item.href}
-              transitionTypes={["nav-forward"]}
-              className={`tone-${group.id} group flex items-center gap-2.5 rounded-full border border-white/35 bg-white/15 py-[clamp(3px,0.6vh,6px)] pr-5 pl-1.5 text-14 font-medium text-white transition-all hover:-translate-y-0.5 hover:bg-white/25`}
-            >
-              <span className="tone-tile grid size-[clamp(24px,3.6vh,32px)] place-items-center rounded-full transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
-                <item.icon size={15} strokeWidth={2} aria-hidden />
+        <div className="relative mx-auto mt-[clamp(8px,2vh,24px)] flex w-[80%] animate-lift-in items-center gap-5">
+          <Mascot size={96} label="น้องมีนา" />
+          <div className="min-w-0">
+            <h1 className="font-display text-[clamp(26px,3.6vh,34px)] leading-tight font-semibold text-pretty">
+              สวัสดีค่ะ{" "}
+              <span className="bg-linear-to-r from-[#fff4c7] to-[#f8b545] bg-clip-text text-transparent">
+                คุณ{firstName}
               </span>
-              {item.label}
-            </Link>
-          ))}
+            </h1>
+            <p className="mt-1 text-16 text-white/90">เลือกแอปที่ต้องการได้เลย · แอปจัดตามงานที่ทำ</p>
+          </div>
         </div>
       </section>
 
       {/* การ์ดกลุ่มกว้าง 80% ของจอ แบ่งคอลัมน์เท่ากันตามจำนวนกลุ่มที่แสดง (กลุ่ม `hidden` ไม่นับ) */}
       <main
-        className="relative z-10 mx-auto -mt-[clamp(28px,5vh,64px)] grid min-h-0 w-[80%] flex-1 items-start justify-center gap-[clamp(14px,1.4vw,24px)] pt-5 pb-[clamp(12px,2.4vh,28px)] [@media(max-height:740px)]:pt-2"
+        className="relative z-10 mx-auto -mt-[clamp(56px,8vh,72px)] grid w-[80%] items-start gap-6"
         style={{ gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))` }}
       >
         {modules.map((group, i) => (
-          <GroupColumn key={group.id} group={group} index={i} />
+          <GroupCard key={group.id} group={group} index={i} />
         ))}
       </main>
     </div>
   );
 }
 
-function GroupColumn({ group, index }: { group: ModuleGroup; index: number }) {
+function GroupCard({ group, index }: { group: ModuleGroup; index: number }) {
+  const sections = moduleSections(group);
+  const count = sections.reduce((n, sec) => n + sec.apps.length, 0);
+
   return (
     <section
       aria-labelledby={`col-${group.id}`}
-      className={`tone-${group.id} home-col flex max-h-full min-h-0 flex-col gap-[clamp(8px,1.4vh,20px)] rounded-[28px] border border-line bg-base-100 p-[clamp(12px,2.2vh,26px)] text-ink elev-raise`}
+      className={`tone-${group.id} home-col flex flex-col gap-[18px] rounded-[24px] border border-line bg-base-100 px-7 pt-6 pb-5 text-ink elev-raise`}
       style={{ animationDelay: `${index * 80}ms` }}
     >
-      <div className="flex shrink-0 items-center gap-3.5">
-        <span className="tone-tile grid size-[clamp(42px,6vh,52px)] shrink-0 place-items-center rounded-[16px]">
-          <group.icon size={22} strokeWidth={1.8} aria-hidden />
+      <div className="flex items-center gap-3.5">
+        <span className="tone-soft grid size-12 shrink-0 place-items-center rounded-[14px]">
+          <group.icon size={24} strokeWidth={1.8} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 id={`col-${group.id}`} className="text-[clamp(17px,2.6vh,22px)] leading-tight font-bold">
+          <h2 id={`col-${group.id}`} className="font-display text-20 leading-tight font-semibold">
             {group.label}
           </h2>
-          <p className="mt-0.5 truncate text-13 text-mut [@media(max-height:700px)]:hidden">
-            {group.tagline}
-          </p>
+          <p className="mt-0.5 truncate text-13 text-mut">{group.tagline}</p>
         </div>
+        <span className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-12-5 text-mut">
+          {count} แอป
+        </span>
       </div>
 
-      {/* หน้าไม่เลื่อน — กลุ่มที่ยาวเกินจอเลื่อนในการ์ดของตัวเอง */}
-      <ul className="-mx-1 flex min-h-0 flex-col gap-[clamp(6px,1vh,14px)] overflow-y-auto overscroll-contain px-1 pb-1">
-        {group.items.map((item) => (
-          <li key={item.id}>
-            {item.children ? (
-              <SubGroupTile item={item} />
-            ) : (
-              <ViewTransition name={`menu-${item.id}`} share="menu-morph" default="none">
-                <MenuTile item={item} />
-              </ViewTransition>
-            )}
-          </li>
-        ))}
-      </ul>
+      {sections.map((sec) => (
+        <div key={sec.id} className="flex flex-col gap-2">
+          {sec.label ? (
+            <div className="flex items-center gap-2.5 text-12-5 font-semibold text-mut">
+              {sec.label}
+              <span aria-hidden className="h-px flex-1 bg-line/70" />
+            </div>
+          ) : null}
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-1">
+            {sec.apps.map(({ item, parent }) => (
+              <li key={item.id} className="flex">
+                <AppIcon item={item} parent={parent} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </section>
   );
 }
 
-function MenuTile({ item }: { item: ModuleItem }) {
-  const body = (
-    <>
-      <span className="tone-soft grid size-[clamp(34px,4.6vh,48px)] shrink-0 place-items-center rounded-[14px]">
-        <item.icon size={20} strokeWidth={1.8} aria-hidden />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[clamp(14px,2vh,16px)] font-semibold">{item.label}</span>
-        <span className="block truncate text-13 text-mut [@media(max-height:820px)]:hidden">{item.desc}</span>
-      </span>
-    </>
-  );
+/**
+ * ไอคอนแอปบนเดสก์ท็อป — ห่อ `<ViewTransition name="menu-<id>">` ชื่อเดียวกับแถวในแถบข้าง
+ * (`components/module/module-nav.tsx`) กดแล้วไอคอนบินไปเป็นแถวนั้น · ชื่อห้ามซ้ำในหน้า
+ */
+function AppIcon({ item, parent }: { item: ModuleItem; parent?: ModuleItem }) {
+  const title = parent ? `${parent.label} · ${item.desc}` : item.desc;
 
   if (item.soon) {
     return (
-      <span className="home-row flex cursor-not-allowed items-center gap-3.5 rounded-[18px] p-[clamp(6px,1vh,16px)] opacity-75">
-        {body}
-        <span className="tone-soft shrink-0 rounded-full px-2.5 py-0.5 text-11-5 font-semibold">
-          เร็ว ๆ นี้
+      <span
+        aria-disabled="true"
+        title="เร็ว ๆ นี้"
+        className="flex w-full cursor-not-allowed flex-col items-center gap-2.5 rounded-[16px] px-1 pt-2.5 pb-3 text-mut"
+      >
+        <span className="relative grid size-[72px] place-items-center rounded-[20px] border border-dashed border-line-strong bg-base-200 text-mut/80">
+          <item.icon size={30} strokeWidth={1.8} aria-hidden />
+          <span className="absolute -top-2 -right-3.5 rounded-full bg-[#3f4c48] px-1.5 py-px text-10-5 font-semibold whitespace-nowrap text-white">
+            เร็ว ๆ นี้
+          </span>
         </span>
+        <span className="line-clamp-2 text-center text-13-5 leading-snug font-medium">{item.label}</span>
       </span>
     );
   }
 
   return (
-    <Link
-      href={item.href}
-      transitionTypes={["nav-forward"]}
-      className="home-row group flex items-center gap-3.5 rounded-[18px] p-[clamp(6px,1vh,16px)]"
-    >
-      {body}
-      <ArrowRight size={19} strokeWidth={1.8} aria-hidden className="home-row-arrow shrink-0 text-mut/60" />
-    </Link>
-  );
-}
-
-/**
- * เมนูที่มี subgroup (เช่น ค่าจ้างและสวัสดิการ) — หัวข้อเป็นปุ่มพับ/กาง ลูกเรียงใต้เส้นประสีกลุ่มที่ลากลง
- * จากกึ่งกลางไอคอนหัวข้อ · พับไว้ตั้งแต่แรก กดหัวข้อจึงกาง · ลูกแต่ละตัวห่อ
- * `<ViewTransition name="menu-<child.id>">` ให้บินไปเป็นแถวลูกในแถบข้างได้เหมือนเมนูปกติ
- *
- * ลูกถูกถอดออกจาก DOM ตอนพับ — ถ้าซ่อนไว้เฉย ๆ ตอนกดย้อนกลับจากหน้าใน แถวในแถบข้าง
- * จะหดหายเข้าไปในก้อนที่สูงศูนย์แทนที่จะครอสเฟด
- */
-function SubGroupTile({ item }: { item: ModuleItem }) {
-  const [open, setOpen] = useState(false);
-  const children = item.children ?? [];
-  const listId = `home-sub-${item.id}`;
-
-  return (
-    <>
-      <ViewTransition name={`menu-${item.id}`} share="menu-morph" default="none">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={listId}
-          onClick={() => setOpen((v) => !v)}
-          className="home-row group flex w-full cursor-pointer items-center gap-3.5 rounded-[18px] p-[clamp(6px,1vh,16px)] text-left"
-        >
-          <span className="tone-soft grid size-[clamp(34px,4.6vh,48px)] shrink-0 place-items-center rounded-[14px]">
-            <item.icon size={20} strokeWidth={1.8} aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[clamp(14px,2vh,16px)] font-semibold">{item.label}</span>
-            <span className="block truncate text-13 text-mut [@media(max-height:820px)]:hidden">
-              {item.desc}
-            </span>
-          </span>
-          <ChevronDown
-            size={18}
-            strokeWidth={1.8}
-            aria-hidden
-            className={`shrink-0 text-mut/70 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
-          />
-        </button>
-      </ViewTransition>
-
-      {open ? (
-        <ul
-          id={listId}
-          className="home-sub mt-1 ml-[calc(clamp(6px,1vh,16px)_+_clamp(34px,4.6vh,48px)_/_2)] flex animate-lift-in flex-col gap-1 border-l-2 border-dashed pl-3"
-        >
-          {children.map((child) => {
-            return (
-              <li key={child.id}>
-                <ViewTransition name={`menu-${child.id}`} share="menu-morph" default="none">
-                  <Link
-                    href={child.href}
-                    transitionTypes={["nav-forward"]}
-                    className="home-row group flex items-center gap-3 rounded-[14px] px-2.5 py-[clamp(4px,0.8vh,10px)]"
-                  >
-                    <span className="tone-soft grid size-[clamp(28px,3.6vh,36px)] shrink-0 place-items-center rounded-[11px]">
-                      <child.icon size={16} strokeWidth={1.8} aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[clamp(13px,1.8vh,15px)] font-semibold">
-                        {child.label}
-                      </span>
-                      <span className="block truncate text-12 text-mut [@media(max-height:820px)]:hidden">
-                        {child.desc}
-                      </span>
-                    </span>
-                    <ArrowRight
-                      size={17}
-                      strokeWidth={1.8}
-                      aria-hidden
-                      className="home-row-arrow shrink-0 text-mut/60"
-                    />
-                  </Link>
-                </ViewTransition>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-    </>
+    <ViewTransition name={`menu-${item.id}`} share="menu-morph" default="none">
+      <Link
+        href={item.href}
+        title={title}
+        transitionTypes={["nav-forward"]}
+        className="home-app group flex w-full flex-col items-center gap-2.5 rounded-[16px] px-1 pt-2.5 pb-3"
+      >
+        <span className="tone-app grid size-[72px] place-items-center rounded-[20px] transition-transform duration-150 group-hover:-translate-y-0.5">
+          <item.icon size={30} strokeWidth={1.8} aria-hidden />
+        </span>
+        <span className="line-clamp-2 text-center text-13-5 leading-snug font-medium">{item.label}</span>
+      </Link>
+    </ViewTransition>
   );
 }
 

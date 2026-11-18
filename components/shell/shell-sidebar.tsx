@@ -15,6 +15,9 @@ export const SIDEBAR_COOKIE = "hrs.sidebar";
  * ให้เนื้อหาได้ที่มากที่สุด · จำค่าไว้ในคุกกี้ (ค่าความสะดวกต่อเครื่อง ไม่ใช่ข้อมูลระบบ)
  *
  * หน้าที่ไม่อยู่ในกลุ่มใดใช้ `fallback` (เมนูเดิมของระบบ ซึ่งไม่มีโหมดไอคอน) — กางเต็มเสมอ
+ *
+ * **หน้าในกลุ่มงานไม่มีแถบข้างแล้ว** (18 พ.ย. 2569 · Bew) — เนื้อหาได้เต็มจอ สลับหน้าด้วยชื่อหน้าบนแถบบน
+ * (`PageSwitcher`) · แถบข้างเหลือแค่หน้าที่ไม่อยู่ในกลุ่มใด ซึ่งมีเมนูของตัวเอง (เช่น สารบัญคู่มือ)
  */
 export function ShellSidebar({
   fallback,
@@ -25,7 +28,8 @@ export function ShellSidebar({
 }) {
   const pathname = usePathname();
   const [railPref, setRailPref] = useState(initialRail);
-  const rail = railPref && Boolean(findModule(pathname));
+  const inModule = Boolean(findModule(pathname));
+  const rail = railPref && inModule;
 
   const toggle = () => {
     const next = !railPref;
@@ -48,6 +52,8 @@ export function ShellSidebar({
       <Icon size={16} strokeWidth={1.8} aria-hidden />
     </button>
   );
+
+  if (inModule) return null;
 
   return (
     <aside

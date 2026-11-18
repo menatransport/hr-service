@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { MenuAccessProvider } from "@/components/auth/menu-access-provider";
+import { MenuAccessProvider, MenuGuard } from "@/components/auth/menu-access-provider";
 
 import { ShellHeader } from "@/components/shell/shell-header";
 import { SIDEBAR_COOKIE, ShellSidebar } from "@/components/shell/shell-sidebar";
@@ -65,7 +65,8 @@ export async function AppShell({
           ไม่สร้าง scroll container ของที่ `sticky` จึงยังติดหัวจอได้
         */}
         <main className="app-shell-sheet min-h-[calc(100dvh-var(--shell-header-h)-0.875rem)] min-w-0 flex-1 overflow-clip rounded-[16px] px-(--sheet-px)">
-          {children}
+          {/* เมนูที่ถูกซ่อน = เปิดหน้าไม่ได้ แม้พิมพ์ URL ตรง ๆ */}
+          <MenuGuard>{children}</MenuGuard>
         </main>
       </div>
     </div>

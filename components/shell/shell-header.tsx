@@ -8,12 +8,15 @@ import { ArrowLeft, Menu, X } from "lucide-react";
 
 import { ModuleNav } from "@/components/module/module-nav";
 import { ManualButton } from "@/components/shell/manual-button";
+import { PageSwitcher } from "@/components/shell/page-switcher";
 import { UserMenu, type ShellUser } from "@/components/shell/user-menu";
-import { findModule } from "@/lib/modules";
+import { findModule, moduleSections } from "@/lib/modules";
 
 /**
  * แถบบนของหน้าใน — โครงเดียวกับ `NavbarHeader` ของ menaIT V.2:
- * ซ้าย ← (กลับหน้าหลัก) + ที่อยู่ของหน้า `กลุ่ม / เมนู` ชิดซ้าย · ขวา เมนูผู้ใช้แบบเตี้ย (app launcher)
+ * ซ้าย ← (กลับหน้าหลัก) + ที่อยู่ของหน้า `กลุ่ม / หมวด / เมนู ▾` ชิดซ้าย · ขวา เมนูผู้ใช้แบบเตี้ย (app launcher)
+ * · หน้าในกลุ่มงานไม่มีแถบข้างแล้ว (18 พ.ย. 2569) — ชื่อหน้ากดกางเมนูสลับหน้า (`PageSwitcher`) แทน
+ *   ปุ่มลิ้นชักเมนูบนมือถือเหลือเฉพาะหน้าที่ไม่อยู่ในกลุ่มใด (เช่น คู่มือ)
  * สูง 56px (`--shell-header-h`) · ไม่มีกระดิ่งตามที่สั่ง (9 ต.ค. 2569)
  *
  * ติดหัวจอ (`sticky`) และใช้พื้นไล่สีแบบ `fixed` ชุดเดียวกับตัวเชลล์ เนื้อหาที่เลื่อนผ่าน
@@ -35,18 +38,25 @@ export function ShellHeader({
   const pathname = usePathname();
   const match = findModule(pathname);
   const [drawer, setDrawer] = useState(false);
+  // หมวดของหน้านี้บน Home (เช่น “สรรหาและพนักงาน”) — ใช้เป็นชิ้นกลางของที่อยู่
+  const current = match ? (match.child ?? match.item) : undefined;
+  const section = match
+    ? moduleSections(match.group).find((sec) => sec.apps.some(({ item }) => item.id === current?.id))?.label
+    : undefined;
 
   return (
     <header className="app-shell-fixed sticky top-0 z-30 text-white">
       <div className="flex h-(--shell-header-h) items-center gap-2 px-2 sm:px-3">
-        <button
-          type="button"
-          aria-label="เปิดเมนู"
-          onClick={() => setDrawer(true)}
-          className="glass-btn grid size-9 flex-none place-items-center rounded-[10px] lg:hidden"
-        >
-          <Menu size={18} strokeWidth={1.8} aria-hidden />
-        </button>
+        {match ? null : (
+          <button
+            type="button"
+            aria-label="เปิดเมนู"
+            onClick={() => setDrawer(true)}
+            className="glass-btn grid size-9 flex-none place-items-center rounded-[10px] lg:hidden"
+          >
+            <Menu size={18} strokeWidth={1.8} aria-hidden />
+          </button>
+        )}
         <Link
           href={match ? `/home?m=${match.group.id}` : "/home"}
           transitionTypes={["nav-back"]}
@@ -57,21 +67,25 @@ export function ShellHeader({
           <ArrowLeft size={17} strokeWidth={1.8} aria-hidden />
         </Link>
 
-        {/* ที่อยู่ของหน้า ชิดซ้ายแนวเดียวกับแถบข้าง — กลุ่ม (และหัวข้อ subgroup) จาง · ชื่อหน้าเด่น */}
+        {/* ที่อยู่ของหน้า — กลุ่ม (กดกลับการ์ดกลุ่มบน Home) และหมวดจาง · ชื่อหน้าเด่น กดสลับหน้าได้ */}
         <nav aria-label="ตำแหน่งของหน้า" className="flex min-w-0 flex-1 items-center gap-1.5 pl-1 sm:pl-2">
           {match ? (
             <>
-              <span className="hidden truncate text-13 text-white/65 sm:inline">{match.group.label}</span>
-              {match.child ? (
+              <Link
+                href={`/home?m=${match.group.id}`}
+                transitionTypes={["nav-back"]}
+                className="hidden truncate text-13 text-white/65 transition-colors hover:text-white sm:inline"
+              >
+                {match.group.label}
+              </Link>
+              {section ? (
                 <>
                   <Slash className="md:inline" />
-                  <span className="hidden truncate text-13 text-white/65 md:inline">{match.item.label}</span>
+                  <span className="hidden truncate text-13 text-white/65 md:inline">{section}</span>
                 </>
               ) : null}
               <Slash className="sm:inline" />
-              <span aria-current="page" className="truncate text-15 font-semibold">
-                {(match.child ?? match.item).label}
-              </span>
+              <PageSwitcher match={match} />
             </>
           ) : (
             <span className="truncate text-15 font-semibold">{systemLabel ?? "HR Service"}</span>

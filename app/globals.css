@@ -2271,6 +2271,31 @@
   color: var(--tone-ink);
 }
 
+/* ไอคอนแอปบน Home เดสก์ท็อป — สีทึบเดียวต่อกลุ่ม (ไม่ไล่สี ไม่ใช้สีต่อแอป) · ขาวบนสีผ่าน 3:1 ของไอคอน */
+.tone-driver {
+  --tone-solid: #b45f04;
+}
+.tone-office {
+  --tone-solid: #1e5fb8;
+}
+.tone-master {
+  --tone-solid: #0f766e;
+}
+.tone-app {
+  color: #ffffff;
+  background: var(--tone-solid);
+}
+.home-app {
+  transition: background-color 0.15s ease;
+}
+a.home-app:hover {
+  background: var(--color-base-200);
+}
+a.home-app:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* การ์ดคอลัมน์กลุ่มบน Home + แถวเมนู (สไตล์ GroupColumn / MenuRow ของ menaIT) */
 .home-col {
   animation: home-card-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
