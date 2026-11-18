@@ -229,6 +229,9 @@
   /* ม่วง — รอรับรถ (หน้าผู้สมัคร + รหัส `ร` ในตารางสถานะฝึกงาน · Bew 9 พ.ย. 2026) · คู่ 6.9:1 */
   --color-st-violet: #ece4fb;
   --color-st-violet-ink: #5b2fb0;
+  /* ฟ้า — ผู้สมัครสำรอง (หน้าผู้สมัคร · Bew 18 พ.ย. 2569) · คนละโทนกับน้ำเงินของรอการติดต่อ */
+  --color-st-sky: #d9f1fb;
+  --color-st-sky-ink: #0b6688;
 
   /**
    * เส้นขอบของป้าย — เข้มกว่าพื้นป้ายหนึ่งขั้น ใช้ผ่าน `@utility chip-*` ท้ายไฟล์
@@ -244,6 +247,7 @@
   --color-st-ok-line: #a9dbb9;
   --color-st-pink-line: #f3b8d5;
   --color-st-violet-line: #d3c2f3;
+  --color-st-sky-line: #a6daef;
 
   /**
    * ชั้นความสูงของพื้นผิว — สามระดับ ไม่ใช่สเกลเต็มของ Tailwind
@@ -413,6 +417,8 @@
   --color-st-pink-ink: #f58bbd;
   --color-st-violet: #2a1d45;
   --color-st-violet-ink: #c4a8ff;
+  --color-st-sky: #0f2f3d;
+  --color-st-sky-ink: #6cc8ea;
 
   --color-st-new-line: #2f4664;
   --color-st-wait-line: #5c4518;
@@ -421,6 +427,7 @@
   --color-st-ok-line: #255c39;
   --color-st-pink-line: #6b2347;
   --color-st-violet-line: #4a3577;
+  --color-st-sky-line: #1d5368;
 
   /**
    * เงาบนพื้นมืดเป็น **ดำล้วน ไม่ใช่สีหมึกของธีม** — หมึกธีมมืดเป็นสีอ่อน
@@ -1621,6 +1628,13 @@
   --chip-line: var(--color-st-violet-line);
 }
 
+/* ฟ้า — ผู้สมัครสำรอง */
+@utility chip-sky {
+  --chip-bg: var(--color-st-sky);
+  --chip-ink: var(--color-st-sky-ink);
+  --chip-line: var(--color-st-sky-line);
+}
+
 /* จบสำเร็จ — เขียว (“เสร็จสิ้น” ของบันทึกเคส) */
 @utility chip-ok {
   --chip-bg: var(--color-st-ok);
@@ -2548,6 +2562,9 @@ a.home-row:hover .home-row-arrow {
     --color-st-violet: #ece4fb;
     --color-st-violet-ink: #5b2fb0;
     --color-st-violet-line: #d3c2f3;
+    --color-st-sky: #d9f1fb;
+    --color-st-sky-ink: #0b6688;
+    --color-st-sky-line: #a6daef;
   }
 
   @page {

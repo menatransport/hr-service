@@ -177,7 +177,7 @@ export function isRequisitionStatus(v: unknown): v is RequisitionStatus {
  * อัตราค้างถูกปิดด้วย `syncRequisitionForApplication()` ซึ่งปลดการผูกและเปิดรับใหม่
  * ให้เองเมื่อใบสมัครกลายเป็น `cancelled` · **อย่ากลับไปบังคับแบบเดิมถ้าไม่ได้สั่ง**
  *
- * `cancelled` ยังผูกไม่ได้ — ผูกปุ๊บ sync ก็จะปลดทิ้งทันทีอยู่ดี
+ * `cancelled` ยังผูกไม่ได้ — ผูกปุ๊บ sync ก็จะปลดทิ้งทันทีอยู่ดี · `reserve` (สำรอง) ก็เช่นกัน — สำรองคือไม่ผูก JR
  *
  * **เซิร์ฟเวอร์บังคับซ้ำใน `linkApplication()`** ไม่ใช่แค่กรองรายการในดรอปดาวน์
  * — เส้น API ยิงตรงได้

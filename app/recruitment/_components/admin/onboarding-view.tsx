@@ -1167,10 +1167,11 @@ const APPLICANT_TONE: Record<ApplicationStatus, string> = {
   training: "bg-st-live text-st-live-ink",
   working: "bg-st-live text-st-live-ink",
   cancelled: "bg-alert/12 text-alert",
+  reserve: "bg-st-sky text-st-sky-ink",
 };
 
-/** ปุ่มเลื่อนเดือนของแท็บรับรถแล้ว (ฝัง) — หน้าตาเดียวกับ `Step` ของตารางสถานะฝึกงาน */
-function MonthStep({
+/** ปุ่มเลื่อนเดือนของแท็บรับรถแล้ว (ฝัง) — หน้าตาเดียวกับ `Step` ของตารางสถานะฝึกงาน · มุมมองยกเลิกของหน้าผู้สมัครก็ใช้ */
+export function MonthStep({
   label,
   disabled,
   onClick,

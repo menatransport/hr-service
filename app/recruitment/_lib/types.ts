@@ -91,6 +91,9 @@ export const APPLICATION_STATUSES = [
   "interview_scheduled",
   "interview_passed",
   "cancelled",
+  /* `reserve` (สำรอง) เพิ่ม 18 พ.ย. 2569 ตาม Bew — ผ่านการคัดแล้วแต่ยังไม่มีอัตรา พักไว้พร้อมลูกค้า (+ แพล้นท์ของลาดกระบัง)
+     · ไม่ผูก JR · เข้าได้จาก `RESERVE_FROM` เท่านั้น (ดู `updateApplication()`) */
+  "reserve",
   "training",
   "working",
 ] as const;
@@ -142,6 +145,7 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
      · เข้าสถานะนี้ต้องผ่านกล่องข้อมูล RC (เลือก RQ + วันเริ่มฝึก) เสมอ */
   interview_passed: "รอฝึกงาน",
   cancelled: "ยกเลิก",
+  reserve: "สำรอง",
   training: "ฝึกงาน",
   working: "ปฏิบัติงาน",
 };
@@ -152,6 +156,7 @@ export const STATUS_NEXT_STEP: Record<ApplicationStatus, string> = {
   interview_scheduled: "นัดแล้ว รอถึงวันสัมภาษณ์",
   interview_passed: "ผ่านสัมภาษณ์แล้ว รอวันเริ่มฝึกงาน",
   cancelled: "ยกเลิกแล้ว — ระบุเหตุผลในคอลัมน์เหตุผลที่ยกเลิก",
+  reserve: "สำรองไว้ — รออัตราของลูกค้า/แพล้นท์ที่ระบุ",
   training: "เริ่มฝึกงานแล้ว",
   working: "ปฏิบัติงานแล้ว — ดูสถานะรายวันที่ทะเบียนประวัติ พจส.",
 };
@@ -174,6 +179,15 @@ export const OPEN_STATUSES: ApplicationStatus[] = [
   "interview_scheduled",
   "interview_passed",
 ];
+
+/**
+ * ย้ายเป็น “สำรอง” ได้จากสองสถานะนี้เท่านั้น (Bew 18 พ.ย. 2569) — เซิร์ฟเวอร์บังคับซ้ำใน `updateApplication()`
+ * · ใบที่สำรองอยู่แล้วแก้ลูกค้า/แพล้นท์ได้ และย้ายออกไปสถานะอื่นได้ตามปกติ
+ */
+export const RESERVE_FROM: ApplicationStatus[] = ["pending_contact", "interview_scheduled"];
+
+/** ความยาวสูงสุดของลูกค้า/แพล้นท์ที่สำรองไว้ */
+export const RESERVE_TEXT_MAX = 120;
 
 /**
  * ลำดับความคืบหน้าที่ผู้สมัครเห็นบนหน้าติดตาม — **ไม่ใช่รายการสถานะทั้งหมด**
@@ -599,6 +613,12 @@ export interface Application {
    * · ตอนนี้ใช้แสดงผลอย่างเดียว ยังไม่ได้กันคนที่ติด Blacklist สมัครใหม่
    */
   blacklist: boolean;
+  /**
+   * ลูกค้าที่สำรองไว้ — มีค่าเฉพาะใบที่ `reserve` (ล้างทิ้งเมื่อออกจากสำรอง เหมือน `exitReason`)
+   * · ลาดกระบังบังคับแพล้นท์ด้วย (`reservePlant`) · สระบุรี+บางปะกงระบุแค่ลูกค้า (Bew 18 พ.ย. 2569)
+   */
+  reserveCustomer: string;
+  reservePlant: string;
   answers: AnswerMap;
   questionSnapshot: QuestionSnapshot[];
   /** คะแนน Driver Rating ที่ฝ่ายบุคคลให้จากการสัมภาษณ์ (ดู `RatingRecord`) */
@@ -653,6 +673,9 @@ export interface ApplicationSummary {
   exitReasonNote: string;
   /** ขึ้น Blacklist หรือไม่ (ดู `Application.blacklist`) */
   blacklist: boolean;
+  /** ลูกค้า/แพล้นท์ที่สำรองไว้ (ดู `Application.reserveCustomer`) */
+  reserveCustomer: string;
+  reservePlant: string;
   /** สรุป Driver Rating — ปุ่มดาวในคอลัมน์จัดการอ่านจากนี่ */
   rating: RatingSummary;
   fileCount: number;

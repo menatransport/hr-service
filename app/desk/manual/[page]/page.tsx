@@ -19,6 +19,7 @@ const TONE: Record<Tone, string> = {
   ok: "chip-ok",
   alert: "chip-alert",
   pink: "chip-pink",
+  sky: "chip-sky",
 };
 
 export async function generateMetadata(props: PageProps<"/desk/manual/[page]">) {

@@ -854,6 +854,7 @@ const APP_TONE: Record<ApplicationStatus, string> = {
   training: "bg-st-live text-st-live-ink",
   working: "bg-st-live text-st-live-ink",
   cancelled: "bg-alert/12 text-alert",
+  reserve: "bg-st-sky text-st-sky-ink",
 };
 
 const STATE_TEXT: Record<StepState, string> = {

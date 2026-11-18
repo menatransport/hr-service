@@ -930,13 +930,14 @@ export async function syncRequisitionForApplication(
       );
       return;
     }
-    if (status === "cancelled") {
+    /* สำรอง = ไม่ผูก JR (Bew 18 พ.ย. 2569) — ปลดแล้วเปิดรับใหม่แบบเดียวกับยกเลิก */
+    if (status === "cancelled" || status === "reserve") {
       await apply(
         col,
         current,
         { match: null, status: "open", filledOn: "", ...archiveOnboarding(current) },
         by,
-        `${current.match?.fullName ?? "ผู้สมัคร"} ยกเลิก — เปิดรับอีกครั้ง`,
+        `${current.match?.fullName ?? "ผู้สมัคร"} ${status === "reserve" ? "ย้ายเป็นสำรอง" : "ยกเลิก"} — เปิดรับอีกครั้ง`,
       );
       return;
     }

@@ -60,6 +60,8 @@ const PIPELINE: (ApplicationStatus | HubView)[] = [
   "training",
   "working",
   "cancelled",
+  /* สำรอง ต่อท้ายยกเลิก (Bew 18 พ.ย. 2569) */
+  "reserve",
 ];
 
 /**
@@ -88,6 +90,7 @@ const DOT: Record<ApplicationStatus, string> = {
   training: "bg-st-live-ink",
   working: "bg-st-done-ink",
   cancelled: "bg-alert",
+  reserve: "bg-st-sky-ink",
 };
 
 /** ช่องที่แถบนี้กรองได้ — ทุกตัวเป็น `ColumnId` ของตารางจริง */
@@ -170,7 +173,7 @@ export function CandidateInsights({
 
   return (
     <SummaryPanel label="สรุปใบสมัครตามสถานะ" className="flex-none">
-      <SummaryStats className={hubCounts ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-9" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"}>
+      <SummaryStats className={hubCounts ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-10" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-7"}>
         {/* ยอดรวมไม่ใช่ตัวกรอง (29 ก.ย. 2026) — ไม่มีมุมมอง “ทั้งหมด” ดู `DEFAULT_FILTERS`
             · **ตอนกรองอยู่ช่องนี้กลายเป็นปุ่ม “ล้างตัวกรอง”** (14 ต.ค. 2026) แทนแถวปุ่มเหนือตาราง
             ไม่ได้กรองอยู่ = ไม่ส่ง `onClick` = กล่องเฉย ๆ */}
@@ -221,6 +224,8 @@ export function CandidateInsights({
             active={!view && sameSet(pickedStatus, [STATUS_LABEL[status]])}
             onClick={() => pickStatus([STATUS_LABEL[status]])}
             title={`ดูเฉพาะ${STATUS_LABEL[status]}`}
+            /* การ์ดที่ 10 — จอแคบกินเต็มแถว ไม่เหลือช่องโหว่ท้ายแถบ */
+            className={status === "reserve" && hubCounts ? "col-span-2 sm:col-span-4 lg:col-span-1" : undefined}
           />
           ),
         )}

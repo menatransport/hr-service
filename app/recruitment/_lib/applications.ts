@@ -40,6 +40,8 @@ import {
   isExitReason,
   EXIT_REASON_NOTE_MAX,
   OTHER_EXIT_REASON,
+  RESERVE_FROM,
+  RESERVE_TEXT_MAX,
   isInterviewResult,
   normalizeStatus,
   QUESTION_SECTIONS,
@@ -106,6 +108,9 @@ interface ApplicationDoc {
   exitReasonNote?: string;
   /** ใบเก่ายังไม่มีคีย์นี้ — อ่านผ่าน `blacklistOf()` เสมอ */
   blacklist?: boolean;
+  /** ลูกค้า/แพล้นท์ที่สำรองไว้ — อ่านผ่าน `reserveOf()` (มีความหมายเฉพาะใบ `reserve`) */
+  reserveCustomer?: string;
+  reservePlant?: string;
   answers: AnswerMap;
   questionSnapshot: QuestionSnapshot[];
   /** คะแนน Driver Rating ที่ฝ่ายบุคคลให้เอง — ใบเก่าไม่มีคีย์นี้ อ่านผ่าน `ratingOf()` */
@@ -226,6 +231,15 @@ function exitNoteOf(doc: Pick<ApplicationDoc, "exitReason" | "exitReasonNote">):
   return doc.exitReason === OTHER_EXIT_REASON ? (doc.exitReasonNote ?? "") : "";
 }
 
+/** ลูกค้า/แพล้นท์ที่สำรองไว้ — ค่าที่ค้างในใบที่ไม่ได้สำรองแล้วถูกทิ้งตอนอ่าน */
+function reserveOf(
+  doc: Pick<ApplicationDoc, "status" | "reserveCustomer" | "reservePlant">,
+): { reserveCustomer: string; reservePlant: string } {
+  return normalizeStatus(doc.status) === "reserve"
+    ? { reserveCustomer: doc.reserveCustomer ?? "", reservePlant: doc.reservePlant ?? "" }
+    : { reserveCustomer: "", reservePlant: "" };
+}
+
 function siteOf(doc: Pick<ApplicationDoc, "site">): RecruitSite {
   return isRecruitSite(doc.site) ? doc.site : DEFAULT_RECRUIT_SITE;
 }
@@ -243,6 +257,7 @@ function toApplication(doc: WithId<ApplicationDoc>): Application {
     exitReason: isExitReason(doc.exitReason) ? doc.exitReason : "",
     exitReasonNote: exitNoteOf(doc),
     blacklist: blacklistOf(doc),
+    ...reserveOf(doc),
     answers: doc.answers ?? {},
     questionSnapshot: doc.questionSnapshot ?? [],
     rating: ratingOf(doc),
@@ -660,6 +675,9 @@ export interface ApplicationPatch {
   rating?: unknown;
   /** ย้ายสาขา (แท็บหน้าผู้สมัคร) — `RecruitSite` · ใบที่ผูก RQ แล้วอยู่สาขาของ RQ เสมอ ค่านี้ไม่มีผล */
   site?: unknown;
+  /** ลูกค้าที่สำรองไว้ — บังคับเมื่อสถานะเป็น `reserve` · ลาดกระบังบังคับ `reservePlant` ด้วย */
+  reserveCustomer?: unknown;
+  reservePlant?: unknown;
 }
 
 /**
@@ -947,6 +965,33 @@ export async function updateApplication(
   if (patch.site !== undefined && !isRecruitSite(patch.site)) throw new RecruitmentError("สาขาไม่ถูกต้อง");
   const site = patch.site === undefined ? siteOf(found) : (patch.site as RecruitSite);
 
+  /* สำรอง (Bew 18 พ.ย. 2569) — เข้าได้จากรอการติดต่อ/นัดสัมภาษณ์เท่านั้น · ลูกค้าบังคับ · ลาดกระบังบังคับแพล้นท์
+     (สระบุรี+บางปะกงไม่มีแพล้นท์) · ไม่ผูก JR — ใบที่ผูกอยู่ถูกปลดใน `syncRequisitionForApplication()`
+     · ออกจากสำรอง = ล้างลูกค้า/แพล้นท์ทิ้ง เหมือนเหตุผลที่ยกเลิก */
+  if (status === "reserve" && current !== "reserve" && !RESERVE_FROM.includes(current)) {
+    throw new RecruitmentError(
+      `ย้ายเป็นสำรองได้เฉพาะใบที่${RESERVE_FROM.map((s) => STATUS_LABEL[s]).join("หรือ")}`,
+    );
+  }
+  const reserveCustomer =
+    status !== "reserve"
+      ? ""
+      : patch.reserveCustomer === undefined
+        ? reserveOf(found).reserveCustomer
+        : text(patch.reserveCustomer, RESERVE_TEXT_MAX);
+  const reservePlant =
+    status !== "reserve" || site !== "latkrabang"
+      ? ""
+      : patch.reservePlant === undefined
+        ? reserveOf(found).reservePlant
+        : text(patch.reservePlant, RESERVE_TEXT_MAX);
+  if (status === "reserve" && !reserveCustomer) throw new RecruitmentError("สำรองต้องระบุลูกค้า");
+  if (status === "reserve" && site === "latkrabang" && !reservePlant)
+    throw new RecruitmentError("สำรองของลาดกระบังต้องระบุแพล้นท์");
+  const reserveChanged =
+    status === "reserve" &&
+    (reserveCustomer !== reserveOf(found).reserveCustomer || reservePlant !== reserveOf(found).reservePlant);
+
   /* คำตอบในใบ — ฝ่ายบุคคลแก้แทนผู้สมัครได้ (ดู `editAnswers()`) · ชื่อกับเบอร์
      ที่แยกเก็บไว้นอก `answers` ต้องถูกคำนวณใหม่ตาม ไม่งั้นตารางกับใบจะไม่ตรงกัน */
   const edit =
@@ -1010,6 +1055,7 @@ export async function updateApplication(
       : "",
     filesChanged ? "ปรับไฟล์เอกสารแนบ" : "",
     site !== siteOf(found) ? `ย้ายสาขา → ${recruitSiteLabel(site)}` : "",
+    reserveChanged ? `สำรอง · ${[reserveCustomer, reservePlant].filter(Boolean).join(" · ")}` : "",
     ratingEdit?.changed ? `ประเมิน Driver Rating · ${ratingEdit.changed} ข้อ` : "",
     /* ขึ้น/ถอด Blacklist คือการตัดสินเรื่องตัวคน ต้องมีร่องรอยว่าใครทำเมื่อไหร่ */
     blacklist !== wasBlacklisted
@@ -1041,6 +1087,8 @@ export async function updateApplication(
         exitReason,
         exitReasonNote,
         blacklist,
+        reserveCustomer,
+        reservePlant,
         updatedAt: now,
         ...(site !== siteOf(found) ? { site } : {}),
         ...(edit ? { answers, fullName, phone } : {}),
@@ -1066,6 +1114,8 @@ export async function updateApplication(
     exitReason,
     exitReasonNote,
     blacklist,
+    reserveCustomer,
+    reservePlant,
     site,
     answers,
     fullName,
@@ -1155,6 +1205,8 @@ const SUMMARY_FIELDS = {
   exitReason: 1,
   exitReasonNote: 1,
   blacklist: 1,
+  reserveCustomer: 1,
+  reservePlant: 1,
   erasedAt: 1,
   createdAt: 1,
   updatedAt: 1,
@@ -1243,6 +1295,7 @@ export async function listApplications(range?: { gte: string; lt: string }): Pro
       exitReason: isExitReason(doc.exitReason) ? doc.exitReason : "",
       exitReasonNote: exitNoteOf(doc),
       blacklist: blacklistOf(doc),
+      ...reserveOf(doc),
       rating: summarizeRating({
         questionSnapshot: doc.questionSnapshot,
         answers: doc.answers ?? {},

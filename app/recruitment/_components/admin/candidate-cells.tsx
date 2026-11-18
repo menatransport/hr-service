@@ -27,12 +27,15 @@ import {
   TextField,
 } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ReservePrompt } from "@/app/recruitment/_components/admin/reserve-prompt";
+import type { RecruitSite } from "@/app/recruitment/_lib/sites";
 import { daysUntil, formatPhone, thaiDate } from "@/app/recruitment/_lib/form";
 import { CANCEL_REASONS, type CancelReason } from "@/app/recruitment/_lib/requisitions/types";
 import {
   EXIT_REASONS,
   EXIT_REASON_NOTE_MAX,
   OTHER_EXIT_REASON,
+  RESERVE_FROM,
   STATUS_LABEL,
   exitReasonText,
   type ApplicationStatus,
@@ -62,6 +65,9 @@ export type CellPatch = {
   contactOwner?: string;
   /** ย้ายสาขา — ปุ่มในคอลัมน์จัดการ (ดู `sites.ts`) */
   site?: ApplicationSummary["site"];
+  /** สำรอง — ลูกค้า (+ แพล้นท์ของลาดกระบัง) จากกล่อง `ReservePrompt` */
+  reserveCustomer?: string;
+  reservePlant?: string;
   /** ยกเลิกใบที่ผูก JR + เลือก “ยกเลิก JR ด้วย” — ไม่ส่ง = คืน JR กลับไปสรรหา */
   requisitionCancelReason?: CancelReason;
   interview?: Partial<ApplicationSummary["interview"]>;
@@ -87,6 +93,8 @@ const SELECTABLE: ApplicationStatus[] = [
   "interview_passed",
   "training",
   "cancelled",
+  /* สำรอง — ขึ้นเฉพาะใบที่อยู่ `RESERVE_FROM` หรือสำรองอยู่แล้ว (ดู `StatusCell`) */
+  "reserve",
 ];
 
 /* ─────────────────────────────────────────────────── โครงของช่องที่กดได้ */
@@ -192,7 +200,10 @@ export function StatusCell({
   onStage,
   handover = false,
   jr = "",
+  site,
 }: CellProps & {
+  /** แท็บสาขาของแถว — กล่องสำรองถามแพล้นท์เฉพาะลาดกระบัง · ไม่ส่ง = ไม่มีตัวเลือกสำรอง */
+  site?: RecruitSite;
   /** เลข JR ที่ผูกอยู่ — มี = กล่องยกเลิกถามว่าคืน JR กลับไปสรรหา หรือยกเลิก JR ด้วย */
   jr?: string;
   /** มี = เลือก “รอฝึกงาน”/“ฝึกงาน” แล้วให้หน้าแม่จัดการ (เปิดฟอร์มข้อมูล RC + RQ) แทนการบันทึกตรง */
@@ -202,6 +213,9 @@ export function StatusCell({
 }) {
   const [saving, setSaving] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [reserving, setReserving] = useState(false);
+  /* สำรองได้จากรอการติดต่อ/นัดสัมภาษณ์เท่านั้น (Bew 18 พ.ย. 2569) · ใบที่สำรองอยู่แล้วกดซ้ำ = แก้ลูกค้า/แพล้นท์ */
+  const canReserve = Boolean(site) && (candidate.status === "reserve" || RESERVE_FROM.includes(candidate.status));
 
   async function apply(status: ApplicationStatus, close: () => void) {
     close();
@@ -219,9 +233,21 @@ export function StatusCell({
       return;
     }
 
+    if (status === "reserve") {
+      setReserving(true);
+      return;
+    }
+
     if (status === candidate.status) return;
     setSaving(true);
     await onPatch({ status });
+    setSaving(false);
+  }
+
+  async function reserveWith(reserveCustomer: string, reservePlant: string) {
+    setReserving(false);
+    setSaving(true);
+    await onPatch({ status: "reserve", reserveCustomer, reservePlant, site });
     setSaving(false);
   }
 
@@ -266,7 +292,7 @@ export function StatusCell({
                 {handover ? "กลับไปฝึกงาน: ลง “ฝ”" : "เปลี่ยนเป็นรอรับรถ: ลง “ร”"} ในแท็บสถานะฝึกงาน
               </span>
             ) : null}
-            {SELECTABLE.map((s) => (
+            {SELECTABLE.filter((s) => s !== "reserve" || canReserve).map((s) => (
               <Option
                 key={s}
                 on={candidate.status === s}
@@ -286,6 +312,10 @@ export function StatusCell({
           onConfirm={cancelWith}
           onClose={() => setAsking(false)}
         />
+      ) : null}
+
+      {reserving && site ? (
+        <ReservePrompt candidate={candidate} site={site} onConfirm={reserveWith} onClose={() => setReserving(false)} />
       ) : null}
     </>
   );

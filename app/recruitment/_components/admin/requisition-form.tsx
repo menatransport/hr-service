@@ -874,7 +874,8 @@ function Chips({
  */
 type Grouped = { options?: SelectOption[]; groups?: SelectGroupOption[] };
 
-function groupCustomers(options: RequisitionOptions, branch: string): Grouped {
+/** ใช้ซ้ำในกล่องสำรองของหน้าผู้สมัคร (`reserve-prompt.tsx`) */
+export function groupCustomers(options: RequisitionOptions, branch: string): Grouped {
   const other = { value: OTHER, label: "อื่นๆ (ระบุเอง)" };
   const all = CUSTOMERS.map((c) => ({ value: c, label: c }));
   const hit = new Set(
@@ -891,7 +892,7 @@ function groupCustomers(options: RequisitionOptions, branch: string): Grouped {
   };
 }
 
-function groupPlants(
+export function groupPlants(
   options: RequisitionOptions,
   branch: string,
   customer: string,

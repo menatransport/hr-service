@@ -6,6 +6,8 @@ import { Fragment, useCallback, useMemo, useState, type Dispatch, type ReactNode
 import Link from "next/link";
 import {
   ArrowLeftRight,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   FilePenLine,
   IdCard,
@@ -60,8 +62,9 @@ import {
   type OnboardingRecord,
 } from "@/app/recruitment/_lib/requisitions/onboarding";
 import type { Hub } from "@/app/recruitment/_lib/requisitions/onboarding-store";
-import { OnboardingView, hubRows, workingMonth } from "@/app/recruitment/_components/admin/onboarding-view";
+import { MonthStep, OnboardingView, hubRows, workingMonth } from "@/app/recruitment/_components/admin/onboarding-view";
 import { todayInBangkok } from "@/lib/record-case-flow";
+import { THAI_MONTHS_SHORT } from "@/app/recruitment/_lib/drivers/types";
 import { OnboardingDialog } from "@/app/recruitment/_components/admin/onboarding-dialog";
 import { JrCell } from "@/app/recruitment/_components/admin/jr-cell";
 import { VehicleStatusCell } from "@/app/recruitment/_components/admin/repair-badge";
@@ -268,8 +271,9 @@ const COLUMNS = [
     text: (a: Row) => a.jrCode || "—",
   },
   { id: "position", label: "ตำแหน่ง", width: "min-w-[80px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.position || "—" },
-  { id: "customer", label: "ลูกค้า", width: "min-w-[80px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.customer || "—" },
-  { id: "plant", label: "แพล้นท์", width: "min-w-[100px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.plant || "—" },
+  /* ใบสำรอง = ลูกค้า/แพล้นท์ที่สำรองไว้ (ไม่มี JR) · นอกนั้น = ของ JR ที่ผูก */
+  { id: "customer", label: "ลูกค้า", width: "min-w-[80px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => (a.status === "reserve" ? a.reserveCustomer : a.trainee?.customer) || "—" },
+  { id: "plant", label: "แพล้นท์", width: "min-w-[100px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => (a.status === "reserve" ? a.reservePlant : a.trainee?.plant) || "—" },
   { id: "trainer", label: "ครูฝึก", width: "min-w-[140px]", asc: "ก → ฮ", desc: "ฮ → ก", text: (a: Row) => a.trainee?.trainer || "—" },
   {
     /* โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว · รอฝึกงานเป็นสถานะจริงแล้ว
@@ -484,6 +488,9 @@ const PENDING_VIEWS = [STATUS_LABEL.pending_contact, STATUS_LABEL.interview_sche
 /** คอลัมน์ JR + วันที่ฝึกงาน — โผล่เฉพาะตอนกรอง “รอฝึกงาน” หรือ “ฝึกงาน” อย่างเดียว */
 const TRAINING_COLUMNS: ColumnId[] = ["jr", "trainingStart"];
 
+/** คอลัมน์ของแท็บสำรอง (Bew 18 พ.ย. 2569) — ลาดกระบัง ลูกค้า + แพล้นท์ · สระบุรี+บางปะกง ลูกค้าอย่างเดียว */
+const reserveColumns = (site?: RecruitSite): ColumnId[] => (site === "saraburi-bangpakong" ? ["customer"] : ["customer", "plant"]);
+
 /** คอลัมน์ผู้ฝึกงาน — โผล่เฉพาะตอนกรอง “ฝึกงาน” อย่างเดียว (Bew 5 พ.ย. 2569) */
 const TRAINEE_COLUMNS: ColumnId[] = ["drivercode", "position", "customer", "plant", "trainer", "trainDays", "orientation", "st", "vehicle", "criminal"];
 
@@ -541,6 +548,9 @@ const DEFAULT_SORT: TableSort = { column: "createdAt", dir: "desc" };
 /** ลำดับตั้งต้นของมุมมองฝึกงาน — รหัสพนักงาน น้อย → มาก (Bew 5 พ.ย. 2569) */
 const TRAINEE_SORT: TableSort = { column: "drivercode", dir: "asc" };
 
+/** เดือน `YYYY-MM` (เวลาไทย) ของวันที่ยกเลิก — ตัวกรองเดือนของมุมมองยกเลิก */
+const bangkokMonth = (iso: string) => (iso ? new Date(Date.parse(iso) + 7 * 3600_000).toISOString().slice(0, 7) : "");
+
 /** ลำดับตั้งต้นของมุมมองยกเลิก — คนที่ยกเลิก/ออกล่าสุดอยู่บนสุด (Bew 13 พ.ย. 2569) */
 const CANCELLED_SORT: TableSort = { column: "cancelledAt", dir: "desc" };
 
@@ -555,6 +565,8 @@ function candidateXlsxColumns(
   showTrainee: boolean,
   /** มุมมองรอฝึกงาน — ไม่มีจำนวนวันฝึก/ปฐมนิเทศ/ST */
   waiting = false,
+  /** แท็บสำรอง — ลูกค้า/แพล้นท์ที่สำรองไว้ */
+  reserve = false,
 ): XlsxColumn<Row>[] {
   const text = (id: ColumnId) => COLUMNS.find((c) => c.id === id)!.text;
   const progress: XlsxColumn<Row>[] = [
@@ -630,6 +642,12 @@ function candidateXlsxColumns(
       value: statusText,
       tone: (a) => (a.status === "cancelled" ? "alert" : a.waitHandover ? "mut" : a.status === "working" || a.status === "training" ? "ok" : null),
     },
+    ...(reserve
+      ? ([
+          { header: "ลูกค้า (สำรอง)", width: 16, value: (a) => a.reserveCustomer },
+          { header: "แพล้นท์ (สำรอง)", width: 16, value: (a) => a.reservePlant },
+        ] satisfies XlsxColumn<Row>[])
+      : []),
     ...(showReason
       ? ([
           { header: "รหัสพนักงาน", width: 12, kind: "code", value: (a) => a.exitDrivercode },
@@ -684,6 +702,7 @@ async function candidateSheet(
   showTraining: boolean,
   showTrainee: boolean,
   waiting = false,
+  reserve = false,
 ): Promise<Pick<XlsxSheet<FormRow>, "columns" | "rows">> {
   const form = await requestJson<ApplicationFormExport>(
     "/api/recruitment/applications/export",
@@ -695,7 +714,7 @@ async function candidateSheet(
   return {
     rows: visible.map((a) => ({ ...a, form: byId.get(a.id) ?? {} })),
     columns: [
-      ...candidateXlsxColumns(showReason, showBlacklist, showTraining, showTrainee, waiting),
+      ...candidateXlsxColumns(showReason, showBlacklist, showTraining, showTrainee, waiting, reserve),
       ...form.columns.map(
         (q): XlsxColumn<FormRow> => ({
           header: q.label,
@@ -980,6 +999,9 @@ export function CandidatesView({
 
   const showBlacklist = BLACKLIST_VIEWS.some(onlyStatus);
 
+  /** แท็บสำรอง — คอลัมน์ลูกค้า (+ แพล้นท์ของลาดกระบัง) */
+  const showReserve = onlyStatus(STATUS_LABEL.reserve);
+
   const showPending = PENDING_VIEWS.some(onlyStatus);
 
   /** มุมมองฝึกงาน = กรองเฉพาะ ฝึกงาน และ/หรือ รอรับรถ (การ์ดแบ่งครึ่งกรองสองค่าพร้อมกัน · ติ๊กเหลือค่าเดียวที่หัวคอลัมน์ได้) */
@@ -1011,13 +1033,28 @@ export function CandidatesView({
    *  (แท็บสถานะฝึกงานมีช่องค้นหาของตัวเอง) */
   const [query, setQuery] = useState("");
   /* รอการติดต่อ · นัดสัมภาษณ์ · รอฝึกงาน ก็มีช่องค้นหาเหนือตาราง (Bew 11 พ.ย. 2569) · ยกเลิก (13 พ.ย. 2569) */
-  const searchBar = !view && !showDaily && (showPending || showWaiting || showReason);
+  const searchBar = !view && !showDaily && (showPending || showWaiting || showReason || showReserve);
   const needle = (showDaily && !dailyTab) || searchBar ? query.trim().toLowerCase() : "";
 
   /** แท็บ ทั้งหมด | Mixer L | Mixer S — มุมมองรอฝึกงาน/ฝึกงานของลาดกระบัง (Bew 12 พ.ย. 2569) · แท็บซ่อน = ไม่กรองต่อเบื้องหลัง */
   const showMixer = showTrainee && site === "latkrabang";
   const [mixerPick, setMixerPick] = useState<MixerPick>("all");
   const mixer = showMixer ? mixerPick : "all";
+
+  /**
+   * เดือนของมุมมองยกเลิก — ตั้งต้นเดือนนี้ (Bew 18 พ.ย. 2569) · ลูกศรเดินตามเดือนที่มีใบยกเลิก + เดือนนี้
+   * แบบเดียวกับแท็บรับรถแล้วของหน้าติดตามพนักงานใหม่ · มุมมองอื่นไม่กรองเดือน
+   */
+  const thisMonth = todayInBangkok().slice(0, 7);
+  const [cancelMonth, setCancelMonth] = useState(thisMonth);
+  const cancelMonths = useMemo(() => {
+    const set = new Set([thisMonth]);
+    for (const a of enriched) if (a.status === "cancelled" && a.cancelledAt) set.add(bangkokMonth(a.cancelledAt));
+    return [...set].sort().reverse();
+  }, [enriched, thisMonth]);
+  const cancelMonthAt = cancelMonths.indexOf(cancelMonth);
+  const cancelMonthLabel = `${THAI_MONTHS_SHORT[Number(cancelMonth.slice(5, 7)) - 1]} ${Number(cancelMonth.slice(0, 4)) + 543}`;
+  const monthFilter = showReason ? cancelMonth : "";
 
   const columns = useMemo(
     () =>
@@ -1030,9 +1067,11 @@ export function CandidatesView({
               (c.id !== BLACKLIST_COLUMN || showBlacklist) &&
               (!PENDING_COLUMNS.includes(c.id) || showPending) &&
               (!TRAINING_COLUMNS.includes(c.id) || showTraining) &&
-              (!TRAINEE_COLUMNS.includes(c.id) || (showReason && CANCELLED_COLUMNS.includes(c.id))),
+              (!TRAINEE_COLUMNS.includes(c.id) ||
+                (showReason && CANCELLED_COLUMNS.includes(c.id)) ||
+                (showReserve && reserveColumns(site).includes(c.id))),
           ),
-    [showReason, showBlacklist, showPending, showTraining, showTrainee, showWaiting],
+    [showReason, showBlacklist, showPending, showTraining, showTrainee, showWaiting, showReserve, site],
   );
   const head = (c: (typeof COLUMNS)[number]) => ({
     label: (showTrainee && TRAINEE_HEAD[c.id]?.label) || c.label,
@@ -1053,9 +1092,10 @@ export function CandidatesView({
     /* กรองด้วยคอลัมน์ที่เห็นอยู่จริงเท่านั้น — ตัวกรองของคอลัมน์เหตุผลที่ถูกซ่อนไป
        แล้วต้องไม่แอบกรองต่ออยู่เบื้องหลัง */
     const filtered = enriched.filter((a) => {
+      if (monthFilter && bangkokMonth(a.cancelledAt) !== monthFilter) return false;
       if (needle) {
         const rq = rqByApplication.get(a.id);
-        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.contactOwner, a.licenseType, a.jrCode, a.exitDrivercode, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
+        const hay = [a.fullName, a.nickname, a.ref, a.phone, a.contactOwner, a.licenseType, a.jrCode, a.exitDrivercode, a.reserveCustomer, a.reservePlant, rq?.drivercode, rq?.plant, rq?.trainer?.name, rq?.vehicle?.code, rq?.vehicle?.plateNo];
         if (!hay.some((t) => t?.toLowerCase().includes(needle))) return false;
       }
       return columns.every((column) => {
@@ -1078,7 +1118,7 @@ export function CandidatesView({
       return sort.dir === "asc" ? order : -order;
     });
     return [sorted, counts] as const;
-  }, [enriched, columns, filters, sort, needle, rqByApplication, mixer]);
+  }, [enriched, columns, filters, sort, needle, rqByApplication, mixer, monthFilter]);
 
   /* ทั้งหมด | Mixer L | Mixer S — แท็บตาราง: ต่อจากช่องค้นหา · แท็บสถานะฝึกงาน: ต่อจากแท็บสาขา (Bew 16 พ.ย. 2569) */
   const mixerTabs = showMixer ? (
@@ -1089,7 +1129,7 @@ export function CandidatesView({
    * หน้าละ 25 แถว (2 พ.ย. 2569) — ตัดหลังกรอง/เรียงแล้ว · แถบสรุป ตัวเลขในหัวคอลัมน์
    * ปุ่ม Excel และตารางฝึกงานรายวันยังใช้ `visible` ทั้งชุดเหมือนเดิม
    */
-  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort, needle, mixer]));
+  const [paged, pagedScroll] = usePaged(visible, JSON.stringify([filters, sort, needle, mixer, monthFilter]));
 
   /** แถวของตารางรายวัน — `pool` = ทุกใบที่ฝึกงาน (ตัวโหลด) · `people` = ที่ตารางแสดงอยู่หลังกรอง */
   const toPerson = (a: ApplicationSummary): TraineePerson => {
@@ -1145,6 +1185,8 @@ export function CandidatesView({
               ...("exitReason" in patch ? { exitReason: patch.exitReason! } : {}),
               ...("exitReasonNote" in patch ? { exitReasonNote: patch.exitReasonNote! } : {}),
               ...("blacklist" in patch ? { blacklist: patch.blacklist! } : {}),
+              ...("reserveCustomer" in patch ? { reserveCustomer: patch.reserveCustomer! } : {}),
+              ...("reservePlant" in patch ? { reservePlant: patch.reservePlant! } : {}),
               ...("contactOwner" in patch
                 ? { contactOwner: patch.contactOwner! }
                 : {}),
@@ -1175,6 +1217,8 @@ export function CandidatesView({
                 exitReason: next.exitReason,
                 exitReasonNote: next.exitReasonNote,
                 blacklist: next.blacklist,
+                reserveCustomer: next.reserveCustomer,
+                reservePlant: next.reservePlant,
                 cancelledAt: next.status !== "cancelled" ? "" : a.status === "cancelled" ? a.cancelledAt : next.updatedAt,
                 updatedAt: next.updatedAt,
                 /* แก้คำตอบในใบแล้วชื่อ เบอร์ เขต และวันพร้อมเริ่มงานในแถวเปลี่ยนตาม
@@ -1205,7 +1249,8 @@ export function CandidatesView({
       );
       setDrafting((open) => (open && open.id === id ? next : open));
       /* ยกเลิกใบที่ผูก JR — เซิร์ฟเวอร์ปลดการผูกแล้ว: คืน JR ไปสรรหา หรือยกเลิก JR ด้วย (`syncRequisitionForApplication`) */
-      if (next.status === "cancelled" && before.status !== "cancelled")
+      /* สำรองก็ปลด JR แล้วคืนไปสรรหาเหมือนกัน (ไม่มีทางเลือกยกเลิก JR) */
+      if ((next.status === "cancelled" || next.status === "reserve") && before.status !== next.status)
         setRequisitions?.((prev) =>
           prev.map((r) =>
             r.match?.applicationId === id
@@ -1364,6 +1409,19 @@ export function CandidatesView({
         </div>
       ) : searchBar ? (
         <div className="flex flex-none flex-col gap-2 py-3 lg:flex-row lg:items-center lg:gap-3">
+          {showReason ? (
+            <div className="flex items-center gap-1">
+              <MonthStep label="เดือนก่อนหน้า" disabled={cancelMonthAt >= cancelMonths.length - 1} onClick={() => setCancelMonth(cancelMonths[cancelMonthAt + 1])}>
+                <ChevronLeft size={15} strokeWidth={1.9} aria-hidden />
+              </MonthStep>
+              <span aria-live="polite" className="min-w-24 text-center text-13-5 font-semibold tabular-nums">
+                {cancelMonthLabel}
+              </span>
+              <MonthStep label="เดือนถัดไป" disabled={cancelMonthAt <= 0} onClick={() => setCancelMonth(cancelMonths[cancelMonthAt - 1])}>
+                <ChevronRight size={15} strokeWidth={1.9} aria-hidden />
+              </MonthStep>
+            </div>
+          ) : null}
           <SearchField
             value={query}
             onChange={setQuery}
@@ -1484,7 +1542,7 @@ export function CandidatesView({
                       .map((c) => `${head(c).label}: ${filters[c.id]!.join(", ")}`)
                       .join(" · "),
                     total: rows.length,
-                    ...(await candidateSheet(visible, showReason, showBlacklist, showTraining, showTrainee, showWaiting)),
+                    ...(await candidateSheet(visible, showReason, showBlacklist, showTraining, showTrainee, showWaiting, showReserve)),
                   })}
                 />
                 {syncMode ? (
@@ -1568,6 +1626,11 @@ export function CandidatesView({
                     return <td className="px-3 py-2 whitespace-nowrap">{t?.position ? <PositionTag value={t.position} /> : dash}</td>;
                   case "customer":
                   case "plant":
+                    return (
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {(a.status === "reserve" ? (id === "customer" ? a.reserveCustomer : a.reservePlant) : t?.[id]) || dash}
+                      </td>
+                    );
                   case "trainer":
                     return <td className="px-3 py-2 whitespace-nowrap">{t?.[id] || dash}</td>;
                   case "trainingStart":
@@ -1706,6 +1769,7 @@ export function CandidatesView({
                           onStage={(to) => toStage(a, to)}
                           handover={a.waitHandover}
                           jr={rqByApplication.get(a.id)?.code}
+                          site={site}
                         />
                       </td>
                     );
@@ -2089,6 +2153,7 @@ const PERSON_TONE: Record<ApplicationStatus, string> = {
   training: "bg-st-live text-st-live-ink",
   working: "bg-st-live text-st-live-ink",
   cancelled: "bg-alert/12 text-alert",
+  reserve: "bg-st-sky text-st-sky-ink",
 };
 
 /** วงรอบรูปหน้าตรง — สีชุดเดียวกับไอคอนคน สถานะจึงยังอ่านออกตอนมีรูป */
@@ -2099,6 +2164,7 @@ const PERSON_RING: Record<ApplicationStatus, string> = {
   training: "ring-st-live-ink/45",
   working: "ring-st-live-ink/45",
   cancelled: "ring-alert/50",
+  reserve: "ring-st-sky-ink/45",
 };
 
 /**

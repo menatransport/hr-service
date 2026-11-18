@@ -26,6 +26,8 @@ const TONE: Record<ApplicationStatus, string> = {
   interview_scheduled: "chip-wait",
   interview_passed: "chip-live",
   cancelled: "chip-alert",
+  /* สำรอง = พักไว้รออัตรา — ฟ้า (Bew) */
+  reserve: "chip-sky",
   /* กำลังฝึก = ป้ายพื้นทึบตัวเดียวของชุด — เป็นสถานะที่ต้องหาเจอก่อนเพื่อนในตาราง */
   training: "chip-on",
   /* ปฏิบัติงาน = ส่งต่อให้ทะเบียน พจส. แล้ว ใบสมัครจบหน้าที่ — เทาแบบปิดงาน ไม่แย่งสายตาจากคนที่กำลังฝึก */
