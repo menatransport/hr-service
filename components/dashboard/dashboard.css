@@ -8,21 +8,32 @@
  */
 .dash {
   color-scheme: light;
-  --dash-page: #f4f4f1;
-  --dash-surface: #fcfcfb;
+  --dash-page: #f4f6f7;
+  --dash-surface: #ffffff;
   --dash-raise: #ffffff;
-  --dash-ink: #0b0b0b;
-  --dash-ink-2: #52514e;
-  --dash-mut: #898781;
-  --dash-grid: #e1e0d9;
-  --dash-axis: #c3c2b7;
-  --dash-ring: rgba(11, 11, 11, 0.1);
-  --dash-hover: rgba(11, 11, 11, 0.04);
-  --dash-up: #006300;
+  /* พื้นรอง: หัวตาราง แถวกลุ่ม แถบเปรียบเทียบ */
+  --dash-sunken: #f7f9fa;
+  --dash-ink: #101828;
+  --dash-ink-2: #475467;
+  --dash-mut: #8a94a6;
+  --dash-grid: #eaecf0;
+  --dash-axis: #d0d5dd;
+  --dash-ring: rgba(16, 24, 40, 0.08);
+  --dash-hover: rgba(16, 24, 40, 0.035);
+  --dash-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.04);
+  /* สีหลักของระบบ (teal ของ hr-service) — ใช้กับสถานะเลือก/ตัวเลขเด่นเท่านั้น ไม่ใช่สีกราฟ */
+  --dash-accent: #0f766e;
+  --dash-up: #067647;
   --dash-down: #d03b3b;
   --dash-neg: #e34948;
+  /* สถานะเทียบเป้า: เต็ม / ใกล้ / ขาดมาก */
+  --dash-good: #067647;
+  --dash-warn: #b54708;
+  --dash-bad: #c01048;
   /* จุดกลางของสเกลสองขั้ว (เทา ไม่มีสี = “ไม่เปลี่ยน”) */
-  --dash-mid: #ebeae6;
+  --dash-mid: #eef0f3;
+  /* แถบตัวกรอง — พื้นกรมท่าเข้ม ตัดกับการ์ดขาว ให้เห็นทันทีว่ากำลังกรองอะไร */
+  --dash-filter-bg: #1e2a44;
 
   --s1: #2a78d6;
   --s2: #eb6834;
@@ -36,20 +47,27 @@
 
 [data-theme="hrs-dark"] .dash {
   color-scheme: dark;
-  --dash-page: #0d0d0d;
-  --dash-surface: #1a1a19;
-  --dash-raise: #222220;
-  --dash-ink: #ffffff;
-  --dash-ink-2: #c3c2b7;
-  --dash-mut: #898781;
-  --dash-grid: #2c2c2a;
-  --dash-axis: #383835;
-  --dash-ring: rgba(255, 255, 255, 0.1);
-  --dash-hover: rgba(255, 255, 255, 0.05);
+  --dash-page: #0c0e10;
+  --dash-surface: #16191c;
+  --dash-raise: #1d2125;
+  --dash-sunken: #1b1f22;
+  --dash-ink: #f5f7f9;
+  --dash-ink-2: #c1c8d1;
+  --dash-mut: #85909c;
+  --dash-grid: #262b30;
+  --dash-axis: #353b42;
+  --dash-ring: rgba(255, 255, 255, 0.08);
+  --dash-hover: rgba(255, 255, 255, 0.045);
+  --dash-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --dash-accent: #2dd4bf;
+  --dash-good: #3ccb7f;
+  --dash-warn: #f5a524;
+  --dash-bad: #f2638a;
   --dash-up: #0ca30c;
   --dash-down: #e66767;
   --dash-neg: #e66767;
-  --dash-mid: #383835;
+  --dash-mid: #2b3036;
+  --dash-filter-bg: #24324f;
 
   --s1: #3987e5;
   --s2: #d95926;

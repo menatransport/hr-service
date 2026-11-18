@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Select } from "radix-ui";
-import { ArrowDownRight, ArrowUpRight, BarChart3, Check, ChevronDown, Minus, Table2 } from "lucide-react";
+import { Popover, Select } from "radix-ui";
+import { ArrowDownRight, ArrowUpRight, BarChart3, Check, ChevronDown, Minus, Search, Table2 } from "lucide-react";
 
 /**
  * ชิ้นประกอบหน้าแดชบอร์ด (แนว shadcn/ui · สีจาก `dashboard.css` ไม่ใช่ธีมระบบ)
@@ -37,17 +37,17 @@ export function DashCard({
   return (
     <section
       aria-label={title}
-      className={`flex min-w-0 flex-col rounded-[14px] border border-(--dash-ring) bg-(--dash-surface) ${className}`}
+      className={`flex min-w-0 flex-col rounded-2xl border border-(--dash-ring) bg-(--dash-surface) shadow-(--dash-shadow) ${className}`}
     >
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pt-4 pb-3">
         <div className="min-w-0">
-          <h3 className="text-14 font-semibold text-(--dash-ink)">{title}</h3>
-          {sub ? <p className="mt-0.5 text-12 text-(--dash-mut)">{sub}</p> : null}
+          <h3 className="text-15 font-semibold tracking-tight text-(--dash-ink)">{title}</h3>
+          {sub ? <p className="mt-1 text-12 leading-relaxed text-(--dash-mut)">{sub}</p> : null}
         </div>
         <div className="flex items-center gap-3">
           {action}
           {table ? (
-            <div role="group" aria-label="มุมมอง" className="flex rounded-lg border border-(--dash-ring) p-0.5">
+            <div role="group" aria-label="มุมมอง" className="flex rounded-lg bg-(--dash-sunken) p-0.5 ring-1 ring-(--dash-ring) ring-inset">
               {[
                 { on: !asTable, icon: BarChart3, label: "กราฟ", set: false },
                 { on: asTable, icon: Table2, label: "ตาราง", set: true },
@@ -59,7 +59,7 @@ export function DashCard({
                   title={label}
                   onClick={() => setAsTable(set)}
                   className={`grid size-7 cursor-pointer place-items-center rounded-md transition-colors ${
-                    on ? "bg-(--dash-hover) text-(--dash-ink)" : "text-(--dash-mut) hover:text-(--dash-ink)"
+                    on ? "bg-(--dash-surface) text-(--dash-ink) shadow-(--dash-shadow)" : "text-(--dash-mut) hover:text-(--dash-ink)"
                   }`}
                 >
                   <Icon size={15} strokeWidth={1.8} aria-hidden />
@@ -77,14 +77,14 @@ export function DashCard({
 
 function DataTable({ columns, rows }: TableView) {
   return (
-    <div className="max-h-96 overflow-auto rounded-lg border border-(--dash-grid)">
+    <div className="max-h-96 overflow-auto rounded-xl border border-(--dash-grid)">
       <table className="w-full border-collapse text-12-5">
         <thead>
           <tr>
             {columns.map((c) => (
               <th
                 key={c.label}
-                className={`sticky top-0 border-b border-(--dash-grid) bg-(--dash-surface) px-3 py-2 font-medium whitespace-nowrap text-(--dash-mut) ${
+                className={`sticky top-0 border-b border-(--dash-grid) bg-(--dash-sunken) px-3 py-2 text-12 font-medium whitespace-nowrap text-(--dash-ink-2) ${
                   c.num ? "text-right" : "text-left"
                 }`}
               >
@@ -95,11 +95,11 @@ function DataTable({ columns, rows }: TableView) {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-b border-(--dash-grid) last:border-0">
+            <tr key={i} className="border-b border-(--dash-grid) transition-colors last:border-0 hover:bg-(--dash-hover)">
               {r.map((v, j) => (
                 <td
                   key={j}
-                  className={`px-3 py-1.5 ${columns[j]?.num ? "text-right tabular-nums" : ""} text-(--dash-ink-2)`}
+                  className={`px-3 py-2 ${columns[j]?.num ? "text-right tabular-nums" : ""} text-(--dash-ink-2)`}
                 >
                   {typeof v === "number" ? v.toLocaleString("th-TH") : v}
                 </td>
@@ -123,6 +123,7 @@ export function StatTile({
   note,
   delta,
   swatch,
+  hero = false,
 }: {
   label: string;
   value: number;
@@ -130,18 +131,26 @@ export function StatTile({
   note?: React.ReactNode;
   delta?: { value: number; label: string };
   swatch?: string;
+  /** ตัวเลขหลักของหน้า — พื้นอ่อนสีหลัก */
+  hero?: boolean;
 }) {
   const d = delta?.value ?? 0;
   const DeltaIcon = d > 0 ? ArrowUpRight : d < 0 ? ArrowDownRight : Minus;
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-[14px] border border-(--dash-ring) bg-(--dash-surface) px-5 py-4">
-      <p className="flex items-center gap-2 text-12-5 text-(--dash-ink-2)">
-        {swatch ? <span aria-hidden className="size-2.5 rounded-[3px]" style={{ background: swatch }} /> : null}
+    <div
+      className={`flex min-w-0 flex-col gap-2 rounded-2xl border px-5 py-4 shadow-(--dash-shadow) ${
+        hero
+          ? "border-[color-mix(in_oklab,var(--dash-accent),transparent_70%)] bg-[color-mix(in_oklab,var(--dash-accent),var(--dash-surface)_93%)]"
+          : "border-(--dash-ring) bg-(--dash-surface)"
+      }`}
+    >
+      <p className={`flex items-center gap-2 text-12-5 ${hero ? "font-medium text-(--dash-accent)" : "text-(--dash-ink-2)"}`}>
+        {swatch ? <span aria-hidden className="size-2 rounded-full" style={{ background: swatch }} /> : null}
         {label}
       </p>
       <p className="flex items-baseline gap-1.5">
-        <span className="text-30 leading-none font-semibold tracking-tight text-(--dash-ink)">
+        <span className="text-30 leading-none font-semibold tracking-tight text-(--dash-ink) tabular-nums">
           {value.toLocaleString("th-TH")}
         </span>
         {unit ? <span className="text-13 text-(--dash-mut)">{unit}</span> : null}
@@ -219,6 +228,110 @@ export function DashSelect({
   );
 }
 
+/**
+ * ตัวกรองเลือกหลายค่า (checkbox) สำหรับแถบกรองพื้นเข้ม `.dash-filterbar`
+ * · ไม่เลือกเลย = ทั้งหมด · ปุ่ม: ยังไม่เลือก = โปร่งบนพื้นเข้ม · เลือกแล้ว = ขาวทึบ + จำนวนที่เลือก
+ * · รายการเกิน 8 ค่ามีช่องค้นหา
+ */
+export function DashMultiFilter({
+  label,
+  allLabel,
+  values,
+  options,
+  onChange,
+}: {
+  label: string;
+  allLabel: string;
+  values: readonly string[];
+  options: { value: string; label: string; hint?: string }[];
+  onChange: (v: string[]) => void;
+}) {
+  const [q, setQ] = useState("");
+  const on = values.length > 0;
+  const picked = options.filter((o) => values.includes(o.value));
+  const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q.trim().toLowerCase())) : options;
+  const toggle = (v: string) => onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
+  const summary = !on ? allLabel : picked.length === 1 ? picked[0].label : `${picked[0]?.label ?? ""} +${picked.length - 1}`;
+
+  return (
+    <Popover.Root onOpenChange={(open) => !open && setQ("")}>
+      <Popover.Trigger
+        aria-label={label}
+        className={`inline-flex h-9 max-w-72 cursor-pointer items-center gap-2 rounded-full pr-3 pl-3.5 text-13 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-white/60 ${
+          on ? "bg-white text-(--dash-filter-bg) shadow-sm" : "bg-white/10 text-white ring-1 ring-white/20 ring-inset hover:bg-white/15"
+        }`}
+      >
+        <span className={on ? "text-(--dash-mut)" : "text-white/65"}>{label}</span>
+        <span className="truncate font-semibold">{summary}</span>
+        {on && picked.length > 1 ? (
+          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-(--dash-accent) px-1.5 text-11 font-semibold text-white tabular-nums">{picked.length}</span>
+        ) : null}
+        <ChevronDown size={15} className={on ? "text-(--dash-mut)" : "text-white/70"} aria-hidden />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={8}
+          className="dash z-60 flex max-h-(--radix-popover-content-available-height) w-72 flex-col overflow-hidden rounded-xl border border-(--dash-ring) bg-(--dash-raise) shadow-[0_18px_44px_-18px_rgba(0,0,0,0.35)]"
+        >
+          {options.length > 8 ? (
+            <div className="border-b border-(--dash-grid) p-2">
+              <label className="flex h-8 items-center gap-2 rounded-lg bg-(--dash-sunken) px-2.5 ring-1 ring-(--dash-ring) ring-inset focus-within:ring-(--dash-accent)">
+                <Search size={14} className="text-(--dash-mut)" aria-hidden />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={`ค้นหา${label}`}
+                  aria-label={`ค้นหา${label}`}
+                  className="min-w-0 flex-1 bg-transparent text-13 text-(--dash-ink) outline-none placeholder:text-(--dash-mut)"
+                />
+              </label>
+            </div>
+          ) : null}
+          <div role="group" aria-label={label} className="min-h-0 flex-1 overflow-auto p-1">
+            {shown.length === 0 ? <p className="px-3 py-4 text-center text-12 text-(--dash-mut)">ไม่พบ “{q}”</p> : null}
+            {shown.map((o) => {
+              const checked = values.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  onClick={() => toggle(o.value)}
+                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-13 text-(--dash-ink) hover:bg-(--dash-hover)"
+                >
+                  <span
+                    aria-hidden
+                    className={`grid size-4 flex-none place-items-center rounded-[5px] border transition-colors ${
+                      checked ? "border-(--dash-accent) bg-(--dash-accent) text-white" : "border-(--dash-axis) bg-(--dash-surface)"
+                    }`}
+                  >
+                    {checked ? <Check size={12} strokeWidth={3} /> : null}
+                  </span>
+                  <span className={`min-w-0 flex-1 truncate ${checked ? "font-semibold" : ""}`}>{o.label}</span>
+                  {o.hint ? <span className="text-12 text-(--dash-mut) tabular-nums">{o.hint}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between border-t border-(--dash-grid) px-3 py-2 text-12">
+            <span className="text-(--dash-mut)">{on ? `เลือก ${picked.length} จาก ${options.length}` : allLabel}</span>
+            <button
+              type="button"
+              disabled={!on}
+              onClick={() => onChange([])}
+              className="cursor-pointer rounded-md px-2 py-1 font-medium text-(--dash-accent) hover:bg-(--dash-hover) disabled:cursor-default disabled:text-(--dash-axis) disabled:hover:bg-transparent"
+            >
+              ล้าง
+            </button>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 /** แท็บของหน้า — หนึ่งแท็บ = หนึ่งหมวดการวิเคราะห์ (`DASH_SECTIONS` ใน dashboard-view) */
 export function DashTabs<T extends string>({
   tabs,
@@ -230,7 +343,7 @@ export function DashTabs<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div role="tablist" className="flex gap-1">
+    <div role="tablist" className="inline-flex gap-1 rounded-xl bg-(--dash-surface) p-1 shadow-(--dash-shadow) ring-1 ring-(--dash-ring)">
       {tabs.map((t) => {
         const on = t.id === value;
         return (
@@ -240,10 +353,10 @@ export function DashTabs<T extends string>({
             role="tab"
             aria-selected={on}
             onClick={() => onChange(t.id)}
-            className={`-mb-px cursor-pointer border-b-2 px-3 pt-1 pb-2.5 text-13 transition-colors ${
+            className={`h-8 cursor-pointer rounded-lg px-4 text-13 transition-colors ${
               on
-                ? "border-(--dash-ink) font-semibold text-(--dash-ink)"
-                : "border-transparent text-(--dash-mut) hover:text-(--dash-ink)"
+                ? "bg-(--dash-accent) font-semibold text-white"
+                : "text-(--dash-ink-2) hover:bg-(--dash-hover) hover:text-(--dash-ink)"
             }`}
           >
             {t.label}
@@ -267,7 +380,7 @@ export function DashToggle<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-lg border border-(--dash-ring) p-0.5">
+    <div role="radiogroup" aria-label={label} className="flex rounded-lg bg-(--dash-sunken) p-0.5 ring-1 ring-(--dash-ring) ring-inset">
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -278,7 +391,7 @@ export function DashToggle<T extends string>({
             aria-checked={on}
             onClick={() => onChange(o.value)}
             className={`h-7 cursor-pointer rounded-md px-2.5 text-12 whitespace-nowrap transition-colors ${
-              on ? "bg-(--dash-hover) font-semibold text-(--dash-ink)" : "text-(--dash-mut) hover:text-(--dash-ink)"
+              on ? "bg-(--dash-surface) font-semibold text-(--dash-ink) shadow-(--dash-shadow)" : "text-(--dash-mut) hover:text-(--dash-ink)"
             }`}
           >
             {o.label}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LayoutDashboard } from "lucide-react";
 
 import "@/components/dashboard/dashboard.css";
 import { DashTabs } from "@/components/dashboard/card";
@@ -17,7 +18,10 @@ import { ManpowerDailySection } from "./manpower-daily-section";
  * · Manpower = รายงาน Manpower พจส. รายวัน/สัปดาห์/เดือน แทนชีต “[HR] Manpower Daily Report” (15 พ.ย. 2569)
  */
 
-const DASH_SECTIONS = [{ id: "manpower", label: "Manpower" }] as const;
+const DASH_SECTIONS = [
+  { id: "manpower", label: "Manpower" },
+  { id: "turnover", label: "TurnOver" },
+] as const;
 type SectionId = (typeof DASH_SECTIONS)[number]["id"];
 
 export function DashboardView({ manpower, canEditTargets }: { manpower: MpBoard; canEditTargets: boolean }) {
@@ -30,13 +34,30 @@ export function DashboardView({ manpower, canEditTargets }: { manpower: MpBoard;
         <p className="mt-0.5 text-13 text-(--dash-mut)">กำลังคน พจส. เทียบเป้า · ท่อสรรหา · แนวโน้มรายวัน / สัปดาห์ / เดือน</p>
       </header>
 
-      <div className="mb-5 border-b border-(--dash-grid)">
-        <div className="-mb-px">
-          <DashTabs tabs={[...DASH_SECTIONS]} value={section} onChange={setSection} />
-        </div>
+      <div className="mb-5">
+        <DashTabs tabs={[...DASH_SECTIONS]} value={section} onChange={setSection} />
       </div>
 
       {section === "manpower" ? <ManpowerDailySection board={manpower} canEditTargets={canEditTargets} /> : null}
+      {section === "turnover" ? <ComingSoon title="TurnOver" note="หน้าวิเคราะห์การลาออก — กำลังออกแบบ" /> : null}
     </div>
+  );
+}
+
+/** หมวดที่ยังไม่ได้ทำ — กรอบว่างไว้ก่อน */
+function ComingSoon({ title, note }: { title: string; note: string }) {
+  return (
+    <section
+      aria-label={title}
+      className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-(--dash-axis) bg-(--dash-surface) px-6 py-12 text-center"
+    >
+      <div className="flex flex-col items-center gap-3">
+        <span className="grid size-12 place-items-center rounded-xl bg-[color-mix(in_oklab,var(--dash-accent),var(--dash-surface)_90%)] text-(--dash-accent)">
+          <LayoutDashboard size={22} aria-hidden />
+        </span>
+        <h2 className="text-16 font-semibold text-(--dash-ink)">{title}</h2>
+        <p className="text-13 text-(--dash-mut)">{note}</p>
+      </div>
+    </section>
   );
 }
