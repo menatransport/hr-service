@@ -123,7 +123,7 @@ export const API_CHANGELOG: { date: string; version: string; changes: string[] }
     date: "2026-11-04",
     version: "4.4.0",
     changes: [
-      "`PATCH /api/recruitment/requisitions/{id}` รับ `details` — แก้คำขอ + ครูฝึก/รถ ทั้งก้อนในครั้งเดียว (ช่องเดียวกับตอนขออัตรา ยกเว้นวันที่แจ้งซึ่งแก้ไม่ได้) · ใบที่ยกเลิกแล้วแก้ไม่ได้",
+      "`PATCH /api/recruitment/requisitions/{id}` รับ `details` — แก้คำขอ + ครูฝึก/รถ ทั้งก้อนในครั้งเดียว (ช่องเดียวกับตอนขออัตรา รวมวันที่แจ้ง · เลขที่คำขอคงเดิม) · ใบที่ยกเลิกแล้วแก้ไม่ได้",
       "เพิ่ม `GET /api/recruitment/requisitions/options` — ตัวเลือกฟอร์มขออัตรา (พจส. · รถ · แพล้นท์ · ผู้สมัคร) โหลดเมื่อกดเพิ่มอัตรา",
       "เพิ่ม `GET /api/recruitment/pipeline` —รอสรรหา · รอฝึกงาน · ฝึกงาน · รอรับรถ (รอรับรถ = ฝึกครบ 10 วันเฉพาะวันฝึกงาน + ปฐมนิเทศ + ST ผ่าน)",
       "`PUT /api/drivers/{drivercode}/status` รับ `status: \"transferred\"` (ย้ายไปรถร่วม · วันที่ + หมายเหตุ) — เก็บเป็นพ้นสภาพ · `resignation.kind` = `resign` | `transfer`",
@@ -634,7 +634,7 @@ export const API_GROUPS: ApiGroup[] = [
           { name: "status", in: "body", type: '"cancelled" | "open"', desc: "ยกเลิก / เปิดรับอีกครั้ง" },
           { name: "cancelReason", in: "body", type: "string", desc: "บังคับเมื่อยกเลิก" },
           { name: "drivercode / note", in: "body", type: "string", desc: "รหัส พจส. ที่ได้ / หมายเหตุ" },
-          { name: "details", in: "body", type: "RequisitionDetails", desc: "แก้คำขอ + ครูฝึก/รถ ทั้งก้อน (ช่องเดียวกับตอนขออัตรา ยกเว้นวันที่แจ้ง) · ใบที่ยกเลิกแล้วแก้ไม่ได้" },
+          { name: "details", in: "body", type: "RequisitionDetails", desc: "แก้คำขอ + ครูฝึก/รถ ทั้งก้อน (ช่องเดียวกับตอนขออัตรา รวมวันที่แจ้ง) · ใบที่ยกเลิกแล้วแก้ไม่ได้" },
         ],
         response: "Requisition",
         errors: [

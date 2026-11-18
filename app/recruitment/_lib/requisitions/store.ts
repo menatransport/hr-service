@@ -620,7 +620,7 @@ const same = (a: unknown, b: unknown) => (typeof a === "string" ? a.trim() : "")
 /**
  * ฟอร์มขออัตราโหมดแก้ไข — ช่องเดียวกับตอนสร้าง + ครูฝึก/รถ (งานของ KA) บันทึกครั้งเดียว
  * · ค่าที่ส่งมาเท่าเดิมเก็บตามเดิมโดยไม่ตรวจซ้ำ — ใบนำเข้าจากไฟล์ที่ลูกค้า/ตำแหน่งไม่อยู่ในรายการ
- *   หรือครูฝึกที่ไม่มีรหัส ยังแก้ช่องอื่นได้ · **วันที่แจ้งแก้ไม่ได้** (ล็อก · Bew 4 พ.ย. 2569) เลขที่คำขอจึงคงเดิม
+ *   หรือครูฝึกที่ไม่มีรหัส ยังแก้ช่องอื่นได้ · วันที่แจ้งแก้ได้ (Bew 18 พ.ย. 2569 ปลดล็อก) แต่เลขที่คำขอคงเดิม
  */
 async function updateDetails(
   col: Collection<RequisitionDoc>,
@@ -689,6 +689,10 @@ async function updateDetails(
       : null;
 
   const set: Partial<RequisitionDoc> = {
+    requestedOn:
+      input.requestedOn === undefined || same(input.requestedOn, current.requestedOn)
+        ? current.requestedOn
+        : ymd(input.requestedOn, "วันที่แจ้งสรรหา"),
     branch: branchName,
     position,
     positionOther,
@@ -702,6 +706,7 @@ async function updateDetails(
   };
 
   const changed = [
+    set.requestedOn !== current.requestedOn && "วันที่แจ้ง",
     set.branch !== (current.branch ?? "") && "สาขา",
     (set.position !== (current.position ?? "") || set.positionOther !== (current.positionOther ?? "")) && "ตำแหน่ง",
     (set.customer !== (current.customer ?? "") || set.customerOther !== (current.customerOther ?? "")) && "ลูกค้า",

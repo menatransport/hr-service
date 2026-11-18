@@ -42,6 +42,7 @@ import {
   type Requisition,
 } from "@/app/recruitment/_lib/requisitions/types";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
+import { driverOptionsForSite } from "@/app/recruitment/_components/admin/driver-groups";
 import {
   RegistryPlantFields,
   isSameCustomer,
@@ -175,6 +176,13 @@ export function RequisitionForm({
     else if (!list.includes(customer)) setCustomer("");
   }
 
+  /** ช่องแทนใคร = ยังทำงาน + พ้นสภาพ · ครูฝึกใช้ `options.drivers` (ยังทำงานอยู่) อย่างเดียว
+   *  · `?? []` = backend (HR_API_URL) ที่ยังไม่ sync ไม่ส่ง `resignedDrivers` มา */
+  const replaceDrivers = useMemo(
+    () => [...options.drivers, ...(options.resignedDrivers ?? [])],
+    [options.drivers, options.resignedDrivers],
+  );
+
   function fillFromVehicle(v: VehicleOption | undefined) {
     const next = {
       branch: inBranches(v?.branch),
@@ -209,7 +217,7 @@ export function RequisitionForm({
    */
   function pickReplace(code: string) {
     setReplaceDrivercode(code);
-    const driver = options.drivers.find((d) => d.value === code);
+    const driver = replaceDrivers.find((d) => d.value === code);
     const site = inBranches(driver?.branch);
     if (site && !branch) pickBranch(site);
     const bound = driver?.vehicle ?? "";
@@ -239,6 +247,13 @@ export function RequisitionForm({
         label: `${d.value} · ${d.label.split(" — ")[0]}`,
       })),
     [options.drivers],
+  );
+  /** แท็บสาขาที่เปิดอยู่ (ทุกสาขา = ใช้สาขาที่เลือกในฟอร์ม) */
+  const replaceScope = (branches.length < BRANCHES.length || !branch ? branches : [branch]).join("|");
+  const replacePick = useMemo(
+    () =>
+      driverOptionsForSite(replaceDrivers, replaceScope.split("|")),
+    [replaceDrivers, replaceScope],
   );
 
   /** ช่องเบอร์รถ: แค่ `เบอร์ · ทะเบียน` — ยี่ห้อ/แพล้นท์รกตา ส่วนแพล้นท์ระบบเติมให้อยู่แล้ว */
@@ -290,7 +305,7 @@ export function RequisitionForm({
         .filter(Boolean)
         .join(" · "),
       hireType === "replace"
-        ? `แทน ${nameOf(options.drivers, replaceDrivercode)}`
+        ? `แทน ${nameOf(replaceDrivers, replaceDrivercode)}`
         : `อัตราใหม่ ${count} อัตรา`,
     ];
     const rows = slots.map((s, i) =>
@@ -441,7 +456,7 @@ export function RequisitionForm({
             placeholder="ค้นรหัสหรือชื่อ พจส…"
             value={replaceDrivercode}
             onChange={pickReplace}
-            options={replaceOptions}
+            groups={replacePick}
             searchable
             searchPlaceholder="ค้นรหัสหรือชื่อ…"
           />

@@ -39,6 +39,8 @@ export interface DriverOption extends PickOption {
   customer?: string;
   plant?: string;
   position?: string;
+  /** พ้นสภาพแล้ว — มาเฉพาะใน `resignedDrivers` (ช่อง พจส. ที่จะแทน) */
+  resigned?: true;
 }
 
 /**
@@ -71,6 +73,8 @@ export interface VehicleOption extends PickOption {
 export interface RequisitionOptions {
   /** พจส. ที่ยังทำงานอยู่ — ใช้ทั้งช่องครูฝึกและช่อง พจส. ที่จะแทน */
   drivers: DriverOption[];
+  /** พจส. ที่พ้นสภาพแล้ว — ใช้เฉพาะช่อง พจส. ที่จะแทน (Bew 18 พ.ย. 2569) ไม่ปนในช่องครูฝึก */
+  resignedDrivers?: DriverOption[];
   vehicles: VehicleOption[];
   plants: PickOption[];
   /** ใบสมัครที่ผูกกับอัตราได้ — ทุกสถานะยกเว้นยกเลิก (ดู `LINKABLE_STATUSES`) */
@@ -90,6 +94,7 @@ export interface RequisitionOptions {
 
 const EMPTY: RequisitionOptions = {
   drivers: [],
+  resignedDrivers: [],
   vehicles: [],
   plants: [],
   candidates: [],
@@ -108,7 +113,8 @@ const EMPTY: RequisitionOptions = {
 const THAI_ORDER = new Intl.Collator("th", { numeric: true });
 const thai = (a: PickOption, b: PickOption) => THAI_ORDER.compare(a.label, b.label);
 
-export async function loadDrivers(): Promise<DriverOption[]> {
+/** `resigned` = เอาเฉพาะคนพ้นสภาพ (`active` ไม่ใช่ true หรือ HR กดพ้นสภาพ) · ไม่ส่ง = คนที่ยังทำงานอยู่ */
+export async function loadDrivers({ resigned = false }: { resigned?: boolean } = {}): Promise<DriverOption[]> {
   const docs = await readDrivers<{
     drivercode?: string;
     driverName?: string;
@@ -118,10 +124,12 @@ export async function loadDrivers(): Promise<DriverOption[]> {
     plant?: string;
     position?: string;
     active?: boolean;
-  }>(["drivercode", "driverName", "branch", "vehicleCode", "customer", "plant", "position", "active"]);
+    statusOverride?: string;
+  }>(["drivercode", "driverName", "branch", "vehicleCode", "customer", "plant", "position", "active", "statusOverride"]);
 
+  const gone = (d: { active?: boolean; statusOverride?: string }) => d.active !== true || d.statusOverride === "resigned";
   return docs
-    .filter((d) => d.active === true && (d.drivercode ?? "").trim())
+    .filter((d) => gone(d) === resigned && (d.drivercode ?? "").trim())
     .map((d) => {
       const code = (d.drivercode ?? "").trim();
       const name = (d.driverName ?? "").trim() || code;
@@ -145,6 +153,7 @@ export async function loadDrivers(): Promise<DriverOption[]> {
         ...(vehicle ? { vehicle } : {}),
         ...(site ? { branch: site } : {}),
         ...extra,
+        ...(resigned ? { resigned: true as const } : {}),
       };
     })
     .sort(thai);
@@ -306,8 +315,9 @@ export async function loadRegistryPlants(): Promise<RegistryPlant[]> {
  * โหลดหน้าฟรี ๆ · ชุดที่พังไม่ลากชุดที่เหลือลงไปด้วย (`allSettled`)
  */
 export async function getRequisitionOptions(): Promise<RequisitionOptions> {
-  const [drivers, vehicles, candidates, repairs, branchCustomers, registryPlants] = await Promise.allSettled([
+  const [drivers, resignedDrivers, vehicles, candidates, repairs, branchCustomers, registryPlants] = await Promise.allSettled([
     loadDrivers(),
+    loadDrivers({ resigned: true }),
     loadVehicles(),
     loadCandidates(),
     getRepairStatuses(),
@@ -324,6 +334,8 @@ export async function getRequisitionOptions(): Promise<RequisitionOptions> {
   return {
     ...EMPTY,
     drivers: drivers.status === "fulfilled" ? drivers.value : [],
+    /* อ่านไม่ได้ = ช่องแทนใครมีแค่คนที่ยังทำงานอยู่ ไม่ต้องขึ้นแถบเตือน */
+    resignedDrivers: resignedDrivers.status === "fulfilled" ? resignedDrivers.value : [],
     vehicles: vehicles.status === "fulfilled" ? vehicles.value.vehicles : [],
     plants: vehicles.status === "fulfilled" ? vehicles.value.plants : [],
     candidates: candidates.status === "fulfilled" ? candidates.value : [],

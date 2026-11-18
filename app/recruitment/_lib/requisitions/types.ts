@@ -307,8 +307,10 @@ export interface RequisitionPatch {
   details?: RequisitionDetails;
 }
 
-/** ไม่มีวันที่แจ้ง — แก้ไม่ได้หลังขอแล้ว (ล็อก) */
+/** วันที่แจ้งแก้ได้ (Bew 18 พ.ย. 2569 ปลดล็อก) — เลขที่คำขอคงเดิม */
 export interface RequisitionDetails {
+  /** `YYYY-MM-DD` */
+  requestedOn: string;
   branch: string;
   position: string;
   positionOther: string;

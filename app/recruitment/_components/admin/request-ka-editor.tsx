@@ -6,7 +6,6 @@ import { Check, Loader2, Lock, TriangleAlert } from "lucide-react";
 import { DateField, SelectField, TextField, TextareaField, type SelectOption } from "@/components/ui/field";
 import { requestJson } from "@/lib/http";
 import { toastSuccess } from "@/lib/swal";
-import { thaiDate } from "@/app/recruitment/_lib/form";
 import type { RequisitionOptions } from "@/app/recruitment/_lib/requisitions/options";
 import {
   SECTION_SPECS,
@@ -27,6 +26,7 @@ import {
   type RequisitionDetails,
 } from "@/app/recruitment/_lib/requisitions/types";
 import { RepairBadge } from "@/app/recruitment/_components/admin/repair-badge";
+import { driverOptionsForSite } from "@/app/recruitment/_components/admin/driver-groups";
 import {
   RegistryPlantFields,
   pickedOrTyped,
@@ -38,7 +38,7 @@ import {
  * (Bew 4 พ.ย. 2569: ไม่เปิดโมดัลซ้อน ไม่ใช้โครงฟอร์มเพิ่มอัตรา)
  * · คำขอ + ครูฝึก/รถ → `PATCH …/[id]` `{ details }` · มีผู้ฝึกงานแล้ว: Co-Driver (ka) + ส่งมอบรถ (handover)
  *   → `PATCH …/[id]/onboarding` ทีละส่วนเฉพาะส่วนที่เปลี่ยน (ส่งมอบรถย้ายมารวมการ์ดนี้ · Bew 4 พ.ย. 2569)
- * · วันที่แจ้ง + ผู้แจ้ง แก้ไม่ได้ (ล็อก)
+ * · วันที่แจ้งแก้ได้ (Bew 18 พ.ย. 2569) · ผู้แจ้งแก้ไม่ได้
  */
 
 const editable = (section: OnboardingSection) => SECTION_SPECS[section].fields.filter((f) => !f.byUser && !f.readOnly);
@@ -75,6 +75,7 @@ export function RequestKaEditor({
         options.registryPlants.map((r) => r.position),
       );
 
+  const [requestedOn, setRequestedOn] = useState(record.requestedOn);
   const [hireType, setHireType] = useState<string>(record.hireType);
   const [replace, setReplace] = useState(record.replace?.drivercode ?? "");
   const [branch, setBranch] = useState(record.branch);
@@ -104,6 +105,16 @@ export function RequestKaEditor({
         list.push({ value: p.drivercode, label: `${p.drivercode} · ${p.name}` });
     return list;
   }, [options.drivers, record.replace, record.trainer]);
+  /** รายชื่อเฉพาะแท็บสาขาของคำขอนี้ รวมคนพ้นสภาพ (`driverOptionsForSite`) · คนที่เลือกอยู่โชว์เสมอ */
+  const replacePick = useMemo(
+    () =>
+      driverOptionsForSite(
+        [...options.drivers, ...(options.resignedDrivers ?? [])],
+        branch ? [branch] : BRANCHES,
+        people.find((o) => o.value === replace),
+      ),
+    [options.drivers, options.resignedDrivers, branch, people, replace],
+  );
 
   const vehicles = useMemo<SelectOption[]>(() => {
     const list = options.vehicles.map((v) => ({
@@ -165,6 +176,7 @@ export function RequestKaEditor({
           method: "PATCH",
           body: {
             details: {
+              requestedOn,
               branch,
               position: mixer ? position : OTHER,
               positionOther: mixer ? positionOther.trim() : pickedOrTyped(position, positionOther),
@@ -208,9 +220,7 @@ export function RequestKaEditor({
   return (
     <div className="flex flex-col gap-3 px-4 py-3.5">
       <div className="grid gap-x-4 gap-y-3 sm:grid-cols-4">
-        <ReadOnly label="วันที่แจ้ง" lock>
-          {thaiDate(record.requestedOn)}
-        </ReadOnly>
+        <DateField id="rk-requested" label="วันที่แจ้ง" value={requestedOn} onChange={setRequestedOn} />
         <SelectField id="rk-hire" label="ประเภท" value={hireType} onChange={setHireType} options={hireTypes} />
         <SelectField
           id="rk-branch"
@@ -228,7 +238,7 @@ export function RequestKaEditor({
             label="พจส. ที่จะแทน"
             value={replace}
             onChange={setReplace}
-            options={people}
+            groups={replacePick}
             placeholder="ค้นรหัสหรือชื่อ…"
             searchable
             searchPlaceholder="ค้นรหัสหรือชื่อ…"
