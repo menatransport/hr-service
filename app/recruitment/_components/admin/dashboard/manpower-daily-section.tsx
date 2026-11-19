@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, MessageSquareText, RotateCcw, Settings2, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, MessageSquareText, RotateCcw, Settings2, SlidersHorizontal, UserRound } from "lucide-react";
 
 import { DashCard, DashMultiFilter } from "@/components/dashboard/card";
 import { XlsxExportButton } from "@/components/ui/xlsx-export-button";
@@ -383,6 +383,8 @@ function FillBadge({ actual, target, suffix = "" }: { actual: number; target: nu
 function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<typeof groupRows>; total: MpCounts; truck: number; totalLabel: string }) {
   const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(new Set());
   const [openCustomers, setOpenCustomers] = useState<ReadonlySet<string>>(new Set());
+  /* คอลัมน์ผู้รับผิดชอบ — ซ่อนไว้ก่อน กดปุ่มเพื่อแสดง */
+  const [showOwner, setShowOwner] = useState(false);
   const customerKeys = fleets.flatMap((f) => f.customers.filter((c) => c.plants.length > 1).map((c) => c.key));
   const allOpen = closedGroups.size === 0 && customerKeys.every((k) => openCustomers.has(k));
 
@@ -398,18 +400,32 @@ function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<t
       title="Manpower รายกลุ่มงาน · ลูกค้า · แพล้นท์"
       sub="กดแถวเพื่อเปิด/ปิด · เต็มเป้า = (ปฏิบัติงาน + ฝึกงาน) ÷ เป้าคน · อัตราว่าง = รอสรรหา + รอฝึกงาน · เป้ารถ = ตั้งเอง (ข้อมูลประกอบ)"
       action={
-        <button
-          type="button"
-          onClick={() => {
-            setClosedGroups(new Set());
-            setOpenCustomers(allOpen ? new Set() : new Set(customerKeys));
-          }}
-          title={allOpen ? "ปิดแพล้นท์ทั้งหมด" : "เปิดแพล้นท์ทั้งหมด"}
-          className="grid size-8 cursor-pointer place-items-center rounded-lg border border-(--dash-ring) bg-(--dash-surface) text-(--dash-ink-2) shadow-(--dash-shadow) hover:bg-(--dash-hover)"
-        >
-          {allOpen ? <ChevronsDownUp size={16} aria-hidden /> : <ChevronsUpDown size={16} aria-hidden />}
-          <span className="sr-only">{allOpen ? "ปิดทั้งหมด" : "เปิดทั้งหมด"}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={showOwner}
+            onClick={() => setShowOwner((v) => !v)}
+            title={showOwner ? "ซ่อนคอลัมน์ผู้รับผิดชอบ" : "แสดงคอลัมน์ผู้รับผิดชอบ"}
+            className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-12-5 font-medium shadow-(--dash-shadow) transition-colors ${
+              showOwner ? "border-(--dash-accent) bg-[color-mix(in_oklab,var(--dash-accent),transparent_88%)] text-(--dash-accent)" : "border-(--dash-ring) bg-(--dash-surface) text-(--dash-ink-2) hover:bg-(--dash-hover)"
+            }`}
+          >
+            <UserRound size={15} aria-hidden />
+            ผู้รับผิดชอบ
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setClosedGroups(new Set());
+              setOpenCustomers(allOpen ? new Set() : new Set(customerKeys));
+            }}
+            title={allOpen ? "ปิดแพล้นท์ทั้งหมด" : "เปิดแพล้นท์ทั้งหมด"}
+            className="grid size-8 cursor-pointer place-items-center rounded-lg border border-(--dash-ring) bg-(--dash-surface) text-(--dash-ink-2) shadow-(--dash-shadow) hover:bg-(--dash-hover)"
+          >
+            {allOpen ? <ChevronsDownUp size={16} aria-hidden /> : <ChevronsUpDown size={16} aria-hidden />}
+            <span className="sr-only">{allOpen ? "ปิดทั้งหมด" : "เปิดทั้งหมด"}</span>
+          </button>
+        </div>
       }
     >
       <div className="max-h-[680px] overflow-auto rounded-xl border border-(--dash-grid)">
@@ -419,9 +435,11 @@ function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<t
               <th rowSpan={2} className={`${HEAD} top-0 left-0 z-20 min-w-56 px-3 py-2 text-left align-bottom`}>
                 <Head th="กลุ่มงาน / ลูกค้า / แพล้นท์" en="Fleet / Customer / Plant" />
               </th>
-              <th rowSpan={2} className={`${HEAD} top-0 z-10 px-3 py-2 text-left align-bottom whitespace-nowrap`}>
-                <Head th="ผู้รับผิดชอบ" en="RC Owner" />
-              </th>
+              {showOwner ? (
+                <th rowSpan={2} className={`${HEAD} top-0 z-10 px-3 py-2 text-left align-bottom whitespace-nowrap`}>
+                  <Head th="ผู้รับผิดชอบ" en="RC Owner" />
+                </th>
+              ) : null}
               {GROUPS.map((g) => (
                 <th key={g.label} colSpan={g.cols.length} className={`${HEAD} ${SEP} top-0 z-10 h-7 px-3 text-center text-11-5 font-semibold tracking-wide text-(--dash-mut)`}>
                   {g.label}
@@ -439,7 +457,7 @@ function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<t
           <tbody>
             {fleets.length === 0 ? (
               <tr>
-                <td colSpan={COLUMNS.length + 2}>
+                <td colSpan={COLUMNS.length + (showOwner ? 2 : 1)}>
                   <Empty />
                 </td>
               </tr>
@@ -450,7 +468,7 @@ function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<t
                 <Fragment key={f.group}>
                   <tr className={`cursor-pointer border-t border-(--dash-grid) font-semibold ${FLEET_BG}`} onClick={() => setClosedGroups((s) => toggle(s, f.group))}>
                     <NameCell level={0} open={open} label={f.group} hint={`${f.customers.length} ลูกค้า`} />
-                    <td className="px-3" />
+                    {showOwner ? <td className="px-3" /> : null}
                     <Cells r={{ ...f.t, recruit: recruitOf(f.t) }} truck={f.targetTruck || null} />
                   </tr>
                   {open
@@ -464,14 +482,14 @@ function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<t
                               onClick={many ? () => setOpenCustomers((s) => toggle(s, c.key)) : undefined}
                             >
                               <NameCell level={1} open={many ? cOpen : null} label={c.customer} hint={many ? `${c.plants.length} แพล้นท์` : c.plants[0]?.plant !== c.customer ? c.plants[0]?.plant : ""} />
-                              <td className="px-3 whitespace-nowrap text-(--dash-ink-2)">{c.target?.rcOwner || DASH}</td>
+                              {showOwner ? <td className="px-3 whitespace-nowrap text-(--dash-ink-2)">{c.target?.rcOwner || DASH}</td> : null}
                               <Cells r={{ ...c.t, recruit: recruitOf(c.t) }} truck={c.target?.targetTruck ?? null} />
                             </tr>
                             {many && cOpen
                               ? c.plants.map((p) => (
                                   <tr key={p.key} className="border-t border-(--dash-grid)/70 bg-(--dash-sunken) text-(--dash-ink-2)">
                                     <NameCell level={2} open={null} label={p.plant} />
-                                    <td />
+                                    {showOwner ? <td /> : null}
                                     <Cells r={{ ...p, recruit: recruitOf(p) }} truck={null} />
                                   </tr>
                                 ))
@@ -488,7 +506,7 @@ function PlantTable({ fleets, total, truck, totalLabel }: { fleets: ReturnType<t
             <tfoot>
               <tr className="font-semibold">
                 <td className="sticky bottom-0 left-0 z-20 border-t border-(--dash-axis) bg-(--dash-sunken) px-3 py-2.5 text-(--dash-ink)">{totalLabel}</td>
-                <td className="sticky bottom-0 border-t border-(--dash-axis) bg-(--dash-sunken)" />
+                {showOwner ? <td className="sticky bottom-0 border-t border-(--dash-axis) bg-(--dash-sunken)" /> : null}
                 <Cells r={{ ...total, recruit: recruitOf(total) }} truck={truck || null} sticky />
               </tr>
             </tfoot>
