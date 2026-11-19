@@ -40,6 +40,7 @@ import {
  */
 
 interface RegistryDoc {
+  drivercode?: unknown;
   customer?: unknown;
   plant?: unknown;
   position?: unknown;
@@ -93,6 +94,22 @@ function fallbackGroup(customer: string, site: RecruitSite): MpGroup {
   return site === "latkrabang" ? "Mixer L" : "อื่น ๆ";
 }
 
+/** ลูกค้าที่ไม่นับใน Manpower (Bew 19 พ.ย. 2569 — Kpac ไม่มีงาน MS) */
+const HIDDEN_CUSTOMERS = /^kpac\s*ms$/i;
+/** รหัส MTM = รถร่วม — ย้ายไป/มาจากรถร่วมไม่ใช่การเข้าใหม่/ลาออก (ไม่นับใน Newhire/Resign) */
+const isPartnerCode = (code: string) => /^MTM/i.test(code);
+/** กลุ่มงานตามลูกค้า ชนะกลุ่มจากตำแหน่ง — MDL รถ 12W แต่เป็นงาน Cold Chain */
+const GROUP_OF_CUSTOMER: readonly [RegExp, MpGroup][] = [[/^mdl$/i, "Cold Chain"]];
+
+/** จัดลูกค้า/กลุ่มงานให้ลงแถวเดียวกัน — Mixer S ต้องเป็นลูกค้า `… MS` (`Cpac` → `Cpac MS` · `SCCO` → `Scco MS`) */
+function placeOf(group: MpGroup, customer: string): { group: MpGroup; customer: string } | null {
+  if (HIDDEN_CUSTOMERS.test(customer)) return null;
+  const byCustomer = GROUP_OF_CUSTOMER.find(([re]) => re.test(customer))?.[1];
+  if (byCustomer) return { group: byCustomer, customer };
+  if (group === "Mixer S" && customer && !/\sMS$/i.test(customer)) return { group, customer: `${customer} MS` };
+  return { group, customer };
+}
+
 /** ลูกค้าของคำขอในรูปเดียวกับทะเบียน — ตำแหน่ง MS ต่อ ` MS` (กติกาเดียวกับ `manpower.ts`) */
 function customerOf(r: OnboardingRecord): string {
   const base = customerLabel(r);
@@ -122,7 +139,10 @@ export async function getManpowerDaily(): Promise<MpBoard> {
     if (!names.has(k)) names.set(k, raw);
     return names.get(k)!;
   };
-  const rowOf = (group: MpGroup, site: RecruitSite, customer: string, plant: string): MpRow => {
+  const rowOf = (rawGroup: MpGroup, site: RecruitSite, rawCustomer: string, plant: string): MpRow | null => {
+    const place = placeOf(rawGroup, rawCustomer);
+    if (!place) return null;
+    const { group, customer } = place;
     const c = nameOf(customer || NONE);
     const p = nameOf(plant || NONE);
     const key = rowKey(group, c, p);
@@ -140,10 +160,12 @@ export async function getManpowerDaily(): Promise<MpBoard> {
     const site = siteOfDriver(str(d.branch), posGroup);
     const group = posGroup ?? fallbackGroup(customer, site);
     const row = rowOf(group, site, customer, str(d.plant));
+    if (!row) continue;
     /* กติกาเดียวกับ `toRecord()` — บันทึกการพ้นสภาพชนะ `active` ของ ETL */
     const override = str(d.statusOverride);
     const active = override ? override === "active" : Boolean(d.active);
     if (active) row.active++;
+    if (isPartnerCode(str(d.drivercode))) continue;
     if (toIsoDate(d.startDate).startsWith(month)) row.newhire++;
     if (!active && toIsoDate(d.resignation?.dateISO ?? d.resignation?.date).startsWith(month)) row.resign++;
   }
@@ -168,6 +190,7 @@ export async function getManpowerDaily(): Promise<MpBoard> {
       !val(r.onboarding, "handover", "handoverOn");
     if (!bucket && !startedToday && !resignTraining && !r.match?.applicationId) continue;
     const row = rowOf(group, site, customer, r.plant);
+    if (!row) continue;
     if (bucket === "open") row.open++;
     else if (bucket === "waitTraining") row.waiting++;
     else if (bucket === "training" || bucket === "waitHandover") {
