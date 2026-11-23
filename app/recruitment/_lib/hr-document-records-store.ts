@@ -1,7 +1,7 @@
 import { ObjectId, type Collection, type WithId } from "mongodb";
 
 import { hrCol } from "@/lib/db";
-import type { DocFill } from "./hr-documents";
+import { PROFILE_RESULTS, type DocFill } from "./hr-documents";
 import {
   applySignaturePatch,
   sanitizeSignaturePatch,
@@ -90,7 +90,12 @@ function isDuplicateKeyError(err: unknown): boolean {
 
 /** ช่องที่เพิ่มหลังมีข้อมูลในฐานแล้ว — แถวเก่าไม่มีคีย์ อ่านเป็นค่าว่างให้ช่องกรอกบนจอเป็น controlled เสมอ */
 function readFill(fill: DocFill): DocFill {
-  return { ...fill, interviewer: fill.interviewer ?? "" };
+  return {
+    ...fill,
+    interviewer: fill.interviewer ?? "",
+    profileComment: fill.profileComment ?? "",
+    profileResult: fill.profileResult ?? "",
+  };
 }
 
 function toRecord(doc: WithId<HrDocumentDoc>): HrDocumentRecord {
@@ -132,6 +137,7 @@ const TEXT_FIELD_CAPS: Record<
   Exclude<
     keyof DocFill,
     "docDate" | "startDate" | "salary" | "probationDays" | "deposit" | "installment" | "signatures"
+    | "profileResult"
   >,
   number
 > = {
@@ -150,6 +156,7 @@ const TEXT_FIELD_CAPS: Record<
   guarantor: MAX_TEXT,
   deductFrom: MAX_TEXT,
   interviewer: MAX_TEXT,
+  profileComment: MAX_ADDRESS,
   employer: MAX_TEXT,
   witness1: MAX_TEXT,
   witness2: MAX_TEXT,
@@ -204,6 +211,9 @@ export function sanitizeDocFill(input: unknown): DocFill {
     out[key] = sanitizeAmount(body[key]);
   }
   /* รูปลายเซ็นต้องเป็น data URL ภาพเท่านั้น และมีเพดานขนาด — ดู `hr-signatures.ts` */
+  out.profileResult = PROFILE_RESULTS.some((r) => r.value === body.profileResult)
+    ? body.profileResult
+    : "";
   out.signatures = sanitizeSignatures(body.signatures);
   return out as unknown as DocFill;
 }

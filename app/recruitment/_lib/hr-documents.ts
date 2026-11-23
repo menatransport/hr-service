@@ -82,6 +82,15 @@ export type HrDocId = (typeof HR_DOCUMENTS)[number]["id"];
 
 /* ------------------------------------------------------------ ค่าที่เติมลงเอกสาร */
 
+/** ผลการพิจารณาท้ายรายงานผู้สมัคร — `""` = ยังไม่เลือก (เว้นช่องติ๊กให้เขียนมือ) */
+export const PROFILE_RESULTS = [
+  { value: "pass", label: "ผ่าน รับเข้าทำงาน" },
+  { value: "fail", label: "ไม่ผ่าน" },
+  { value: "reserve", label: "สำรองไว้พิจารณา" },
+] as const;
+
+export type ProfileResult = (typeof PROFILE_RESULTS)[number]["value"] | "";
+
 /**
  * ทุกช่องที่เติมลงเอกสาร — ฝ่ายบุคคลแก้ได้ทุกช่องในกล่องก่อนพิมพ์
  *
@@ -123,6 +132,13 @@ export interface DocFill {
    * ถึงคนกดเซ็นจะเป็นบัญชีอื่น (Bew 10 พ.ย. 2569) · ว่าง = ชื่อบัญชีที่กดเซ็น
    */
   interviewer: string;
+
+  /**
+   * ส่วน “ความเห็นและผลการพิจารณา” ท้ายรายงานผู้สมัคร (Bew 23 พ.ย. 2569) · ว่าง =
+   * เว้นเส้นให้เขียนมือเหมือนเดิม · ค่าที่บันทึกก่อนวันนั้นไม่มีสองช่องนี้ อ่านเป็น `""`
+   */
+  profileComment: string;
+  profileResult: ProfileResult;
 
   /** ผู้ลงนามฝั่งบริษัท */
   employer: string;
@@ -381,6 +397,8 @@ export function initialDocFill(facts: ApplicantFacts, appliedPosition: string): 
     guarantor: "",
     deductFrom: "",
     interviewer: "",
+    profileComment: "",
+    profileResult: "",
     signatures: {},
   };
 }

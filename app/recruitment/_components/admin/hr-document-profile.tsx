@@ -1,4 +1,4 @@
-import { Box, Row, Blank, Sheet, SignLine } from "@/app/recruitment/_components/admin/hr-document-paper";
+import { Box, Row, Sheet, SignLine } from "@/app/recruitment/_components/admin/hr-document-paper";
 import type { DocSignatures } from "@/app/recruitment/_lib/hr-signatures";
 import { CONSENT_ITEMS } from "@/app/recruitment/_lib/consent";
 import {
@@ -10,10 +10,12 @@ import {
   type DocSlot,
 } from "@/app/recruitment/_lib/form";
 import {
+  PROFILE_RESULTS,
   requisitionPosition,
   thaiDateTime,
   thaiLongDate,
   todayIso,
+  type ProfileResult,
 } from "@/app/recruitment/_lib/hr-documents";
 import { customerLabel, type Requisition } from "@/app/recruitment/_lib/requisitions/types";
 import {
@@ -54,6 +56,8 @@ export function ApplicantProfile({
   signatures,
   interviewerName,
   forApplicant = false,
+  comment = "",
+  result = "",
 }: {
   application: Application;
   docSlots: DocSlot[];
@@ -65,6 +69,9 @@ export function ApplicantProfile({
   interviewerName?: string;
   /** หน้าเซ็นของผู้สมัครเอง (`/recruitment/sign`) — ซ่อนแผน/บันทึกภายในของผู้สัมภาษณ์ */
   forApplicant?: boolean;
+  /** ความเห็น/ผลพิจารณาที่กรอกในกล่อง (ส่วนสุดท้าย) — ว่าง = เว้นเส้นให้เขียนมือ */
+  comment?: string;
+  result?: ProfileResult;
 }) {
   const snapshot = application.questionSnapshot;
   const { interview } = application;
@@ -282,19 +289,17 @@ export function ApplicantProfile({
         </p>
       ) : null}
 
-      {/* ─────────────────────────── ผลพิจารณา — เขียนมือทั้งส่วน */}
+      {/* ─────────── ผลพิจารณา — ความเห็นพิมพ์ทับเส้นประ (ว่าง = เส้นเปล่าให้เขียนมือ) */}
       <div className="hrdoc-keep">
         <Band no={next()} title="ความเห็นและผลการพิจารณา" />
-        {[0, 1, 2].map((i) => (
-          <Row key={i}>
-            <Blank grow />
-          </Row>
-        ))}
+        <p className="hrdoc-ruled mt-[1.6mm]">{comment.trim()}</p>
         <Row className="mt-[3mm] gap-x-[1.4em]">
           <span>ผลการพิจารณา</span>
-          <Box>ผ่าน รับเข้าทำงาน</Box>
-          <Box>ไม่ผ่าน</Box>
-          <Box>สำรองไว้พิจารณา</Box>
+          {PROFILE_RESULTS.map((r) => (
+            <Box key={r.value} on={result === r.value}>
+              {r.label}
+            </Box>
+          ))}
         </Row>
 
         <div className="mt-[4mm] grid grid-cols-2 gap-x-[10mm]">

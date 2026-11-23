@@ -2707,6 +2707,24 @@ a.home-row:hover .home-row-arrow {
   white-space: normal;
 }
 
+/* ข้อความหลายบรรทัดบนเส้นประ — ความเห็นท้ายรายงานผู้สมัคร · เส้นเว้นเท่าแถว `hrdoc-blank`
+   ขึ้นอย่างน้อย 3 เส้นเสมอ พิมพ์ยาวกว่านั้นเส้นงอกตามบรรทัด (ชั้นบน = ช่องว่างตัดเส้นทึบให้เป็นจุด) */
+.hrdoc-ruled {
+  --rule-h: calc(1.4em + 1.6mm);
+  min-height: calc(var(--rule-h) * 3);
+  padding: 0 0.35em;
+  line-height: var(--rule-h);
+  color: var(--color-paper-fill);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  background-image:
+    linear-gradient(to right, transparent 1px, var(--color-paper) 1px),
+    linear-gradient(to bottom, transparent calc(100% - 1px), var(--color-paper-ink) calc(100% - 1px));
+  background-size: 2px var(--rule-h), 100% var(--rule-h);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 .hrdoc-grow {
   flex: 1 1 0;
   min-width: 0;

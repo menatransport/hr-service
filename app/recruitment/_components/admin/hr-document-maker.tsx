@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { FileDown, FileStack, Link2, Save, SquarePen } from "lucide-react";
 
 import { AttachmentGallery } from "@/components/ui/attachment-gallery";
-import { DateField, NumberField, SelectField, TextField } from "@/components/ui/field";
+import { DateField, NumberField, SelectField, TextField, TextareaField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
 import { SignatureLoaderOverlay } from "@/app/recruitment/_components/signature-loader";
@@ -46,6 +46,7 @@ import {
 } from "@/app/recruitment/_components/admin/hr-document-contracts";
 import {
   HR_DOCUMENTS,
+  PROFILE_RESULTS,
   bahtText,
   initialDocFill,
   personName,
@@ -56,6 +57,7 @@ import {
   thaiLongDate,
   type DocFill,
   type HrDocId,
+  type ProfileResult,
 } from "@/app/recruitment/_lib/hr-documents";
 import type { DocSlot } from "@/app/recruitment/_lib/form";
 import {
@@ -122,6 +124,7 @@ type Unit =
   | "deposit"
   | "installment"
   | "deductFrom"
+  | "verdict"
   | "signers";
 
 /**
@@ -129,7 +132,7 @@ type Unit =
  * คนกรอกไล่ตาลงทั้งซ้ายและขวาไปพร้อมกันได้
  */
 const DOC_UNITS: Record<HrDocId, Unit[]> = {
-  profile: ["applied"],
+  profile: ["applied", "verdict"],
   /* Driver Rating ไม่มีช่องเติม — แผงซ้ายเป็นตัวให้คะแนน (`RatingEditor`) แทน */
   rating: [],
   contract: [
@@ -634,6 +637,30 @@ export function HrDocumentMaker({
             onChange={set("deductFrom")}
           />
         );
+      case "verdict":
+        return (
+          <>
+            <TextareaField
+              id="doc-profile-comment"
+              label="ความเห็น (ส่วนที่ ๗)"
+              optional
+              hint="เว้นว่างได้ ถ้าจะเขียนมือ"
+              rows={3}
+              value={fill.profileComment}
+              onChange={set("profileComment")}
+            />
+            <SelectField
+              id="doc-profile-result"
+              label="ผลการพิจารณา"
+              optional
+              placeholder="ยังไม่เลือก — เว้นให้ติ๊กมือ"
+              clearable={Boolean(fill.profileResult)}
+              options={PROFILE_RESULTS.map((r) => ({ value: r.value, label: r.label }))}
+              value={fill.profileResult}
+              onChange={(v) => set("profileResult")(v as ProfileResult)}
+            />
+          </>
+        );
       case "signers":
         return (
           <div className="flex flex-col gap-3 rounded-field border border-line p-3">
@@ -855,6 +882,8 @@ export function HrDocumentMaker({
               requisition={chosen}
               signatures={fill.signatures}
               interviewerName={fill.interviewer}
+              comment={fill.profileComment}
+              result={fill.profileResult}
             />
           ) : null}
           {doc.id === "rating" ? (
