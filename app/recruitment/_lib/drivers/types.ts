@@ -672,8 +672,7 @@ export const DRIVER_DETAIL_FIELDS = [
   "birthDateISO",
   "birthDateSource",
   "nationalId",
-  "idCardExpiryISO",
-  "idCardDaysLeft",
+  /* วันหมดอายุบัตรประชาชนส่งลงตารางแล้ว — แจ้งเตือนเอกสารหมดอายุในหน้าทะเบียน (Bew 21 พ.ย. 2569) */
   "emergencyContactName",
   "emergencyContactRelation",
   "emergencyContactPhone",

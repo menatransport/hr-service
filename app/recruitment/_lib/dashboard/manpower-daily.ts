@@ -100,10 +100,14 @@ const HIDDEN_CUSTOMERS = /^kpac\s*ms$/i;
 const isPartnerCode = (code: string) => /^MTM/i.test(code);
 /** กลุ่มงานตามลูกค้า ชนะกลุ่มจากตำแหน่ง — MDL รถ 12W แต่เป็นงาน Cold Chain */
 const GROUP_OF_CUSTOMER: readonly [RegExp, MpGroup][] = [[/^mdl$/i, "Cold Chain"]];
+/** กลุ่มงานตามลูกค้า + แพล้นท์ — TDM บางวัว (รถ 7.5) เป็นงาน Trailer (Bew 24 พ.ย. 2569) */
+const GROUP_OF_PLANT: readonly [RegExp, RegExp, MpGroup][] = [[/^tdm$/i, /บางวัว/, "Trailer"]];
 
 /** จัดลูกค้า/กลุ่มงานให้ลงแถวเดียวกัน — Mixer S ต้องเป็นลูกค้า `… MS` (`Cpac` → `Cpac MS` · `SCCO` → `Scco MS`) */
-function placeOf(group: MpGroup, customer: string): { group: MpGroup; customer: string } | null {
+function placeOf(group: MpGroup, customer: string, plant: string): { group: MpGroup; customer: string } | null {
   if (HIDDEN_CUSTOMERS.test(customer)) return null;
+  const byPlant = GROUP_OF_PLANT.find(([c, p]) => c.test(customer.trim()) && p.test(plant))?.[2];
+  if (byPlant) return { group: byPlant, customer };
   const byCustomer = GROUP_OF_CUSTOMER.find(([re]) => re.test(customer))?.[1];
   if (byCustomer) return { group: byCustomer, customer };
   if (group === "Mixer S" && customer && !/\sMS$/i.test(customer)) return { group, customer: `${customer} MS` };
@@ -140,7 +144,7 @@ export async function getManpowerDaily(): Promise<MpBoard> {
     return names.get(k)!;
   };
   const rowOf = (rawGroup: MpGroup, site: RecruitSite, rawCustomer: string, plant: string): MpRow | null => {
-    const place = placeOf(rawGroup, rawCustomer);
+    const place = placeOf(rawGroup, rawCustomer, plant);
     if (!place) return null;
     const { group, customer } = place;
     const c = nameOf(customer || NONE);

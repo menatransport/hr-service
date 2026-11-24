@@ -185,6 +185,18 @@ function fromFleet(fleet: string): { customer?: string; position?: string } {
   return { ...(customer ? { customer } : {}), ...(position ? { position } : {}) };
 }
 
+/**
+ * ชื่อแพล้นท์ที่ ETL (`Boom_ETL.vehicles`) ส่งมาเป็นอังกฤษ → ชื่อที่ฝ่ายบุคคลใช้ · แก้ที่ฐาน ETL ไม่ได้ (ซิงก์ทับ)
+ * จึงแปลงตอนอ่าน · Bew 23 พ.ย. 2569
+ */
+const PLANT_RENAME: Record<string, string> = {
+  Suwinthawong: "สุวินทวงศ์",
+};
+const plantName = (raw?: string) => {
+  const p = (raw ?? "").trim();
+  return PLANT_RENAME[p] ?? p;
+};
+
 export async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plants: PickOption[] }> {
   const vehicleCol = await etlCol<{
     code?: string;
@@ -207,12 +219,12 @@ export async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plant
     .map((v) => {
       const code = (v.code ?? "").trim();
       const plate = (v.plate_no ?? "").trim();
-      const rest = [plate, (v.brand ?? "").trim(), (v.plant ?? "").trim()]
+      const rest = [plate, (v.brand ?? "").trim(), plantName(v.plant)]
         .filter(Boolean)
         .join(" · ");
       /* เลือกด้วย `code` เมื่อมี ไม่งั้นใช้ทะเบียน — `vehicle()` ใน `store.ts`
          ค้นด้วยทั้งสองฟิลด์อยู่แล้ว เพราะบางสาขาเรียกรถด้วยทะเบียนล้วน */
-      const plant = (v.plant ?? "").trim();
+      const plant = plantName(v.plant);
       return {
         value: code || plate,
         label: code ? `${code} — ${rest}` : rest,
@@ -226,7 +238,7 @@ export async function loadVehicles(): Promise<{ vehicles: VehicleOption[]; plant
     })
     .sort(thai);
 
-  const plants = [...new Set(docs.map((v) => (v.plant ?? "").trim()).filter(Boolean))]
+  const plants = [...new Set(docs.map((v) => plantName(v.plant)).filter(Boolean))]
     .map((p) => ({ value: p, label: p }))
     .sort(thai);
 

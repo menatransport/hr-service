@@ -134,7 +134,7 @@ export function splitPicked(saved: string, listed: string[]): [string, string] {
   return [OTHER, saved];
 }
 
-function groupPlants(rows: RegistryPlant[], customer: string): SelectGroupOption[] {
+export function groupPlants(rows: RegistryPlant[], customer: string): SelectGroupOption[] {
   const byCustomer = new Map<string, { hit: boolean; count: number; plants: string[] }>();
   const seen = new Set<string>();
   for (const r of rows) {
@@ -152,7 +152,7 @@ function groupPlants(rows: RegistryPlant[], customer: string): SelectGroupOption
   return [...groups, { label: "อื่นๆ", options: [{ value: OTHER, label: "ระบุเอง…" }] }];
 }
 
-function groupPositions(
+export function groupPositions(
   rows: RegistryPlant[],
   customer: string,
 ): { options?: SelectOption[]; groups?: SelectGroupOption[] } {

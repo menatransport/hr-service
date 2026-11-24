@@ -299,6 +299,25 @@ export function isExitReason(v: unknown): v is ExitReason {
   return v === "" || EXIT_REASONS.some((r) => r.value === v);
 }
 
+/**
+ * ฝึก 1-2 วันออก — ข้อเหตุผลในกล่องยกเลิก (เฉพาะใบที่อยู่สถานะ “ฝึกงาน”) = จุดเดียวที่ปิดคนฝึกงาน
+ * (Bew 21 พ.ย. 2569 — เดิมกด ลอ/ปอ ในตารางสถานะฝึกงานรายวันได้อีกทาง)
+ *
+ * ยืนยันแล้วระบบ: ลงรหัส `code` ในตารางรายวันวันที่พ้นสภาพ · ปิดผลสิ้นสุด RC (`outcome`) ·
+ * ยกเลิกใบสมัคร (เหตุผล “อื่นๆ” = `<label>: <เหตุผล>`) · คืน JR · ทะเบียน: `trial` = **ไม่เก็บในทะเบียน**
+ * (`registryExcluded`) — ดู `exitTrainee()`
+ */
+export const TRAINEE_EXITS = [
+  /* เหลือข้อเดียว — ลาออก/ปลดของคนฝึกงานใช้เหตุผลทั่วไป (Bew 21 พ.ย. 2569) · โครงเป็นรายการไว้เผื่อเพิ่มข้อ */
+  { value: "trial", label: "ฝึก 1-2 วันออก", code: "ลอ", outcome: "trial_exit", hint: "ไม่บันทึกเก็บในทะเบียนประวัติ" },
+] as const;
+
+export type TraineeExitKind = (typeof TRAINEE_EXITS)[number]["value"];
+
+export function traineeExitOf(v: unknown) {
+  return TRAINEE_EXITS.find((e) => e.value === v) ?? null;
+}
+
 export function exitReasonLabel(value: ExitReason): string {
   return EXIT_REASONS.find((r) => r.value === value)?.label ?? "—";
 }

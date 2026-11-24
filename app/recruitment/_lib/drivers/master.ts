@@ -81,8 +81,17 @@ export type DriverField = ProfileField | HrField | "registry";
 
 const ALL_FIELDS: DriverField[] = [...PROFILE_FIELDS, ...HR_FIELDS, "registry"];
 
-/** แถวที่นับเป็นทะเบียน — ทุก query ของไฟล์นี้ขึ้นต้นด้วยตัวนี้ */
-export const IN_REGISTRY = { registry: { $exists: true } } as const;
+/**
+ * แถวที่นับเป็นทะเบียน — ทุก query ของไฟล์นี้ขึ้นต้นด้วยตัวนี้
+ *
+ * `registryExcluded` = พ้นสภาพหลังฝึกงาน 1-2 วัน → **ไม่เก็บในทะเบียนประวัติ** (Bew 21 พ.ย. 2569) —
+ * ซ่อนจากทุกหน้าที่อ่านทะเบียน แต่ไม่ลบแถว (ย้อนกลับได้ด้วยการ `$unset` · `enrollDriver()` ถอดให้เองเมื่อรับเข้าใหม่)
+ * · ตารางสถานะฝึกงานรายวันยังอ่านชื่อ/รูปของคนกลุ่มนี้ได้ผ่าน `readDrivers(…, { withExcluded: true })`
+ */
+export const IN_REGISTRY = { registry: { $exists: true }, registryExcluded: { $exists: false } } as const;
+
+/** ทะเบียน + คนที่ถูกซ่อนจากทะเบียน (`registryExcluded`) */
+const IN_REGISTRY_WITH_EXCLUDED = { registry: { $exists: true } } as const;
 
 /** เพดานกันพลาด ไม่ใช่การแบ่งหน้า (ทะเบียนราวพันแถว) */
 const LIST_LIMIT = 5_000;
@@ -96,7 +105,7 @@ const code = (v: unknown): string => (typeof v === "string" ? v.trim() : String(
  */
 export async function readDrivers<T extends object = Record<string, unknown>>(
   fields: readonly DriverField[] | "all",
-  { codes }: { codes?: readonly string[] } = {},
+  { codes, withExcluded = false }: { codes?: readonly string[]; withExcluded?: boolean } = {},
 ): Promise<T[]> {
   const wanted = fields === "all" ? ALL_FIELDS : fields;
   const projection: Record<string, 1 | 0> = { _id: 0, drivercode: 1 };
@@ -108,7 +117,8 @@ export async function readDrivers<T extends object = Record<string, unknown>>(
   const extra = withPhoto ? (["nationalId", "mediaPurgedAt"] as const).filter((f) => !wanted.includes(f)) : [];
   for (const f of extra) projection[f] = 1;
 
-  const filter = codes ? { ...IN_REGISTRY, drivercode: { $in: [...codes] } } : IN_REGISTRY;
+  const base = withExcluded ? IN_REGISTRY_WITH_EXCLUDED : IN_REGISTRY;
+  const filter = codes ? { ...base, drivercode: { $in: [...codes] } } : base;
   const [docs, portraits, nicknames] = await Promise.all([
     hrCol("drivers").then((c) =>
       c.find(filter, { projection }).sort({ drivercode: 1 }).limit(LIST_LIMIT).toArray(),

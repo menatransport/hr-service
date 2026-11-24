@@ -256,7 +256,8 @@ export async function getTraineeBoard(requestedMonth: string, onlyCodes?: string
     if (codes.length) {
       docs = await readDrivers<DriverLite>(
         ["drivercode", "driverName", "photoUrl", "branch", "vehicleCode", "startDate", "resignation"],
-        { codes },
+        /* คนที่ฝึก 1-2 วันแล้วถูกซ่อนจากทะเบียนยังต้องมีชื่อ/รูปในตารางนี้ */
+        { codes, withExcluded: true },
       );
     }
   } catch (err) {

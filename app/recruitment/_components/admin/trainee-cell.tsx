@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Select, TextareaField } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
-import { toastError, toastSuccess } from "@/lib/swal";
+import { toastError } from "@/lib/swal";
 import {
   WORK_STATUS_GROUPS,
   formatThaiDate,
@@ -50,6 +50,15 @@ import { TONE_FILL, TONE_TEXT, cellTone, reasonRuleOf } from "@/app/recruitment/
  *    อ็อบเจกต์ใหม่ = `memo` ไม่มีผล = ทั้งสี่พันช่องวาดใหม่เพื่อการเปลี่ยนช่องเดียว
  */
 
+/**
+ * ตัวเลือกในดรอปดาวน์ — **ไม่มีกลุ่มพ้นสภาพ (`ลอ`/`ปอ`)** (Bew 21 พ.ย. 2569): พ้นสภาพกดที่ตารางผู้สมัคร →
+ * สถานะ → ยกเลิก จุดเดียว แล้วระบบลงรหัสในช่องนี้ให้เอง · ช่องที่เป็น `ลอ`/`ปอ` แล้วจึงกดแก้ไม่ได้ (แสดงผลอย่างเดียว)
+ */
+const PICK_GROUPS = WORK_STATUS_GROUPS.map((g) => ({
+  ...g,
+  options: g.options.filter((o) => !isExitStatus(o.value)),
+})).filter((g) => g.options.length);
+
 const CLIP_TOP = "polygon(0 0, 100% 0, 0 100%)";
 const CLIP_BOTTOM = "polygon(100% 0, 100% 100%, 0 100%)";
 
@@ -91,26 +100,26 @@ export const TraineeCell = memo(function TraineeCell({
   const [asking, setAsking] = useState<string | null>(null);
   const cellRef = useRef<HTMLButtonElement>(null);
 
-  const canEdit = editable && !saving;
+  /* พ้นสภาพที่ระบบลงให้จากการยกเลิก — แสดงอย่างเดียว ไม่เด้งไปหน้ายกเลิก */
+  const exitLocked = isExitStatus(manual);
+  const canEdit = editable && !saving && !exitLocked;
 
   /* รหัสที่ขึ้นรายงาน RC Alert (ลากิจ/ลาป่วย/ขาดงาน/ปลด/ลาออก) ถามเหตุผลก่อน · ที่เหลือบันทึกทันที */
   function pick(code: string) {
     if (code && reasonRuleOf(code)) setAsking(code);
-    else void save(code, "", false);
+    else void save(code, "");
   }
 
-  async function save(code: string, reason: string, isTrial: boolean) {
+  async function save(code: string, reason: string) {
     setSaving(true);
 
     try {
-      const res = await requestJson<{ entry: TraineeDailyEntry | null; exited?: boolean; exitError?: string }>(
+      const res = await requestJson<{ entry: TraineeDailyEntry | null }>(
         `/api/drivers/${encodeURIComponent(drivercode)}/daily`,
-        { method: "PUT", body: { dateISO: iso, code, note: reason, trial: isTrial } },
+        { method: "PUT", body: { dateISO: iso, code, note: reason } },
         "บันทึกไม่สำเร็จ",
       );
       onSaved(drivercode, iso, res.entry, manual);
-      if (res.exitError) toastError("บันทึกสถานะแล้ว แต่ปิดผลสิ้นสุดไม่สำเร็จ", res.exitError);
-      else if (res.exited) toastSuccess("บันทึกแล้ว · ปิดผลสิ้นสุดและย้ายใบสมัครไปยกเลิกแล้ว");
     } catch (err) {
       /* ไม่แก้ค่าในหน้าจอเมื่อบันทึกไม่ติด — ช่องยังเป็นค่าเดิมที่เซิร์ฟเวอร์รู้จัก
          ผู้ใช้จะได้เห็นว่ายังไม่ถูกบันทึก แทนที่จะเห็นค่าใหม่ค้างอยู่ลอย ๆ */
@@ -171,7 +180,7 @@ export const TraineeCell = memo(function TraineeCell({
     <button
       ref={cellRef}
       type="button"
-      title={cellTitle(driverName, iso, atms, manual, note, beforeStart)}
+      title={cellTitle(driverName, iso, atms, manual, note, beforeStart, trial)}
       onClick={canEdit && !editing ? () => setEditing(true) : undefined}
       className={`block w-full rounded-[5px] outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-primary data-[state=open]:ring-2 data-[state=open]:ring-primary ${
         canEdit ? "cursor-pointer hover:ring-1 hover:ring-ink/25" : "cursor-default"
@@ -189,11 +198,10 @@ export const TraineeCell = memo(function TraineeCell({
           driverName={driverName}
           iso={iso}
           initialNote={asking === manual ? note : ""}
-          initialTrial={asking === manual && trial}
           onCancel={() => setAsking(null)}
-          onSave={(reason, isTrial) => {
+          onSave={(reason) => {
             setAsking(null);
-            void save(asking, reason, isTrial);
+            void save(asking, reason);
           }}
         />
       ) : null}
@@ -201,7 +209,7 @@ export const TraineeCell = memo(function TraineeCell({
         <Select
           value={manual}
           onChange={pick}
-          groups={WORK_STATUS_GROUPS}
+          groups={PICK_GROUPS}
           label={`สถานะของ ${driverName} วันที่ ${formatThaiDate(iso)}`}
           searchPlaceholder="ค้นหารหัสหรือความหมาย…"
           clearable
@@ -223,16 +231,12 @@ export const TraineeCell = memo(function TraineeCell({
   );
 });
 
-/**
- * กล่องเหตุผลของรหัสที่ขึ้นรายงาน RC Alert — ข้อความนี้ไปอยู่ท้าย “: เนื่องจาก …” ในรายงานประจำวัน
- * · `ลอ`/`ปอ` ติ๊ก “ฝึกงาน 1-2 วัน” ได้ และบอกก่อนว่าบันทึกแล้วจะปิดผลสิ้นสุด + ยกเลิกใบสมัคร
- */
+/** กล่องเหตุผลของรหัสที่ขึ้นรายงาน RC Alert — ข้อความนี้ไปอยู่ท้าย “: เนื่องจาก …” ในรายงานประจำวัน */
 function ReasonDialog({
   code,
   driverName,
   iso,
   initialNote,
-  initialTrial,
   onCancel,
   onSave,
 }: {
@@ -240,13 +244,10 @@ function ReasonDialog({
   driverName: string;
   iso: string;
   initialNote: string;
-  initialTrial: boolean;
   onCancel: () => void;
-  onSave: (reason: string, trial: boolean) => void;
+  onSave: (reason: string) => void;
 }) {
   const [reason, setReason] = useState(initialNote);
-  const [isTrial, setIsTrial] = useState(initialTrial);
-  const exit = isExitStatus(code);
   const required = reasonRuleOf(code) === "required";
   const ready = !required || Boolean(reason.trim());
 
@@ -268,9 +269,9 @@ function ReasonDialog({
           </button>
           <button
             type="button"
-            onClick={() => onSave(reason.trim(), exit && isTrial)}
+            onClick={() => onSave(reason.trim())}
             disabled={!ready}
-            className={`${exit ? "btn-danger" : "btn-pri"} px-4 py-2 text-13 font-medium disabled:opacity-60`}
+            className="btn-pri px-4 py-2 text-13 font-medium disabled:opacity-60"
           >
             บันทึก
           </button>
@@ -283,26 +284,10 @@ function ReasonDialog({
         value={reason}
         onChange={setReason}
         rows={2}
-        placeholder={exit ? "เช่น ตรวจพบสารเสพติด · ติดต่อไม่ได้" : "เช่น ทำธุระส่วนตัว · ไม่สบาย"}
+        placeholder="เช่น ทำธุระส่วนตัว · ไม่สบาย"
         optional={!required}
         hint="ขึ้นในรายงานสถานะฝึกงานประจำวัน (: เนื่องจาก …)"
       />
-      {exit ? (
-        <>
-          <label className="flex cursor-pointer items-center gap-2 text-13">
-            <input
-              type="checkbox"
-              checked={isTrial}
-              onChange={(e) => setIsTrial(e.target.checked)}
-              className="size-4 accent-primary"
-            />
-            ฝึกงาน 1-2 วัน
-          </label>
-          <p className="rounded-field bg-alert/10 px-3 py-2 text-12 leading-relaxed text-alert">
-            บันทึกแล้วระบบจะปิดผลสิ้นสุดของคำขอสรรหา และย้ายใบสมัครไปที่ “ยกเลิก” ให้ด้วย
-          </p>
-        </>
-      ) : null}
     </ModalShell>
   );
 }
@@ -331,6 +316,7 @@ function cellTitle(
   manual: string,
   note: string,
   beforeStart: boolean,
+  trial = false,
 ): string {
   const head = `${name} · ${formatThaiDate(iso)}`;
   if (!atms && !manual) return `${head} — ${beforeStart ? "ยังไม่ได้เริ่มงาน" : "ไม่มีบันทึก"}`;
@@ -340,6 +326,8 @@ function cellTitle(
   if (manual) parts.push(`กรอกเอง: ${manual} ${workStatusFullLabel(manual)}`);
   if (atms && manual && atms.trim() !== manual.trim()) parts.push("⚠ สองค่าไม่ตรงกัน");
   if (note) parts.push(`หมายเหตุ: ${note}`);
+  if (isExitStatus(manual))
+    parts.push(`${trial ? "ฝึก 1-2 วันออก · " : ""}บันทึกจากการยกเลิกในตารางผู้สมัคร (แก้ที่นี่ไม่ได้)`);
 
   return parts.join("\n");
 }

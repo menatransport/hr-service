@@ -5,6 +5,7 @@ import { moveDocumentsToRegistry } from "@/app/recruitment/_lib/drivers/applicat
 import { isHiredStatus } from "@/app/recruitment/_lib/types";
 import {
   enrollDriver,
+  excludeFromRegistry,
   moveRequisitionDaily,
   resignFromOnboarding,
   toIsoDate,
@@ -51,7 +52,14 @@ export async function syncRegistryFromRequisition(
   const group = outcomeGroup(outcome);
   if (group === "withdrawn" || group === "lost") {
     const exitOn = val(r.onboarding, "rc", "exitOn");
-    if (exitOn)
+    /* ฝึกงาน 1-2 วัน = ไม่เก็บในทะเบียนประวัติ (Bew 21 พ.ย. 2569) — ซ่อนจากทะเบียน ไม่ลบแถว */
+    if (exitOn && outcome === "trial_exit")
+      await excludeFromRegistry(
+        drivercode,
+        { dateISO: exitOn, note: `ฝึก 1-2 วันออก · ${r.code}` },
+        by,
+      );
+    else if (exitOn)
       await resignFromOnboarding(
         drivercode,
         { dateISO: exitOn, label: outcomeLabel(outcome), note: `ผลสิ้นสุดจากหน้าติดตามพนักงานใหม่ · ${r.code}` },

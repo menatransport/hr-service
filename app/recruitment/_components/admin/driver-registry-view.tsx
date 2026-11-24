@@ -3,6 +3,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  CarFront,
   Eye,
   IdCard,
   ListFilter,
@@ -13,6 +14,7 @@ import {
 
 import { DriverAddDialog } from "@/app/recruitment/_components/admin/driver-add-dialog";
 import { DriverAvatar } from "@/app/recruitment/_components/admin/driver-avatar";
+import { DocRenewalCalendar } from "@/app/recruitment/_components/admin/doc-renewal-calendar";
 import { Nickname } from "@/app/recruitment/_components/admin/nickname";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
@@ -119,7 +121,7 @@ function siteTabsOf(sites: readonly RecruitSite[], totals: Record<string, number
 }
 type EmploymentTab = "current" | "resigned";
 
-type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "licenseType" | "license" | "status" | "fleet" | "exitMonth";
+type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "licenseType" | "docs" | "status" | "fleet" | "exitMonth";
 type Filters = Record<FilterKey, string[]>;
 
 type SortKey =
@@ -154,7 +156,7 @@ const NO_FILTERS: Filters = {
   owner: [],
   tenure: [],
   licenseType: [],
-  license: [],
+  docs: [],
   status: [],
   fleet: [],
   exitMonth: [],
@@ -167,7 +169,7 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   owner: "ประเภท",
   tenure: "อายุงาน",
   licenseType: "ชนิดใบขับขี่",
-  license: "ใบขับขี่",
+  docs: "เอกสารหมดอายุ",
   status: "สถานะ",
   fleet: "ลูกค้า",
   exitMonth: "ปี-เดือนที่พ้นสภาพ",
@@ -177,6 +179,39 @@ const FILTER_LABELS: Record<FilterKey, string> = {
 const NONE = "__none__";
 
 const norm = (v: string) => v.toLowerCase().replace(/[\s-]/g, "");
+
+/**
+ * แจ้งเตือนเอกสารหมดอายุ — **ใบขับขี่ + บัตรประชาชน** (Bew 21 พ.ย. 2569)
+ *
+ * ทั้งสองใบใช้เกณฑ์เดียวกัน (`licenseState` · ใกล้หมด = เหลือไม่เกิน `LICENSE_WARN_DAYS` วัน) ·
+ * หนึ่งคนมีได้หลายแท็ก (`docTags`) ตัวกรอง “เอกสารหมดอายุ” จึงเป็น “ตรงแท็กใดแท็กหนึ่ง” ไม่ใช่ค่าเดียวต่อแถว
+ */
+type DocKind = "license" | "idCard";
+type DocTag = `${DocKind}:${LicenseState}` | "ok";
+
+const DOC_KINDS: { kind: DocKind; label: string; short: string; Icon: typeof IdCard }[] = [
+  { kind: "license", label: "ใบขับขี่", short: "ใบขับขี่", Icon: CarFront },
+  { kind: "idCard", label: "บัตรประชาชน", short: "บัตร ปชช.", Icon: IdCard },
+];
+
+/** แท็กที่ต้องตาม — การ์ด “เอกสารต้องต่ออายุ” = กรองทั้งสี่แท็กนี้พร้อมกัน */
+const ALERT_TAGS: DocTag[] = ["license:expired", "license:soon", "idCard:expired", "idCard:soon"];
+
+const docDays = (d: DriverListRecord, kind: DocKind) => (kind === "license" ? d.licenseDaysLeft : d.idCardDaysLeft);
+const docState = (d: DriverListRecord, kind: DocKind) => licenseState(docDays(d, kind));
+const needsRenewal = (state: LicenseState) => state === "expired" || state === "soon";
+
+function docTags(d: DriverListRecord): DocTag[] {
+  const tags: DocTag[] = DOC_KINDS.map(({ kind }) => `${kind}:${docState(d, kind)}` as DocTag);
+  if (!DOC_KINDS.some(({ kind }) => needsRenewal(docState(d, kind)))) tags.push("ok");
+  return tags;
+}
+
+/** วันที่เหลือน้อยสุดของสองใบ — ใช้เรียงคอลัมน์ (ไม่มีวันหมดอายุทั้งคู่ = `null`) */
+function soonestDays(d: DriverListRecord): number | null {
+  const days = [d.licenseDaysLeft, d.idCardDaysLeft].filter((v): v is number => v !== null);
+  return days.length ? Math.min(...days) : null;
+}
 
 /** ตัวคั่นท้ายสุดตอนเรียง — ค่าว่างต้องไปอยู่ท้ายรายการเสมอ ไม่ใช่ขึ้นหัวตาราง */
 const LAST = "￿";
@@ -264,9 +299,9 @@ const COLUMNS: {
   },
   {
     sort: "license",
-    label: "ใบขับขี่หมดอายุ",
-    width: "w-[168px]",
-    filter: "license",
+    label: "เอกสารหมดอายุ",
+    width: "w-[184px]",
+    filter: "docs",
     asc: "ใกล้หมดอายุก่อน",
     desc: "หมดอายุช้าสุดก่อน",
   },
@@ -552,16 +587,22 @@ export function DriverRegistryView({
 
   const counts = useMemo(() => {
     let probation = 0;
-    let expired = 0;
     let withoutVehicle = 0;
+    /* แจ้งเตือนเอกสาร — นับเป็นคน (คนเดียวหมดทั้งสองใบนับหนึ่ง) + แยกต่อใบต่อสถานะให้ชิปในแถบเตือน */
+    let renewal = 0;
+    let renewalExpired = 0;
+    const docCount: Partial<Record<DocTag, number>> = {};
 
     for (const d of scope) {
       if (isProbation(d.tenureMonths)) probation++;
-      if (licenseState(d.licenseDaysLeft) === "expired") expired++;
       if (!d.vehicleRef) withoutVehicle++;
+      const states = DOC_KINDS.map(({ kind }) => docState(d, kind));
+      if (states.some(needsRenewal)) renewal++;
+      if (states.includes("expired")) renewalExpired++;
+      for (const tag of docTags(d)) docCount[tag] = (docCount[tag] ?? 0) + 1;
     }
 
-    return { total: scope.length, probation, expired, withoutVehicle };
+    return { total: scope.length, probation, withoutVehicle, renewal, renewalExpired, docCount };
   }, [scope]);
 
   /**
@@ -574,7 +615,6 @@ export function DriverRegistryView({
     const fleet = new Map<string, number>();
     const owner = new Map<string, number>();
     const status = new Map<string, number>();
-    const license = new Map<LicenseState, number>();
     const licenseType = new Map<string, number>();
     const exitMonth = new Map<string, number>();
     let hasVehicle = 0;
@@ -592,9 +632,6 @@ export function DriverRegistryView({
       bump(licenseType, d.licenseType || NONE);
       bump(status, d.work?.latestStatus || NONE);
       if (!d.active) bump(exitMonth, exitMonthKey(d) || NONE);
-
-      const state = licenseState(d.licenseDaysLeft);
-      license.set(state, (license.get(state) ?? 0) + 1);
 
       if (d.vehicleRef) hasVehicle++;
       else noVehicle++;
@@ -616,11 +653,16 @@ export function DriverRegistryView({
           count,
         }));
 
-    const licenseOrder: [LicenseState, string][] = [
-      ["expired", "หมดอายุแล้ว"],
-      ["soon", `ใกล้หมดอายุ (ภายใน ${LICENSE_WARN_DAYS} วัน)`],
-      ["ok", "ปกติ"],
-      ["unknown", "ไม่มีวันหมดอายุ"],
+    const docCount = new Map<string, number>();
+    for (const d of scope) for (const tag of docTags(d)) docCount.set(tag, (docCount.get(tag) ?? 0) + 1);
+    const docOrder: [DocTag, string][] = [
+      ["license:expired", "ใบขับขี่ หมดอายุแล้ว"],
+      ["license:soon", `ใบขับขี่ ใกล้หมด (≤ ${LICENSE_WARN_DAYS} วัน)`],
+      ["idCard:expired", "บัตรประชาชน หมดอายุแล้ว"],
+      ["idCard:soon", `บัตรประชาชน ใกล้หมด (≤ ${LICENSE_WARN_DAYS} วัน)`],
+      ["ok", "ปกติทั้งสองใบ"],
+      ["license:unknown", "ไม่มีวันหมดอายุใบขับขี่"],
+      ["idCard:unknown", "ไม่มีวันหมดอายุบัตรประชาชน"],
     ];
 
     return {
@@ -661,9 +703,9 @@ export function DriverRegistryView({
         ] as ColumnFilterOption[]
       ).filter((o) => o.count),
       licenseType: byLabel(licenseType, "ไม่ระบุชนิด"),
-      license: licenseOrder
-        .filter(([key]) => license.get(key))
-        .map(([key, label]) => ({ value: key, label, count: license.get(key) })),
+      docs: docOrder
+        .filter(([key]) => docCount.get(key))
+        .map(([key, label]) => ({ value: key, label, count: docCount.get(key) })),
       status: [...status]
         .sort((a, b) => {
           if (a[0] === NONE) return 1;
@@ -691,7 +733,7 @@ export function DriverRegistryView({
       if (!on("fleet", d.customer || NONE)) return false;
       if (!on("owner", d.ownerTypeKey ?? NONE)) return false;
       if (!on("status", d.work?.latestStatus || NONE)) return false;
-      if (!on("license", licenseState(d.licenseDaysLeft))) return false;
+      if (filters.docs.length && !docTags(d).some((t) => filters.docs.includes(t))) return false;
       if (!on("licenseType", d.licenseType || NONE)) return false;
       if (!on("tenure", isProbation(d.tenureMonths) ? "under4" : "normal")) return false;
 
@@ -802,6 +844,17 @@ export function DriverRegistryView({
     setFilter(key, filters[key].includes(value) ? [] : [value]);
   }
 
+
+  /**
+   * กรองเฉพาะแท็กต้องต่ออายุ (การ์ด/ชิปแถบเตือน) = เนื้อหน้าเปลี่ยนเป็นปฏิทิน (Bew 21 พ.ย. 2569)
+   * · สลับกลับเป็นตารางได้ · ปฏิทินอ่าน `results` ทั้งชุด (ไม่แบ่งหน้า)
+   */
+  const renewalMode = !resignedTab && filters.docs.length > 0 && filters.docs.every((t) => ALERT_TAGS.includes(t as DocTag));
+  const [docView, setDocView] = useState<"calendar" | "table">("calendar");
+  const showCalendar = renewalMode && docView === "calendar";
+  /** แถบ “กรองอยู่” — โหมดต่ออายุมีตัวกรองเอกสารของตัวเองบนแถบล่างแล้ว ไม่ต้องขึ้นซ้ำเป็น “4 รายการ” */
+  const barFilters = renewalMode ? activeFilters.filter((f) => f.key !== "docs") : activeFilters;
+
   /** เมนูของคอลัมน์หนึ่ง — ไอคอนเดียวคุมทั้งเรียงและกรอง ใช้ซ้ำทั้งหัวตารางและแถบชิป */
   const columnMenu = (column: (typeof COLUMNS)[number], variant: "head" | "chip") => (
     <ColumnMenu
@@ -878,15 +931,16 @@ export function DriverRegistryView({
             onClick={() => toggleTile("tenure", "under4")}
           />
           <SummaryStat
-            label="ใบขับขี่หมดอายุ"
-            value={counts.expired}
+            label="เอกสารต้องต่ออายุ"
+            value={counts.renewal}
             unit="คน"
-            share={counts.expired / (counts.total || 1)}
-            title="ต้องระงับการจ่ายงาน"
+            sub={counts.renewal ? `หมดแล้ว ${counts.renewalExpired} · ใกล้หมด ${counts.renewal - counts.renewalExpired}` : "ใบขับขี่ · บัตรประชาชน"}
+            share={counts.renewal / (counts.total || 1)}
+            title={`ใบขับขี่หรือบัตรประชาชน หมดอายุแล้ว / เหลือไม่เกิน ${LICENSE_WARN_DAYS} วัน`}
             dot="bg-alert"
             tone="alert"
-            active={filters.license.includes("expired")}
-            onClick={() => toggleTile("license", "expired")}
+            active={renewalMode}
+            onClick={() => setFilter("docs", renewalMode ? [] : ALERT_TAGS)}
           />
           <SummaryStat
             label="ยังไม่มีทะเบียนรถ"
@@ -939,17 +993,23 @@ export function DriverRegistryView({
           </div>
         </SummaryToolbar>
 
-        {activeFilters.length > 0 ? (
+        {barFilters.length > 0 ? (
           <ActiveFilterBar
-            active={activeFilters}
+            active={barFilters}
             options={options}
             onClear={(key) => setFilter(key, [])}
             onClearAll={clearFilters}
           />
         ) : null}
 
-        {/* แท็บสถานะการจ้าง + ยอดที่เหลือหลังกรอง — ขีดใต้แท็บวางทับขอบล่างของการ์ดพอดี */}
-        <SummaryStrip className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+        {/* แท็บสถานะการจ้าง + ยอดที่เหลือหลังกรอง — ขีดใต้แท็บวางทับขอบล่างของการ์ดพอดี
+            · โหมดเอกสารต้องต่ออายุ: ไม่มีแท็บและแถบเตือน เหลือแค่สลับมุมมอง + ยอด (Bew 21 พ.ย. 2569) */}
+        <SummaryStrip
+          className={`flex flex-wrap justify-between gap-x-4 gap-y-1 ${renewalMode ? "items-center gap-y-2 py-2.5" : "items-end"}`}
+        >
+          {renewalMode ? (
+            <RenewalFilter tags={filters.docs as DocTag[]} count={counts.docCount} onChange={(tags) => setFilter("docs", tags)} />
+          ) : (
           <div className="-mx-3 flex gap-1">
             <EmploymentTabButton
               active={employment === "current"}
@@ -965,8 +1025,32 @@ export function DriverRegistryView({
               พ้นสภาพแล้ว
             </EmploymentTabButton>
           </div>
+          )}
 
-          <p role="status" aria-live="polite" className="pb-2.5 text-12-5 text-mut">
+          <div className={`flex w-full items-center justify-between gap-3 sm:w-auto ${renewalMode ? "sm:ml-auto sm:justify-end sm:gap-4" : "pb-2.5"}`}>
+          {renewalMode ? (
+            <SegmentedControl
+              label="มุมมองเอกสารต้องต่ออายุ"
+              value={docView}
+              onChange={setDocView}
+              options={[
+                { value: "calendar", label: "ปฏิทิน" },
+                { value: "table", label: "ตาราง" },
+              ]}
+              className="[&_button]:min-h-7 [&_button]:px-3"
+            />
+          ) : null}
+          {renewalMode ? (
+            <button
+              type="button"
+              onClick={() => setFilter("docs", [])}
+              className="flex cursor-pointer items-center gap-1 text-12-5 text-mut transition-colors hover:text-ink"
+            >
+              <X size={14} strokeWidth={2} aria-hidden />
+              ปิดมุมมองนี้
+            </button>
+          ) : null}
+          <p role="status" aria-live="polite" className="text-12-5 text-mut">
             <span key={results.length} className="inline-block animate-fade-in">
               {filtering ? (
                 <>
@@ -987,6 +1071,7 @@ export function DriverRegistryView({
               )}
             </span>
           </p>
+          </div>
         </SummaryStrip>
 
       {loadingResigned ? (
@@ -1007,6 +1092,8 @@ export function DriverRegistryView({
         <SummaryBody pad>
           <EmptyResult query={query.trim()} onClear={clearFilters} />
         </SummaryBody>
+      ) : showCalendar ? (
+        <DocRenewalCalendar drivers={results} tags={filters.docs} />
       ) : (
         <>
           {/*
@@ -1152,7 +1239,7 @@ function compare(a: DriverListRecord, b: DriverListRecord, key: SortKey): number
     case "licenseType":
       return byText(a.licenseType, b.licenseType);
     case "license":
-      return byNumber(a.licenseDaysLeft, b.licenseDaysLeft);
+      return byNumber(soonestDays(a), soonestDays(b));
     case "status":
       return byText(a.work?.latestStatus ?? "", b.work?.latestStatus ?? "");
   }
@@ -1446,7 +1533,7 @@ function DriverCard({
         <CardField label="ชนิดใบขับขี่">
           <LicenseTypeCell driver={driver} href={driverHref(driver)} canEdit={canEdit} />
         </CardField>
-        <CardField label="ใบขับขี่หมดอายุ">
+        <CardField label="เอกสารหมดอายุ">
           <LicenseCell driver={driver} />
         </CardField>
       </div>
@@ -1510,24 +1597,112 @@ const LICENSE_NOTE_TONE: Record<LicenseState, string> = {
   unknown: "text-mut",
 };
 
+/**
+ * เอกสารหมดอายุ — สองบรรทัด ใบขับขี่ (รถ) + บัตรประชาชน (บัตร) · แยกกันด้วยรูปไอคอน ไม่ใช่สีอย่างเดียว
+ * ใบที่ปกติขึ้นแค่วันที่สีจาง · ใกล้หมด/หมดแล้ว ขึ้นระยะเวลาสีเหลือง/แดงต่อท้าย (Bew 21 พ.ย. 2569)
+ */
 function LicenseCell({ driver }: { driver: DriverListRecord }) {
-  const state = licenseState(driver.licenseDaysLeft);
+  return (
+    <span className="flex flex-col gap-1">
+      {DOC_KINDS.map(({ kind, label, Icon }) => {
+        const days = docDays(driver, kind);
+        const state = licenseState(days);
+        const iso = kind === "license" ? driver.licenseExpiryISO : driver.idCardExpiryISO;
+        return (
+          <span
+            key={kind}
+            title={`${label}: ${state === "unknown" ? "ไม่มีวันหมดอายุ" : `${formatThaiDate(iso)} · ${formatLicenseGap(days)}`}`}
+            className="flex min-w-0 items-center gap-1.5 leading-tight"
+          >
+            <Icon
+              size={13}
+              strokeWidth={1.8}
+              aria-label={label}
+              className={`flex-none ${state === "expired" ? "text-alert" : state === "soon" ? "text-sla" : "text-mut/70"}`}
+            />
+            {state === "unknown" ? (
+              <span className="text-11 text-mut/70">—</span>
+            ) : (
+              <>
+                <span
+                  className={`font-mono text-12 tabular-nums ${
+                    state === "expired" ? "font-semibold text-alert" : state === "soon" ? "text-ink" : "text-mut"
+                  }`}
+                >
+                  {formatThaiDate(iso)}
+                </span>
+                {needsRenewal(state) ? (
+                  <span className={`truncate text-11 ${LICENSE_NOTE_TONE[state]}`}>
+                    {state === "expired" ? `หมด ${formatLicenseGap(days).replace("หมดอายุแล้ว ", "")}` : formatLicenseGap(days)}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
-  if (state === "unknown") return <Dash>ไม่มีวันหมดอายุ</Dash>;
+/**
+ * ตัวกรองโหมดเอกสารต้องต่ออายุ — แถวช่องเดียว **เลือกได้ทีละช่อง ไม่กรองซ้อน** (Bew 21 พ.ย. 2569)
+ * ทั้งหมด = สี่แท็กพร้อมกัน · ช่องอื่น = หนึ่งแท็ก (ชนิด × สถานะ) · ตัวเลข = จำนวนใบในขอบเขตสาขา
+ */
+function RenewalFilter({
+  tags,
+  count,
+  onChange,
+}: {
+  tags: DocTag[];
+  count: Partial<Record<DocTag, number>>;
+  onChange: (tags: DocTag[]) => void;
+}) {
+  const options: { key: string; tags: DocTag[]; label: string; Icon?: typeof IdCard; tone?: string }[] = [
+    { key: "all", tags: ALERT_TAGS, label: "ทั้งหมด" },
+    ...DOC_KINDS.flatMap(({ kind, short, Icon }) =>
+      (
+        [
+          ["expired", "หมดแล้ว", "text-alert"],
+          ["soon", "ใกล้หมด", "text-sla"],
+        ] as const
+      ).map(([state, text, tone]) => ({
+        key: `${kind}:${state}`,
+        tags: [`${kind}:${state}` as DocTag],
+        label: `${short} ${text}`,
+        Icon,
+        tone,
+      })),
+    ),
+  ];
+  const current = tags.length === 1 ? tags[0] : "all";
 
   return (
-    <span className="flex flex-col gap-0.5">
-      <span
-        className={`font-mono text-12-5 tabular-nums ${
-          state === "expired" ? "font-semibold text-alert" : "text-ink"
-        }`}
-      >
-        {formatThaiDate(driver.licenseExpiryISO)}
-      </span>
-      <span className={`text-11 ${LICENSE_NOTE_TONE[state]}`}>
-        {formatLicenseGap(driver.licenseDaysLeft)}
-      </span>
-    </span>
+    <div role="radiogroup" aria-label="กรองเอกสารต้องต่ออายุ" className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="text-13 font-semibold text-ink">เอกสารต้องต่ออายุ</span>
+      <div className="flex overflow-x-auto rounded-field border border-line scrollbar-thin">
+        {options.map((o, i) => {
+          const on = current === o.key;
+          const n = o.tags.reduce((sum, t) => sum + (count[t] ?? 0), 0);
+          return (
+            <button
+              key={o.key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.tags)}
+              className={`flex h-9 flex-none cursor-pointer items-center gap-1.5 px-3.5 text-12-5 whitespace-nowrap transition-colors ${
+                i ? "border-l border-line" : ""
+              } ${on ? "bg-primary font-semibold text-primary-content" : "text-ink hover:bg-base-200/60"}`}
+            >
+              {o.Icon ? <o.Icon size={14} strokeWidth={1.9} aria-hidden className={on ? "" : "text-mut"} /> : null}
+              <span className={on ? "" : o.tone}>{o.label}</span>
+              <span className={`font-mono text-11-5 tabular-nums ${on ? "" : "text-mut"}`}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

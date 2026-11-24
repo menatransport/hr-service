@@ -3,16 +3,16 @@ import { ObjectId, type WithId } from "mongodb";
 import { etlCol, hrCol } from "@/lib/db";
 import { todayInBangkok } from "@/lib/record-case-flow";
 import { findIssuedCodeByName, readDriver, readDrivers } from "@/app/recruitment/_lib/drivers/master";
-import { isExitStatus, RQ_DAILY_PREFIX, requisitionDailyKey, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
-import { loadManualDays } from "@/app/recruitment/_lib/drivers/registry";
+import { isExitStatus, requisitionDailyKey, workStatusFullLabel } from "@/app/recruitment/_lib/drivers/types";
+import { loadManualDays, setTraineeDaily } from "@/app/recruitment/_lib/drivers/registry";
 import { listApplications, updateApplication } from "@/app/recruitment/_lib/applications";
 import {
-  EXIT_REASON_NOTE_MAX,
-  OTHER_EXIT_REASON,
   exitReasonText,
+  traineeExitOf,
   normalizeStatus,
   type ApplicationStatus,
   type ApplicationSummary,
+  type TraineeExitKind,
 } from "@/app/recruitment/_lib/types";
 import type { Requisition } from "./types";
 import {
@@ -695,56 +695,45 @@ export async function updateOnboardingSection(
 }
 
 /**
- * RC เลือก `ลอ`/`ปอ` ในตารางฝึกงานรายวัน → ปิดผลสิ้นสุดให้ (Bew 25 ต.ค. 2569 — กล่องข้อมูล RC
- * ไม่มีช่องผลสิ้นสุดแล้ว)
+ * พ้นสภาพระหว่างฝึกงาน — **จุดเดียวที่ปิดคนฝึกงาน** = ตารางผู้สมัคร → สถานะ → ยกเลิก (Bew 21 พ.ย. 2569)
  *
- * 1. ผลสิ้นสุดของ RQ ที่ถือรหัสนี้ = ลาออก / ปลด / ฝึกงาน 1-2 วัน + วันที่สิ้นสุด = วันที่ของช่อง
- *    (ผ่าน `updateOnboardingSection` จึงบันทึกพ้นสภาพในทะเบียนให้ด้วย)
- * 2. ใบสมัครที่ผูกไว้ → “ยกเลิก” เหตุผลอื่น ๆ = `<หัวข้อ>: <เหตุผล>` แล้ว RQ ปลดคนออก เก็บประวัติไว้
- *    (`archiveOnboarding`) และกลับไปเปิดรับ — ทางเดียวกับการกดยกเลิกในหน้าผู้สมัคร
+ * เดิม (25 ต.ค.) RC กด `ลอ`/`ปอ` ในตารางสถานะฝึกงานรายวันแล้วระบบปิดให้ (`exitFromDaily`) — ตอนนี้ตารางรายวัน
+ * แสดงผลอย่างเดียว · เรียก **ก่อน** ยกเลิกใบสมัคร (ตอนที่ RQ ยังผูกใบนี้อยู่) แล้วผู้เรียกยกเลิกใบ + คืน JR ต่อเอง
  *
- * ไม่เจอ RQ ที่ถือรหัสนี้ = ไม่ทำอะไร (คนที่ไม่ได้มาจากคำขอสรรหา) · ล้มเหลวไม่ทำให้การบันทึกรายวันล้ม
+ * 1. ลงรหัส `ลอ`/`ปอ` (+`trial`) ในตารางรายวันวันที่พ้นสภาพ — RC Alert / ตารางรายวันเห็นตรงกัน ไม่ต้องคีย์ซ้ำ
+ * 2. ผลสิ้นสุด RC + วันที่สิ้นสุด (`updateOnboardingSection` → `syncRegistryFromRequisition`):
+ *    ฝึกงาน 1-2 วัน = ซ่อนจากทะเบียน (`excludeFromRegistry`) · ลาออก/ปลด = บันทึกพ้นสภาพ
+ *
+ * ไม่เจอ RQ ที่ผูกใบนี้ = ไม่ทำอะไร (คืน `false`) · ล้มที่ขั้นรายวันไม่ขวางขั้นอื่น
  */
-export async function exitFromDaily(
-  drivercode: string,
-  input: { dateISO: string; code: string; trial: boolean; reason: string },
+export async function exitTrainee(
+  applicationId: string,
+  input: { kind: TraineeExitKind; dateISO: string; reason: string },
   by: string,
 ): Promise<boolean> {
-  if (!isExitStatus(input.code) || !ISO.test(input.dateISO)) return false;
-  /* `rq:<id>` = คนที่ยังไม่มีรหัส พจส. — หาคำขอจาก id ตรง ๆ */
-  const rqId = drivercode.startsWith(RQ_DAILY_PREFIX) ? drivercode.slice(RQ_DAILY_PREFIX.length) : "";
-  if (rqId && !ObjectId.isValid(rqId)) return false;
-  const current = await (await requisitions())
-    .find({ ...(rqId ? { _id: new ObjectId(rqId) } : { drivercode }), status: { $ne: "cancelled" }, match: { $ne: null } })
-    .sort({ updatedAt: -1 })
-    .limit(1)
-    .next();
+  const exit = traineeExitOf(input.kind);
+  if (!exit || !ISO.test(input.dateISO)) throw new RequisitionError("ข้อมูลพ้นสภาพไม่ถูกต้อง");
+  const current = await (await requisitions()).findOne({
+    "match.applicationId": applicationId,
+    status: { $ne: "cancelled" },
+  });
   if (!current) return false;
 
-  const outcome = input.trial ? "trial_exit" : input.code === "ลอ" ? "resigned" : "dismissed";
+  const key = current.drivercode?.trim() || requisitionDailyKey(current._id.toHexString());
+  try {
+    await setTraineeDaily(key, { dateISO: input.dateISO, code: exit.code, note: input.reason, trial: exit.value === "trial" }, by);
+  } catch (err) {
+    console.warn("[onboarding] ลงรหัสพ้นสภาพในตารางรายวันไม่สำเร็จ —", err);
+  }
+
   await updateOnboardingSection(
     current._id.toHexString(),
     {
       section: "rc",
       values: current.onboarding?.rc?.values ?? {},
-      exit: { outcome, exitOn: input.dateISO },
+      exit: { outcome: exit.outcome, exitOn: input.dateISO },
     },
     by,
   );
-
-  const applicationId = current.match?.applicationId;
-  if (applicationId) {
-    const topic = input.trial ? "ฝึกงาน 1-2 วัน" : input.code === "ลอ" ? "ลาออก" : "ปลด";
-    await updateApplication(
-      applicationId,
-      {
-        status: "cancelled",
-        exitReason: OTHER_EXIT_REASON,
-        exitReasonNote: [topic, input.reason].filter(Boolean).join(": ").slice(0, EXIT_REASON_NOTE_MAX),
-      },
-      by,
-    );
-    await syncRequisitionForApplication(applicationId, "cancelled", by);
-  }
   return true;
 }

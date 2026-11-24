@@ -1363,7 +1363,8 @@ export async function enrollDriver(input: EnrollInput, actor: string): Promise<b
         registeredAt: now,
         registry: { source: "onboarding", requisitionId, requisitionCode, at: now, by: actor },
       },
-      $unset: { statusOverride: "", resignation: "" },
+      /* คนที่เคยถูกซ่อนเพราะฝึก 1-2 วัน (`excludeFromRegistry`) แล้วกลับมาเข้าใหม่ = กลับเข้าทะเบียน */
+      $unset: { statusOverride: "", resignation: "", registryExcluded: "" },
     },
     { upsert: true },
   );
@@ -1493,11 +1494,11 @@ export async function addDriverManually(
     if (out.value) $set[key] = out.value;
   }
 
-  /* ลาดกระบัง (งานโม่) ต้องมีตำแหน่ง Mixer L / Mixer S / Spare driver · สาขาอื่นไม่มีตำแหน่งชุดนี้ = ไม่เก็บ */
+  /* ต้องมีตำแหน่งทุกสาขา · ลาดกระบัง (งานโม่) = Mixer L / Mixer S / Spare driver · สระบุรี/บางปะกง = ดรอปดาวน์จากทะเบียน */
   if (siteOfBranch($set.branch ?? "") === "latkrabang") {
     if (!MIXER_POSITIONS.includes($set.position ?? ""))
       throw new DriverRegistryError(`ต้องเลือกตำแหน่ง (${MIXER_POSITIONS.join(" / ")})`);
-  } else delete $set.position;
+  } else if (!$set.position) throw new DriverRegistryError("ต้องเลือกตำแหน่ง");
 
   if (await driverExists(drivercode)) throw new DriverRegistryError(`รหัส ${drivercode} อยู่ในทะเบียนแล้ว`);
 
@@ -1576,6 +1577,47 @@ export async function resignFromOnboarding(
           recordedAt: new Date(),
           recordedBy: actor,
         },
+      },
+    },
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
+ * พ้นสภาพหลังฝึกงาน 1-2 วัน → **ไม่เก็บในทะเบียนประวัติ** (Bew 21 พ.ย. 2569)
+ *
+ * ไม่ลบแถว — ตั้ง `registryExcluded` ให้ `IN_REGISTRY` มองข้าม (หน้าทะเบียน/ส่งออก/แดชบอร์ด/ปฏิทินเอกสาร)
+ * พร้อมบันทึกพ้นสภาพไว้ในแถวด้วย เผื่อมีคนถอดธงทีหลังจะไม่กลับมาเป็น “ปฏิบัติงาน” ·
+ * ประวัติจริงอยู่ที่ใบสมัคร (แท็บยกเลิก + เหตุผล) และคำขอสรรหา (ผลสิ้นสุด `trial_exit`)
+ */
+export async function excludeFromRegistry(
+  code: string,
+  exit: { dateISO: string; note: string },
+  actor: string,
+): Promise<boolean> {
+  const drivercode = code.trim();
+  const dateISO = toIsoDate(exit.dateISO);
+  if (!drivercode || !dateISO) return false;
+
+  const now = new Date();
+  const drivers = await hrCol<MasterDriverDoc>("drivers");
+  const res = await drivers.updateOne(
+    { ...IN_REGISTRY, drivercode },
+    {
+      $set: {
+        active: false,
+        statusOverride: "resigned",
+        resignation: {
+          dateISO,
+          reasonCode: "ONB",
+          reasonLabel: "ฝึกงาน 1-2 วัน (พ้นสภาพ)",
+          categoryLabel: "",
+          exitType: "",
+          note: exit.note,
+          recordedAt: now,
+          recordedBy: actor,
+        },
+        registryExcluded: { reason: "trial_exit", dateISO, note: exit.note, at: now, by: actor },
       },
     },
   );

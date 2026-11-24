@@ -24,8 +24,11 @@ import {
   dateToIso,
   dayPickerClassNames,
   isoToDate,
+  DateField,
+  TextareaField,
   TextField,
 } from "@/components/ui/field";
+import { todayInBangkok } from "@/lib/record-case-flow";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ReservePrompt } from "@/app/recruitment/_components/admin/reserve-prompt";
 import type { RecruitSite } from "@/app/recruitment/_lib/sites";
@@ -37,11 +40,13 @@ import {
   OTHER_EXIT_REASON,
   RESERVE_FROM,
   STATUS_LABEL,
+  TRAINEE_EXITS,
   exitReasonText,
   type ApplicationStatus,
   type ApplicationSummary,
   type BlacklistHit,
   type ExitReason,
+  type TraineeExitKind,
 } from "@/app/recruitment/_lib/types";
 
 /**
@@ -70,6 +75,8 @@ export type CellPatch = {
   reservePlant?: string;
   /** ยกเลิกใบที่ผูก JR + เลือก “ยกเลิก JR ด้วย” — ไม่ส่ง = คืน JR กลับไปสรรหา */
   requisitionCancelReason?: CancelReason;
+  /** ยกเลิกคนฝึกงานด้วยข้อ “ฝึก 1-2 วันออก” — ดู `exitTrainee()` */
+  traineeExit?: TraineeExitInput;
   interview?: Partial<ApplicationSummary["interview"]>;
   /**
    * ข้อความที่ถูกบันทึกลงไทม์ไลน์พร้อมชื่อผู้แก้ไขและเวลา — ช่องในตารางไม่ได้ส่ง
@@ -256,6 +263,7 @@ export function StatusCell({
     exitReasonNote: string,
     blacklist: boolean,
     requisitionCancelReason?: CancelReason,
+    traineeExit?: TraineeExitInput,
   ) {
     setAsking(false);
     setSaving(true);
@@ -265,6 +273,7 @@ export function StatusCell({
       exitReasonNote,
       blacklist,
       ...(requisitionCancelReason ? { requisitionCancelReason } : {}),
+      ...(traineeExit ? { traineeExit } : {}),
     });
     setSaving(false);
   }
@@ -286,12 +295,7 @@ export function StatusCell({
       >
         {(close) => (
           <>
-            {/* รอรับรถไม่ใช่สถานะใบสมัคร — เปลี่ยนไป/กลับที่ตารางสถานะฝึกงาน (`ร` / `ฝ`) */}
-            {candidate.status === "training" ? (
-              <span className="mb-1 rounded-selector bg-st-violet/60 px-2 py-1.5 text-11-5 leading-snug text-st-violet-ink">
-                {handover ? "กลับไปฝึกงาน: ลง “ฝ”" : "เปลี่ยนเป็นรอรับรถ: ลง “ร”"} ในแท็บสถานะฝึกงาน
-              </span>
-            ) : null}
+            {/* ไม่มีกล่องคำอธิบายบนเมนูแล้ว (Bew 21 พ.ย. 2569) — รอรับรถ = ลง `ร` ในแท็บสถานะฝึกงาน (ดูคู่มือ) */}
             {SELECTABLE.filter((s) => s !== "reserve" || canReserve).map((s) => (
               <Option
                 key={s}
@@ -342,11 +346,30 @@ function CancelPrompt({
 }: {
   candidate: ApplicationSummary;
   jr: string;
-  onConfirm: (reason: ExitReason, note: string, blacklist: boolean, requisitionCancelReason?: CancelReason) => void;
+  onConfirm: (
+    reason: ExitReason,
+    note: string,
+    blacklist: boolean,
+    requisitionCancelReason?: CancelReason,
+    traineeExit?: TraineeExitInput,
+  ) => void;
   onClose: () => void;
 }) {
   const [reason, setReason] = useState<ExitReason>(candidate.exitReason);
   const [note, setNote] = useState(candidate.exitReasonNote);
+  /* คนฝึกงาน: ข้อ “ฝึก 1-2 วันออก” อยู่ในรายการเหตุผล (Bew 21 พ.ย. 2569) — เลือกแล้วถามวันที่ + เหตุผล */
+  const trainee = candidate.status === "training";
+  const today = todayInBangkok();
+  const [exitKind, setExitKind] = useState<TraineeExitKind | "">("");
+  const [exitOn, setExitOn] = useState(today);
+  const [exitNote, setExitNote] = useState("");
+  const exitPicked = TRAINEE_EXITS.find((e) => e.value === exitKind) ?? null;
+  const exitDateBad = Boolean(exitPicked) && (!exitOn || exitOn > today);
+  const exitReady = !exitDateBad && exitNote.trim().length > 0;
+  const reasonButton = (on: boolean) =>
+    `flex items-center gap-2.5 rounded-field border px-3.5 py-2.5 text-left text-13 transition-colors ${
+      on ? "border-primary/50 bg-soft font-medium text-primary" : "border-line hover:border-primary/45 hover:bg-base-200"
+    }`;
   const [blacklist, setBlacklist] = useState(candidate.blacklist);
   /* ใบที่ผูก JR — คืน JR กลับไปสรรหา (ตั้งต้น) หรือยกเลิก JR ไปด้วย + เหตุผลของ JR (Bew 12 พ.ย. 2569) */
   const [jrAction, setJrAction] = useState<"reopen" | "cancel">("reopen");
@@ -354,7 +377,8 @@ function CancelPrompt({
   const jrCancel = Boolean(jr) && jrAction === "cancel";
 
   const other = reason === OTHER_EXIT_REASON;
-  const ready = (!other || note.trim().length > 0) && (!jrCancel || Boolean(jrReason));
+  const ready =
+    (exitPicked ? exitReady : !other || note.trim().length > 0) && (!jrCancel || Boolean(jrReason));
 
   return (
     <ModalShell
@@ -368,7 +392,7 @@ function CancelPrompt({
         </span>
       }
       onClose={onClose}
-      width="440px"
+      width="600px"
       tone="plain"
       footer={
         <div className="flex w-full items-center justify-between gap-2">
@@ -381,7 +405,15 @@ function CancelPrompt({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(reason, other ? note.trim() : "", blacklist, jrCancel && jrReason ? jrReason : undefined)}
+            onClick={() =>
+              onConfirm(
+                exitPicked ? OTHER_EXIT_REASON : reason,
+                exitPicked || !other ? "" : note.trim(),
+                blacklist,
+                jrCancel && jrReason ? jrReason : undefined,
+                exitPicked ? { kind: exitPicked.value, dateISO: exitOn, reason: exitNote.trim() } : undefined,
+              )
+            }
             disabled={!ready}
             className="btn-danger flex items-center gap-1.5 px-4 py-2 text-12-5 font-medium disabled:opacity-45"
           >
@@ -396,27 +428,56 @@ function CancelPrompt({
           ยกเลิกเพราะอะไร
           <span className="font-normal"> (ไม่บังคับ — ระบุทีหลังในคอลัมน์เหตุผลได้)</span>
         </span>
-        {EXIT_REASONS.map((r) => (
-          <button
-            key={r.value}
-            type="button"
-            onClick={() => setReason((prev) => (prev === r.value ? "" : r.value))}
-            aria-pressed={reason === r.value}
-            className={`flex items-center gap-2.5 rounded-field border px-3.5 py-2.5 text-left text-13 transition-colors ${
-              reason === r.value
-                ? "border-primary/50 bg-soft font-medium text-primary"
-                : "border-line hover:border-primary/45 hover:bg-base-200"
-            }`}
-          >
-            <Check
-              size={13}
-              strokeWidth={2.5}
-              aria-hidden
-              className={reason === r.value ? "flex-none text-primary" : "flex-none opacity-0"}
-            />
-            {r.value === OTHER_EXIT_REASON ? "อื่นๆ (พิมพ์เอง)" : r.label}
-          </button>
-        ))}
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {trainee
+            ? TRAINEE_EXITS.map((e) => {
+                const on = exitKind === e.value;
+                return (
+                  <button
+                    key={e.value}
+                    type="button"
+                    onClick={() => {
+                      setExitKind(on ? "" : e.value);
+                      if (!on) setReason("");
+                    }}
+                    aria-pressed={on}
+                    className={`${reasonButton(on)} sm:col-span-2`}
+                  >
+                    <Check
+                      size={13}
+                      strokeWidth={2.5}
+                      aria-hidden
+                      className={on ? "flex-none text-primary" : "flex-none opacity-0"}
+                    />
+                    <span>
+                      {e.label}
+                      <span className={`ml-1.5 text-12 font-normal ${on ? "text-primary/80" : "text-mut"}`}>({e.hint})</span>
+                    </span>
+                  </button>
+                );
+              })
+            : null}
+          {EXIT_REASONS.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => {
+                setExitKind("");
+                setReason((prev) => (prev === r.value ? "" : r.value));
+              }}
+              aria-pressed={reason === r.value}
+              className={reasonButton(reason === r.value)}
+            >
+              <Check
+                size={13}
+                strokeWidth={2.5}
+                aria-hidden
+                className={reason === r.value ? "flex-none text-primary" : "flex-none opacity-0"}
+              />
+              {r.value === OTHER_EXIT_REASON ? "อื่นๆ (พิมพ์เอง)" : r.label}
+            </button>
+          ))}
+        </div>
         {other ? (
           <TextField
             id={`cancel-note-${candidate.id}`}
@@ -426,6 +487,25 @@ function CancelPrompt({
             onChange={(v) => setNote(v.slice(0, EXIT_REASON_NOTE_MAX))}
             placeholder="พิมพ์เหตุผลที่ไม่มีให้เลือกข้างบน…"
           />
+        ) : null}
+        {exitPicked ? (
+          <div className="mt-1 flex flex-col gap-2 rounded-box border border-line bg-base-200/50 p-3">
+            <div className="grid gap-2 sm:grid-cols-[11rem_1fr]">
+              <DateField id={`exit-on-${candidate.id}`} label="วันที่ออก" value={exitOn} onChange={setExitOn} />
+              <TextareaField
+                id={`exit-note-${candidate.id}`}
+                label="รายละเอียด"
+                value={exitNote}
+                onChange={(v) => setExitNote(v.slice(0, EXIT_REASON_NOTE_MAX - 30))}
+                rows={2}
+                placeholder="เช่น ไม่มาฝึกต่อ ติดต่อไม่ได้"
+              />
+            </div>
+            {exitDateBad ? <p className="text-12 text-alert">วันที่ออกต้องไม่เกินวันนี้</p> : null}
+            <p className="text-11-5 leading-relaxed text-mut">
+              ระบบลง “{exitPicked.code}” ในแท็บสถานะฝึกงาน · ปิดผลสิ้นสุด RC · ไม่เก็บคนนี้ในทะเบียนประวัติ
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -507,6 +587,13 @@ function CancelPrompt({
       </div>
     </ModalShell>
   );
+}
+
+/** ฝึก 1-2 วันออก — ส่งไปกับ PATCH (`traineeExit`) · ดู `exitTrainee()` */
+interface TraineeExitInput {
+  kind: TraineeExitKind;
+  dateISO: string;
+  reason: string;
 }
 
 const JR_CHOICES = [

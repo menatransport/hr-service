@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, FileUp, Loader2, Search, TriangleAlert, X } from "lucide-react";
 
@@ -19,6 +19,15 @@ import {
   type DriverCopySource,
   type DriverListRecord,
 } from "@/app/recruitment/_lib/drivers/types";
+import type { RegistryPlant } from "@/app/recruitment/_lib/requisitions/options";
+import { OTHER } from "@/app/recruitment/_lib/requisitions/types";
+import {
+  groupPlants,
+  groupPositions,
+  pickedOrTyped,
+  positionOfPlant,
+  splitPicked,
+} from "@/app/recruitment/_components/admin/registry-plant-fields";
 
 /**
  * กล่อง “เพิ่มพนักงาน” บนหน้าทะเบียน — เลือก พจส./พจร. แล้วกรอกเฉพาะที่จำเป็น ไม่ผ่านใบสมัคร (`POST /api/drivers`)
@@ -39,6 +48,29 @@ const OWNER_OPTIONS = (["1", "2"] as const).map((value) => ({ value, label: OWNE
 
 /** ตำแหน่งงานโม่ — ชิปกดครั้งเดียวแบบฟอร์มขออัตรา ไม่ตั้งค่าเริ่มให้ */
 const POSITION_OPTIONS = MIXER_POSITIONS.map((value) => ({ value, label: value }));
+
+/**
+ * แพล้นท์·ตำแหน่งของสระบุรี/บางปะกงจากทะเบียน (คนทำงาน + พ้นสภาพ) — ชุดเดียวกับฟอร์มขอสรรหา (`loadRegistryPlants()`)
+ * · เรียงจำนวนคนมาก → น้อย ให้ `positionOfPlant()` เติมตำแหน่งที่แพล้นท์นั้นถือมากสุด
+ */
+function registryPlants(rows: DriverListRecord[]): RegistryPlant[] {
+  const out = new Map<string, RegistryPlant>();
+  const seen = new Set<string>();
+  for (const d of rows) {
+    if (seen.has(d.drivercode)) continue;
+    seen.add(d.drivercode);
+    const site = siteOfBranch(d.branch ?? "");
+    const plant = (d.plant ?? "").trim();
+    if ((site !== "saraburi" && site !== "bangpakong") || !plant) continue;
+    const customer = (d.customer ?? "").trim();
+    const position = (d.position ?? "").trim();
+    const key = `${customer}|${plant}|${position}`;
+    const row = out.get(key);
+    if (row) row.count += 1;
+    else out.set(key, { customer, plant, position, count: 1 });
+  }
+  return [...out.values()].sort((a, b) => b.count - a.count || a.plant.localeCompare(b.plant, "th"));
+}
 
 const today = () => new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -96,14 +128,37 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
     position: "",
     note: "",
   });
+  /* สระบุรี/บางปะกง — “ระบุเอง…” ของแพล้นท์/ตำแหน่ง */
+  const [plantOther, setPlantOther] = useState("");
+  const [positionOther, setPositionOther] = useState("");
+  const regPlants = useMemo(
+    () => registryPlants([...drivers, ...(resigned ?? [])]),
+    [drivers, resigned],
+  );
+  const regPlantGroups = useMemo(() => groupPlants(regPlants, form.customer), [regPlants, form.customer]);
+  const regPositions = useMemo(() => groupPositions(regPlants, form.customer), [regPlants, form.customer]);
+  /* เลือกแพล้นท์แล้วเติมตำแหน่งที่แพล้นท์นั้นถือมากสุด — เฉพาะช่องที่ว่างหรือที่ระบบเติมไว้ (แบบฟอร์มขอสรรหา) */
+  const autoPosition = useRef("");
+  function pickRegPlant(v: string) {
+    const next = v === OTHER ? "" : positionOfPlant(regPlants, v);
+    setForm((f) => ({
+      ...f,
+      plant: v,
+      position: next && (!f.position || f.position === autoPosition.current) ? next : f.position,
+    }));
+    autoPosition.current = next;
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
-  /* ลาดกระบัง = งานโม่ ต้องเลือกตำแหน่ง · เปลี่ยนไปสาขาอื่นแล้วตำแหน่งถูกล้าง (สาขาอื่นไม่มีชุดนี้) */
+  /*
+   * ลาดกระบัง = งานโม่ ต้องเลือกตำแหน่ง (ชิป) · สระบุรี/บางปะกง = ดรอปดาวน์แพล้นท์+ตำแหน่งจากทะเบียนแบบฟอร์มขอสรรหา
+   * · เปลี่ยนสาขาข้ามกลุ่มแล้วตำแหน่งถูกล้าง (คนละชุดกัน)
+   */
   const mixer = siteOfBranch(form.branch) === "latkrabang";
   const pickBranch = (v: string) =>
-    setForm((f) => ({ ...f, branch: v, position: siteOfBranch(v) === "latkrabang" ? f.position : "" }));
+    setForm((f) => ({ ...f, branch: v, position: (siteOfBranch(v) === "latkrabang") === mixer ? f.position : "" }));
   const ready =
     form.ownerType &&
     form.drivercode.trim() &&
@@ -111,6 +166,8 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
     form.branch &&
     form.startDate &&
     (!mixer || form.position) &&
+    (mixer || form.plant !== OTHER || plantOther.trim()) &&
+    (mixer || (form.position && (form.position !== OTHER || positionOther.trim()))) &&
     !source?.active;
 
   /** ตรวจสอบ = ดึงข้อมูลรหัสเดิม แล้วเติมฟอร์ม · วันเริ่มงานคงไว้ เบอร์รถล้าง (ของรอบจ้างใหม่) */
@@ -126,6 +183,14 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
       );
       setSource(src);
       setFilled((n) => n + 1);
+      /* สระบุรี/บางปะกง — ค่าเดิมที่ไม่อยู่ในดรอปดาวน์ = “ระบุเอง…” + ข้อความเดิม */
+      const srcMixer = siteOfBranch(branchOption(src.form.branch) ?? form.branch) === "latkrabang";
+      const [plantPick, plantTyped] = srcMixer ? [src.form.plant, ""] : splitPicked(src.form.plant, regPlants.map((r) => r.plant));
+      const [posPick, posTyped] = srcMixer
+        ? [src.form.position, ""]
+        : splitPicked(src.form.position, regPlants.map((r) => r.position).filter(Boolean));
+      setPlantOther(plantTyped);
+      setPositionOther(posTyped);
       setForm((f) => {
         const branch = branchOption(src.form.branch) ?? f.branch;
         const mixerBranch = siteOfBranch(branch) === "latkrabang";
@@ -135,8 +200,8 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
           branch,
           phone: src.form.phone,
           customer: src.form.customer,
-          plant: src.form.plant,
-          position: mixerBranch && MIXER_POSITIONS.includes(src.form.position) ? src.form.position : "",
+          plant: plantPick,
+          position: mixerBranch ? (MIXER_POSITIONS.includes(posPick) ? posPick : "") : posPick,
           vehicleCode: "",
         };
       });
@@ -164,7 +229,16 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
         copied: { files: number; failed: number } | null;
       }>(
         "/api/drivers",
-        { method: "POST", body: { ...form, ...(source ? { copyFrom: source.drivercode } : {}) } },
+        {
+          method: "POST",
+          body: {
+            ...form,
+            ...(mixer
+              ? {}
+              : { plant: pickedOrTyped(form.plant, plantOther), position: pickedOrTyped(form.position, positionOther) }),
+            ...(source ? { copyFrom: source.drivercode } : {}),
+          },
+        },
         "เพิ่มพนักงานไม่สำเร็จ",
       );
       const title = `เพิ่ม ${OWNER_TYPE_LABELS[form.ownerType as "1" | "2"]} ${drivercode} แล้ว`;
@@ -259,7 +333,31 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
               className="self-start"
             />
           </Frame>
-        ) : null}
+        ) : (
+          <div className="flex flex-col gap-2 sm:max-w-[calc(50%-0.5rem)]">
+            <SelectField
+              key={`add-position-${filled}`}
+              id="add-position"
+              label="ตำแหน่ง"
+              placeholder="เลือก…"
+              value={form.position}
+              onChange={set("position")}
+              {...regPositions}
+              readOnly={saving}
+            />
+            {form.position === OTHER ? (
+              <TextField
+                id="add-position-other"
+                label="ระบุตำแหน่ง"
+                srLabel
+                placeholder="ระบุตำแหน่ง…"
+                value={positionOther}
+                onChange={setPositionOther}
+                readOnly={saving}
+              />
+            ) : null}
+          </div>
+        )}
 
         <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-2">
           <TextField id="add-drivercode" label="รหัสพนักงาน" value={form.drivercode} onChange={set("drivercode")} readOnly={saving} />
@@ -298,20 +396,50 @@ export function DriverAddDialog({ drivers, onClose }: { drivers: DriverListRecor
             optional
             readOnly={saving}
           />
-          <SelectField
-            key={`add-plant-${filled}`}
-            id="add-plant"
-            label="แพล้นท์"
-            options={plants}
-            value={form.plant}
-            onChange={set("plant")}
-            placeholder="เลือกแพล้นท์"
-            searchable
-            searchPlaceholder="ค้นหาแพล้นท์…"
-            clearable
-            optional
-            readOnly={saving}
-          />
+          {mixer ? (
+            <SelectField
+              key={`add-plant-${filled}`}
+              id="add-plant"
+              label="แพล้นท์"
+              options={plants}
+              value={form.plant}
+              onChange={set("plant")}
+              placeholder="เลือกแพล้นท์"
+              searchable
+              searchPlaceholder="ค้นหาแพล้นท์…"
+              clearable
+              optional
+              readOnly={saving}
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <SelectField
+                key={`add-plant-${filled}`}
+                id="add-plant"
+                label="แพล้นท์"
+                placeholder="เลือก…"
+                value={form.plant}
+                onChange={pickRegPlant}
+                groups={regPlantGroups}
+                searchable
+                searchPlaceholder="ค้นชื่อแพล้นท์…"
+                clearable
+                optional
+                readOnly={saving}
+              />
+              {form.plant === OTHER ? (
+                <TextField
+                  id="add-plant-other"
+                  label="ระบุชื่อแพล้นท์"
+                  srLabel
+                  placeholder="ระบุชื่อแพล้นท์…"
+                  value={plantOther}
+                  onChange={setPlantOther}
+                  readOnly={saving}
+                />
+              ) : null}
+            </div>
+          )}
         </div>
 
         <TextareaField
