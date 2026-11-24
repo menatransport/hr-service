@@ -668,8 +668,9 @@ export async function updateOnboardingSection(
   );
   if (!updated) throw new RequisitionError("ไม่พบคำขอที่ระบุ");
 
-  /* รับรถผ่าน → ใบสมัครเป็น “ปฏิบัติงาน” (ล้มเหลวไม่ทำให้การบันทึกของฝ่ายนี้ล้ม) */
-  if (patch.section === "handover" && values.handoverOn && values.result === HANDOVER_PASS && current.match) {
+  /* รับรถผ่าน → ใบสมัครเป็น “ปฏิบัติงาน” (ล้มเหลวไม่ทำให้การบันทึกของฝ่ายนี้ล้ม) · ผลรับรถเว้นว่าง
+     = ผ่าน เหมือน `stageOf()` ที่นับวันรับรถจริงเป็นรับรถแล้ว (DRV2611-0060 ค้างฝึกงาน 17 พ.ย. 2569) */
+  if (patch.section === "handover" && values.handoverOn && (!values.result || values.result === HANDOVER_PASS) && current.match) {
     try {
       const app = await readApplication(current.match.applicationId);
       if (app?.status === "training") {
