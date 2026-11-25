@@ -132,7 +132,8 @@ function siteTabsOf(sites: readonly RecruitSite[], totals: Record<string, number
   const all = sites.length === RECRUIT_SITES.length;
   return [...sites, ...(all && totals.other ? (["other"] as SiteFilter[]) : [])];
 }
-type EmploymentTab = "current" | "resigned";
+/** ทำงาน | พ้นสภาพ | ย้ายไปรถร่วม/พจส. — การย้ายไม่ใช่การลาออก แยกแท็บ (Bew 25 พ.ย. 2569) */
+type EmploymentTab = "current" | "resigned" | "moved";
 
 type FilterKey =
   | "vehicle"
@@ -400,6 +401,8 @@ const RESIGNED_HIDDEN = new Set<string>(["vehicle", "fleet", "plant"]);
 
 /** คอลัมน์ที่ขึ้น **เฉพาะแท็บ “พ้นสภาพแล้ว”** — คนที่ยังทำงานไม่มีวันพ้นสภาพ */
 const RESIGNED_ONLY = new Set<string>(["exitMonth", "exitDate", "exitReason", "exitCategory", "exitControl", "exitOwner"]);
+/** แท็บย้ายไปรถร่วม/พจส. — ไม่ใช่การลาออก ไม่มีหมวด/ควบคุมได้/เจ้าของ */
+const MOVED_HIDDEN = new Set<string>(["exitCategory", "exitControl", "exitOwner"]);
 
 /** ค่าของแต่ละช่องสาเหตุ — ใช้ร่วมกันทั้งตัวกรอง ตัวเลือก และการเรียง · `-` ใน master = ไม่มีเจ้าของ */
 const exitOwnerOf = (d: DriverListRecord) => (d.resignation?.owner && d.resignation.owner !== "-" ? d.resignation.owner : "");
@@ -552,7 +555,9 @@ const RESIGNED_XLSX_DROP = new Set([
 
 /** แท็บที่คนนี้อยู่ — ทุกคนอยู่แท็บเดียวเสมอ */
 function employmentOf(driver: DriverListRecord): EmploymentTab {
-  return driver.active ? "current" : "resigned";
+  if (driver.active) return "current";
+  const kind = driver.resignation?.kind;
+  return kind === "transfer" || kind === "pjs" ? "moved" : "resigned";
 }
 
 /** ข้อความในคอลัมน์รถ — ลาดกระบังนำด้วยเลขรถ สาขาอื่นนำด้วยทะเบียน */
@@ -617,10 +622,10 @@ export function DriverRegistryView({
     () => (resignedRows ? [...registry.drivers, ...resignedRows] : registry.drivers),
     [registry.drivers, resignedRows],
   );
-  const loadingResigned = employment === "resigned" && !resignedLoad;
+  const loadingResigned = employment !== "current" && !resignedLoad;
 
   useEffect(() => {
-    if (employment !== "resigned" || resignedLoad) return;
+    if (employment === "current" || resignedLoad) return;
     let alive = true;
     requestJson<DriverListRecord[]>("/api/drivers/resigned", {}, "โหลดรายชื่อพ้นสภาพไม่สำเร็จ")
       .then((rows) => {
@@ -646,6 +651,9 @@ export function DriverRegistryView({
   /** กล่องตารางเลื่อนของมันเอง เปลี่ยนหน้าแล้วต้องดึงกลับขึ้นหัวตาราง ไม่ใช่ค้างกลางหน้าใหม่ */
   const tableBox = useRef<HTMLDivElement>(null);
 
+  /** แท็บคนที่ออกจากทะเบียน (พ้นสภาพ หรือ ย้าย) — ชุดคอลัมน์/การเรียง/รายชื่อที่โหลดทีหลัง ใช้ร่วมกัน */
+  const exitedTab = employment !== "current";
+  /** แท็บพ้นสภาพจริง (ลาออก/ปลด) — Exit Interview · ภาพรวมสาเหตุ · DataLog อยู่ที่นี่เท่านั้น */
   const resignedTab = employment === "resigned";
 
   /* Exit Interview — สิทธิ์ย่อย `exit-interview` (ค่าเริ่มต้นไม่เห็น) · สถานะโหลดเฉพาะตอนเปิดแท็บพ้นสภาพ */
@@ -660,12 +668,17 @@ export function DriverRegistryView({
    * การเรียงที่ใช้จริง — ยังไม่เลือกคอลัมน์ในแท็บพ้นสภาพ = วันที่พ้นสภาพล่าสุดขึ้นก่อนเสมอ (Bew 10 พ.ย. 2569)
    * · หัวคอลัมน์ “วันที่พ้นสภาพ” จึงขึ้นลูกศรตามด้วย
    */
-  const activeSort: SortKey | null = sortKey ?? (resignedTab ? "exitDate" : null);
+  const activeSort: SortKey | null = sortKey ?? (exitedTab ? "exitDate" : null);
   const activeDir: SortDir = sortKey ? sortDir : "desc";
   /** ชุดคอลัมน์ของแท็บที่เปิดอยู่ — หัวตาราง เมนูบนแถบ (จอแคบ) และช่องในแถวอ่านจากตัวนี้ตัวเดียว */
   const columns = useMemo(
-    () => COLUMNS.filter((c) => (resignedTab ? !RESIGNED_HIDDEN.has(c.sort) : !RESIGNED_ONLY.has(c.sort))),
-    [resignedTab],
+    () =>
+      COLUMNS.filter((c) =>
+        exitedTab
+          ? !RESIGNED_HIDDEN.has(c.sort) && !(employment === "moved" && MOVED_HIDDEN.has(c.sort))
+          : !RESIGNED_ONLY.has(c.sort),
+      ),
+    [exitedTab, employment],
   );
 
   /** รายชื่อในขอบเขตสาขา + สถานะการจ้างที่เลือกอยู่ — ฐานของทั้งไทล์และตัวเลือกตัวกรอง */
@@ -710,8 +723,11 @@ export function DriverRegistryView({
       site === "other"
         ? (registry.siteTotals.other ?? 0)
         : SITE_TAB_KEYS[site].reduce((sum, key) => sum + (registry.siteTotals[key] ?? 0), 0);
-    const loaded = resignedRows?.filter((d) => siteTabOf(d.siteKey) === site).length;
-    return { current, resigned: loaded ?? Math.max(0, all - current) };
+    const loaded = resignedRows?.filter((d) => siteTabOf(d.siteKey) === site);
+    /* ก่อนโหลดรายชื่อแยกพ้นสภาพ/ย้ายไม่ได้ — พ้นสภาพแสดงยอดรวมไปก่อน แท็บย้ายยังไม่มีตัวเลข */
+    if (!loaded) return { current, resigned: Math.max(0, all - current), moved: undefined };
+    const moved = loaded.filter((d) => employmentOf(d) === "moved").length;
+    return { current, resigned: loaded.length - moved, moved };
   }, [registry, site, resignedRows]);
 
   /** ออกเดือนนี้ / เดือนก่อน (แท็บพ้นสภาพ) */
@@ -997,13 +1013,19 @@ export function DriverRegistryView({
    */
   function changeEmployment(next: EmploymentTab) {
     setEmployment(next);
-    if (next !== "resigned") {
+    if (next === "current") {
       setFilters((prev) => ({ ...prev, exitMonth: [], exitReason: [], exitCategory: [], exitControl: [], exitOwner: [] }));
       if (sortKey && RESIGNED_ONLY.has(sortKey)) setSortKey(null);
       return;
     }
 
-    setFilters((prev) => ({ ...prev, vehicle: [], fleet: [], plant: [] }));
+    setFilters((prev) => ({
+      ...prev,
+      vehicle: [],
+      fleet: [],
+      plant: [],
+      ...(next === "moved" ? { exitCategory: [], exitControl: [], exitOwner: [] } : {}),
+    }));
     /* เข้าแท็บพ้นสภาพ = กลับไปเรียงวันที่พ้นสภาพล่าสุดก่อนทุกครั้ง */
     setSortKey(null);
   }
@@ -1018,7 +1040,7 @@ export function DriverRegistryView({
    * กรองเฉพาะแท็กต้องต่ออายุ (การ์ด/ชิปแถบเตือน) = เนื้อหน้าเปลี่ยนเป็นปฏิทิน (Bew 21 พ.ย. 2569)
    * · สลับกลับเป็นตารางได้ · ปฏิทินอ่าน `results` ทั้งชุด (ไม่แบ่งหน้า)
    */
-  const renewalMode = !resignedTab && filters.docs.length > 0 && filters.docs.every((t) => ALERT_TAGS.includes(t as DocTag));
+  const renewalMode = !exitedTab && filters.docs.length > 0 && filters.docs.every((t) => ALERT_TAGS.includes(t as DocTag));
   const [docView, setDocView] = useState<"calendar" | "table">("calendar");
   const showCalendar = renewalMode && docView === "calendar";
   /** แถบ “กรองอยู่” — โหมดต่ออายุมีตัวกรองเอกสารของตัวเองบนแถบล่างแล้ว ไม่ต้องขึ้นซ้ำเป็น “4 รายการ” */
@@ -1049,12 +1071,14 @@ export function DriverRegistryView({
   );
 
   /** ส่งออก Excel — เหมือนกันทั้งเมนูเต็ม (แก้ได้) และปุ่มส่งออกอย่างเดียว (อ่านอย่างเดียว) */
+  const tabName = employment === "moved" ? "ย้ายไปรถร่วม-พจส" : resignedTab ? "พ้นสภาพ" : "ปัจจุบัน";
+  const tabTitle = employment === "moved" ? "ย้ายไปรถร่วม / พจส." : resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน";
   const exportProps: XlsxExportProps<DriverExportRow> = {
-    name: `ทะเบียน-พจส-${resignedTab ? "พ้นสภาพ" : "ปัจจุบัน"}`,
+    name: `ทะเบียน-พจส-${tabName}`,
     count: results.length,
     build: async () => ({
-      sheet: resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน",
-      title: `ทะเบียนประวัติ พจส. · ${resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน"}`,
+      sheet: tabTitle.replace(/\//g, "-"),
+      title: `ทะเบียนประวัติ พจส. · ${tabTitle}`,
       filter: [
         `สาขา: ${siteFilterLabel(site)}`,
         mixer !== "all" ? `ตำแหน่ง: ${mixer}` : "",
@@ -1067,10 +1091,14 @@ export function DriverRegistryView({
         .filter(Boolean)
         .join(" · "),
       total: scope.length,
-      ...(await driverSheet(results, resignedTab)),
+      ...(await driverSheet(results, exitedTab)),
     }),
   };
 
+  const moved = {
+    transfer: scope.filter((d) => d.resignation?.kind === "transfer").length,
+    pjs: scope.filter((d) => d.resignation?.kind === "pjs").length,
+  };
   const interview = resignedTab && canInterview && interviewSummary ? interviewCounts(scope, interviewSummary) : null;
   const toggleStage = (stages: InterviewStage[]) =>
     setStageFilter((cur) => (cur.join() === stages.join() ? [] : stages));
@@ -1083,7 +1111,24 @@ export function DriverRegistryView({
 
       <SummaryPanel label="สรุปทะเบียน">
         <StatStrip>
-          {resignedTab ? (
+          {employment === "moved" ? (
+            <>
+              <RegistryStat label="ย้ายออกจากทะเบียน" value={counts.total} sub={`สาขา${siteFilterLabel(site)} · ไม่นับเป็นการลาออก`} />
+              <RegistryStat
+                label="ย้ายไปรถร่วม"
+                value={moved.transfer}
+                share={moved.transfer / (counts.total || 1)}
+              />
+              <RegistryStat label="ย้ายไปพจส." value={moved.pjs} share={moved.pjs / (counts.total || 1)} />
+              <RegistryStat
+                label={`ย้ายเดือนนี้ (${THAI_MONTHS_SHORT[new Date().getMonth()]})`}
+                value={exitPace.thisMonth}
+                sub={`เดือนก่อน ${exitPace.lastMonth.toLocaleString("th-TH")} คน`}
+                active={filters.exitMonth.length === 1 && filters.exitMonth[0] === exitPace.thisKey}
+                onClick={() => toggleTile("exitMonth", exitPace.thisKey)}
+              />
+            </>
+          ) : resignedTab ? (
             <>
               <RegistryStat label="พ้นสภาพแล้ว" value={counts.total} sub={`สาขา${siteFilterLabel(site)}`} />
               <RegistryStat
@@ -1183,7 +1228,7 @@ export function DriverRegistryView({
             value={query}
             onChange={setQuery}
             label="ค้นหาในทะเบียนประวัติ"
-            placeholder={resignedTab ? "ค้นหาชื่อ รหัส เบอร์โทร…" : "ค้นหาชื่อ รหัส ทะเบียน แพล้นท์…"}
+            placeholder={exitedTab ? "ค้นหาชื่อ รหัส เบอร์โทร…" : "ค้นหาชื่อ รหัส ทะเบียน แพล้นท์…"}
             tone="filled"
             className="w-full lg:max-w-80 lg:flex-1"
           />
@@ -1196,6 +1241,7 @@ export function DriverRegistryView({
             options={[
               { value: "current", label: "ทำงาน", count: employmentTotals.current },
               { value: "resigned", label: "พ้นสภาพ", count: employmentTotals.resigned },
+              { value: "moved", label: "ย้ายไปรถร่วม / พจส.", count: employmentTotals.moved },
             ]}
             className="w-full sm:w-auto"
           />
@@ -1292,7 +1338,7 @@ export function DriverRegistryView({
         <SummaryBody pad>
           <MascotLoader text="กำลังโหลดรายชื่อพ้นสภาพ" className="py-10" />
         </SummaryBody>
-      ) : resignedTab && resignedLoad?.error ? (
+      ) : exitedTab && resignedLoad?.error ? (
         <SummaryBody pad>
           <div className="flex flex-col items-center gap-2.5 py-10 text-center">
             <p className="text-sm font-semibold text-sla">โหลดรายชื่อพ้นสภาพไม่สำเร็จ</p>
@@ -1332,7 +1378,7 @@ export function DriverRegistryView({
             <table
               /* แท็บพ้นสภาพเหลือ 5 คอลัมน์ ถ้าคงความกว้างขั้นต่ำเดิมไว้จะเหลือที่ว่างยาวท้ายตาราง */
               className={`sheet-table w-full border-collapse text-13 ${
-                resignedTab ? "min-w-[1800px]" : "min-w-[1350px]"
+                exitedTab ? "min-w-[1800px]" : "min-w-[1350px]"
               }`}
             >
               <thead>
@@ -1367,7 +1413,7 @@ export function DriverRegistryView({
               */}
               <tbody key={`${current}-${results.length}-${sortKey ?? ""}-${sortDir}`}>
                 {pageRows.map((d, i) => (
-                  <Row key={d.drivercode} driver={d} index={i} hideVehicle={resignedTab} interview={interviewCol} />
+                  <Row key={d.drivercode} driver={d} index={i} hideVehicle={exitedTab} interview={interviewCol} />
                 ))}
               </tbody>
             </table>
@@ -1378,7 +1424,7 @@ export function DriverRegistryView({
           <ul key={`${current}-${results.length}`} className="divide-y divide-line">
             {pageRows.map((d, i) => (
               <li key={d.drivercode}>
-                <DriverCard driver={d} index={i} hideVehicle={resignedTab} interview={interviewCol} />
+                <DriverCard driver={d} index={i} hideVehicle={exitedTab} interview={interviewCol} />
               </li>
             ))}
           </ul>
@@ -2255,10 +2301,25 @@ function OwnerSplitStat({ options }: { options: ColumnFilterOption[] }) {
 /* --------------------------------------------------------- ภาพรวมพ้นสภาพ */
 
 /** ควบคุมได้ = ได้ + ได้บางส่วน · ที่เหลือ (ไม่ได้ / ไม่นับ / ไม่ระบุ) นับเป็นควบคุมไม่ได้ในกราฟ */
+/**
+ * ควบคุมได้? 4 ชั้นของกราฟรายเดือน — สี/ลำดับเดียวกับแท็บ TurnOver ของแดชบอร์ด (`CTL_CONFIG` ใน turnover-charts.tsx)
+ * หน้านี้ไม่มีตัวแปรสีของ `.dash` จึงใส่ค่าสีตรง ๆ
+ */
+const CTL_BARS = [
+  { key: "yes", label: "ควบคุมได้", color: "#eb6834" },
+  { key: "partial", label: "ควบคุมได้บางส่วน", color: "#eda100" },
+  { key: "no", label: "ควบคุมไม่ได้", color: "#2a78d6" },
+  { key: "na", label: "ไม่ได้ข้อมูล / ไม่ระบุ", color: "#c4cad3" },
+] as const;
+const ctlKeyOf = (d: DriverListRecord): (typeof CTL_BARS)[number]["key"] => {
+  const c = d.resignation?.controllable;
+  return c === "yes" || c === "partial" || c === "no" ? c : "na";
+};
 const isControllable = (d: DriverListRecord) => d.resignation?.controllable === "yes" || d.resignation?.controllable === "partial";
 
 /**
- * แถบภาพรวมของแท็บพ้นสภาพ — กราฟแท่งรายเดือน 12 เดือนล่าสุด (ควบคุมได้ / ไม่ได้ ซ้อนกัน) + สาเหตุหลัก 5 อันดับ
+ * แถบภาพรวมของแท็บพ้นสภาพ — กราฟแท่งรายเดือน 12 เดือนล่าสุด (ควบคุมได้ / บางส่วน / ไม่ได้ / ไม่ได้ข้อมูล ซ้อนกัน
+ * แบบเดียวกับแท็บ TurnOver 25 พ.ย. 2569) + สาเหตุหลัก 5 อันดับ
  * · นับจาก `scope` (สาขา + แท็บ) ไม่ใช่ผลที่กรองแล้ว — กดแท่ง/สาเหตุ = ติ๊กตัวกรองคอลัมน์นั้น กดซ้ำเลิก
  */
 function ExitInsights({
@@ -2281,26 +2342,28 @@ function ExitInsights({
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
     }
-    const byMonth = new Map(keys.map((k) => [k, { ctl: 0, un: 0 }]));
+    const byMonth = new Map(keys.map((k) => [k, { yes: 0, partial: 0, no: 0, na: 0 }]));
     const byReason = new Map<string, { label: string; count: number; ctl: boolean }>();
     for (const d of rows) {
       const m = byMonth.get(exitMonthKey(d));
-      if (m) {
-        if (isControllable(d)) m.ctl++;
-        else m.un++;
-      }
+      if (m) m[ctlKeyOf(d)]++;
       const code = d.resignation?.reasonCode;
       if (code) {
         const r = byReason.get(code);
         byReason.set(code, { label: d.resignation?.reasonLabel || r?.label || "", count: (r?.count ?? 0) + 1, ctl: isControllable(d) });
       }
     }
-    const bars = keys.map((key) => ({ key, ...byMonth.get(key)! }));
+    const bars = keys.map((key) => {
+      const b = byMonth.get(key)!;
+      return { key, ...b, total: b.yes + b.partial + b.no + b.na };
+    });
     const top = [...byReason.entries()]
       .map(([code, r]) => ({ code, ...r }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-    return { bars, max: Math.max(1, ...bars.map((b) => b.ctl + b.un)), top };
+    const sum = bars.reduce((n, b) => n + b.total, 0);
+    const active = bars.filter((b) => b.total).length;
+    return { bars, max: Math.max(1, ...bars.map((b) => b.total)), top, avg: active ? Math.round(sum / active) : 0 };
   }, [rows]);
 
   const maxReason = data.top[0]?.count ?? 1;
@@ -2308,22 +2371,22 @@ function ExitInsights({
   return (
     <div className="flex flex-wrap border-b border-line">
       <div className="flex min-w-0 flex-[1_1_32rem] flex-col gap-3 border-line px-(--sheet-px) py-4 lg:border-r">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="text-13 font-semibold text-ink">พ้นสภาพรายเดือน · 12 เดือนล่าสุด</h2>
-          <span className="flex gap-3.5 text-11-5 text-mut">
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="size-2.5 rounded-xs bg-ink" />
-              ควบคุมได้
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="size-2.5 rounded-xs bg-ink/25" />
-              ควบคุมไม่ได้
-            </span>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5">
+          <div className="min-w-0">
+            <h2 className="text-13 font-semibold text-ink">พ้นสภาพรายเดือน · 12 เดือนล่าสุด</h2>
+            <p className="text-11-5 text-mut">แยกตามควบคุมได้หรือไม่ · เฉลี่ย {data.avg.toLocaleString("th-TH")} คน/เดือน · กดแท่งเพื่อกรองเดือน</p>
+          </div>
+          <span className="flex flex-wrap gap-x-3.5 gap-y-1 text-11-5 text-mut">
+            {CTL_BARS.map((c) => (
+              <span key={c.key} className="flex items-center gap-1.5">
+                <span aria-hidden className="size-2.5 rounded-xs" style={{ background: c.color }} />
+                {c.label}
+              </span>
+            ))}
           </span>
         </div>
-        <div className="grid h-36 grid-cols-12 items-end gap-2 border-b border-line-strong">
+        <div className="grid h-40 grid-cols-12 items-end gap-2 border-b border-line-strong">
           {data.bars.map((b) => {
-            const total = b.ctl + b.un;
             const on = months.includes(b.key);
             const dim = months.length > 0 && !on;
             return (
@@ -2332,13 +2395,16 @@ function ExitInsights({
                 type="button"
                 onClick={() => onMonth(b.key)}
                 aria-pressed={on}
-                title={`${formatExitMonth(b.key)} · ${total} คน (ควบคุมได้ ${b.ctl} · ไม่ได้ ${b.un})`}
-                className={`group flex h-full cursor-pointer flex-col items-center justify-end gap-1 transition-opacity ${dim ? "opacity-40 hover:opacity-80" : ""}`}
+                title={`${formatExitMonth(b.key)} · ${b.total} คน (${CTL_BARS.map((c) => `${c.label} ${b[c.key]}`).join(" · ")})`}
+                className={`group flex h-full cursor-pointer flex-col items-center justify-end gap-1 transition-opacity ${dim ? "opacity-35 hover:opacity-80" : ""}`}
               >
-                <span className="text-11 text-mut tabular-nums">{total || ""}</span>
-                <span className="flex w-full max-w-7 flex-col gap-px" style={{ height: `${(total / data.max) * 78}%` }}>
-                  <span className={`rounded-t-xs ${on ? "bg-primary/40" : "bg-ink/25"} group-hover:bg-primary/40`} style={{ flexGrow: b.un }} />
-                  <span className={`${on ? "bg-primary" : "bg-ink"} group-hover:bg-primary`} style={{ flexGrow: b.ctl }} />
+                <span className={`text-11 tabular-nums ${on ? "font-semibold text-ink" : "text-mut"}`}>{b.total || ""}</span>
+                {/* ซ้อนจากล่างขึ้นบน: ควบคุมได้ → บางส่วน → ไม่ได้ → ไม่ได้ข้อมูล (ลำดับเดียวกับแท็บ TurnOver) */}
+                <span
+                  className={`flex w-full max-w-8 flex-col-reverse overflow-hidden rounded-t-sm transition-[filter] group-hover:brightness-95 ${on ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                  style={{ height: `${(b.total / data.max) * 80}%` }}
+                >
+                  {CTL_BARS.map((c) => (b[c.key] ? <span key={c.key} style={{ flexGrow: b[c.key], background: c.color }} /> : null))}
                 </span>
               </button>
             );

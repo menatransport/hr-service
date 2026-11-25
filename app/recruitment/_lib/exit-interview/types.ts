@@ -64,10 +64,19 @@ export const RECRUIT_CHANNELS = [
   "ย้ายกลับมาจากรถร่วม",
 ];
 
+/** Q1 ช่วงเวลาที่เริ่มคิดจะออก — ตัวเลือกเดียวกับ dropdown ในชีต DataLog */
+export const Q1_BANDS = [
+  "น้อยกว่า 1 เดือนก่อนลาออก",
+  "ประมาณ 1–3 เดือนก่อนลาออก",
+  "ประมาณ 4–6 เดือนก่อนลาออก",
+  "ประมาณ 7–12 เดือนก่อนลาออก",
+  "มากกว่า 1 ปีก่อนลาออก",
+] as const;
+
 export interface Wave1Answers {
   dateISO: string;
-  /** Q1 เริ่มคิดจะออกกี่เดือนก่อนยื่นใบลาออก */
-  q1Months: number | null;
+  /** Q1 เริ่มคิดจะออกเมื่อไหร่ (`Q1_BANDS`) */
+  q1Band: string;
   q2: string;
   q3: string;
   q4: YesNoUnsure;
@@ -80,10 +89,12 @@ export interface Wave1Answers {
   /** Q8 คะแนนหัวหน้า 1–5 */
   q8Score: number | null;
   q81: string;
-  /** Q9 เดือนที่แล้วรับจริง (บาท) */
-  q9Income: number | null;
-  /** Q9.1 ที่ใหม่ให้เท่าไร (บาท) */
-  q91NewIncome: number | null;
+  /**
+   * Q9 เดือนที่แล้วรับจริง · Q9.1 ที่ใหม่ให้เท่าไร — **ข้อความตามที่ตอบ** (เช่น “สุทธิ 12000” · “วันละ 400”)
+   * ตัวเลขรายเดือนดึงตอนวิเคราะห์ด้วย `monthlyAmount()`
+   */
+  q9Income: string;
+  q91NewIncome: string;
   q10: string;
   q11: string;
   completed: boolean;
@@ -92,7 +103,8 @@ export interface Wave1Answers {
 export interface Wave2Answers {
   dateISO: string;
   qw1: string;
-  qw2Income: number | null;
+  /** QW2 รายได้ที่ใหม่ — ข้อความตามที่ตอบ (แบบเดียวกับ Q9) */
+  qw2Income: string;
   qw21: string;
   qw3: string;
   /** QW3.1 รหัสสาเหตุจากคำตอบ QW3 */
@@ -203,12 +215,24 @@ export function tenureDays(startISO: string, endISO: string): number | null {
   return Number.isFinite(ms) ? Math.round(ms / 86_400_000) : null;
 }
 
+/**
+ * ตัวเลขรายได้ต่อเดือนจากคำตอบที่พิมพ์ (“ประมาณ 18000” · “20K” · “15,000”) — ค่าที่ต่ำกว่า 3,000
+ * (เช่น “วันละ 400”) ไม่ใช่รายเดือน ไม่นับ · ไม่เจอ = `null`
+ */
+export function monthlyAmount(text: string): number | null {
+  const nums = [...text.replace(/,/g, "").matchAll(/(\d+(?:\.\d+)?)\s*(k|K|พัน|หมื่น)?/g)].map(([, n, u]) =>
+    Number(n) * (u === "k" || u === "K" || u === "พัน" ? 1000 : u === "หมื่น" ? 10000 : 1),
+  );
+  const monthly = nums.filter((n) => n >= 3000 && n <= 300000);
+  return monthly.length ? Math.max(...monthly) : null;
+}
+
 /* ------------------------------------------------------------------ ค่าว่าง */
 
 export function emptyWave1(): Wave1Answers {
   return {
     dateISO: "",
-    q1Months: null,
+    q1Band: "",
     q2: "",
     q3: "",
     q4: "",
@@ -220,8 +244,8 @@ export function emptyWave1(): Wave1Answers {
     q7: "",
     q8Score: null,
     q81: "",
-    q9Income: null,
-    q91NewIncome: null,
+    q9Income: "",
+    q91NewIncome: "",
     q10: "",
     q11: "",
     completed: false,
@@ -229,7 +253,7 @@ export function emptyWave1(): Wave1Answers {
 }
 
 export function emptyWave2(): Wave2Answers {
-  return { dateISO: "", qw1: "", qw2Income: null, qw21: "", qw3: "", qw31Code: "", qw4: "", qw5: "", completed: false };
+  return { dateISO: "", qw1: "", qw2Income: "", qw21: "", qw3: "", qw31Code: "", qw4: "", qw5: "", completed: false };
 }
 
 export function emptyInterview(drivercode: string, exitDateISO: string): ExitInterview {

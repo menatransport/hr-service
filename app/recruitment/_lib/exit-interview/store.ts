@@ -6,6 +6,7 @@ import { controllableLabel, exitTypeLabel } from "@/app/recruitment/_lib/resign-
 import {
   addDaysISO,
   emptyInterview,
+  Q1_BANDS,
   stageOf,
   tenureBand,
   tenureDays,
@@ -231,7 +232,7 @@ export async function saveExitInterview(code: string, input: SaveInput, actor: s
 
   const wave1 = {
     dateISO: date(w1.dateISO, "วันที่สัมภาษณ์ Wave 1 "),
-    q1Months: num(w1.q1Months, "จำนวนเดือน (Q1) ", 0, 600),
+    q1Band: oneOf(w1.q1Band, Q1_BANDS),
     q2: text(w1.q2),
     q3: text(w1.q3),
     q4: oneOf<Exclude<YesNoUnsure, "">>(w1.q4, yn),
@@ -243,8 +244,8 @@ export async function saveExitInterview(code: string, input: SaveInput, actor: s
     q7: text(w1.q7, MAX_SHORT),
     q8Score: num(w1.q8Score, "คะแนนหัวหน้า (Q8) ", 1, 5),
     q81: text(w1.q81),
-    q9Income: num(w1.q9Income, "รายได้เดือนที่แล้ว (Q9) "),
-    q91NewIncome: num(w1.q91NewIncome, "รายได้ที่ใหม่ (Q9.1) "),
+    q9Income: text(w1.q9Income, MAX_SHORT * 2),
+    q91NewIncome: text(w1.q91NewIncome, MAX_SHORT * 2),
     q10: text(w1.q10),
     q11: text(w1.q11),
     completed: w1.completed === true,
@@ -252,7 +253,7 @@ export async function saveExitInterview(code: string, input: SaveInput, actor: s
   const wave2 = {
     dateISO: date(w2.dateISO, "วันที่โทร Wave 2 "),
     qw1: text(w2.qw1),
-    qw2Income: num(w2.qw2Income, "รายได้ที่ใหม่ (QW2) "),
+    qw2Income: text(w2.qw2Income, MAX_SHORT * 2),
     qw21: text(w2.qw21),
     qw3: text(w2.qw3),
     qw31Code: text(w2.qw31Code, 8).toUpperCase(),

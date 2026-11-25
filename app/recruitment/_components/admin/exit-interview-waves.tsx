@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { ChevronDown, Info } from "lucide-react";
 
-import { DateField, NumberField, SelectField, TextField, TextareaField } from "@/components/ui/field";
+import { DateField, SelectField, TextField, TextareaField } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/summary-panel";
 import {
   JOB_MATCH,
+  Q1_BANDS,
   WAVE1_CLOSING,
   WAVE1_OPENING,
   WAVE1_QUESTIONS,
@@ -104,7 +105,16 @@ export function Wave1Fields({ id, v, set }: { id: string; v: Wave1Answers; set: 
       <Script title="สคริปต์เปิดบทสนทนา (อ่านคำต่อคำ)" text={WAVE1_OPENING} />
       <DateField id={`${id}-w1d`} label="วันที่สัมภาษณ์ Wave 1" value={v.dateISO} onChange={(x) => set({ dateISO: x })} />
       <Question q={Q.q1}>
-        <NumberField id={`${id}-q1`} label="กี่เดือนก่อนยื่นใบลาออก" optional value={v.q1Months} onChange={(x) => set({ q1Months: x })} placeholder="เดือน" />
+        <SelectField
+          id={`${id}-q1`}
+          label="เริ่มคิดจะออกเมื่อไหร่"
+          optional
+          value={v.q1Band}
+          onChange={(x) => set({ q1Band: x })}
+          placeholder="ยังไม่ตอบ"
+          options={Q1_BANDS.map((b) => ({ value: b, label: b }))}
+          clearable
+        />
       </Question>
       <Question q={Q.q2}>
         <TextareaField id={`${id}-q2`} label="คำตอบ (คำต่อคำ)" optional rows={2} value={v.q2} onChange={(x) => set({ q2: x })} />
@@ -142,8 +152,8 @@ export function Wave1Fields({ id, v, set }: { id: string; v: Wave1Answers; set: 
       </Question>
       <Question q={Q.q9}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <NumberField id={`${id}-q9`} label="เดือนที่แล้วรับจริง (บาท)" optional value={v.q9Income} onChange={(x) => set({ q9Income: x })} />
-          <NumberField id={`${id}-q91`} label="Q9.1 ที่ใหม่ให้ (บาท)" optional value={v.q91NewIncome} onChange={(x) => set({ q91NewIncome: x })} />
+          <TextField id={`${id}-q9`} label="เดือนที่แล้วรับจริง" optional value={v.q9Income} onChange={(x) => set({ q9Income: x })} placeholder="เช่น สุทธิ 12000 · วันละ 400" />
+          <TextField id={`${id}-q91`} label="Q9.1 ที่ใหม่ให้" optional value={v.q91NewIncome} onChange={(x) => set({ q91NewIncome: x })} placeholder="เช่น 20K · ยังไม่ได้งานใหม่" />
         </div>
       </Question>
       <Question q={Q.q10}>
@@ -179,7 +189,7 @@ export function Wave2Fields({
         <TextareaField id={`${id}-qw1`} label="ที่ทำงานใหม่ / ขับรถอะไร" optional rows={2} value={v.qw1} onChange={(x) => set({ qw1: x })} />
       </Question>
       <Question q={Q.qw2}>
-        <NumberField id={`${id}-qw2`} label="รายได้ที่ใหม่ / เดือน (บาท)" optional value={v.qw2Income} onChange={(x) => set({ qw2Income: x })} />
+        <TextField id={`${id}-qw2`} label="รายได้ที่ใหม่" optional value={v.qw2Income} onChange={(x) => set({ qw2Income: x })} placeholder="เช่น 18000 / เดือน" />
         <TextareaField id={`${id}-qw21`} label="QW2.1 ตารางงาน · ได้กลับบ้าน · พักผ่อน" optional rows={2} value={v.qw21} onChange={(x) => set({ qw21: x })} />
       </Question>
       <Question q={Q.qw3}>
