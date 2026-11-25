@@ -52,11 +52,19 @@ export interface ApiGroup {
 /** พาธที่อยู่ในขอบเขตเอกสาร — `check_api_docs.mjs` อ่านรายการนี้ไปเทียบกับ route จริง */
 export const API_DOCS_SCOPE = ["/api/auth/", "/api/api-keys", "/api/recruitment/", "/api/drivers", "/api/uploads"];
 
-export const API_DOCS_VERSION = "4.11.0";
-export const API_DOCS_UPDATED = "2026-11-12";
+export const API_DOCS_VERSION = "4.12.0";
+export const API_DOCS_UPDATED = "2026-11-25";
 
 /** ใหม่สุดอยู่บน · เวอร์ชัน: ต่อท้ายเส้นใหม่/ฟิลด์ใหม่ = minor · เปลี่ยนรูปแบบที่ของเดิมพัง = major */
 export const API_CHANGELOG: { date: string; version: string; changes: string[] }[] = [
+  {
+    date: "2026-11-25",
+    version: "4.12.0",
+    changes: [
+      "เพิ่ม **Exit Interview** (สิทธิ์ย่อย `exit-interview` · ปฏิเสธเมื่ออ่านสิทธิ์ไม่ได้): `GET/PUT /api/drivers/{drivercode}/exit-interview` · `GET /api/drivers/exit-interviews/summary` · `POST /api/drivers/exit-interviews/export`",
+      "`resignation` เพิ่ม `controllable` · `owner` · `secondaryCodes` · `reasonSource` · Reason Code Master เพิ่ม `controllable` · `owner` · `evidence` · `evidenceType`",
+    ],
+  },
   {
     date: "2026-11-12",
     version: "4.11.0",
@@ -428,6 +436,66 @@ export const API_GROUPS: ApiGroup[] = [
         errors: [
           { status: 400, when: "ข้อมูลไม่ครบ รหัสเหตุผลไม่มี/ปิดใช้ หรือวันที่ในอนาคต" },
           { status: 404, when: "ไม่พบรหัส พจส." },
+        ],
+      },
+      {
+        method: "GET",
+        path: "/api/drivers/{drivercode}/exit-interview",
+        summary: "Exit Interview ของคนพ้นสภาพ — ข้อมูลอ้างอิง + คำตอบ + สถานะ",
+        description: "เฉพาะสิทธิ์ย่อย `exit-interview` (ค่าเริ่มต้นไม่เห็น · อ่านสิทธิ์ไม่ได้ = 403) · ใช้ได้กับ `resignation.kind = resign` เท่านั้น",
+        access: "login",
+        params: [P("drivercode", "รหัส พจส.")],
+        response: "{ driver: { drivercode, name, exitDateISO, tenureDays, tenureBand, reasonCode, … }, interview: { reference, contacts, outcome, wave1, wave2, income, safetyFlag, reasonHistory }, stage, saved }",
+        errors: [
+          { status: 400, when: "ยังไม่พ้นสภาพ หรือเป็นย้ายไปรถร่วม/พจส." },
+          { status: 403, when: "ไม่มีสิทธิ์ exit-interview" },
+          { status: 404, when: "ไม่พบรหัส พจส." },
+        ],
+      },
+      {
+        method: "PUT",
+        path: "/api/drivers/{drivercode}/exit-interview",
+        summary: "บันทึก Exit Interview ทั้งชุด + ซิงก์รหัสสาเหตุลงทะเบียน",
+        description: "ทับของเดิมทั้งชุด · `outcome` N1/N2 = รหัสหลักเป็น N1/N2 · รหัสหลักเปลี่ยน → เขียนทับ `resignation.reasonCode` (ของเก่าลง `reasonHistory`) · รหัสรอง ≤ 2 ไม่ซ้ำรหัสหลัก",
+        access: "login",
+        params: [
+          P("drivercode", "รหัส พจส."),
+          { name: "reference", in: "body", type: "{ stZone, rcOwner, channel }", desc: "ข้อมูลที่ทะเบียนไม่มี" },
+          { name: "contacts", in: "body", type: "[{ slot: 1|2|3, dateISO, result: \"answered\"|\"no_answer\", note }]", desc: "การโทร ≤ 3 ครั้ง" },
+          { name: "outcome", in: "body", type: '"" | "interviewed" | "N1" | "N2"', desc: "N1 ต้องไม่รับครบ 3 ครั้ง" },
+          { name: "wave1", in: "body", type: "object", desc: "Q1–Q11 + `dateISO` + `completed`" },
+          { name: "wave2", in: "body", type: "object", desc: "QW1–QW5 + `qw31Code` + `dateISO` + `completed` (ต้องเสร็จ Wave 1 ก่อน)" },
+          { name: "income", in: "body", type: "{ net, average, deduction }", desc: "รายได้ย้อนหลัง 3 เดือน (บาท)" },
+          { name: "safetyFlag", in: "body", type: "boolean", desc: "ต้องแจ้ง HR Chief" },
+          { name: "codes", in: "body", type: "{ primary, secondary: string[] }", desc: "รหัสสาเหตุหลัก/รอง" },
+        ],
+        response: "เหมือน GET",
+        errors: [
+          { status: 400, when: "ค่าไม่ถูกต้อง วันที่ในอนาคต รหัสไม่มี/ซ้ำ หรือ N1 โทรไม่ครบ 3 ครั้ง" },
+          { status: 403, when: "ไม่มีสิทธิ์ exit-interview" },
+          { status: 404, when: "ไม่พบรหัส พจส." },
+        ],
+      },
+      {
+        method: "GET",
+        path: "/api/drivers/exit-interviews/summary",
+        summary: "สถานะ Exit Interview ต่อคน (ไม่มีคำตอบ)",
+        description: "ทุกคนที่พ้นสภาพแบบ `resign` · สิทธิ์ `exit-interview`",
+        access: "login",
+        response: "[{ drivercode, exitDateISO, stage: \"pending\"|\"wave1\"|\"wave2_due\"|\"wave2_late\"|\"done\"|\"no_data\", wave2DueISO, safetyFlag }]",
+        errors: [{ status: 403, when: "ไม่มีสิทธิ์ exit-interview" }],
+      },
+      {
+        method: "POST",
+        path: "/api/drivers/exit-interviews/export",
+        summary: "แถว DataLog สำหรับไฟล์ Excel Exit Interview",
+        description: "สิทธิ์ `exit-interview` · เบอร์โทรตามกติกาเดียวกับ `/api/drivers/resigned`",
+        access: "login",
+        params: [{ name: "codes", in: "body", type: "string[] ≤ 5000", required: true, desc: "รหัสตามลำดับในตาราง" }],
+        response: "[{ drivercode, name, phone, …, reasonCode, controllable, owner, stage, interview }]",
+        errors: [
+          { status: 400, when: "ไม่มีรายชื่อ หรือเกิน 5000" },
+          { status: 403, when: "ไม่มีสิทธิ์ exit-interview" },
         ],
       },
       {

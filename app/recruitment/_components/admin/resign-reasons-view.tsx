@@ -20,6 +20,8 @@ import {
 } from "@/app/recruitment/_components/admin/resign-reason-editors";
 import {
   EXIT_TYPES,
+  CONTROLLABLE_CHIP,
+  controllableLabel,
   EXIT_TYPE_CHIP,
   type ExitType,
   type ResignCategory,
@@ -292,6 +294,16 @@ export function ResignReasonsView({ initial }: { initial: ResignMaster }) {
                       <p className="text-13 text-pretty">{r.label}</p>
                       {r.description ? (
                         <p className="text-11-5 text-mut text-pretty">{r.description}</p>
+                      ) : null}
+                      {r.controllable || r.owner ? (
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-11-5 text-mut">
+                          {r.controllable ? (
+                            <span className={`chip ${CONTROLLABLE_CHIP[r.controllable]}`}>
+                              {controllableLabel(r.controllable)}
+                            </span>
+                          ) : null}
+                          {r.owner && r.owner !== "-" ? <span>เจ้าของ · {r.owner}</span> : null}
+                        </p>
                       ) : null}
                     </div>
                     <span className="col-start-2 row-start-2 sm:col-start-auto sm:row-start-auto">

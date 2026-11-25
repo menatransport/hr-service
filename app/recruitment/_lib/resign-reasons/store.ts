@@ -4,7 +4,9 @@ import { hrCol } from "@/lib/db";
 import { RecruitmentError } from "@/app/recruitment/_lib/questions";
 import {
   compareCode,
+  isControllable,
   isExitType,
+  type Controllable,
   type ExitType,
   type ResignCategory,
   type ResignMaster,
@@ -28,6 +30,7 @@ import {
 
 const MAX_LABEL = 120;
 const MAX_DESC = 300;
+const MAX_OWNER = 80;
 
 interface CategoryDoc {
   prefix: string;
@@ -44,6 +47,10 @@ interface ReasonDoc {
   label: string;
   description: string;
   exitType: ExitType;
+  controllable?: Controllable | "";
+  owner?: string;
+  evidence?: string;
+  evidenceType?: string;
   active: boolean;
   order: number;
   updatedAt: string;
@@ -85,6 +92,10 @@ function toReason(doc: WithId<ReasonDoc>): ResignReason {
     label: doc.label,
     description: doc.description ?? "",
     exitType: isExitType(doc.exitType) ? doc.exitType : "vol",
+    controllable: isControllable(doc.controllable) ? doc.controllable : "",
+    owner: doc.owner ?? "",
+    evidence: doc.evidence ?? "",
+    evidenceType: doc.evidenceType ?? "",
     active: doc.active !== false,
     order: doc.order ?? 0,
     updatedAt: doc.updatedAt ?? "",
@@ -134,6 +145,8 @@ export async function pickResignReason(
     label: doc.label,
     categoryLabel: cat?.label ?? "",
     exitType: isExitType(doc.exitType) ? doc.exitType : "vol",
+    controllable: isControllable(doc.controllable) ? doc.controllable : "",
+    owner: doc.owner ?? "",
   };
 }
 
@@ -149,6 +162,22 @@ function text(v: unknown, field: string, max: number, required = true): string {
 function exitType(v: unknown): ExitType {
   if (!isExitType(v)) throw new RecruitmentError("กรุณาเลือกประเภทการออก");
   return v;
+}
+
+function controllable(v: unknown): Controllable | "" {
+  if (v === "" || v == null) return "";
+  if (!isControllable(v)) throw new RecruitmentError("ค่า “ควบคุมได้?” ไม่ถูกต้อง");
+  return v;
+}
+
+/** ฟิลด์วิเคราะห์ของรหัส (พ.ย. 2026) — ส่งมาเฉพาะช่องที่แก้ */
+function analysisFields(input: Record<string, unknown>): Partial<ReasonDoc> {
+  const set: Partial<ReasonDoc> = {};
+  if ("controllable" in input) set.controllable = controllable(input.controllable);
+  if ("owner" in input) set.owner = text(input.owner, "เจ้าของการแก้ไข", MAX_OWNER, false);
+  if ("evidence" in input) set.evidence = text(input.evidence, "หลักฐาน", MAX_DESC, false);
+  if ("evidenceType" in input) set.evidenceType = text(input.evidenceType, "ประเภทหลักฐาน", MAX_OWNER, false);
+  return set;
 }
 
 function oid(id: string, what: string): ObjectId {
@@ -262,6 +291,11 @@ export async function createReason(
     label: text(input.label, "หมวดย่อย (เหตุผล)", MAX_LABEL),
     description: text(input.description, "ขยายความ", MAX_DESC, false),
     exitType: isExitType(input.exitType) ? input.exitType : cat.exitType,
+    controllable: "",
+    owner: "",
+    evidence: "",
+    evidenceType: "",
+    ...analysisFields(input),
     active: input.active !== false,
     order: (last?.order ?? 0) + 1,
     ...stamp(who),
@@ -286,6 +320,7 @@ export async function updateReason(
     set.description = text(input.description, "ขยายความ", MAX_DESC, false);
   if ("exitType" in input) set.exitType = exitType(input.exitType);
   if ("active" in input) set.active = input.active !== false;
+  Object.assign(set, analysisFields(input));
 
   /* ย้ายหมวดได้เฉพาะหมวดที่อักษรนำตรงกับรหัส — ไม่งั้นได้ `P3` ไปอยู่ในหมวด J */
   if ("categoryId" in input && input.categoryId !== current.categoryId) {

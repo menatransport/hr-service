@@ -57,6 +57,36 @@ export function exitTypeLabel(v: string): string {
   return EXIT_TYPES.find((t) => t.value === v)?.label ?? "";
 }
 
+/* ------------------------------------------------------------ ควบคุมได้? */
+
+/**
+ * บริษัทแก้สาเหตุนี้ได้เองไหม — คอลัมน์ “ควบคุมได้?” ของไฟล์ `Reason Code_Final` (พ.ย. 2026)
+ * `na` = รหัสหมวด N (ไม่ได้ข้อมูล) ที่ไม่นับเข้าสัดส่วน · ว่าง = ยังไม่ได้ระบุ
+ */
+export type Controllable = "yes" | "partial" | "no" | "na";
+
+export const CONTROLLABLE_OPTIONS: { value: Controllable; label: string }[] = [
+  { value: "yes", label: "ควบคุมได้" },
+  { value: "partial", label: "ควบคุมได้บางส่วน" },
+  { value: "no", label: "ควบคุมไม่ได้" },
+  { value: "na", label: "ไม่นับ (ไม่ได้ข้อมูล)" },
+];
+
+export const CONTROLLABLE_CHIP: Record<Controllable, string> = {
+  yes: "chip-live",
+  partial: "chip-wait",
+  no: "chip-ink",
+  na: "chip-ink",
+};
+
+export function isControllable(v: unknown): v is Controllable {
+  return v === "yes" || v === "partial" || v === "no" || v === "na";
+}
+
+export function controllableLabel(v: string): string {
+  return CONTROLLABLE_OPTIONS.find((o) => o.value === v)?.label ?? "";
+}
+
 /* ---------------------------------------------------------------- หมวดใหญ่ */
 
 export interface ResignCategory {
@@ -83,6 +113,14 @@ export interface ResignReason {
   /** ขยายความ (ถ้ามี) */
   description: string;
   exitType: ExitType;
+  /** ควบคุมได้? · ว่าง = ยังไม่ระบุ */
+  controllable: Controllable | "";
+  /** เจ้าของการแก้ไข เช่น `จัดส่ง` `HR + Finance` · `-` = ไม่มีเจ้าของ (ควบคุมไม่ได้) */
+  owner: string;
+  /** หลักฐานที่เป็นรูปธรรมและเชื่อถือได้ */
+  evidence: string;
+  /** ประเภทหลักฐาน เช่น `System + Payroll` */
+  evidenceType: string;
   /** `false` = ซ่อนจากดรอปดาวน์ แต่ของเก่าที่อ้างรหัสนี้ยังอ่านได้ */
   active: boolean;
   order: number;
@@ -101,6 +139,8 @@ export interface ResignReasonPick {
   label: string;
   categoryLabel: string;
   exitType: ExitType;
+  controllable: Controllable | "";
+  owner: string;
 }
 
 /* ------------------------------------------------------------ ตัวช่วยแสดงผล */

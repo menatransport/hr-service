@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Popover as RPopover } from "radix-ui";
 import { ArrowRightLeft, Check, ChevronDown, Settings2, Truck, UserMinus, UserRound } from "lucide-react";
@@ -9,7 +9,7 @@ import Link from "next/link";
 import { DateField, SelectField, TextareaField, useOverlayCount } from "@/components/ui/field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
-import { escapeHtml, runAction } from "@/lib/swal";
+import { confirm, escapeHtml, runAction } from "@/lib/swal";
 import {
   EXIT_KIND_LABEL,
   employmentLabel,
@@ -22,10 +22,12 @@ import {
   reasonOptionLabel,
   exitTypeLabel,
   type ExitType,
-  type ResignMaster,
 } from "@/app/recruitment/_lib/resign-reasons/types";
 import { ExitTypePicker } from "@/app/recruitment/_components/admin/exit-type-picker";
 import { useCanSee } from "@/components/auth/menu-access-provider";
+import { useResignMaster } from "@/app/recruitment/_components/admin/use-resign-master";
+import { ExitInterviewDrawer } from "@/app/recruitment/_components/admin/exit-interview-drawer";
+import { EXIT_INTERVIEW_MENU } from "@/app/recruitment/_lib/exit-interview/types";
 
 /**
  * ปุ่มปรับสถานะการจ้างของ พจส. — ใช้ทั้งในตารางและบนหน้ารายบุคคล
@@ -67,6 +69,9 @@ export function DriverStatusControl({
   const label = employmentLabel(driver);
   /* สิทธิ์ย่อย “↳ ประวัติ” ไม่เห็น = ทะเบียนอ่านอย่างเดียว — เหลือแค่ป้ายสถานะ กดไม่ได้ */
   const canEdit = useCanSee("registry-profile");
+  /* บันทึกพ้นสภาพเสร็จ → ถามว่าจะทำ Exit Interview ต่อเลยไหม (เฉพาะสิทธิ์ `exit-interview`) */
+  const canInterview = useCanSee(EXIT_INTERVIEW_MENU);
+  const [interviewOpen, setInterviewOpen] = useState(false);
 
   /** กดกลับเป็นปฏิบัติงาน = ยกเลิกการบันทึกที่ผิด จึงถามให้ชัดว่าข้อมูลจะหาย */
   async function revertToActive() {
@@ -198,7 +203,15 @@ export function DriverStatusControl({
       </RPopover.Root>
 
       {formOpen ? (
-        <ResignForm driver={driver} kind={formOpen} onClose={() => setFormOpen(null)} />
+        <ResignForm
+          driver={driver}
+          kind={formOpen}
+          onClose={() => setFormOpen(null)}
+          onInterview={canInterview ? () => setInterviewOpen(true) : undefined}
+        />
+      ) : null}
+      {interviewOpen ? (
+        <ExitInterviewDrawer drivercode={driver.drivercode} onClose={() => setInterviewOpen(false)} />
       ) : null}
     </span>
   );
@@ -221,25 +234,6 @@ function todayInBangkok(): string {
  * ทุกแถวของตาราง ถ้าส่งมาจากหน้าจะต้องลากรายการ 62 รหัสผ่านทุกชั้นของตาราง
  * ทั้งที่คนเปิดฟอร์มนี้วันละไม่กี่ครั้ง
  */
-function useResignMaster(enabled: boolean) {
-  const [master, setMaster] = useState<ResignMaster | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    requestJson<ResignMaster>("/api/recruitment/resign-reasons", {}, "โหลดรหัสเหตุผลไม่สำเร็จ")
-      .then((m) => alive && setMaster(m))
-      .catch((err: unknown) =>
-        alive && setError(err instanceof Error ? err.message : "โหลดรหัสเหตุผลไม่สำเร็จ"),
-      );
-    return () => {
-      alive = false;
-    };
-  }, [enabled]);
-
-  return { master, error };
-}
 
 /**
  * ฟอร์มพ้นสภาพ — `kind="transfer"` = ย้ายไปรถร่วม · `kind="pjs"` = ย้ายไปพจส.: มีแค่วันที่กับหมายเหตุ
@@ -249,10 +243,13 @@ function ResignForm({
   driver,
   kind,
   onClose,
+  onInterview,
 }: {
   driver: DriverListRecord;
   kind: DriverExitKind;
   onClose: () => void;
+  /** มี = ผู้ใช้มีสิทธิ์ Exit Interview · บันทึกพ้นสภาพแล้วถามต่อ */
+  onInterview?: () => void;
 }) {
   const router = useRouter();
   const fieldId = useId();
@@ -345,6 +342,17 @@ function ResignForm({
 
     onClose();
     router.refresh();
+    if (
+      !simple &&
+      onInterview &&
+      (await confirm({
+        title: "ทำ Exit Interview ต่อเลยไหม?",
+        text: "เปิดลิ้นชัก Exit Interview ของคนนี้ — บันทึกทีหลังจากแท็บพ้นสภาพก็ได้",
+        confirmText: "เปิด Exit Interview",
+        cancelText: "ไว้ทีหลัง",
+      }))
+    )
+      onInterview();
   }
 
   return (

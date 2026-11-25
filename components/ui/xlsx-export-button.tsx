@@ -58,8 +58,9 @@ const exportTitle = (count: number) =>
 
 export function XlsxExportButton<T>({
   className = "px-3 py-1.5 text-13",
+  label = "Excel",
   ...props
-}: ExportProps<T> & { className?: string }) {
+}: ExportProps<T> & { className?: string; label?: string }) {
   const { busy, download } = useXlsxDownload(props);
 
   return (
@@ -75,7 +76,7 @@ export function XlsxExportButton<T>({
       ) : (
         <ExcelIcon className="text-excel" />
       )}
-      Excel
+      {label}
     </button>
   );
 }

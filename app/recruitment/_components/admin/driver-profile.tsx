@@ -29,6 +29,7 @@ import { DriverProfileTabs } from "@/app/recruitment/_components/admin/driver-pr
 import { CriminalRecordPanel } from "@/app/recruitment/_components/admin/criminal-record";
 import { DriverRental } from "@/app/recruitment/_components/admin/driver-rental";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
+import { ExitInterviewButton } from "@/app/recruitment/_components/admin/exit-interview-button";
 import { DriverTraining } from "@/app/recruitment/_components/admin/driver-training";
 import type { DriverHrLink } from "@/app/recruitment/_lib/drivers/driver-hr";
 import type { DriverDocSource } from "@/app/recruitment/_lib/drivers/document-sync";
@@ -152,6 +153,7 @@ export function DriverProfile({
         <div className="ml-auto flex flex-col items-end gap-1.5">
           <span className="text-11-5 text-mut">สถานะการจ้าง</span>
           <DriverStatusControl driver={driver} variant="panel" />
+          <ExitInterviewButton driver={driver} />
         </div>
         </div>
       </header>

@@ -1,6 +1,6 @@
 import { CarFront, IdCard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ExitType } from "@/app/recruitment/_lib/resign-reasons/types";
+import type { Controllable, ExitType } from "@/app/recruitment/_lib/resign-reasons/types";
 import { OTHER, POSITIONS } from "@/app/recruitment/_lib/requisitions/types";
 
 /**
@@ -368,6 +368,14 @@ export interface DriverResignation {
   /** ประเภทการออก (Vol/Inv/Disap) · ว่างในระเบียนก่อนมี master */
   exitType: ExitType | "";
   note: string;
+  /** ควบคุมได้? ของรหัสหลัก ณ เวลาที่บันทึก (Exit Interview 24 พ.ย. 2569) · ว่างในระเบียนเก่า */
+  controllable: Controllable | "";
+  /** เจ้าของการแก้ไขของรหัสหลัก ณ เวลาที่บันทึก */
+  owner: string;
+  /** รหัสสาเหตุรอง ≤ 2 ตัว (ไม่ซ้ำรหัสหลัก) — บันทึกจาก Exit Interview */
+  secondaryCodes: string[];
+  /** รหัสหลักล่าสุดมาจากไหน — ฟอร์มพ้นสภาพ · Wave 1 · Wave 2 (ตามกติกาไฟล์: ยึด Wave 2) */
+  reasonSource: "status" | "wave1" | "wave2";
   /** เวลาที่กดบันทึก (ISO) — คนละเรื่องกับวันที่พ้นสภาพ */
   recordedAt: string;
   /** รหัสพนักงานของคนที่กดบันทึก */

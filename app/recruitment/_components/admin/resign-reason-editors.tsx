@@ -7,10 +7,12 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { requestJson } from "@/lib/http";
 import { runAction } from "@/lib/swal";
 import { ExitTypePicker } from "@/app/recruitment/_components/admin/exit-type-picker";
-import type {
-  ExitType,
-  ResignCategory,
-  ResignReason,
+import {
+  CONTROLLABLE_OPTIONS,
+  type Controllable,
+  type ExitType,
+  type ResignCategory,
+  type ResignReason,
 } from "@/app/recruitment/_lib/resign-reasons/types";
 
 /**
@@ -50,6 +52,10 @@ export function ReasonEditor({
   const [exitType, setExitType] = useState<ExitType>(
     reason?.exitType ?? categories.find((c) => c.id === initialCategory)?.exitType ?? "vol",
   );
+  const [controllable, setControllable] = useState<Controllable | "">(reason?.controllable ?? "");
+  const [owner, setOwner] = useState(reason?.owner ?? "");
+  const [evidence, setEvidence] = useState(reason?.evidence ?? "");
+  const [evidenceType, setEvidenceType] = useState(reason?.evidenceType ?? "");
   const [busy, setBusy] = useState(false);
 
   const cat = categories.find((c) => c.id === categoryId);
@@ -79,6 +85,10 @@ export function ReasonEditor({
                 label: label.trim(),
                 description: description.trim(),
                 exitType,
+                controllable,
+                owner: owner.trim(),
+                evidence: evidence.trim(),
+                evidenceType: evidenceType.trim(),
               },
             },
             "บันทึกรหัสไม่สำเร็จ",
@@ -154,6 +164,44 @@ export function ReasonEditor({
         />
 
         <ExitTypePicker value={exitType} onChange={setExitType} />
+
+        {/* ใช้วิเคราะห์ Exit Interview — “% ควบคุมได้” และใครต้องแก้ (ไฟล์ Reason Code_Final พ.ย. 2026) */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SelectField
+            id={`${id}-ctrl`}
+            label="ควบคุมได้?"
+            optional
+            value={controllable}
+            onChange={(v) => setControllable(v as Controllable | "")}
+            placeholder="ยังไม่ระบุ"
+            options={CONTROLLABLE_OPTIONS}
+          />
+          <TextField
+            id={`${id}-owner`}
+            label="เจ้าของการแก้ไข"
+            optional
+            value={owner}
+            onChange={setOwner}
+            placeholder="เช่น จัดส่ง · HR + Finance"
+          />
+        </div>
+        <TextareaField
+          id={`${id}-evidence`}
+          label="หลักฐานที่เป็นรูปธรรม"
+          optional
+          rows={2}
+          value={evidence}
+          onChange={setEvidence}
+          placeholder="เช่น สลิปเงินเดือน 3 เดือนล่าสุด + รายงานเที่ยววิ่ง"
+        />
+        <TextField
+          id={`${id}-evtype`}
+          label="ประเภทหลักฐาน"
+          optional
+          value={evidenceType}
+          onChange={setEvidenceType}
+          placeholder="เช่น System + Payroll"
+        />
       </div>
     </ModalShell>
   );

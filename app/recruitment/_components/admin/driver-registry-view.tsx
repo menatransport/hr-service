@@ -18,6 +18,16 @@ import { DocRenewalCalendar } from "@/app/recruitment/_components/admin/doc-rene
 import { Nickname } from "@/app/recruitment/_components/admin/nickname";
 import { DriverStatusControl } from "@/app/recruitment/_components/admin/driver-status-control";
 import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resign-document-maker";
+import { ExitInterviewDrawer } from "@/app/recruitment/_components/admin/exit-interview-drawer";
+import {
+  DataLogExportButton,
+  ExitInterviewContext,
+  ExitReasonCell,
+  interviewCounts,
+  stageOfRow,
+  useInterviewSummary,
+} from "@/app/recruitment/_components/admin/exit-interview-panel";
+import { EXIT_INTERVIEW_MENU, type InterviewStage } from "@/app/recruitment/_lib/exit-interview/types";
 import { useCanSee } from "@/components/auth/menu-access-provider";
 import { ColumnMenu, type ColumnFilterOption } from "@/components/ui/column-menu";
 import { Pager } from "@/components/ui/pager";
@@ -127,6 +137,7 @@ type Filters = Record<FilterKey, string[]>;
 type SortKey =
   | "exitMonth"
   | "exitDate"
+  | "exitReason"
   | "name"
   | "code"
   | "phone"
@@ -244,6 +255,8 @@ const COLUMNS: {
     desc: "ใหม่ → เก่า",
   },
   { sort: "exitDate", label: "วันที่พ้นสภาพ", width: "w-[120px]", asc: "เก่า → ใหม่", desc: "ใหม่ → เก่า" },
+  /* รหัสสาเหตุ + ควบคุมได้? + เจ้าของ (ทุกคน) · ชิปสถานะ Exit Interview (สิทธิ์ `exit-interview`) — 24 พ.ย. 2569 */
+  { sort: "exitReason", label: "สาเหตุการออก", width: "w-[230px]", asc: "รหัส A → Z", desc: "รหัส Z → A" },
   { sort: "code", label: "รหัสพนักงาน", width: "w-[112px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
   { sort: "phone", label: "เบอร์โทร", width: "w-[124px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
   /* อายุจากใบสมัครที่ผูกกับคนนี้ — ทะเบียนไม่มีวันเกิด คนเก่าจาก Excel จึงว่าง (Bew 11 พ.ย. 2569) */
@@ -328,7 +341,7 @@ const COLUMNS: {
 const RESIGNED_HIDDEN = new Set<string>(["vehicle", "fleet", "plant"]);
 
 /** คอลัมน์ที่ขึ้น **เฉพาะแท็บ “พ้นสภาพแล้ว”** — คนที่ยังทำงานไม่มีวันพ้นสภาพ */
-const RESIGNED_ONLY = new Set<string>(["exitMonth", "exitDate"]);
+const RESIGNED_ONLY = new Set<string>(["exitMonth", "exitDate", "exitReason"]);
 
 /** `2026-11-10` → `2026-11` (คีย์ตัวกรอง/เรียง · ค.ศ.) */
 const exitMonthKey = (d: DriverListRecord) => d.resignation?.dateISO.slice(0, 7) ?? "";
@@ -563,6 +576,13 @@ export function DriverRegistryView({
   const tableBox = useRef<HTMLDivElement>(null);
 
   const resignedTab = employment === "resigned";
+
+  /* Exit Interview — สิทธิ์ย่อย `exit-interview` (ค่าเริ่มต้นไม่เห็น) · สถานะโหลดเฉพาะตอนเปิดแท็บพ้นสภาพ */
+  const canInterview = useCanSee(EXIT_INTERVIEW_MENU);
+  const { summary: interviewSummary } = useInterviewSummary(resignedTab && canInterview, registry);
+  const [interviewOf, setInterviewOf] = useState<string | null>(null);
+  const [stageFilter, setStageFilter] = useState<InterviewStage[]>([]);
+  const interviewCtx = useMemo(() => ({ summary: interviewSummary, open: setInterviewOf }), [interviewSummary]);
   /**
    * การเรียงที่ใช้จริง — ยังไม่เลือกคอลัมน์ในแท็บพ้นสภาพ = วันที่พ้นสภาพล่าสุดขึ้นก่อนเสมอ (Bew 10 พ.ย. 2569)
    * · หัวคอลัมน์ “วันที่พ้นสภาพ” จึงขึ้นลูกศรตามด้วย
@@ -728,6 +748,10 @@ export function DriverRegistryView({
 
     const rows = scope.filter((d) => {
       if (!on("exitMonth", exitMonthKey(d) || NONE)) return false;
+      if (resignedTab && stageFilter.length) {
+        const st = stageOfRow(d, interviewSummary);
+        if (!st || !stageFilter.includes(st)) return false;
+      }
       if (!on("vehicle", d.vehicleRef ? "has" : "none")) return false;
       if (!on("plant", d.plant || NONE)) return false;
       if (!on("fleet", d.customer || NONE)) return false;
@@ -762,7 +786,7 @@ export function DriverRegistryView({
 
     const mul = activeDir === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => compare(a, b, activeSort) * mul);
-  }, [scope, deferred, filters, activeSort, activeDir]);
+  }, [scope, deferred, filters, activeSort, activeDir, resignedTab, stageFilter, interviewSummary]);
 
   const activeFilters = useMemo(
     () =>
@@ -789,7 +813,7 @@ export function DriverRegistryView({
    * ค้น/กรอง/เรียง/สลับแท็บแล้วต้องกลับหน้า 1 — ปรับ state ตอน render ตามแนวเดียวกับ
    * `case-table.tsx` (กฎ `react-hooks/set-state-in-effect` ห้ามย้ายไปไว้ใน effect)
    */
-  const resetKey = `${site}|${employment}|${deferred}|${JSON.stringify(filters)}|${sortKey}|${sortDir}`;
+  const resetKey = `${site}|${employment}|${deferred}|${JSON.stringify(filters)}|${sortKey}|${sortDir}|${stageFilter.join()}`;
   const [lastKey, setLastKey] = useState(resetKey);
   if (lastKey !== resetKey) {
     setLastKey(resetKey);
@@ -810,6 +834,7 @@ export function DriverRegistryView({
   function clearFilters() {
     setQuery("");
     setFilters(NO_FILTERS);
+    setStageFilter([]);
   }
 
   /** เลือกทิศจากในเมนูตรง ๆ — `null` = เลิกเรียงด้วยคอลัมน์นั้น กลับไปลำดับตามรหัส */
@@ -901,8 +926,14 @@ export function DriverRegistryView({
     }),
   };
 
+  const interview = resignedTab && canInterview && interviewSummary ? interviewCounts(scope, interviewSummary) : null;
+  const toggleStage = (stages: InterviewStage[]) =>
+    setStageFilter((cur) => (cur.join() === stages.join() ? [] : stages));
+
   return (
+    <ExitInterviewContext.Provider value={interviewCtx}>
     <div className="flex flex-col gap-4">
+      {interviewOf ? <ExitInterviewDrawer drivercode={interviewOf} onClose={() => setInterviewOf(null)} /> : null}
       
 
       <SummaryPanel label="สรุปทะเบียน">
@@ -953,6 +984,41 @@ export function DriverRegistryView({
             active={filters.vehicle.includes("none")}
             onClick={() => toggleTile("vehicle", "none")}
           />
+          {interview ? (
+            <>
+              <SummaryStat
+                label="รอ Exit Interview"
+                value={interview.pending}
+                unit="คน"
+                share={interview.pending / (interview.total || 1)}
+                sub={interview.flagged ? `แจ้ง HR Chief ${interview.flagged} คน` : "ยังไม่สัมภาษณ์ Wave 1"}
+                dot="bg-ink"
+                tone="ink"
+                active={stageFilter.join() === "pending"}
+                onClick={() => toggleStage(["pending"])}
+              />
+              <SummaryStat
+                label="ถึงรอบ Wave 2"
+                value={interview.wave2}
+                unit="คน"
+                sub="วันที่ 30–45 หลังออก (รวมเลยกำหนด)"
+                dot="bg-primary"
+                tone="primary"
+                active={stageFilter.join() === "wave2_due,wave2_late"}
+                onClick={() => toggleStage(["wave2_due", "wave2_late"])}
+              />
+              <SummaryStat
+                label="Coverage Rate"
+                value={Math.round(interview.coverage * 100)}
+                unit="%"
+                sub={`สัมภาษณ์ได้ ${interview.interviewed}/${interview.total} คน · เป้า ≥ 70%`}
+                share={interview.coverage}
+                title="สัมภาษณ์ได้ (ไม่ใช่ N1/N2) ÷ คนพ้นสภาพแบบลาออก/ปลดทั้งหมดในขอบเขตนี้"
+                dot={interview.coverage >= 0.7 ? "bg-primary" : "bg-alert"}
+                tone={interview.coverage >= 0.7 ? "primary" : "alert"}
+              />
+            </>
+          ) : null}
         </SummaryStats>
 
         <SummaryToolbar className="lg:flex-wrap">
@@ -971,6 +1037,7 @@ export function DriverRegistryView({
             {/* ปุ่ม Excel = ส่งออกอย่างเดียว — เอานำเข้า/Sync จาก Excel ออกไปก่อน (Bew 10 พ.ย. 2569)
                 · กล่อง `DriverPasteDialog` / `DriverExcelSyncDialog` ยังเก็บไว้ ใส่กลับได้ */}
             <XlsxExportButton {...exportProps} />
+            {resignedTab && canInterview ? <DataLogExportButton rows={results} filter={`สาขา: ${siteFilterLabel(site)}`} /> : null}
             {canEdit ? (
               <button
                 type="button"
@@ -1118,7 +1185,7 @@ export function DriverRegistryView({
             <table
               /* แท็บพ้นสภาพเหลือ 5 คอลัมน์ ถ้าคงความกว้างขั้นต่ำเดิมไว้จะเหลือที่ว่างยาวท้ายตาราง */
               className={`sheet-table w-full border-collapse text-13 ${
-                resignedTab ? "min-w-[1240px]" : "min-w-[1350px]"
+                resignedTab ? "min-w-[1470px]" : "min-w-[1350px]"
               }`}
             >
               <thead>
@@ -1182,6 +1249,7 @@ export function DriverRegistryView({
       )}
       </SummaryPanel>
     </div>
+    </ExitInterviewContext.Provider>
   );
 }
 
@@ -1218,6 +1286,10 @@ function compare(a: DriverListRecord, b: DriverListRecord, key: SortKey): number
     case "exitMonth":
     case "exitDate":
       return byText(a.resignation?.dateISO ?? "", b.resignation?.dateISO ?? "");
+    case "exitReason":
+      return a.resignation?.reasonCode && b.resignation?.reasonCode
+        ? a.resignation.reasonCode.localeCompare(b.resignation.reasonCode, "en", { numeric: true })
+        : byText(a.resignation?.reasonCode ?? "", b.resignation?.reasonCode ?? "");
     case "name":
       return byText(a.name, b.name);
     case "code":
@@ -1314,6 +1386,9 @@ function Row({
           </td>
           <td className="px-3 py-2 whitespace-nowrap text-ink">
             {formatThaiDate(driver.resignation?.dateISO ?? "") || <Dash />}
+          </td>
+          <td className="max-w-[230px] px-3 py-2">
+            <ExitReasonCell driver={driver} />
           </td>
         </>
       ) : null}
@@ -1511,6 +1586,9 @@ function DriverCard({
             </CardField>
             <CardField label="วันที่พ้นสภาพ">
               <span className="text-ink">{formatThaiDate(driver.resignation?.dateISO ?? "") || "—"}</span>
+            </CardField>
+            <CardField label="สาเหตุการออก">
+              <ExitReasonCell driver={driver} />
             </CardField>
           </>
         ) : (

@@ -7,7 +7,7 @@ import { mediaKeyOf, mediaUrl } from "@/lib/media";
 import { ageOn } from "@/app/recruitment/_lib/form";
 import { copyMedia, deleteMedia, mediaKeys } from "@/lib/s3";
 import { pickResignReason } from "@/app/recruitment/_lib/resign-reasons/store";
-import { isExitType } from "@/app/recruitment/_lib/resign-reasons/types";
+import { isControllable, isExitType } from "@/app/recruitment/_lib/resign-reasons/types";
 import {
   collectDocExpiries,
   DRIVER_COPY_FIELDS,
@@ -573,6 +573,10 @@ function toResignation(raw: unknown): DriverResignation | null {
     categoryLabel: str(doc.categoryLabel),
     exitType: isExitType(doc.exitType) ? doc.exitType : "",
     note: str(doc.note),
+    controllable: isControllable(doc.controllable) ? doc.controllable : "",
+    owner: str(doc.owner),
+    secondaryCodes: Array.isArray(doc.secondaryCodes) ? doc.secondaryCodes.map(str).filter(Boolean) : [],
+    reasonSource: doc.reasonSource === "wave1" || doc.reasonSource === "wave2" ? doc.reasonSource : "status",
     recordedAt:
       recordedAt instanceof Date ? recordedAt.toISOString() : str(recordedAt),
     recordedBy: str(doc.recordedBy),
@@ -1207,7 +1211,8 @@ export async function setDriverStatus(
        ระเบียนนี้ที่ถูกปิดใช้ไปทีหลัง (กำลังแก้วันที่/หมายเหตุของข้อมูลเก่า) */
     const drivers = await hrCol<MasterDriverDoc>("drivers");
     const current = await drivers.findOne({ drivercode }, { projection: { resignation: 1 } });
-    const held = str((current?.resignation as { reasonCode?: unknown } | undefined)?.reasonCode);
+    const heldDoc = (current?.resignation ?? {}) as Record<string, unknown>;
+    const held = str(heldDoc.reasonCode);
     const reason = await pickResignReason(input.reasonCode, held);
     if (!reason) throw new DriverRegistryError("ต้องเลือกเหตุผลการพ้นสภาพจากรหัสที่เปิดใช้อยู่");
     if (input.exitType && !isExitType(input.exitType))
@@ -1225,6 +1230,17 @@ export async function setDriverStatus(
           categoryLabel: reason.categoryLabel,
           exitType: isExitType(input.exitType) ? input.exitType : reason.exitType,
           note: (input.note ?? "").trim(),
+          controllable: reason.controllable,
+          owner: reason.owner,
+          /* แก้วันที่/หมายเหตุจากฟอร์มพ้นสภาพ ห้ามล้างผลของ Exit Interview — รหัสรองคงไว้
+             (ตัดตัวที่ซ้ำรหัสหลักใหม่) · แหล่งของรหัสหลักเปลี่ยนเป็น status ก็ต่อเมื่อรหัสเปลี่ยน */
+          secondaryCodes: (Array.isArray(heldDoc.secondaryCodes) ? heldDoc.secondaryCodes.map(str) : []).filter(
+            (c) => c && c !== reason.code,
+          ),
+          reasonSource:
+            held === reason.code && (heldDoc.reasonSource === "wave1" || heldDoc.reasonSource === "wave2")
+              ? heldDoc.reasonSource
+              : "status",
           recordedAt: new Date(),
           recordedBy: actor,
         },

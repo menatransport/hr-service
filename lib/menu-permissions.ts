@@ -4,6 +4,7 @@ import { cache } from "react";
 import { readSessionUser } from "./auth/session";
 import { hrCol } from "./db";
 import {
+  baseDefault,
   canSeeMenu,
   hiddenMenuIds,
   leafMenus,
@@ -169,9 +170,12 @@ export const getHiddenMenuIds = cache(async (): Promise<string[]> => {
     const user = await readSessionUser();
     if (!user) return [];
     const scopes = await getMenuScopes();
-    const anyHidden = [scopes.base, ...Object.values(scopes.divisions), ...Object.values(scopes.departments)].some(
-      (v) => Object.values(v).includes(false),
-    );
+    /* สิทธิ์ย่อยที่ `defaultOff` นับว่าซ่อนอยู่แล้ว แม้ยังไม่มีใครตั้งค่าเลย */
+    const anyHidden =
+      leafMenus().some((m) => !baseDefault(m.id)) ||
+      [scopes.base, ...Object.values(scopes.divisions), ...Object.values(scopes.departments)].some((v) =>
+        Object.values(v).includes(false),
+      );
     if (!anyHidden) return [];
     return hiddenMenuIds(scopes, await orgOf(user.departmentId));
   } catch (err) {
@@ -187,6 +191,23 @@ export const getHiddenMenuIds = cache(async (): Promise<string[]> => {
  */
 export async function canAccessMenu(menuId: string): Promise<boolean> {
   return !(await getHiddenMenuIds()).includes(menuId);
+}
+
+/**
+ * ด่านจริงของสิทธิ์ย่อยที่มีข้อมูลอ่อนไหว (เช่น `exit-interview`) — **ล้มเหลวแล้วปฏิเสธ**
+ * ต่างจาก `canAccessMenu` ที่เปิดให้เมื่ออ่านสิทธิ์ไม่ได้ · ไม่ล็อกอิน = ไม่มีสิทธิ์
+ */
+export async function canAccessMenuStrict(menuId: string): Promise<boolean> {
+  try {
+    const user = await readSessionUser();
+    if (!user) return false;
+    const scopes = await getMenuScopes();
+    return canSeeMenu(scopes, menuId, await orgOf(user.departmentId));
+  } catch (err) {
+    unstable_rethrow(err);
+    console.warn(`[menu-permissions] อ่านสิทธิ์ “${menuId}” ไม่สำเร็จ — ปฏิเสธไว้ก่อน`, err);
+    return false;
+  }
 }
 
 /* --------------------------------------------------------------------- บันทึก */
