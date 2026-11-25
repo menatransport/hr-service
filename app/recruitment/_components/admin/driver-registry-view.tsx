@@ -74,6 +74,8 @@ import {
 import { thaiCompare } from "@/lib/thai-order";
 import { CONTROLLABLE_CHIP, CONTROLLABLE_OPTIONS, controllableLabel } from "@/app/recruitment/_lib/resign-reasons/types";
 import { RECRUIT_SITES, type RecruitSite } from "@/app/recruitment/_lib/sites";
+import { MixerTabs, mixerCounts, type MixerPick } from "@/app/recruitment/_components/admin/position-tag";
+import { groupOfPosition } from "@/app/recruitment/_lib/dashboard/manpower-daily-shared";
 
 /**
  * ทะเบียนประวัติ พจส. — ตารางข้อมูลแบบมาตรฐาน (เรียง + กรองที่หัวคอลัมน์)
@@ -560,6 +562,12 @@ function vehicleLead(driver: DriverListRecord): string {
   return driver.siteKey === "latkrabang" ? code || plate : plate || code;
 }
 
+/** Mixer L / Mixer S ของคนขับ — ตำแหน่งในทะเบียนก่อน แล้วค่อยประเภทรถ · อื่น ๆ = "" */
+function mixerOf(driver: DriverListRecord): string {
+  const g = groupOfPosition(driver.position ?? "") ?? groupOfPosition(driver.vehicle?.vehicleType ?? "");
+  return g === "Mixer L" || g === "Mixer S" ? g : "";
+}
+
 export function DriverRegistryView({
   registry,
   sites,
@@ -595,6 +603,9 @@ export function DriverRegistryView({
     } catch {}
   }, []);
   const [employment, setEmployment] = useState<EmploymentTab>("current");
+  /** ทั้งหมด | Mixer L | Mixer S — เฉพาะแท็บลาดกระบัง (Bew 25 พ.ย. 2569) · สาขาอื่นไม่กรองต่อเบื้องหลัง */
+  const [mixerPick, setMixerPick] = useState<MixerPick>("all");
+  const mixer: MixerPick = site === "latkrabang" ? mixerPick : "all";
 
   /* คนพ้นสภาพไม่มากับหน้า — โหลดตอนเปิดแท็บครั้งแรก · `of` = ชุดของหน้าที่โหลดไว้ (refresh แล้วโหลดใหม่) */
   const [resigned, setResigned] = useState<{ of: DriverListRegistry; rows?: DriverListRecord[]; error?: string } | null>(
@@ -658,13 +669,18 @@ export function DriverRegistryView({
   );
 
   /** รายชื่อในขอบเขตสาขา + สถานะการจ้างที่เลือกอยู่ — ฐานของทั้งไทล์และตัวเลือกตัวกรอง */
-  const scope = useMemo(
+  const siteScope = useMemo(
     () =>
       drivers.filter((d) => {
         if (siteTabOf(d.siteKey) !== site) return false;
         return employmentOf(d) === employment;
       }),
     [drivers, site, employment],
+  );
+  const mixerCount = useMemo(() => mixerCounts(siteScope, mixerOf), [siteScope]);
+  const scope = useMemo(
+    () => (mixer === "all" ? siteScope : siteScope.filter((d) => mixerOf(d) === mixer)),
+    [siteScope, mixer],
   );
 
   const counts = useMemo(() => {
@@ -941,7 +957,7 @@ export function DriverRegistryView({
    * ค้น/กรอง/เรียง/สลับแท็บแล้วต้องกลับหน้า 1 — ปรับ state ตอน render ตามแนวเดียวกับ
    * `case-table.tsx` (กฎ `react-hooks/set-state-in-effect` ห้ามย้ายไปไว้ใน effect)
    */
-  const resetKey = `${site}|${employment}|${deferred}|${JSON.stringify(filters)}|${sortKey}|${sortDir}|${stageFilter.join()}`;
+  const resetKey = `${site}|${mixer}|${employment}|${deferred}|${JSON.stringify(filters)}|${sortKey}|${sortDir}|${stageFilter.join()}`;
   const [lastKey, setLastKey] = useState(resetKey);
   if (lastKey !== resetKey) {
     setLastKey(resetKey);
@@ -1041,6 +1057,7 @@ export function DriverRegistryView({
       title: `ทะเบียนประวัติ พจส. · ${resignedTab ? "พ้นสภาพแล้ว" : "พนักงานปัจจุบัน"}`,
       filter: [
         `สาขา: ${siteFilterLabel(site)}`,
+        mixer !== "all" ? `ตำแหน่ง: ${mixer}` : "",
         deferred.trim() ? `คำค้น: “${deferred.trim()}”` : "",
         ...activeFilters.map(
           ({ key, values }) =>
@@ -1065,22 +1082,6 @@ export function DriverRegistryView({
       
 
       <SummaryPanel label="สรุปทะเบียน">
-        {/* แถวบน: แท็บสถานะการจ้าง (มียอดของสาขา) + สาขา — แบบใหม่ 25 พ.ย. 2569 (canvas “ทะเบียน พจส. Redesign”) */}
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b border-line px-(--sheet-px)">
-          <div role="tablist" aria-label="สถานะการจ้าง" className="-mb-px flex gap-6">
-            <EmploymentTabButton active={!resignedTab} count={employmentTotals.current} onClick={() => changeEmployment("current")}>
-              ทำงาน
-            </EmploymentTabButton>
-            <EmploymentTabButton active={resignedTab} tone="ink" count={employmentTotals.resigned} onClick={() => changeEmployment("resigned")}>
-              พ้นสภาพ
-            </EmploymentTabButton>
-          </div>
-          <div className="flex w-full items-center gap-3 pb-2.5 sm:w-auto sm:pt-2.5">
-            <span className="hidden text-12 text-mut sm:inline">สาขา</span>
-            <SiteTabs value={site} tabs={siteTabs} onChange={(v) => setSite(v)} />
-          </div>
-        </div>
-
         <StatStrip>
           {resignedTab ? (
             <>
@@ -1182,10 +1183,26 @@ export function DriverRegistryView({
             value={query}
             onChange={setQuery}
             label="ค้นหาในทะเบียนประวัติ"
-            placeholder={resignedTab ? "ค้นหาชื่อ รหัส เบอร์โทร…" : "ค้นหาชื่อ รหัส ทะเบียน เลขรถ ลูกค้า แพล้นท์…"}
+            placeholder={resignedTab ? "ค้นหาชื่อ รหัส เบอร์โทร…" : "ค้นหาชื่อ รหัส ทะเบียน แพล้นท์…"}
             tone="filled"
-            className="w-full lg:max-w-88 lg:flex-1"
+            className="w-full lg:max-w-80 lg:flex-1"
           />
+
+          {/* แท็บสถานะการจ้าง + สาขา (+ Mixer ของลาดกระบัง) ต่อจากช่องค้นหา (Bew 25 พ.ย. 2569) */}
+          <SegmentedControl
+            label="สถานะการจ้าง"
+            value={employment}
+            onChange={changeEmployment}
+            options={[
+              { value: "current", label: "ทำงาน", count: employmentTotals.current },
+              { value: "resigned", label: "พ้นสภาพ", count: employmentTotals.resigned },
+            ]}
+            className="w-full sm:w-auto"
+          />
+          <SiteTabs value={site} tabs={siteTabs} onChange={(v) => setSite(v)} />
+          {site === "latkrabang" ? (
+            <MixerTabs value={mixerPick} counts={mixerCount} onChange={setMixerPick} className="w-full sm:w-auto" />
+          ) : null}
 
           <div className="flex items-center gap-2 lg:ml-auto">
             {/* ปุ่ม Excel = ส่งออกอย่างเดียว — เอานำเข้า/Sync จาก Excel ออกไปก่อน (Bew 10 พ.ย. 2569)
@@ -2124,7 +2141,7 @@ const STAT_TONE: Record<StatTone, { value: string; bar: string }> = {
  */
 function StatStrip({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden border-b border-line">
+    <div className="overflow-hidden border-y border-line">
       <div className="-mr-px -mb-px flex flex-wrap">{children}</div>
     </div>
   );
@@ -2472,51 +2489,6 @@ function SiteTabs({
       options={tabs.map((tab) => ({ value: tab, label: siteFilterLabel(tab) }))}
       className="w-full sm:w-auto sm:self-start lg:self-auto"
     />
-  );
-}
-
-function EmploymentTabButton({
-  active,
-  onClick,
-  tone = "primary",
-  count,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  /** ขีดใต้ของแท็บ — ทำงาน = เขียว · พ้นสภาพ = หมึก */
-  tone?: "primary" | "ink";
-  count?: number;
-  children: React.ReactNode;
-}) {
-  const bar = tone === "ink" ? "bg-ink" : "bg-primary";
-  return (
-    <button
-      type="button"
-      role="tab"
-      onClick={onClick}
-      aria-selected={active}
-      className={`group relative flex h-12 cursor-pointer items-center gap-2 px-0.5 text-14 transition-colors ${
-        active ? "font-semibold text-ink" : "text-mut hover:text-ink"
-      }`}
-    >
-      {children}
-      {count !== undefined ? (
-        <span
-          className={`rounded-full px-2 py-px text-12 font-medium tabular-nums ${
-            active ? (tone === "ink" ? "bg-base-300 text-ink" : "bg-soft text-primary") : "bg-base-200 text-mut"
-          }`}
-        >
-          {count.toLocaleString("th-TH")}
-        </span>
-      ) : null}
-      <span
-        aria-hidden
-        className={`absolute inset-x-0 bottom-0 h-0.5 origin-left transition-transform duration-300 ease-out ${
-          active ? `scale-x-100 ${bar}` : "scale-x-0 bg-line group-hover:scale-x-100"
-        }`}
-      />
-    </button>
   );
 }
 
