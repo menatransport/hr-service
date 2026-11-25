@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, Menu, X } from "lucide-react";
 
 import { ModuleNav } from "@/components/module/module-nav";
+import { HEADER_SLOT_ID } from "@/components/shell/header-slot";
 import { ManualButton } from "@/components/shell/manual-button";
 import { PageSwitcher } from "@/components/shell/page-switcher";
 import { UserMenu, type ShellUser } from "@/components/shell/user-menu";
@@ -92,6 +93,8 @@ export function ShellHeader({
           )}
         </nav>
 
+        {/* ปุ่มเฉพาะหน้า — หน้าในวางลงมาด้วย `HeaderSlot` */}
+        <div id={HEADER_SLOT_ID} className="contents" />
         {actions}
         <ManualButton compact />
         <UserMenu user={user} compact />

@@ -1,7 +1,7 @@
 import { hrCol } from "./index";
 
 /** คอลเลกชันตัวนับที่มีอยู่ — แถวละหนึ่งตัวนับ `{ _id, seq }` */
-export type CounterKey = "recordCounters" | "recruitmentCounters";
+export type CounterKey = "recordCounters" | "recruitmentCounters" | "parkingCounters";
 
 /**
  * เลื่อนตัวนับ `id` ไป `by` แล้วคืน **ค่าหลังเลื่อน** (= เลขตัวสุดท้ายของก้อนที่จองได้)

@@ -2,6 +2,7 @@ import {
   BookUser,
   Bookmark,
   Building2,
+  CarFront,
   ChartColumn,
   ClipboardList,
   ClipboardPenLine,
@@ -238,10 +239,38 @@ export const MODULES: ModuleGroup[] = [
     caption: "ค่าตั้งต้นที่ทุกโมดูลใช้ร่วมกัน",
     icon: Database,
     sections: [
+      // 25 พ.ย. 2569 · Bew — หมวด “บริการ” แยกจากงาน HR อยู่บนสุด · เริ่มที่จอดรถบริษัท
+      { id: "facility", label: "บริการ" },
       { id: "service", label: "จัดการงาน HR" },
       { id: "settings", label: "ตั้งค่าระบบ" },
     ],
     items: [
+      {
+        /* บริการจอดรถบริษัท (24 พ.ย. 2569) — เฟส 1 ลงทะเบียนรถ + ออกบัตรจอด · ขอค้างคืน/รปภ. ตรวจ เป็นเฟสถัดไป */
+        id: "parking",
+        label: "จอดรถบริษัท",
+        desc: "ลงทะเบียนรถ · ตรวจกรรมสิทธิ์ · ออกบัตรจอด",
+        href: "/desk/parking",
+        section: "facility",
+        icon: CarFront,
+        soon: SOON,
+        actions: [
+          {
+            /* Bew 24 พ.ย. 2569 — ตารางทะเบียนเห็นเฉพาะ HOD + Process Excellence · คนอื่นเห็นแค่บัตรของตัวเอง */
+            id: "parking-admin",
+            label: "จัดการทะเบียนรถ",
+            desc: "เห็น = ตารางรถทุกคัน · อนุมัติ/ส่งกลับ/ออกบัตร/ยกเลิก · เปิดให้ HOD + Process Excellence · ไม่เห็น = เห็นแค่บัตรจอดของตัวเองและปุ่มลงทะเบียน",
+            defaultOff: true,
+          },
+          {
+            /* Bew 25 พ.ย. 2569 — สแกน QR บนบัตรแล้วเห็นข้อมูลรถ (ต้องล็อกอิน) · ทุกการสแกนเก็บ log */
+            id: "parking-verify",
+            label: "ตรวจบัตรจอด (สแกน QR)",
+            desc: "เห็น = สแกน QR บนบัตรจอดแล้วเห็นสถานะ รูปรถ ทะเบียน และผู้รับผิดชอบ · เปิดให้ รปภ. + HR · ผู้ดูแลทะเบียนรถและเจ้าของรถเห็นได้อยู่แล้ว",
+            defaultOff: true,
+          },
+        ],
+      },
       {
         id: "payroll",
         label: "ค่าจ้างและสวัสดิการ",
