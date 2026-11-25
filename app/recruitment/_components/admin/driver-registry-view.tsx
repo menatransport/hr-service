@@ -1541,7 +1541,8 @@ function Row({
   const href = driverHref(driver);
 
   /**
-   * แถวของคนที่พ้นสภาพแล้วเป็น **โทนแดงทั้งแถว** — รูป รหัส พื้นตอนชี้ ปุ่มตาท้ายแถว
+   * แถวของคนที่พ้นสภาพแล้วเป็น **โทนแดงทั้งแถว** — รูป รหัส ปุ่มตาท้ายแถว
+   * ตอนชี้ทุกแถวใช้พื้นเทากลาง `base-200` ทึบเท่ากันทั้งแถว (sticky ด้วย) + แถบสีโทนซ้ายชื่อ 3px (Bew 25 พ.ย. 2569)
    * (ย้ายไปรถร่วม = โทนม่วง `EXIT_TONE.transfer` · 4 พ.ย. 2569 · ย้ายไปพจส. = น้ำเงิน `EXIT_TONE.pjs` · 9 พ.ย. 2569)
    *
    * ดูจาก `driver.active` ไม่ใช่จากแท็บที่เปิดอยู่ — สีจึงติดไปกับภาพที่แคปส่งต่อ
@@ -1562,18 +1563,18 @@ function Row({
     <tr
       style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
       className={`group animate-fade-in border-b transition-colors last:border-b-0 ${
-        exit ? exit.row : "border-line hover:bg-base-200/50"
+        exit ? exit.row : "border-line hover:bg-base-200"
       }`}
     >
       {/* ชื่อยึดขอบซ้ายไว้ตอนตารางเลื่อนแนวนอน — กติกาเดียวกับตารางผู้สมัคร
           พื้นต้องทึบ (ไม่ใช่ `/50` ของแถว) ไม่งั้นตัวหนังสือคอลัมน์ที่เลื่อนผ่านจะทะลุขึ้นมา */}
       <td
         className={`sticky left-0 z-[5] bg-base-100 px-3 py-2 after:absolute after:inset-y-0 after:right-0 after:w-px ${
-          exit ? exit.sticky : "after:bg-line group-hover:bg-base-200"
+          exit ? exit.sticky : "after:bg-line group-hover:bg-base-200 group-hover:shadow-[inset_3px_0_0_var(--color-primary)]"
         }`}
       >
         <span className="flex items-center gap-2.5">
-          <span className="flex-none transition-transform duration-300 group-hover:scale-108">
+          <span className="flex-none">
             <DriverAvatar driver={driver} editable={canEdit} />
           </span>
           <span className="truncate font-medium text-ink">
@@ -1694,31 +1695,31 @@ function LicenseTypeCell({ driver, href, canEdit }: { driver: DriverListRecord; 
 /** โทนของแถวคนที่ไม่ได้ทำงานแล้ว — พ้นสภาพ = แดง · ย้ายไปรถร่วม = ม่วง · ย้ายไปพจส. = น้ำเงิน · ยังทำงาน = `null` */
 const EXIT_TONE = {
   resign: {
-    row: "border-alert/15 hover:bg-alert-soft",
-    sticky: "after:bg-alert/20 group-hover:bg-alert-soft",
-    stickyEnd: "before:bg-alert/20 group-hover:bg-alert-soft",
+    row: "border-alert/15 hover:bg-base-200",
+    sticky: "after:bg-alert/20 group-hover:bg-base-200 group-hover:shadow-[inset_3px_0_0_var(--color-alert)]",
+    stickyEnd: "before:bg-alert/20 group-hover:bg-base-200",
     text: "text-alert",
     hoverText: "group-hover:text-alert",
     btn: "hover:bg-base-100 hover:text-alert",
-    cardHover: "hover:bg-alert-soft",
+    cardHover: "hover:bg-base-200",
   },
   transfer: {
-    row: "border-transfer/15 hover:bg-transfer-soft",
-    sticky: "after:bg-transfer/20 group-hover:bg-transfer-soft",
-    stickyEnd: "before:bg-transfer/20 group-hover:bg-transfer-soft",
+    row: "border-transfer/15 hover:bg-base-200",
+    sticky: "after:bg-transfer/20 group-hover:bg-base-200 group-hover:shadow-[inset_3px_0_0_var(--color-transfer)]",
+    stickyEnd: "before:bg-transfer/20 group-hover:bg-base-200",
     text: "text-transfer",
     hoverText: "group-hover:text-transfer",
     btn: "hover:bg-base-100 hover:text-transfer",
-    cardHover: "hover:bg-transfer-soft",
+    cardHover: "hover:bg-base-200",
   },
   pjs: {
-    row: "border-pjs/15 hover:bg-pjs-soft",
-    sticky: "after:bg-pjs/20 group-hover:bg-pjs-soft",
-    stickyEnd: "before:bg-pjs/20 group-hover:bg-pjs-soft",
+    row: "border-pjs/15 hover:bg-base-200",
+    sticky: "after:bg-pjs/20 group-hover:bg-base-200 group-hover:shadow-[inset_3px_0_0_var(--color-pjs)]",
+    stickyEnd: "before:bg-pjs/20 group-hover:bg-base-200",
     text: "text-pjs",
     hoverText: "group-hover:text-pjs",
     btn: "hover:bg-base-100 hover:text-pjs",
-    cardHover: "hover:bg-pjs-soft",
+    cardHover: "hover:bg-base-200",
   },
 } as const;
 
@@ -1806,7 +1807,7 @@ function DriverCard({
     <div
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
       className={`group flex animate-fade-in flex-col gap-2.5 px-(--sheet-px) py-3.5 transition-colors ${
-        exit ? exit.cardHover : "hover:bg-soft/35"
+        exit ? exit.cardHover : "hover:bg-base-200"
       }`}
     >
       <div className="flex items-start gap-3">

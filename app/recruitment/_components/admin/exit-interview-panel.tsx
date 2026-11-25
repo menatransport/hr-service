@@ -85,7 +85,11 @@ export function ExitReasonCell({ driver }: { driver: DriverListRecord }) {
   return (
     <span className="flex min-w-0 flex-col items-start gap-0.5">
       <span className="flex max-w-full items-center gap-1.5">
-        <span className="font-mono text-12 font-semibold text-ink">{r.reasonCode}</span>
+        {r.reasonCode ? (
+          <span className="reason-code font-mono text-12 font-semibold" data-cat={/^[A-Z]+/.exec(r.reasonCode)?.[0] ?? ""}>
+            {r.reasonCode}
+          </span>
+        ) : null}
         <span className="truncate text-12 text-mut" title={r.reasonLabel}>
           {r.reasonLabel}
         </span>

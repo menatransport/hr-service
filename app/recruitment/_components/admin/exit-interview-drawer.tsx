@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronRight, ClipboardList, Lock, PhoneCall, PhoneForwarded, ShieldAlert, X } from "lucide-react";
 
-import { CheckboxGroupField, DateField, NumberField, SelectField, TextField, isDropdownOpen } from "@/components/ui/field";
+import { CheckboxGroupField, DateField, NumberField, SelectField, isDropdownOpen } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/summary-panel";
 import { MascotLoader } from "@/components/ui/mascot";
 import { requestJson } from "@/lib/http";
@@ -21,7 +21,6 @@ import {
   addDaysISO,
   CONTACT_SLOTS,
   INTERVIEW_RULES,
-  RECRUIT_CHANNELS,
   STAGE_CHIP,
   STAGE_LABEL,
   WAVE2_DUE_DAYS,
@@ -387,18 +386,10 @@ export function ExitInterviewDrawer({ drivercode, onClose }: { drivercode: strin
                   <Ref k="วันเริ่มงาน" v={d.startDateISO ? formatThaiDate(d.startDateISO) : ""} />
                   <Ref k="วันสุดท้าย" v={formatThaiDate(d.exitDateISO)} />
                   <Ref k="อายุงาน" v={d.tenureDays == null ? "" : `${d.tenureDays} วัน · ${d.tenureBand}`} />
+                  {/* ช่องทางสรรหาระบบเติมจากใบสมัคร (`exit-interview/derive.ts`) · ST Zone / RC Mass เอาออกก่อน — ข้อมูล sync ไม่ได้ (Bew 25 พ.ย. 2569) */}
+                  <Ref k="ช่องทางสรรหา" v={form.reference.channel} />
                   <Ref k="หมายเหตุตอนพ้นสภาพ" v={d.note} />
                 </dl>
-                <div className="grid gap-3 border-t border-line pt-3 sm:grid-cols-3">
-                  <TextField id={`${id}-st`} label="ST Zone" optional value={form.reference.stZone} onChange={(v) => patch("reference", { stZone: v })} placeholder="เช่น ST Zone 3" />
-                  <TextField id={`${id}-rc`} label="RC Mass" optional value={form.reference.rcOwner} onChange={(v) => patch("reference", { rcOwner: v })} />
-                  <TextField id={`${id}-ch`} label="ช่องทางสรรหา" optional list={`${id}-channels`} value={form.reference.channel} onChange={(v) => patch("reference", { channel: v })} />
-                  <datalist id={`${id}-channels`}>
-                    {RECRUIT_CHANNELS.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                </div>
                 <details className="group rounded-field bg-base-200 px-3 py-2 text-12 text-mut">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-ink">
                     <ChevronRight size={14} aria-hidden className="transition-transform group-open:rotate-90" />

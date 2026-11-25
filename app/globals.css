@@ -3197,3 +3197,29 @@ a.home-row:hover .home-row-arrow {
 .apt-pin.is-compact::after {
   display: none;
 }
+
+/**
+ * รหัสสาเหตุพ้นสภาพ — กรอบ + พื้นอ่อนตามหมวด (อักษรนำ) ในตารางพ้นสภาพ (Bew 25 พ.ย. 2569)
+ * ใช้ `<span class="reason-code" data-cat="P">` · หมวดใหม่ที่ไม่มีในนี้ = เทากลาง
+ * สีตั้งครั้งเดียว พื้น/ตัวหนังสือผสมกับ base-100/ink ของธีม จึงอ่านได้ทั้งธีมสว่างและมืด
+ */
+.reason-code {
+  --cat: #71717a;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in oklab, var(--cat) 32%, transparent);
+  border-radius: 4px;
+  background-color: color-mix(in oklab, var(--cat) 11%, var(--color-base-100));
+  color: color-mix(in oklab, var(--cat) 78%, var(--color-ink));
+  padding: 0 0.3rem;
+  line-height: 1.25rem;
+}
+.reason-code[data-cat="P"] { --cat: #b45309; } /* รายได้และค่าตอบแทน */
+.reason-code[data-cat="J"] { --cat: #0369a1; } /* เวลาทำงานและลักษณะงาน */
+.reason-code[data-cat="L"] { --cat: #6d28d9; } /* หัวหน้างานและเพื่อนร่วมงาน */
+.reason-code[data-cat="E"] { --cat: #475569; } /* รถและอุปกรณ์ */
+.reason-code[data-cat="O"] { --cat: #0f766e; } /* การเริ่มงานและเรียนรู้ */
+.reason-code[data-cat="C"] { --cat: #4d7c0f; } /* ความก้าวหน้า */
+.reason-code[data-cat="F"] { --cat: #be185d; } /* ครอบครัวและส่วนตัว */
+.reason-code[data-cat="X"] { --cat: #b91c1c; } /* บริษัทให้ออก */
+.reason-code[data-cat="N"] { --cat: #71717a; } /* ไม่ได้ข้อมูล */

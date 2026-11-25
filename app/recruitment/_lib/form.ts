@@ -170,7 +170,8 @@ export type QuestionRole =
   | "ready_date"
   | "hr_contact"
   | "birth_date"
-  | "age";
+  | "age"
+  | "recruit_channel";
 
 interface RoleMatcher {
   /** คีย์ที่ระบบเคยตั้งไว้เอง — ตรงตัวไหนใช้ตัวนั้นก่อนเสมอ */
@@ -192,6 +193,8 @@ const ROLE_MATCHERS: Record<QuestionRole, RoleMatcher> = {
   hr_contact: { keys: ["hr_contact"], includes: ["ฝ่ายบุคคล"] },
   birth_date: { keys: ["birth_date"], includes: ["เกิดวันที่"] },
   age: { keys: [], includes: ["อายุเท่าไหร่"] },
+  /** “คุณทราบข่าวการรับสมัครจากที่ไหน” → ช่องทางสรรหาของ Exit Interview (`exit-interview/derive.ts`) */
+  recruit_channel: { keys: ["source"], includes: ["ทราบข่าว"] },
 };
 
 /** วันเกิดที่ผู้สมัครตอบ `YYYY-MM-DD` — ไม่ได้ตอบ/อ่านไม่ออก = `""` */

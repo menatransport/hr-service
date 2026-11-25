@@ -21,6 +21,7 @@ import {
   type JobMatch,
   type YesNoUnsure,
 } from "./types";
+import { deriveReference, fillReference } from "./derive";
 
 /**
  * Exit Interview — **ฝั่งเซิร์ฟเวอร์เท่านั้น** · ทุกเส้นต้องผ่าน `canAccessMenuStrict("exit-interview")` ก่อนเรียก
@@ -106,6 +107,7 @@ export async function getExitInterview(code: string): Promise<ExitInterviewBundl
   const exitDateISO = driver.resignation!.dateISO;
   const doc = await (await col()).findOne({ drivercode: driver.drivercode, exitDateISO });
   const interview = fromDoc(doc, driver.drivercode, exitDateISO);
+  interview.reference = fillReference(interview.reference, await deriveReference(driver));
   return {
     driver: refOf(driver),
     interview,
@@ -307,11 +309,14 @@ export async function saveExitInterview(code: string, input: SaveInput, actor: s
   const doc: InterviewDoc = {
     drivercode: driver.drivercode,
     exitDateISO,
-    reference: {
-      stZone: text(ref.stZone, MAX_SHORT),
-      rcOwner: text(ref.rcOwner, MAX_SHORT),
-      channel: text(ref.channel, MAX_SHORT),
-    },
+    reference: fillReference(
+      {
+        stZone: text(ref.stZone, MAX_SHORT),
+        rcOwner: text(ref.rcOwner, MAX_SHORT),
+        channel: text(ref.channel, MAX_SHORT),
+      },
+      await deriveReference(driver),
+    ),
     contacts,
     outcome: outcome || (wave1.completed ? "interviewed" : ""),
     wave1,
