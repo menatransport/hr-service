@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Eye, EyeOff, Save, TriangleAlert, X } from "lucide-react";
 
 import { requestJson } from "@/lib/http";
@@ -46,6 +47,8 @@ export function AccessDrawer({
   const [saving, setSaving] = useState(false);
   const isBase = unit.kind === "base";
   const focusRef = useRef<HTMLDivElement>(null);
+  /** กดลงบนฉากหลังจริงไหม — คลิกที่เริ่มในแผง/ดรอปดาวน์แล้วไปปล่อยข้างนอกต้องไม่ปิดแผง */
+  const downOnBackdrop = useRef(false);
 
   useEffect(() => {
     focusRef.current?.scrollIntoView({ block: "center" });
@@ -107,9 +110,21 @@ export function AccessDrawer({
     return acc;
   }, []);
 
-  return (
+  /* portal ไป `body` — หน้าแม่ห่อด้วย `animate-rise` (transform ค้าง) ทำให้ `fixed` ไปยึดคอลัมน์เนื้อหา
+     แผงจึงสูงเท่าทั้งหน้า ปุ่มบันทึกตกไปท้ายหน้า และฉากหลังไม่คลุมจอ (ดู `modal-shell.tsx`) */
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <>
-      <div onClick={() => void close()} aria-hidden className="fixed inset-0 z-[60] bg-ink/30" />
+      <div
+        onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
+        onClick={(e) => {
+          // ปิดเมื่อกดและปล่อยบนฉากหลังเท่านั้น (คลิกที่ไหลมาจากดรอปดาวน์/ลากเลือกข้อความไม่นับ) · มีที่แก้ค้างอยู่ = ไม่ปิด ต้องกด ปิด/✕ เอง
+          if (!dirty && downOnBackdrop.current && e.target === e.currentTarget) void close();
+        }}
+        aria-hidden
+        className="fixed inset-0 z-[60] bg-ink/30"
+      />
       <aside
         role="dialog"
         aria-label={`ตั้งสิทธิ์ ${unit.name}`}
@@ -208,7 +223,8 @@ export function AccessDrawer({
           </div>
         </footer>
       </aside>
-    </>
+    </>,
+    document.body,
   );
 }
 

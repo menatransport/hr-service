@@ -89,3 +89,4 @@
 - 25 พ.ย. 2569 แดชบอร์ด TurnOver (`/recruitment/admin/dashboard` แท็บ TurnOver) แทนชีต Dashboard: `_lib/dashboard/turnover{,-shared}.ts` + `turnover-{section,charts}.tsx` · อ่านในหน้า server (ไม่ผ่าน /api) · คำตอบสัมภาษณ์เฉพาะสิทธิ์ `exit-interview`
 - 25 พ.ย. 2569 ทะเบียน: แท็บที่ 3 “ย้ายไปรถร่วม / พจส.” แยกจากพ้นสภาพ (`employmentOf` ดู `resignation.kind`) · tsc + eslint ✓ · localhost ✓ · ยังไม่ commit
 - 25 พ.ย. 2569 แก้: นำเข้ารอบแรกใส่ `categoryLabel` ว่าง (master เก็บ `categoryId`) → แก้สคริปต์ + รันซ้ำ 499 คน (backup `backups/exit-datalog-before-2026-11-25T03-36-11-967Z.json`) · กราฟ “พ้นสภาพรายเดือน” ในแท็บพ้นสภาพของทะเบียนเปลี่ยนเป็น 4 ชั้นแบบ TurnOver (ควบคุมได้/บางส่วน/ไม่ได้/ไม่ได้ข้อมูล + เฉลี่ยต่อเดือน) · TurnOver นับเฉพาะ `kind: resign` (ไม่รวมย้ายไปรถร่วม/พจส.)
+- 25 พ.ย. 2569 ส่งขึ้น prod: hr-service 0fc7fd5 · backend b60dda9 (sync เฉพาะ exit-interview store/types · tsc baseline 2 เท่าเดิม)

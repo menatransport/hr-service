@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { isDropdownOpen } from "@/components/ui/field";
@@ -40,6 +41,8 @@ export function Drawer({
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  /** กดลงบนฉากหลังจริงไหม — คลิกที่เริ่มในแผง/ดรอปดาวน์แล้วไปปล่อยข้างนอกต้องไม่ปิดแผง */
+  const downOnBackdrop = useRef(false);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
       // ดรอปดาวน์/ปฏิทินที่กางอยู่ในแผงกิน Esc ก่อน
@@ -49,9 +52,21 @@ export function Drawer({
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
 
-  return (
+  /* portal ไป `body` — หน้าแม่ห่อด้วย `animate-rise` (transform ค้าง) ทำให้ `fixed` ไปยึดคอลัมน์เนื้อหา
+     แผงจึงสูงเท่าทั้งหน้า ปุ่มบันทึกตกไปท้ายหน้า และฉากหลังไม่คลุมจอ (ดู `modal-shell.tsx`) */
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <>
-      <div onClick={onClose} aria-hidden className="fixed inset-0 z-50 animate-fade-in bg-ink/30" />
+      <div
+        onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
+        onClick={(e) => {
+          // ปิดเมื่อกดและปล่อยบนฉากหลังเท่านั้น (คลิกที่ไหลมาจากดรอปดาวน์/ลากเลือกข้อความไม่นับ)
+          if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        }}
+        aria-hidden
+        className="fixed inset-0 z-50 animate-fade-in bg-ink/30"
+      />
       <aside
         role="dialog"
         aria-label={title}
@@ -80,7 +95,8 @@ export function Drawer({
           <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</footer>
         ) : null}
       </aside>
-    </>
+    </>,
+    document.body,
   );
 }
 
