@@ -1,9 +1,7 @@
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
 
 import { readSessionUser } from "@/lib/auth/session";
 import { canAccessMenuStrict } from "@/lib/menu-permissions";
-import { SOON } from "@/lib/modules";
 import { findByCode, logScan, scanResultOf } from "@/lib/parking/store";
 import { PARKING_ADMIN, PARKING_VERIFY } from "@/lib/parking/types";
 
@@ -23,7 +21,6 @@ export const dynamic = "force-dynamic";
  * - **ทุกการเปิดเขียน log** `parking_scans` รวมครั้งที่ไม่มีสิทธิ์/ไม่พบบัตร (ใคร · เมื่อไร · ผล · อุปกรณ์ · IP)
  */
 export default async function VerifyPage(props: PageProps<"/desk/parking/v/[code]">) {
-  if (SOON) notFound();
   const { code: raw } = await props.params;
   const code = decodeURIComponent(raw).trim().toUpperCase();
 

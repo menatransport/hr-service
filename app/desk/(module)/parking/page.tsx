@@ -1,10 +1,8 @@
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
 
 import { DataError } from "@/components/ui/data-error";
 import { readSessionUser } from "@/lib/auth/session";
 import { canAccessMenuStrict } from "@/lib/menu-permissions";
-import { SOON } from "@/lib/modules";
 import { listVehicles } from "@/lib/parking/store";
 import { PARKING_ADMIN, siteFromText } from "@/lib/parking/types";
 import { guessDesktop } from "@/lib/viewport";
@@ -17,7 +15,7 @@ export const metadata = { title: "บริการจอดรถบริษ�
 export const dynamic = "force-dynamic";
 
 /**
- * บริการจอดรถบริษัท (`/desk/parking`) — เฟส 1 ลงทะเบียนรถ + ออกบัตรจอด · เมนูยังเปิดเฉพาะ `next dev` (`soon`)
+ * บริการจอดรถบริษัท (`/desk/parking`) — เฟส 1 ลงทะเบียนรถ + ออกบัตรจอด · เปิดใช้บน prod แล้ว (25 พ.ย. 2569)
  *
  * ข้อมูลจริงจาก `hr_service.parking_vehicles` (`lib/parking/store.ts`) · เขียนผ่าน server actions (`./actions.ts`)
  *
@@ -25,7 +23,6 @@ export const dynamic = "force-dynamic";
  * ได้จากปุ่มบนแถบบน · คนอื่น = “บัตรจอดของฉัน” เท่านั้น · ดู `lib/parking/types.ts`
  */
 export default async function ParkingPage() {
-  if (SOON) notFound();
   const [user, admin, initialDesktop, h] = await Promise.all([
     readSessionUser(),
     canAccessMenuStrict(PARKING_ADMIN),

@@ -253,7 +253,7 @@ export const MODULES: ModuleGroup[] = [
         href: "/desk/parking",
         section: "facility",
         icon: CarFront,
-        soon: SOON,
+        // 25 พ.ย. 2569 · Bew — เปิดใช้บน prod แล้ว (เดิม `soon: SOON`)
         actions: [
           {
             /* Bew 24 พ.ย. 2569 — ตารางทะเบียนเห็นเฉพาะ HOD + Process Excellence · คนอื่นเห็นแค่บัตรของตัวเอง */
