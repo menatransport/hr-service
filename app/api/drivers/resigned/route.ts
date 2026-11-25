@@ -1,6 +1,6 @@
 import { fail, ok, unauthorized } from "@/app/api/_lib/respond";
 import { readSessionUser } from "@/lib/auth/session";
-import { canExportResignedPhone } from "@/lib/auth/resigned-phone-export";
+import { canSeeResignedPhone } from "@/lib/auth/resigned-phone-access";
 import { getResignedDriverList } from "@/app/recruitment/_lib/drivers/registry";
 
 /**
@@ -9,7 +9,7 @@ import { getResignedDriverList } from "@/app/recruitment/_lib/drivers/registry";
  *
  * `proxy.ts` ไม่กัน `GET` ให้ — ตรวจล็อกอินเองเหมือน `/api/drivers/picker`
  *
- * เบอร์โทรคนพ้นสภาพ = ข้อมูลส่วนบุคคล — ส่งลง browser เฉพาะคนใน `canExportResignedPhone()`
+ * เบอร์โทรคนพ้นสภาพ = ข้อมูลส่วนบุคคล — ส่งลง browser เฉพาะคนใน `canSeeResignedPhone()` (อีเมลที่กำหนด + สิทธิ์ย่อย `resigned-phone`)
  * คนอื่นได้ช่องว่าง (ตารางขึ้น “—”) · ล้างที่นี่ ไม่ใช่ซ่อนตอนวาดจอ (ณรงค์กรณ์ 17 พ.ย. 2569)
  */
 
@@ -21,7 +21,7 @@ export async function GET() {
     const user = await readSessionUser();
     if (!user) return unauthorized("หมดเวลาการเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
     const rows = await getResignedDriverList();
-    const res = ok(canExportResignedPhone(user) ? rows : rows.map((d) => ({ ...d, phone: "" })));
+    const res = ok((await canSeeResignedPhone(user)) ? rows : rows.map((d) => ({ ...d, phone: "" })));
     res.headers.set("Cache-Control", "private, no-store");
     return res;
   } catch (err) {

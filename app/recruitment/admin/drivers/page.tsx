@@ -41,7 +41,11 @@ export default async function DriversRegistryPage({ searchParams }: PageProps<"/
   const urlSite = (await searchParams).site;
   /* แท็บสาขา: เห็นเฉพาะสาขาของตัวเอง (สิทธิ์ “ดูทุกสาขา” / site อื่นเห็นทั้งหมด) · `?site=` → คุกกี้ → สาขาของตัวเอง
      · แท็บ `other` (สาขานอกสามสาขาหลัก) ส่งต่อตรง ๆ ให้ view ตัดสินเอง */
-  const allSites = await canAccessMenu("recruit-all-sites");
+  const [registryAll, recruitAll] = await Promise.all([
+    canAccessMenu("registry-all-sites"),
+    canAccessMenu("recruit-all-sites"),
+  ]);
+  const allSites = registryAll || recruitAll;
   const sites = visibleRecruitSites(user, allSites);
   const wanted = typeof urlSite === "string" ? urlSite : null;
   const initialSite =

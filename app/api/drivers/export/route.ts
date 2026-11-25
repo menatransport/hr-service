@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { badRequest, fail, ok, unauthorized } from "@/app/api/_lib/respond";
 import { readSessionUser } from "@/lib/auth/session";
-import { canExportResignedPhone } from "@/lib/auth/resigned-phone-export";
+import { canSeeResignedPhone } from "@/lib/auth/resigned-phone-access";
 import { getDriversForExport } from "@/app/recruitment/_lib/drivers/registry";
 
 /**
@@ -14,7 +14,7 @@ import { getDriversForExport } from "@/app/recruitment/_lib/drivers/registry";
  *
  * เป็น `POST` เพราะรหัสทั้งทะเบียน (~1,000 ตัว) ยาวเกิน query string · ตรวจล็อกอินซ้ำเอง (มีเลขบัตร/บัญชี)
  * · พ้นสภาพแล้ว = ข้อมูลส่วนบุคคลถูกล้างตามกติกาเดียวกับหน้าประวัติ (`getDriversForExport()`) ยกเว้นเบอร์โทรหลัก
- *   — ไฟล์แท็บพ้นสภาพมีคอลัมน์เบอร์โทร (Bew 17 พ.ย. 2569) · **ได้เบอร์เฉพาะคนใน `canExportResignedPhone()`**
+ *   — ไฟล์แท็บพ้นสภาพมีคอลัมน์เบอร์โทร (Bew 17 พ.ย. 2569) · **ได้เบอร์เฉพาะคนใน `canSeeResignedPhone()`**
  *   คนอื่นช่องเบอร์ว่าง (ณรงค์กรณ์ 17 พ.ย. 2569)
  */
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (!codes.length) return badRequest("ไม่มีรายชื่อให้ส่งออก");
     if (codes.length > MAX_CODES) return badRequest("รายชื่อมากเกินไป");
 
-    return ok(await getDriversForExport(codes, { keepPhone: canExportResignedPhone(user) }));
+    return ok(await getDriversForExport(codes, { keepPhone: await canSeeResignedPhone(user) }));
   } catch (err) {
     return fail(err);
   }
