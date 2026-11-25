@@ -1,4 +1,4 @@
-# Exit Interview พจส. พ้นสภาพ  ·  สถานะ: กำลังทำ  ·  24 พ.ย. 2569
+# Exit Interview พจส. พ้นสภาพ  ·  สถานะ: เสร็จ (เฟส 1)  ·  24 พ.ย. 2569
 
 ต้นฉบับ: `Downloads/Reason Code_Final (version 1).xlsx` (ชีต DataLog 507 แถว · ReasonCode · Wave1 · Wave2 · คำแนะนำ · ก่อนโทร)
 
@@ -80,3 +80,7 @@
 - 24 พ.ย. 2569 ทำแล้วบน prod: migration `--apply` (63 รหัส + N3 + resignation 30 คน · backup `backups/resign-reasons-before-2026-11-24T09-04-21-017Z.json`) · สิทธิ์ `exit-interview` = true ที่ `division:34` (HOD) + `department:29` (Process Excellence) พร้อม log
 - 24 พ.ย. 2569 **พักงาน (Bew สั่ง)** — staged แล้วแต่ยังไม่ commit (เฉพาะไฟล์ Exit Interview · `lib/modules.ts` stage แค่ hunk exit-interview — parking/shell-header เป็น WIP ของคนอื่น ห้ามรวม) · ค้างก่อน push: ① `exit-interview-drawer.tsx` ใช้ `toLocaleString()` ผิด Hard rule → เปลี่ยนเป็นตัว format ของ repo ② `api-docs.ts` ยังไม่มี 3 route ใหม่ (`node check_api_docs.mjs`) + `API_CHANGELOG`/`API_DOCS_UPDATED` ③ commit → hr-sync backend (stage เฉพาะไฟล์ที่แตะ) → push ทั้งสอง repo → ทดสอบในเบราว์เซอร์ (qa-tester)
 - 25 พ.ย. 2569 ทำต่อ: เอา `toLocaleString` ออก · checkbox ในลิ้นชักเปลี่ยนเป็น `CheckboxGroupField` (Hard rule: input จาก field.tsx) · `api-docs.ts` 4.12.0 เพิ่ม 4 เส้น + changelog · release-check: ไม่มี env ใหม่ ไม่พบ secret (console.log เฉพาะในสคริปต์ migration)
+- 25 พ.ย. 2569 ส่งขึ้น prod: hr-service 25d91ec · backend 90a681b (DO ตอบ route ใหม่แล้ว) · QA เบราว์เซอร์ด้วยบัญชี Bew (แผนก 29 Process Excellence = มีสิทธิ์): คอลัมน์สาเหตุการออก ✓ การ์ด/ชิป/DataLog/ปุ่มโปรไฟล์ขึ้น ✓ API 200 ✓ หน้าตั้งค่ารหัส + N3 ✓ ไม่มี console error · ไม่ล็อกอิน = 401 ✓ · ยังไม่ได้ลองในเบราว์เซอร์กับผู้ใช้ที่ไม่มีสิทธิ์ (ต้องใช้บัญชีแผนกอื่น)
+- 25 พ.ย. 2569 (Bew) ปรับ UI: ตารางพ้นสภาพรวม “ปี-เดือน + วันที่พ้นสภาพ” เป็นช่อง “พ้นสภาพ” (กรองรายเดือนที่หัวช่อง) · แยกคอลัมน์ “Exit Interview” (ชิปสถานะ + กำหนดโทร W2) · คอลัมน์ “จัดการ” ยึดขวา รวมปุ่ม Exit Interview / ทำเอกสาร / ดูรายละเอียด · ลิ้นชักแบ่งแท็บ Wave 1 · Wave 2 · สรุป (เปิดแท็บตาม stage) · tsc + eslint ✓ · เปิดดูบน localhost ✓ (ยังไม่ commit)
+- 25 พ.ย. 2569 (Bew) แยก “สาเหตุการออก” เป็น 4 ช่อง ช่องละตัวกรอง+เรียง: รหัสสาเหตุ (รหัสรองบรรทัดล่าง) · หมวดสาเหตุ · ควบคุมได้? · เจ้าของการแก้ไข · tsc + eslint ✓ · localhost ✓ (ยังไม่ commit)
+- 25 พ.ย. 2569 (Bew) ออกแบบหน้าทะเบียนใหม่ตาม canvas “ทะเบียน พจส. Redesign”: แท็บ ทำงาน | พ้นสภาพ พร้อมยอดขึ้นบนสุด + สาขาขวา · แถบตัวเลขใหม่ (ประเภทแบบแถบแบ่งส่วน · พ้นสภาพ: ออกเดือนนี้ / ออกใน 4 เดือนแรก / Coverage มีเส้นเป้า) · แท็บพ้นสภาพมีกราฟรายเดือน ควบคุมได้/ไม่ได้ + สาเหตุหลัก 5 อันดับ (กดเพื่อกรอง) · หัวตารางพื้นอ่อน · ตัวกรอง/เรียงที่หัวคอลัมน์และคอลัมน์สถานะคงแบบเดิม

@@ -50,10 +50,13 @@ import type { DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
 export function ResignDocumentsButton({
   driver,
   variant = "icon",
+  className,
 }: {
   driver: DriverListRecord;
   /** `icon` = ปุ่มสี่เหลี่ยมในแถวตาราง · `label` = ปุ่มมีข้อความ (หน้าประวัติ / การ์ดจอแคบ) */
   variant?: "icon" | "label";
+  /** แทนรูปทรงของปุ่มไอคอน — ใช้ในกลุ่มปุ่มคอลัมน์ “จัดการ” ของทะเบียน */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -67,7 +70,7 @@ export function ResignDocumentsButton({
         title="ทำเอกสาร: ใบลาออก · แบบสอบถามพนักงานลาออก"
         className={
           variant === "icon"
-            ? "inline-flex size-8 items-center justify-center rounded-selector border border-line text-mut transition-colors hover:border-alert/40 hover:text-alert"
+            ? (className ?? "inline-flex size-8 items-center justify-center rounded-selector border border-line text-mut transition-colors hover:border-alert/40 hover:text-alert")
             : "btn-sec inline-flex items-center gap-2 px-3 py-2 text-13 transition-colors hover:border-alert/40 hover:text-alert"
         }
       >

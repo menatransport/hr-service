@@ -1,13 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { ShieldAlert } from "lucide-react";
+import { MessagesSquare, ShieldAlert } from "lucide-react";
 
 import { XlsxExportButton, type XlsxExportProps } from "@/components/ui/xlsx-export-button";
 import { xlsxDate, type XlsxColumn } from "@/lib/xlsx-table";
 import { requestJson } from "@/lib/http";
 import { formatThaiDate, type DriverListRecord } from "@/app/recruitment/_lib/drivers/types";
-import { CONTROLLABLE_CHIP, controllableLabel } from "@/app/recruitment/_lib/resign-reasons/types";
 import {
   JOB_MATCH,
   STAGE_CHIP,
@@ -21,7 +20,8 @@ import {
 /**
  * ชิ้นส่วน Exit Interview ที่ฝังในแท็บ “พ้นสภาพแล้ว” ของทะเบียน — แยกจาก `driver-registry-view.tsx` (ไฟล์นั้นยาวมากแล้ว)
  *
- * - `ExitReasonCell` — ทุกคนเห็นรหัส + ควบคุมได้? + เจ้าของ (Bew 24 พ.ย. 2569) · สิทธิ์ `exit-interview` เห็นชิปสถานะ กดเปิดลิ้นชัก
+ * - `ExitReasonCell` — ทุกคนเห็นรหัส (Bew 24 พ.ย. 2569) · ควบคุมได้?/หมวด/เจ้าของ แยกเป็นช่องในทะเบียน (25 พ.ย. 2569)
+ * - `ExitStageCell` / `ExitInterviewAction` — สิทธิ์ `exit-interview` เห็นคอลัมน์สถานะ + ปุ่มในคอลัมน์ “จัดการ” (25 พ.ย. 2569)
  * - `useInterviewSummary` — สถานะต่อคน (`GET /api/drivers/exit-interviews/summary`) โหลดเฉพาะคนมีสิทธิ์
  * - `DataLogExportButton` — ไฟล์ Excel คอลัมน์ตามชีต DataLog ของ HR ส่วนกลาง
  */
@@ -78,46 +78,83 @@ export function interviewCounts(rows: DriverListRecord[], summary: Map<string, I
   return { total, pending, wave2, interviewed, flagged, coverage: total ? interviewed / total : 0 };
 }
 
+/** ช่อง “รหัสสาเหตุ” — รหัส + ป้าย · รหัสรองบรรทัดล่าง (ควบคุมได้?/หมวด/เจ้าของ แยกเป็นช่องของตัวเองในทะเบียน) */
 export function ExitReasonCell({ driver }: { driver: DriverListRecord }) {
-  const { summary, open } = useContext(ExitInterviewContext);
   const r = driver.resignation;
-  const stage = stageOfRow(driver, summary);
   if (!r) return <span className="text-mut">—</span>;
   return (
-    <span className="flex min-w-0 flex-col items-start gap-1">
+    <span className="flex min-w-0 flex-col items-start gap-0.5">
       <span className="flex max-w-full items-center gap-1.5">
         <span className="font-mono text-12 font-semibold text-ink">{r.reasonCode}</span>
         <span className="truncate text-12 text-mut" title={r.reasonLabel}>
           {r.reasonLabel}
         </span>
       </span>
-      {r.controllable || (r.owner && r.owner !== "-") || r.secondaryCodes.length ? (
-        <span className="flex flex-wrap items-center gap-1 text-11-5 text-mut">
-          {r.controllable ? (
-            <span className={`chip px-1.5 py-0 ${CONTROLLABLE_CHIP[r.controllable]}`}>{controllableLabel(r.controllable)}</span>
-          ) : null}
-          {r.owner && r.owner !== "-" ? <span>{r.owner}</span> : null}
-          {r.secondaryCodes.length ? <span className="font-mono">+{r.secondaryCodes.join(", ")}</span> : null}
+      {r.secondaryCodes.length ? (
+        <span className="font-mono text-11 text-mut" title="รหัสสาเหตุรอง">
+          รอง {r.secondaryCodes.join(", ")}
         </span>
       ) : null}
-      {stage ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            open(driver.drivercode);
-          }}
-          title="เปิด Exit Interview"
-          className={`chip cursor-pointer px-1.5 py-0 text-11-5 transition-opacity hover:opacity-80 ${STAGE_CHIP[stage]}`}
-        >
-          {summary?.get(driver.drivercode)?.safetyFlag ? <ShieldAlert size={11} aria-hidden /> : null}
-          {STAGE_LABEL[stage]}
-          {stage === "wave2_due" || stage === "wave2_late"
-            ? ` · ${formatThaiDate(summary?.get(driver.drivercode)?.wave2DueISO ?? "")}`
-            : ""}
-        </button>
+    </span>
+  );
+}
+
+/** คอลัมน์ “Exit Interview” — ชิปสถานะ (กดเปิดลิ้นชัก) + บรรทัดรองบอกกำหนด Wave 2 / วันสัมภาษณ์ล่าสุด */
+export function ExitStageCell({ driver }: { driver: DriverListRecord }) {
+  const { summary, open } = useContext(ExitInterviewContext);
+  const stage = stageOfRow(driver, summary);
+  if (!summary) return <span className="text-12 text-mut">…</span>;
+  if (!stage) return <span className="text-12 text-mut">ไม่ต้องสัมภาษณ์</span>;
+  const row = summary.get(driver.drivercode);
+  const wave2 = stage === "wave2_due" || stage === "wave2_late";
+  return (
+    <span className="flex flex-col items-start gap-0.5">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open(driver.drivercode);
+        }}
+        title="เปิด Exit Interview"
+        className={`chip cursor-pointer px-2 py-0.5 text-11-5 transition-opacity hover:opacity-80 ${STAGE_CHIP[stage]}`}
+      >
+        {row?.safetyFlag ? <ShieldAlert size={11} aria-hidden /> : null}
+        {STAGE_LABEL[stage]}
+      </button>
+      {wave2 && row?.wave2DueISO ? (
+        <span className={`text-11 ${stage === "wave2_late" ? "text-alert" : "text-mut"}`}>
+          โทรภายใน {formatThaiDate(row.wave2DueISO)}
+        </span>
       ) : null}
     </span>
+  );
+}
+
+/** ปุ่มไอคอนในคอลัมน์ “จัดการ” — ขึ้นเฉพาะแถวที่ต้องสัมภาษณ์ (ลาออกแบบ `resign`) + มีสิทธิ์ */
+export function ExitInterviewAction({ driver, className }: { driver: DriverListRecord; className: string }) {
+  const { summary, open } = useContext(ExitInterviewContext);
+  const stage = stageOfRow(driver, summary);
+  if (!stage) return null;
+  const due = stage === "pending" || stage === "wave2_due" || stage === "wave2_late";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        open(driver.drivercode);
+      }}
+      title={`Exit Interview · ${STAGE_LABEL[stage]}`}
+      className={`relative ${className}`}
+    >
+      <MessagesSquare size={15} strokeWidth={1.9} aria-hidden />
+      {due ? (
+        <span
+          aria-hidden
+          className={`absolute top-1 right-1 size-1.5 rounded-full ${stage === "wave2_late" ? "bg-alert" : "bg-warning"}`}
+        />
+      ) : null}
+      <span className="sr-only">Exit Interview ของ {driver.name}</span>
+    </button>
   );
 }
 

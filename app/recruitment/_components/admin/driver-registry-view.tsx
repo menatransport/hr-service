@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CarFront,
@@ -21,8 +21,10 @@ import { ResignDocumentsButton } from "@/app/recruitment/_components/admin/resig
 import { ExitInterviewDrawer } from "@/app/recruitment/_components/admin/exit-interview-drawer";
 import {
   DataLogExportButton,
+  ExitInterviewAction,
   ExitInterviewContext,
   ExitReasonCell,
+  ExitStageCell,
   interviewCounts,
   stageOfRow,
   useInterviewSummary,
@@ -43,8 +45,6 @@ import {
   SummaryBody,
   SummaryFooter,
   SummaryPanel,
-  SummaryStat,
-  SummaryStats,
   SummaryStrip,
   SummaryToolbar,
 } from "@/components/ui/summary-panel";
@@ -72,6 +72,7 @@ import {
   type LicenseState,
 } from "@/app/recruitment/_lib/drivers/types";
 import { thaiCompare } from "@/lib/thai-order";
+import { CONTROLLABLE_CHIP, CONTROLLABLE_OPTIONS, controllableLabel } from "@/app/recruitment/_lib/resign-reasons/types";
 import { RECRUIT_SITES, type RecruitSite } from "@/app/recruitment/_lib/sites";
 
 /**
@@ -131,13 +132,29 @@ function siteTabsOf(sites: readonly RecruitSite[], totals: Record<string, number
 }
 type EmploymentTab = "current" | "resigned";
 
-type FilterKey = "vehicle" | "plant" | "owner" | "tenure" | "licenseType" | "docs" | "status" | "fleet" | "exitMonth";
+type FilterKey =
+  | "vehicle"
+  | "plant"
+  | "owner"
+  | "tenure"
+  | "licenseType"
+  | "docs"
+  | "status"
+  | "fleet"
+  | "exitMonth"
+  | "exitReason"
+  | "exitCategory"
+  | "exitControl"
+  | "exitOwner";
 type Filters = Record<FilterKey, string[]>;
 
 type SortKey =
   | "exitMonth"
   | "exitDate"
   | "exitReason"
+  | "exitCategory"
+  | "exitControl"
+  | "exitOwner"
   | "name"
   | "code"
   | "phone"
@@ -171,6 +188,10 @@ const NO_FILTERS: Filters = {
   status: [],
   fleet: [],
   exitMonth: [],
+  exitReason: [],
+  exitCategory: [],
+  exitControl: [],
+  exitOwner: [],
 };
 
 /** ป้ายของกลุ่มตัวกรอง — ใช้ทั้งบนหัวคอลัมน์ ปุ่มบนแถบ และชิปสรุป */
@@ -184,6 +205,10 @@ const FILTER_LABELS: Record<FilterKey, string> = {
   status: "สถานะ",
   fleet: "ลูกค้า",
   exitMonth: "ปี-เดือนที่พ้นสภาพ",
+  exitReason: "รหัสสาเหตุ",
+  exitCategory: "หมวดสาเหตุ",
+  exitControl: "ควบคุมได้?",
+  exitOwner: "เจ้าของการแก้ไข",
 };
 
 /** ค่าที่ไม่มีข้อมูล — ต้องแยกจาก “ยังไม่ติ๊ก” ให้ชัด จึงใช้คีย์เฉพาะแทนสตริงว่าง */
@@ -245,18 +270,49 @@ const COLUMNS: {
   align?: "start" | "end";
 }[] = [
   { sort: "name", label: "คนขับ", width: "w-[220px]", asc: "ชื่อ ก → ฮ", desc: "ชื่อ ฮ → ก" },
-  /* สองช่องนี้ขึ้นเฉพาะแท็บ “พ้นสภาพแล้ว” (`RESIGNED_ONLY`) ต่อจากคนขับ · 10 พ.ย. 2569 */
+  /* ขึ้นเฉพาะแท็บ “พ้นสภาพแล้ว” (`RESIGNED_ONLY`) ต่อจากคนขับ · 10 พ.ย. 2569
+     25 พ.ย. 2569 รวม “ปี-เดือนที่พ้นสภาพ” เข้าช่องนี้ — วันที่บรรทัดบน ปี-เดือนบรรทัดรอง · ตัวกรองรายเดือนย้ายมาที่หัวช่องนี้ */
   {
-    sort: "exitMonth",
-    label: "ปี-เดือนที่พ้นสภาพ",
-    width: "w-[132px]",
+    sort: "exitDate",
+    label: "พ้นสภาพ",
+    width: "w-[128px]",
     filter: "exitMonth",
     asc: "เก่า → ใหม่",
     desc: "ใหม่ → เก่า",
   },
-  { sort: "exitDate", label: "วันที่พ้นสภาพ", width: "w-[120px]", asc: "เก่า → ใหม่", desc: "ใหม่ → เก่า" },
-  /* รหัสสาเหตุ + ควบคุมได้? + เจ้าของ (ทุกคน) · ชิปสถานะ Exit Interview (สิทธิ์ `exit-interview`) — 24 พ.ย. 2569 */
-  { sort: "exitReason", label: "สาเหตุการออก", width: "w-[230px]", asc: "รหัส A → Z", desc: "รหัส Z → A" },
+  /* สาเหตุการออกแยกเป็น 4 ช่อง ช่องละตัวกรอง (Bew 25 พ.ย. 2569) — ทุกคนเห็น · สถานะ Exit Interview ต่อท้าย (สิทธิ์ `exit-interview`) */
+  {
+    sort: "exitReason",
+    label: "รหัสสาเหตุ",
+    width: "w-[220px]",
+    filter: "exitReason",
+    asc: "รหัส A → Z",
+    desc: "รหัส Z → A",
+  },
+  {
+    sort: "exitCategory",
+    label: "หมวดสาเหตุ",
+    width: "w-[150px]",
+    filter: "exitCategory",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+  },
+  {
+    sort: "exitControl",
+    label: "ควบคุมได้?",
+    width: "w-[140px]",
+    filter: "exitControl",
+    asc: "ควบคุมได้ → ไม่ได้",
+    desc: "ไม่ได้ → ควบคุมได้",
+  },
+  {
+    sort: "exitOwner",
+    label: "เจ้าของการแก้ไข",
+    width: "w-[150px]",
+    filter: "exitOwner",
+    asc: "ก → ฮ",
+    desc: "ฮ → ก",
+  },
   { sort: "code", label: "รหัสพนักงาน", width: "w-[112px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
   { sort: "phone", label: "เบอร์โทร", width: "w-[124px]", asc: "น้อย → มาก", desc: "มาก → น้อย" },
   /* อายุจากใบสมัครที่ผูกกับคนนี้ — ทะเบียนไม่มีวันเกิด คนเก่าจาก Excel จึงว่าง (Bew 11 พ.ย. 2569) */
@@ -341,7 +397,11 @@ const COLUMNS: {
 const RESIGNED_HIDDEN = new Set<string>(["vehicle", "fleet", "plant"]);
 
 /** คอลัมน์ที่ขึ้น **เฉพาะแท็บ “พ้นสภาพแล้ว”** — คนที่ยังทำงานไม่มีวันพ้นสภาพ */
-const RESIGNED_ONLY = new Set<string>(["exitMonth", "exitDate", "exitReason"]);
+const RESIGNED_ONLY = new Set<string>(["exitMonth", "exitDate", "exitReason", "exitCategory", "exitControl", "exitOwner"]);
+
+/** ค่าของแต่ละช่องสาเหตุ — ใช้ร่วมกันทั้งตัวกรอง ตัวเลือก และการเรียง · `-` ใน master = ไม่มีเจ้าของ */
+const exitOwnerOf = (d: DriverListRecord) => (d.resignation?.owner && d.resignation.owner !== "-" ? d.resignation.owner : "");
+const CONTROL_RANK: Record<string, number> = Object.fromEntries(CONTROLLABLE_OPTIONS.map((o, i) => [o.value, i]));
 
 /** `2026-11-10` → `2026-11` (คีย์ตัวกรอง/เรียง · ค.ศ.) */
 const exitMonthKey = (d: DriverListRecord) => d.resignation?.dateISO.slice(0, 7) ?? "";
@@ -582,6 +642,8 @@ export function DriverRegistryView({
   const { summary: interviewSummary } = useInterviewSummary(resignedTab && canInterview, registry);
   const [interviewOf, setInterviewOf] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<InterviewStage[]>([]);
+  /** คอลัมน์/ปุ่ม Exit Interview — แท็บพ้นสภาพ + มีสิทธิ์ (ชุดคอลัมน์ตามแท็บ ไม่ใช่ตามคน) */
+  const interviewCol = resignedTab && canInterview;
   const interviewCtx = useMemo(() => ({ summary: interviewSummary, open: setInterviewOf }), [interviewSummary]);
   /**
    * การเรียงที่ใช้จริง — ยังไม่เลือกคอลัมน์ในแท็บพ้นสภาพ = วันที่พ้นสภาพล่าสุดขึ้นก่อนเสมอ (Bew 10 พ.ย. 2569)
@@ -625,6 +687,33 @@ export function DriverRegistryView({
     return { total: scope.length, probation, withoutVehicle, renewal, renewalExpired, docCount };
   }, [scope]);
 
+  /** ยอดบนแท็บ ทำงาน | พ้นสภาพ ของสาขาที่เลือก — พ้นสภาพ = ยอดทั้งทะเบียนของสาขา − คนที่ยังทำงาน (ก่อนโหลดรายชื่อ) */
+  const employmentTotals = useMemo(() => {
+    const current = registry.drivers.filter((d) => siteTabOf(d.siteKey) === site).length;
+    const all =
+      site === "other"
+        ? (registry.siteTotals.other ?? 0)
+        : SITE_TAB_KEYS[site].reduce((sum, key) => sum + (registry.siteTotals[key] ?? 0), 0);
+    const loaded = resignedRows?.filter((d) => siteTabOf(d.siteKey) === site).length;
+    return { current, resigned: loaded ?? Math.max(0, all - current) };
+  }, [registry, site, resignedRows]);
+
+  /** ออกเดือนนี้ / เดือนก่อน (แท็บพ้นสภาพ) */
+  const exitPace = useMemo(() => {
+    const now = new Date();
+    const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const thisKey = key(now);
+    const lastKey = key(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    let thisMonth = 0;
+    let lastMonth = 0;
+    for (const d of scope) {
+      const m = exitMonthKey(d);
+      if (m === thisKey) thisMonth++;
+      else if (m === lastKey) lastMonth++;
+    }
+    return { thisKey, thisMonth, lastMonth };
+  }, [scope]);
+
   /**
    * ตัวเลือกของทุกคอลัมน์ นับจาก `scope` — **ไม่นับจากผลลัพธ์ที่กรองแล้ว**
    * ไม่งั้นค่าที่ยังไม่ได้ติ๊กจะหายไปจากรายการทันทีที่ติ๊กค่าแรก แล้วจะเลือก
@@ -637,6 +726,10 @@ export function DriverRegistryView({
     const status = new Map<string, number>();
     const licenseType = new Map<string, number>();
     const exitMonth = new Map<string, number>();
+    const exitReason = new Map<string, { label: string; count: number }>();
+    const exitCategory = new Map<string, number>();
+    const exitControl = new Map<string, number>();
+    const exitOwner = new Map<string, number>();
     let hasVehicle = 0;
     let noVehicle = 0;
     let probation = 0;
@@ -651,7 +744,15 @@ export function DriverRegistryView({
       bump(owner, d.ownerTypeKey ?? NONE);
       bump(licenseType, d.licenseType || NONE);
       bump(status, d.work?.latestStatus || NONE);
-      if (!d.active) bump(exitMonth, exitMonthKey(d) || NONE);
+      if (!d.active) {
+        bump(exitMonth, exitMonthKey(d) || NONE);
+        const r = d.resignation;
+        const code = r?.reasonCode || NONE;
+        exitReason.set(code, { label: r?.reasonLabel ?? "", count: (exitReason.get(code)?.count ?? 0) + 1 });
+        bump(exitCategory, r?.categoryLabel || NONE);
+        bump(exitControl, r?.controllable || NONE);
+        bump(exitOwner, exitOwnerOf(d) || NONE);
+      }
 
       if (d.vehicleRef) hasVehicle++;
       else noVehicle++;
@@ -686,6 +787,29 @@ export function DriverRegistryView({
     ];
 
     return {
+      /* รหัสเรียงแบบตัวเลข (A2 ก่อน A10) · ไม่มีรหัสไปท้ายสุด */
+      exitReason: [...exitReason]
+        .sort((a, b) => {
+          if (a[0] === NONE) return 1;
+          if (b[0] === NONE) return -1;
+          return a[0].localeCompare(b[0], "en", { numeric: true });
+        })
+        .map(([value, o]) => ({
+          value,
+          label: value === NONE ? "ไม่ระบุรหัส" : `${value} · ${o.label}`,
+          count: o.count,
+        })) as ColumnFilterOption[],
+      exitCategory: byLabel(exitCategory, "ไม่ระบุหมวด"),
+      /* ลำดับตาม master (ควบคุมได้ → บางส่วน → ไม่ได้ → ไม่นับ) ไม่ใช่ตามตัวอักษร */
+      exitControl: [
+        ...CONTROLLABLE_OPTIONS.filter((o) => exitControl.get(o.value)).map((o) => ({
+          value: o.value,
+          label: o.label,
+          count: exitControl.get(o.value),
+        })),
+        ...(exitControl.get(NONE) ? [{ value: NONE, label: "ไม่ระบุ", count: exitControl.get(NONE) }] : []),
+      ] as ColumnFilterOption[],
+      exitOwner: byLabel(exitOwner, "ไม่มีเจ้าของ"),
       /* เดือนล่าสุดขึ้นก่อน · ไม่มีวันที่ไปท้ายสุด */
       exitMonth: [...exitMonth]
         .sort((a, b) => {
@@ -748,6 +872,10 @@ export function DriverRegistryView({
 
     const rows = scope.filter((d) => {
       if (!on("exitMonth", exitMonthKey(d) || NONE)) return false;
+      if (!on("exitReason", d.resignation?.reasonCode || NONE)) return false;
+      if (!on("exitCategory", d.resignation?.categoryLabel || NONE)) return false;
+      if (!on("exitControl", d.resignation?.controllable || NONE)) return false;
+      if (!on("exitOwner", exitOwnerOf(d) || NONE)) return false;
       if (resignedTab && stageFilter.length) {
         const st = stageOfRow(d, interviewSummary);
         if (!st || !stageFilter.includes(st)) return false;
@@ -854,7 +982,7 @@ export function DriverRegistryView({
   function changeEmployment(next: EmploymentTab) {
     setEmployment(next);
     if (next !== "resigned") {
-      setFilters((prev) => ({ ...prev, exitMonth: [] }));
+      setFilters((prev) => ({ ...prev, exitMonth: [], exitReason: [], exitCategory: [], exitControl: [], exitOwner: [] }));
       if (sortKey && RESIGNED_ONLY.has(sortKey)) setSortKey(null);
       return;
     }
@@ -937,101 +1065,127 @@ export function DriverRegistryView({
       
 
       <SummaryPanel label="สรุปทะเบียน">
-        <SummaryStats>
-          <SummaryStat
-            lead
-            label={
-              resignedTab
-                ? "พ้นสภาพแล้ว"
-                : "ปฏิบัติงานอยู่"
-            }
-            value={counts.total}
-            unit="คน"
-            sub={`สาขา${siteFilterLabel(site)}`}
-            tone={resignedTab ? "alert" : "ink"}
-          />
-          <SummaryStat
-            label={`อายุงานน้อยกว่า ${PROBATION_MONTHS} เดือน`}
-            value={counts.probation}
-            unit="คน"
-            share={counts.probation / (counts.total || 1)}
-            title="กลุ่มที่ต้องตามดูใกล้ ๆ"
-            dot="bg-primary"
-            tone="primary"
-            active={filters.tenure.includes("under4")}
-            onClick={() => toggleTile("tenure", "under4")}
-          />
-          <SummaryStat
-            label="เอกสารต้องต่ออายุ"
-            value={counts.renewal}
-            unit="คน"
-            sub={counts.renewal ? `หมดแล้ว ${counts.renewalExpired} · ใกล้หมด ${counts.renewal - counts.renewalExpired}` : "ใบขับขี่ · บัตรประชาชน"}
-            share={counts.renewal / (counts.total || 1)}
-            title={`ใบขับขี่หรือบัตรประชาชน หมดอายุแล้ว / เหลือไม่เกิน ${LICENSE_WARN_DAYS} วัน`}
-            dot="bg-alert"
-            tone="alert"
-            active={renewalMode}
-            onClick={() => setFilter("docs", renewalMode ? [] : ALERT_TAGS)}
-          />
-          <SummaryStat
-            label="ยังไม่มีทะเบียนรถ"
-            value={counts.withoutVehicle}
-            unit="คน"
-            share={counts.withoutVehicle / (counts.total || 1)}
-            title="ยังไม่ได้ประจำคันไหน"
-            dot="bg-sla"
-            tone="sla"
-            active={filters.vehicle.includes("none")}
-            onClick={() => toggleTile("vehicle", "none")}
-          />
-          {interview ? (
+        {/* แถวบน: แท็บสถานะการจ้าง (มียอดของสาขา) + สาขา — แบบใหม่ 25 พ.ย. 2569 (canvas “ทะเบียน พจส. Redesign”) */}
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b border-line px-(--sheet-px)">
+          <div role="tablist" aria-label="สถานะการจ้าง" className="-mb-px flex gap-6">
+            <EmploymentTabButton active={!resignedTab} count={employmentTotals.current} onClick={() => changeEmployment("current")}>
+              ทำงาน
+            </EmploymentTabButton>
+            <EmploymentTabButton active={resignedTab} tone="ink" count={employmentTotals.resigned} onClick={() => changeEmployment("resigned")}>
+              พ้นสภาพ
+            </EmploymentTabButton>
+          </div>
+          <div className="flex w-full items-center gap-3 pb-2.5 sm:w-auto sm:pt-2.5">
+            <span className="hidden text-12 text-mut sm:inline">สาขา</span>
+            <SiteTabs value={site} tabs={siteTabs} onChange={(v) => setSite(v)} />
+          </div>
+        </div>
+
+        <StatStrip>
+          {resignedTab ? (
             <>
-              <SummaryStat
-                label="รอ Exit Interview"
-                value={interview.pending}
-                unit="คน"
-                share={interview.pending / (interview.total || 1)}
-                sub={interview.flagged ? `แจ้ง HR Chief ${interview.flagged} คน` : "ยังไม่สัมภาษณ์ Wave 1"}
-                dot="bg-ink"
-                tone="ink"
-                active={stageFilter.join() === "pending"}
-                onClick={() => toggleStage(["pending"])}
+              <RegistryStat label="พ้นสภาพแล้ว" value={counts.total} sub={`สาขา${siteFilterLabel(site)}`} />
+              <RegistryStat
+                label={`ออกเดือนนี้ (${THAI_MONTHS_SHORT[new Date().getMonth()]})`}
+                value={exitPace.thisMonth}
+                sub={`เดือนก่อน ${exitPace.lastMonth.toLocaleString("th-TH")} คน`}
+                active={filters.exitMonth.length === 1 && filters.exitMonth[0] === exitPace.thisKey}
+                onClick={() => toggleTile("exitMonth", exitPace.thisKey)}
               />
-              <SummaryStat
-                label="ถึงรอบ Wave 2"
-                value={interview.wave2}
-                unit="คน"
-                sub="วันที่ 30–45 หลังออก (รวมเลยกำหนด)"
-                dot="bg-primary"
-                tone="primary"
-                active={stageFilter.join() === "wave2_due,wave2_late"}
-                onClick={() => toggleStage(["wave2_due", "wave2_late"])}
+              <RegistryStat
+                label={`ออกภายใน ${PROBATION_MONTHS} เดือนแรก`}
+                value={counts.probation}
+                share={counts.probation / (counts.total || 1)}
+                title="อายุงานตอนออกน้อยกว่าช่วงทดลองงาน"
+                active={filters.tenure.includes("under4")}
+                onClick={() => toggleTile("tenure", "under4")}
               />
-              <SummaryStat
-                label="Coverage Rate"
-                value={Math.round(interview.coverage * 100)}
-                unit="%"
-                sub={`สัมภาษณ์ได้ ${interview.interviewed}/${interview.total} คน · เป้า ≥ 70%`}
-                share={interview.coverage}
-                title="สัมภาษณ์ได้ (ไม่ใช่ N1/N2) ÷ คนพ้นสภาพแบบลาออก/ปลดทั้งหมดในขอบเขตนี้"
-                dot={interview.coverage >= 0.7 ? "bg-primary" : "bg-alert"}
-                tone={interview.coverage >= 0.7 ? "primary" : "alert"}
-              />
+              {interview ? (
+                <>
+                  <RegistryStat
+                    label="รอ Exit Interview"
+                    value={interview.pending}
+                    tone="sla"
+                    sub={interview.flagged ? `แจ้ง HR Chief ${interview.flagged} คน` : "ยังไม่สัมภาษณ์ Wave 1"}
+                    active={stageFilter.join() === "pending"}
+                    onClick={() => toggleStage(["pending"])}
+                  />
+                  <RegistryStat
+                    label="ถึงรอบ Wave 2"
+                    value={interview.wave2}
+                    sub="วันที่ 30–45 หลังออก (รวมเลยกำหนด)"
+                    active={stageFilter.join() === "wave2_due,wave2_late"}
+                    onClick={() => toggleStage(["wave2_due", "wave2_late"])}
+                  />
+                  <RegistryStat
+                    label="Coverage Rate"
+                    value={Math.round(interview.coverage * 100)}
+                    unit="%"
+                    tone={interview.coverage >= 0.7 ? "primary" : "alert"}
+                    share={interview.coverage}
+                    target={0.7}
+                    sub={`สัมภาษณ์ได้ ${interview.interviewed}/${interview.total} · เป้า ≥ 70%`}
+                    title="สัมภาษณ์ได้ (ไม่ใช่ N1/N2) ÷ คนพ้นสภาพแบบลาออก/ปลดทั้งหมดในขอบเขตนี้"
+                  />
+                </>
+              ) : null}
             </>
-          ) : null}
-        </SummaryStats>
+          ) : (
+            <>
+              <RegistryStat label="ปฏิบัติงานอยู่" value={counts.total} sub={`สาขา${siteFilterLabel(site)}`} />
+              <RegistryStat
+                label={`อายุงานน้อยกว่า ${PROBATION_MONTHS} เดือน`}
+                value={counts.probation}
+                share={counts.probation / (counts.total || 1)}
+                title="กลุ่มที่ต้องตามดูใกล้ ๆ"
+                active={filters.tenure.includes("under4")}
+                onClick={() => toggleTile("tenure", "under4")}
+              />
+              <RegistryStat
+                label="เอกสารต้องต่ออายุ"
+                value={counts.renewal}
+                tone={counts.renewal ? "alert" : "ink"}
+                sub={
+                  counts.renewal
+                    ? `หมดแล้ว ${counts.renewalExpired} · ใกล้หมด ${counts.renewal - counts.renewalExpired}`
+                    : "ใบขับขี่ · บัตรประชาชน"
+                }
+                title={`ใบขับขี่หรือบัตรประชาชน หมดอายุแล้ว / เหลือไม่เกิน ${LICENSE_WARN_DAYS} วัน`}
+                active={renewalMode}
+                onClick={() => setFilter("docs", renewalMode ? [] : ALERT_TAGS)}
+              />
+              <RegistryStat
+                label="ยังไม่ประจำรถ"
+                value={counts.withoutVehicle}
+                share={counts.withoutVehicle / (counts.total || 1)}
+                title="ยังไม่ได้ประจำคันไหน"
+                active={filters.vehicle.includes("none")}
+                onClick={() => toggleTile("vehicle", "none")}
+              />
+              <OwnerSplitStat options={options.owner} />
+            </>
+          )}
+        </StatStrip>
+
+        {resignedTab && !loadingResigned && scope.length ? (
+          <ExitInsights
+            rows={scope}
+            months={filters.exitMonth}
+            reasons={filters.exitReason}
+            onMonth={(key) => toggleTile("exitMonth", key)}
+            onReason={(code) => toggleTile("exitReason", code)}
+          />
+        ) : null}
 
         <SummaryToolbar className="lg:flex-wrap">
           <SearchField
             value={query}
             onChange={setQuery}
             label="ค้นหาในทะเบียนประวัติ"
-            placeholder="ค้นหาชื่อ รหัส ทะเบียน เลขรถ ลูกค้า แพล้นท์…"
+            placeholder={resignedTab ? "ค้นหาชื่อ รหัส เบอร์โทร…" : "ค้นหาชื่อ รหัส ทะเบียน เลขรถ ลูกค้า แพล้นท์…"}
             tone="filled"
             className="w-full lg:max-w-88 lg:flex-1"
           />
-
-          <SiteTabs value={site} tabs={siteTabs} onChange={(v) => setSite(v)} />
 
           <div className="flex items-center gap-2 lg:ml-auto">
             {/* ปุ่ม Excel = ส่งออกอย่างเดียว — เอานำเข้า/Sync จาก Excel ออกไปก่อน (Bew 10 พ.ย. 2569)
@@ -1060,84 +1214,60 @@ export function DriverRegistryView({
           </div>
         </SummaryToolbar>
 
-        {barFilters.length > 0 ? (
-          <ActiveFilterBar
-            active={barFilters}
-            options={options}
-            onClear={(key) => setFilter(key, [])}
-            onClearAll={clearFilters}
-          />
-        ) : null}
-
-        {/* แท็บสถานะการจ้าง + ยอดที่เหลือหลังกรอง — ขีดใต้แท็บวางทับขอบล่างของการ์ดพอดี
-            · โหมดเอกสารต้องต่ออายุ: ไม่มีแท็บและแถบเตือน เหลือแค่สลับมุมมอง + ยอด (Bew 21 พ.ย. 2569) */}
-        <SummaryStrip
-          className={`flex flex-wrap justify-between gap-x-4 gap-y-1 ${renewalMode ? "items-center gap-y-2 py-2.5" : "items-end"}`}
-        >
+        {/* แถบผลลัพธ์ — ตัวกรองที่ใช้อยู่ (ซ้าย) + ยอดที่เหลือ (ขวา)
+            · โหมดเอกสารต้องต่ออายุ: ชิปเอกสาร + สลับปฏิทิน/ตาราง (Bew 21 พ.ย. 2569) */}
+        <SummaryStrip className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
           {renewalMode ? (
             <RenewalFilter tags={filters.docs as DocTag[]} count={counts.docCount} onChange={(tags) => setFilter("docs", tags)} />
-          ) : (
-          <div className="-mx-3 flex gap-1">
-            <EmploymentTabButton
-              active={employment === "current"}
-              onClick={() => changeEmployment("current")}
-            >
-              พนักงานปัจจุบัน
-            </EmploymentTabButton>
-            <EmploymentTabButton
-              active={resignedTab}
-              tone="alert"
-              onClick={() => changeEmployment("resigned")}
-            >
-              พ้นสภาพแล้ว
-            </EmploymentTabButton>
-          </div>
-          )}
-
-          <div className={`flex w-full items-center justify-between gap-3 sm:w-auto ${renewalMode ? "sm:ml-auto sm:justify-end sm:gap-4" : "pb-2.5"}`}>
-          {renewalMode ? (
-            <SegmentedControl
-              label="มุมมองเอกสารต้องต่ออายุ"
-              value={docView}
-              onChange={setDocView}
-              options={[
-                { value: "calendar", label: "ปฏิทิน" },
-                { value: "table", label: "ตาราง" },
-              ]}
-              className="[&_button]:min-h-7 [&_button]:px-3"
+          ) : null}
+          {barFilters.length > 0 ? (
+            <ActiveFilterBar
+              active={barFilters}
+              options={options}
+              onClear={(key) => setFilter(key, [])}
+              onClearAll={clearFilters}
             />
           ) : null}
-          {renewalMode ? (
-            <button
-              type="button"
-              onClick={() => setFilter("docs", [])}
-              className="flex cursor-pointer items-center gap-1 text-12-5 text-mut transition-colors hover:text-ink"
-            >
-              <X size={14} strokeWidth={2} aria-hidden />
-              ปิดมุมมองนี้
-            </button>
-          ) : null}
-          <p role="status" aria-live="polite" className="text-12-5 text-mut">
-            <span key={results.length} className="inline-block animate-fade-in">
-              {filtering ? (
-                <>
-                  พบ{" "}
-                  <span className="font-semibold text-primary tabular-nums">
-                    {results.length.toLocaleString("th-TH")}
-                  </span>{" "}
-                  คน จาก {counts.total.toLocaleString("th-TH")} คน
-                </>
-              ) : (
-                <>
-                  ทั้งหมด{" "}
-                  <span className="font-semibold text-ink tabular-nums">
-                    {results.length.toLocaleString("th-TH")}
-                  </span>{" "}
-                  คน
-                </>
-              )}
-            </span>
-          </p>
+
+          <div className="ml-auto flex items-center gap-4">
+            {renewalMode ? (
+              <>
+                <SegmentedControl
+                  label="มุมมองเอกสารต้องต่ออายุ"
+                  value={docView}
+                  onChange={setDocView}
+                  options={[
+                    { value: "calendar", label: "ปฏิทิน" },
+                    { value: "table", label: "ตาราง" },
+                  ]}
+                  className="[&_button]:min-h-7 [&_button]:px-3"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFilter("docs", [])}
+                  className="flex cursor-pointer items-center gap-1 text-12-5 text-mut transition-colors hover:text-ink"
+                >
+                  <X size={14} strokeWidth={2} aria-hidden />
+                  ปิดมุมมองนี้
+                </button>
+              </>
+            ) : null}
+            <p role="status" aria-live="polite" className="text-12-5 text-mut">
+              <span key={results.length} className="inline-block animate-fade-in">
+                {filtering ? (
+                  <>
+                    พบ{" "}
+                    <span className="font-semibold text-ink tabular-nums">{results.length.toLocaleString("th-TH")}</span>{" "}
+                    จาก {counts.total.toLocaleString("th-TH")} คน
+                  </>
+                ) : (
+                  <>
+                    ทั้งหมด{" "}
+                    <span className="font-semibold text-ink tabular-nums">{results.length.toLocaleString("th-TH")}</span> คน
+                  </>
+                )}
+              </span>
+            </p>
           </div>
         </SummaryStrip>
 
@@ -1185,28 +1315,31 @@ export function DriverRegistryView({
             <table
               /* แท็บพ้นสภาพเหลือ 5 คอลัมน์ ถ้าคงความกว้างขั้นต่ำเดิมไว้จะเหลือที่ว่างยาวท้ายตาราง */
               className={`sheet-table w-full border-collapse text-13 ${
-                resignedTab ? "min-w-[1470px]" : "min-w-[1350px]"
+                resignedTab ? "min-w-[1800px]" : "min-w-[1350px]"
               }`}
             >
               <thead>
                 <tr>
                   {columns.map((column, i) => (
-                    <Head
-                      key={column.sort}
-                      column={column}
-                      sorted={activeSort === column.sort ? activeDir : null}
-                      menu={columnMenu(column, "head")}
-                      /* คอลัมน์แรก (คนขับ) ยึดทั้งบนทั้งซ้าย ต้องซ้อนสูงกว่าหัวอื่นที่เลื่อนผ่าน */
-                      stickyLeft={i === 0}
-                    />
+                    <Fragment key={column.sort}>
+                      <Head
+                        column={column}
+                        sorted={activeSort === column.sort ? activeDir : null}
+                        menu={columnMenu(column, "head")}
+                        /* คอลัมน์แรก (คนขับ) ยึดทั้งบนทั้งซ้าย ต้องซ้อนสูงกว่าหัวอื่นที่เลื่อนผ่าน */
+                        stickyLeft={i === 0}
+                      />
+                      {/* สถานะ Exit Interview ต่อจากสาเหตุ — สิทธิ์ `exit-interview` · กรองด้วยการ์ดสถานะด้านบน */}
+                      {column.sort === "exitOwner" && interviewCol ? (
+                        <th className="sticky top-0 z-10 w-[150px] border-b border-line-strong bg-base-200 px-3 py-2.5 text-left text-12 font-semibold whitespace-nowrap text-mut">
+                          Exit Interview
+                        </th>
+                      ) : null}
+                    </Fragment>
                   ))}
-                  {resignedTab ? (
-                    <th className="sticky top-0 z-10 w-14 border-b border-line-strong bg-head px-3 py-2.5 text-center font-mono text-10-5 font-semibold tracking-[0.07em] text-mut uppercase">
-                      เอกสาร
-                    </th>
-                  ) : null}
-                  <th className="sticky top-0 z-10 w-9 border-b border-line-strong bg-head px-3 py-2.5 text-right font-mono text-10-5 font-semibold tracking-[0.07em] text-mut uppercase">
-                    ประวัติ
+                  {/* ปุ่มของแถวรวมที่เดียว ยึดขอบขวาตอนเลื่อนแนวนอน กดได้เสมอไม่ต้องเลื่อนหา (25 พ.ย. 2569) */}
+                  <th className="sticky top-0 right-0 z-20 w-px border-b border-line-strong bg-base-200 px-3 py-2.5 text-center text-12 font-semibold whitespace-nowrap text-mut before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line">
+                    จัดการ
                   </th>
                 </tr>
               </thead>
@@ -1217,7 +1350,7 @@ export function DriverRegistryView({
               */}
               <tbody key={`${current}-${results.length}-${sortKey ?? ""}-${sortDir}`}>
                 {pageRows.map((d, i) => (
-                  <Row key={d.drivercode} driver={d} index={i} hideVehicle={resignedTab} />
+                  <Row key={d.drivercode} driver={d} index={i} hideVehicle={resignedTab} interview={interviewCol} />
                 ))}
               </tbody>
             </table>
@@ -1228,7 +1361,7 @@ export function DriverRegistryView({
           <ul key={`${current}-${results.length}`} className="divide-y divide-line">
             {pageRows.map((d, i) => (
               <li key={d.drivercode}>
-                <DriverCard driver={d} index={i} hideVehicle={resignedTab} />
+                <DriverCard driver={d} index={i} hideVehicle={resignedTab} interview={interviewCol} />
               </li>
             ))}
           </ul>
@@ -1290,6 +1423,12 @@ function compare(a: DriverListRecord, b: DriverListRecord, key: SortKey): number
       return a.resignation?.reasonCode && b.resignation?.reasonCode
         ? a.resignation.reasonCode.localeCompare(b.resignation.reasonCode, "en", { numeric: true })
         : byText(a.resignation?.reasonCode ?? "", b.resignation?.reasonCode ?? "");
+    case "exitCategory":
+      return byText(a.resignation?.categoryLabel ?? "", b.resignation?.categoryLabel ?? "");
+    case "exitControl":
+      return byNumber(CONTROL_RANK[a.resignation?.controllable ?? ""] ?? null, CONTROL_RANK[b.resignation?.controllable ?? ""] ?? null);
+    case "exitOwner":
+      return byText(exitOwnerOf(a), exitOwnerOf(b));
     case "name":
       return byText(a.name, b.name);
     case "code":
@@ -1323,6 +1462,7 @@ function Row({
   driver,
   index,
   hideVehicle,
+  interview,
 }: {
   driver: DriverListRecord;
   index: number;
@@ -1331,6 +1471,8 @@ function Row({
    * และเพิ่มช่องปุ่มทำเอกสารพ้นสภาพ
    */
   hideVehicle: boolean;
+  /** คอลัมน์สถานะ Exit Interview (แท็บพ้นสภาพ + สิทธิ์) */
+  interview: boolean;
 }) {
   const canEdit = useCanSee("registry-profile");
   const href = driverHref(driver);
@@ -1378,18 +1520,29 @@ function Row({
         </span>
       </td>
 
-      {/* แท็บพ้นสภาพ — ปี-เดือน + วันที่พ้นสภาพ ต่อจากชื่อ (Bew 10 พ.ย. 2569) */}
+      {/* แท็บพ้นสภาพ — วันที่ + ปี-เดือน ต่อจากชื่อ (Bew 10 พ.ย. 2569 · รวมช่อง 25 พ.ย. 2569) */}
       {hideVehicle ? (
         <>
-          <td className="px-3 py-2 tabular-nums whitespace-nowrap text-ink">
-            {formatExitMonth(exitMonthKey(driver)) || <Dash />}
+          <td className="px-3 py-2 whitespace-nowrap">
+            <ExitDateCell driver={driver} />
           </td>
-          <td className="px-3 py-2 whitespace-nowrap text-ink">
-            {formatThaiDate(driver.resignation?.dateISO ?? "") || <Dash />}
-          </td>
-          <td className="max-w-[230px] px-3 py-2">
+          <td className="max-w-[220px] px-3 py-2">
             <ExitReasonCell driver={driver} />
           </td>
+          <td className="max-w-[150px] truncate px-3 py-2 text-ink" title={driver.resignation?.categoryLabel}>
+            {driver.resignation?.categoryLabel || <Dash />}
+          </td>
+          <td className="px-3 py-2 whitespace-nowrap">
+            <ExitControlChip driver={driver} />
+          </td>
+          <td className="max-w-[150px] truncate px-3 py-2 text-ink" title={exitOwnerOf(driver)}>
+            {exitOwnerOf(driver) || <Dash />}
+          </td>
+          {interview ? (
+            <td className="px-3 py-2 whitespace-nowrap">
+              <ExitStageCell driver={driver} />
+            </td>
+          ) : null}
         </>
       ) : null}
 
@@ -1442,15 +1595,12 @@ function Row({
         <StatusCell driver={driver} />
       </td>
 
-      {/* ใบลาออก + แบบสอบถามลาออก — เฉพาะแท็บพ้นสภาพ (ชุดคอลัมน์ตามแท็บ ไม่ใช่ตามคน) */}
-      {hideVehicle ? (
-        <td className="px-2 py-1.5 text-center">
-          <ResignDocumentsButton driver={driver} />
-        </td>
-      ) : null}
-
-      <td className="px-2 py-1.5 text-right">
-        <ViewDetailLink href={href} name={driver.name} exit={exit} />
+      <td
+        className={`sticky right-0 z-[5] bg-base-100 px-2 py-1.5 before:absolute before:inset-y-0 before:left-0 before:w-px ${
+          exit ? exit.stickyEnd : "before:bg-line group-hover:bg-base-200"
+        }`}
+      >
+        <RowActions driver={driver} href={href} exit={exit} documents={hideVehicle} />
       </td>
     </tr>
   );
@@ -1483,22 +1633,28 @@ const EXIT_TONE = {
   resign: {
     row: "border-alert/15 hover:bg-alert-soft",
     sticky: "after:bg-alert/20 group-hover:bg-alert-soft",
+    stickyEnd: "before:bg-alert/20 group-hover:bg-alert-soft",
     text: "text-alert",
     hoverText: "group-hover:text-alert",
+    btn: "hover:bg-base-100 hover:text-alert",
     cardHover: "hover:bg-alert-soft",
   },
   transfer: {
     row: "border-transfer/15 hover:bg-transfer-soft",
     sticky: "after:bg-transfer/20 group-hover:bg-transfer-soft",
+    stickyEnd: "before:bg-transfer/20 group-hover:bg-transfer-soft",
     text: "text-transfer",
     hoverText: "group-hover:text-transfer",
+    btn: "hover:bg-base-100 hover:text-transfer",
     cardHover: "hover:bg-transfer-soft",
   },
   pjs: {
     row: "border-pjs/15 hover:bg-pjs-soft",
     sticky: "after:bg-pjs/20 group-hover:bg-pjs-soft",
+    stickyEnd: "before:bg-pjs/20 group-hover:bg-pjs-soft",
     text: "text-pjs",
     hoverText: "group-hover:text-pjs",
+    btn: "hover:bg-base-100 hover:text-pjs",
     cardHover: "hover:bg-pjs-soft",
   },
 } as const;
@@ -1513,29 +1669,57 @@ function driverHref(driver: DriverListRecord) {
 }
 
 /**
- * ทางเข้าหน้ารายละเอียดทางเดียวของแถว/การ์ด — ปุ่มรูปตา · ขึ้นให้ทุกคน (Bew 6 พ.ย. 2569)
- * ไม่มีสิทธิ์ `registry-profile` = หน้าประวัติอ่านอย่างเดียว ไม่เห็นแท็บเอกสาร (กันที่หน้านั้นเอง)
+ * คอลัมน์ “จัดการ” — ปุ่มไอคอนของแถวรวมเป็นกลุ่มเดียว ขนาดเท่ากัน กดง่าย (25 พ.ย. 2569)
+ *
+ * - Exit Interview — แท็บพ้นสภาพ + สิทธิ์ `exit-interview` · จุดเหลือง = ถึงรอบต้องโทร · จุดแดง = เลยกำหนด
+ * - ทำเอกสาร (ใบลาออก + แบบสอบถาม) — แท็บพ้นสภาพ
+ * - ดูรายละเอียด — ทุกคน ทุกแท็บ (ทางเข้าหน้ารายละเอียดทางเดียวของแถว · Bew 6 พ.ย. 2569)
+ *   ไม่มีสิทธิ์ `registry-profile` = หน้าประวัติอ่านอย่างเดียว ไม่เห็นแท็บเอกสาร (กันที่หน้านั้นเอง)
  */
-function ViewDetailLink({
+function RowActions({
+  driver,
   href,
-  name,
   exit,
+  documents,
 }: {
+  driver: DriverListRecord;
   href: string;
-  name: string;
   exit: ReturnType<typeof exitToneOf>;
+  documents: boolean;
 }) {
+  const btn = `inline-grid size-8 flex-none cursor-pointer place-items-center rounded-selector text-mut transition-colors ${
+    exit ? exit.btn : "hover:bg-soft hover:text-primary"
+  }`;
   return (
-    <Link
-      href={href}
-      aria-label={`ดูรายละเอียด ${name || ""}`.trim()}
-      title="ดูรายละเอียด"
-      className={`inline-grid size-8 flex-none place-items-center rounded-full transition-colors ${
-        exit ? `${exit.text} hover:bg-base-100` : "text-mut hover:bg-soft hover:text-primary"
-      }`}
-    >
-      <Eye size={16} strokeWidth={1.8} aria-hidden />
-    </Link>
+    <span className="flex items-center justify-center gap-0.5">
+      {documents ? (
+        <>
+          <ExitInterviewAction driver={driver} className={btn} />
+          <ResignDocumentsButton driver={driver} className={btn} />
+        </>
+      ) : null}
+      <Link href={href} aria-label={`ดูรายละเอียด ${driver.name || ""}`.trim()} title="ดูรายละเอียด" className={btn}>
+        <Eye size={16} strokeWidth={1.8} aria-hidden />
+      </Link>
+    </span>
+  );
+}
+
+function ExitControlChip({ driver }: { driver: DriverListRecord }) {
+  const v = driver.resignation?.controllable;
+  if (!v) return <Dash />;
+  return <span className={`chip px-2 py-0.5 text-11-5 ${CONTROLLABLE_CHIP[v]}`}>{controllableLabel(v)}</span>;
+}
+
+/** วันที่พ้นสภาพ + ปี-เดือน (คีย์ตัวกรองรายเดือน) บรรทัดรอง */
+function ExitDateCell({ driver }: { driver: DriverListRecord }) {
+  const date = formatThaiDate(driver.resignation?.dateISO ?? "");
+  if (!date) return <Dash />;
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className="text-ink">{date}</span>
+      <span className="font-mono text-11 tabular-nums text-mut">{formatExitMonth(exitMonthKey(driver))}</span>
+    </span>
   );
 }
 
@@ -1543,11 +1727,13 @@ function DriverCard({
   driver,
   index,
   hideVehicle,
+  interview,
 }: {
   driver: DriverListRecord;
   index: number;
   /** ซ่อนชุดเดียวกับตาราง — การ์ดจอแคบคือตารางเดียวกันในอีกรูปแบบ */
   hideVehicle: boolean;
+  interview: boolean;
 }) {
   const canEdit = useCanSee("registry-profile");
   /* กติกาเดียวกับ `Row` — คนที่พ้นสภาพแล้วอ่านออกจากสีได้ก่อนอ่านตัวหนังสือ */
@@ -1575,21 +1761,32 @@ function DriverCard({
           </span>
         </div>
         <StatusCell driver={driver} />
-        <ViewDetailLink href={driverHref(driver)} name={driver.name} exit={exit} />
+        <RowActions driver={driver} href={driverHref(driver)} exit={exit} documents={hideVehicle} />
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-12">
         {hideVehicle ? (
           <>
-            <CardField label="ปี-เดือนที่พ้นสภาพ">
-              <span className="font-mono tabular-nums text-ink">{formatExitMonth(exitMonthKey(driver)) || "—"}</span>
+            <CardField label="พ้นสภาพ">
+              <ExitDateCell driver={driver} />
             </CardField>
-            <CardField label="วันที่พ้นสภาพ">
-              <span className="text-ink">{formatThaiDate(driver.resignation?.dateISO ?? "") || "—"}</span>
-            </CardField>
-            <CardField label="สาเหตุการออก">
+            <CardField label="รหัสสาเหตุ">
               <ExitReasonCell driver={driver} />
             </CardField>
+            <CardField label="หมวดสาเหตุ">
+              <span className="truncate text-ink">{driver.resignation?.categoryLabel || "—"}</span>
+            </CardField>
+            <CardField label="ควบคุมได้?">
+              <ExitControlChip driver={driver} />
+            </CardField>
+            <CardField label="เจ้าของการแก้ไข">
+              <span className="truncate text-ink">{exitOwnerOf(driver) || "—"}</span>
+            </CardField>
+            {interview ? (
+              <CardField label="Exit Interview">
+                <ExitStageCell driver={driver} />
+              </CardField>
+            ) : null}
           </>
         ) : (
           <>
@@ -1869,7 +2066,7 @@ function Dash({ children }: { children?: React.ReactNode }) {
  * ข้างในกินพื้นที่เต็มช่อง กดตรงไหนของหัวคอลัมน์ก็ได้เมนู
  *
  * เส้นใต้เป็น `border-b` ธรรมดาได้ เพราะหัวตารางชุดนี้ปักหมุดด้วย `sticky`
- * กับ `border-collapse` ที่มีพื้นทึบ (`bg-head`) อยู่แล้ว — ท่าเดียวกับ
+ * กับ `border-collapse` ที่มีพื้นทึบ (`bg-base-200`) อยู่แล้ว — ท่าเดียวกับ
  * ตารางผู้สมัคร ที่พิสูจน์มาแล้วว่าเส้นไม่หายเวลาเลื่อน
  *
  * `aria-sort` อยู่ที่ `<th>` ไม่ใช่ที่ปุ่ม — role ของปุ่มไม่รองรับ และโปรแกรม
@@ -1889,7 +2086,7 @@ function Head({
 }) {
   return (
     /*
-      เส้นใต้เป็น `border-b` ธรรมดาได้ เพราะหัวตารางมีพื้นทึบ (`bg-head`)
+      เส้นใต้เป็น `border-b` ธรรมดาได้ เพราะหัวตารางมีพื้นทึบ (`bg-base-200`)
       ไม่ใช่พื้นโปร่งแสง+เบลอ — ท่าเดียวกับตารางผู้สมัคร ที่พิสูจน์มาแล้วว่า
       เส้นไม่หายเวลาเลื่อน · เบลอกันการไหลทะลุแนวตั้งได้ แต่กันแนวนอนไม่ได้
 
@@ -1898,7 +2095,7 @@ function Head({
     */
     <th
       aria-sort={sorted ? (sorted === "asc" ? "ascending" : "descending") : "none"}
-      className={`${column.width} sticky top-0 border-b border-line-strong bg-head px-3 py-0 text-left whitespace-nowrap ${
+      className={`${column.width} sticky top-0 border-b border-line-strong bg-base-200 px-3 py-0 text-left whitespace-nowrap ${
         stickyLeft
           ? "left-0 z-20 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line"
           : "z-10"
@@ -1906,6 +2103,281 @@ function Head({
     >
       {menu}
     </th>
+  );
+}
+
+/* --------------------------------------------------------- แถบตัวเลข (แบบใหม่ 25 พ.ย. 2569) */
+
+type StatTone = "ink" | "primary" | "alert" | "sla";
+
+const STAT_TONE: Record<StatTone, { value: string; bar: string }> = {
+  ink: { value: "text-ink", bar: "bg-ink" },
+  primary: { value: "text-primary", bar: "bg-primary" },
+  alert: { value: "text-alert", bar: "bg-alert" },
+  sla: { value: "text-sla", bar: "bg-sla" },
+};
+
+/**
+ * แถบตัวเลขบนสุดของทะเบียน — ช่องเรียงต่อกันคั่นเส้นบาง ไม่ใช่การ์ด · ช่องยืดเต็มแถวเสมอ (`flex-1`)
+ * จอแคบตัดขึ้นแถวใหม่โดยไม่มีช่องว่างค้าง · เส้นคั่นของแถวที่ตัดลงมาคือ `border-b` ของแต่ละช่อง
+ * (กล่องใน `-mb-px -mr-px` ซ่อนเส้นของช่องขอบขวา/ล่างสุด)
+ */
+function StatStrip({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden border-b border-line">
+      <div className="-mr-px -mb-px flex flex-wrap">{children}</div>
+    </div>
+  );
+}
+
+/** หนึ่งช่องตัวเลข — ส่ง `onClick` แล้วเป็นปุ่มกรอง · ช่องที่กรองอยู่ = ขีดสีขอบบน + พื้นอ่อน */
+function RegistryStat({
+  label,
+  value,
+  unit = "คน",
+  sub,
+  share,
+  target,
+  tone = "ink",
+  active,
+  onClick,
+  title,
+}: {
+  label: string;
+  value: number;
+  unit?: string;
+  sub?: string;
+  /** สัดส่วน 0–1 → แถบบางใต้ตัวเลข + ป้าย % ต่อท้ายหน่วย */
+  share?: number;
+  /** เส้นเป้าบนแถบ (0–1) — Coverage Rate */
+  target?: number;
+  tone?: StatTone;
+  active?: boolean;
+  onClick?: () => void;
+  title?: string;
+}) {
+  const t = STAT_TONE[tone];
+  const pct = share === undefined ? null : Math.min(100, Math.max(0, share * 100));
+  const body = (
+    <>
+      <span className="flex items-center gap-1.5 text-12 text-mut">
+        <span className="min-w-0 truncate">{label}</span>
+        {active ? <ListFilter size={13} strokeWidth={2.2} aria-hidden className="flex-none text-primary" /> : null}
+      </span>
+      <span className="flex items-baseline gap-1.5">
+        <span key={value} className={`animate-fade-in text-26 leading-tight font-semibold tabular-nums ${t.value}`}>
+          {value.toLocaleString("th-TH")}
+        </span>
+        <span className="text-12-5 text-mut">
+          {unit}
+          {pct !== null && unit !== "%" ? ` · ${pct > 0 && pct < 0.1 ? "<0.1" : pct.toFixed(1)}%` : ""}
+        </span>
+      </span>
+      {pct !== null ? (
+        <span aria-hidden className="relative mt-0.5 block h-1 w-full rounded-full bg-base-200">
+          <span
+            className={`block h-full rounded-full transition-[width] duration-700 ease-out ${tone === "ink" ? "bg-primary" : t.bar}`}
+            style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
+          />
+          {target !== undefined ? (
+            <span className="absolute -top-[3px] h-2.5 w-0.5 bg-ink" style={{ left: `${target * 100}%` }} />
+          ) : null}
+        </span>
+      ) : null}
+      {sub ? <span className="truncate text-12 text-mut">{sub}</span> : null}
+      {active ? <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-primary" /> : null}
+    </>
+  );
+  const shell = `relative flex min-w-0 flex-1 basis-44 flex-col gap-1 border-r border-b border-line px-(--sheet-px) py-3.5 text-left ${
+    active ? "bg-soft/40" : ""
+  }`;
+  if (!onClick)
+    return (
+      <div className={shell} title={title}>
+        {body}
+      </div>
+    );
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      className={`${shell} cursor-pointer transition-colors ${active ? "" : "hover:bg-base-200/60"}`}
+    >
+      {body}
+    </button>
+  );
+}
+
+/** ช่องสัดส่วนประเภท (พจส. / สแปร์ / …) — แถบแบ่งส่วนเดียว + ยอดของแต่ละประเภท · สีเข้ม→อ่อนตามลำดับ */
+function OwnerSplitStat({ options }: { options: ColumnFilterOption[] }) {
+  const rows = options.filter((o) => (o.count ?? 0) > 0);
+  const total = rows.reduce((s, o) => s + (o.count ?? 0), 0);
+  const shades = ["bg-primary", "bg-primary/45", "bg-ink/25", "bg-ink/15"];
+  if (!total) return null;
+  return (
+    <div className="flex min-w-0 flex-1 basis-56 flex-col gap-2 border-r border-b border-line px-(--sheet-px) py-3.5">
+      <span className="text-12 text-mut">ประเภท</span>
+      <span aria-hidden className="mt-1.5 flex h-2 gap-px overflow-hidden rounded-sm">
+        {rows.map((o, i) => (
+          <span key={o.value} className={shades[i % shades.length]} style={{ width: `${((o.count ?? 0) / total) * 100}%` }} />
+        ))}
+      </span>
+      <span className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-12 text-mut">
+        {rows.map((o) => (
+          <span key={o.value} className="whitespace-nowrap">
+            {o.label} <b className="font-semibold text-ink tabular-nums">{(o.count ?? 0).toLocaleString("th-TH")}</b>
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------- ภาพรวมพ้นสภาพ */
+
+/** ควบคุมได้ = ได้ + ได้บางส่วน · ที่เหลือ (ไม่ได้ / ไม่นับ / ไม่ระบุ) นับเป็นควบคุมไม่ได้ในกราฟ */
+const isControllable = (d: DriverListRecord) => d.resignation?.controllable === "yes" || d.resignation?.controllable === "partial";
+
+/**
+ * แถบภาพรวมของแท็บพ้นสภาพ — กราฟแท่งรายเดือน 12 เดือนล่าสุด (ควบคุมได้ / ไม่ได้ ซ้อนกัน) + สาเหตุหลัก 5 อันดับ
+ * · นับจาก `scope` (สาขา + แท็บ) ไม่ใช่ผลที่กรองแล้ว — กดแท่ง/สาเหตุ = ติ๊กตัวกรองคอลัมน์นั้น กดซ้ำเลิก
+ */
+function ExitInsights({
+  rows,
+  months,
+  reasons,
+  onMonth,
+  onReason,
+}: {
+  rows: DriverListRecord[];
+  months: string[];
+  reasons: string[];
+  onMonth: (key: string) => void;
+  onReason: (code: string) => void;
+}) {
+  const data = useMemo(() => {
+    const now = new Date();
+    const keys: string[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    const byMonth = new Map(keys.map((k) => [k, { ctl: 0, un: 0 }]));
+    const byReason = new Map<string, { label: string; count: number; ctl: boolean }>();
+    for (const d of rows) {
+      const m = byMonth.get(exitMonthKey(d));
+      if (m) {
+        if (isControllable(d)) m.ctl++;
+        else m.un++;
+      }
+      const code = d.resignation?.reasonCode;
+      if (code) {
+        const r = byReason.get(code);
+        byReason.set(code, { label: d.resignation?.reasonLabel || r?.label || "", count: (r?.count ?? 0) + 1, ctl: isControllable(d) });
+      }
+    }
+    const bars = keys.map((key) => ({ key, ...byMonth.get(key)! }));
+    const top = [...byReason.entries()]
+      .map(([code, r]) => ({ code, ...r }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    return { bars, max: Math.max(1, ...bars.map((b) => b.ctl + b.un)), top };
+  }, [rows]);
+
+  const maxReason = data.top[0]?.count ?? 1;
+
+  return (
+    <div className="flex flex-wrap border-b border-line">
+      <div className="flex min-w-0 flex-[1_1_32rem] flex-col gap-3 border-line px-(--sheet-px) py-4 lg:border-r">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-13 font-semibold text-ink">พ้นสภาพรายเดือน · 12 เดือนล่าสุด</h2>
+          <span className="flex gap-3.5 text-11-5 text-mut">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="size-2.5 rounded-xs bg-ink" />
+              ควบคุมได้
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="size-2.5 rounded-xs bg-ink/25" />
+              ควบคุมไม่ได้
+            </span>
+          </span>
+        </div>
+        <div className="grid h-36 grid-cols-12 items-end gap-2 border-b border-line-strong">
+          {data.bars.map((b) => {
+            const total = b.ctl + b.un;
+            const on = months.includes(b.key);
+            const dim = months.length > 0 && !on;
+            return (
+              <button
+                key={b.key}
+                type="button"
+                onClick={() => onMonth(b.key)}
+                aria-pressed={on}
+                title={`${formatExitMonth(b.key)} · ${total} คน (ควบคุมได้ ${b.ctl} · ไม่ได้ ${b.un})`}
+                className={`group flex h-full cursor-pointer flex-col items-center justify-end gap-1 transition-opacity ${dim ? "opacity-40 hover:opacity-80" : ""}`}
+              >
+                <span className="text-11 text-mut tabular-nums">{total || ""}</span>
+                <span className="flex w-full max-w-7 flex-col gap-px" style={{ height: `${(total / data.max) * 78}%` }}>
+                  <span className={`rounded-t-xs ${on ? "bg-primary/40" : "bg-ink/25"} group-hover:bg-primary/40`} style={{ flexGrow: b.un }} />
+                  <span className={`${on ? "bg-primary" : "bg-ink"} group-hover:bg-primary`} style={{ flexGrow: b.ctl }} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="-mt-1.5 grid grid-cols-12 gap-2">
+          {data.bars.map((b, i) => (
+            <span key={b.key} className={`text-center text-11 ${i === 11 ? "font-semibold text-ink" : "text-mut"}`}>
+              {THAI_MONTHS_SHORT[Number(b.key.slice(5, 7)) - 1]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-[1_1_24rem] flex-col gap-3 border-t border-line px-(--sheet-px) py-4 lg:border-t-0">
+        <h2 className="text-13 font-semibold text-ink">สาเหตุหลัก 5 อันดับ</h2>
+        {data.top.length ? (
+          <ul className="flex flex-col gap-1">
+            {data.top.map((r) => {
+              const on = reasons.includes(r.code);
+              return (
+                <li key={r.code}>
+                  <button
+                    type="button"
+                    onClick={() => onReason(r.code)}
+                    aria-pressed={on}
+                    className={`grid w-full cursor-pointer grid-cols-[3.25rem_minmax(0,1fr)_2.5rem] items-center gap-2.5 rounded-selector px-1.5 py-1 text-left transition-colors ${
+                      on ? "bg-soft/60" : "hover:bg-base-200/60"
+                    }`}
+                  >
+                    <span className="font-mono text-12 font-semibold text-ink">{r.code}</span>
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="flex justify-between gap-2 text-12-5">
+                        <span className="truncate text-ink" title={r.label}>
+                          {r.label}
+                        </span>
+                        <span className="flex-none text-11-5 text-mut">{r.ctl ? "ควบคุมได้" : "ไม่ได้"}</span>
+                      </span>
+                      <span aria-hidden className="block h-1.5 rounded-xs bg-base-200">
+                        <span
+                          className={`block h-full rounded-xs ${on ? "bg-primary" : r.ctl ? "bg-ink" : "bg-ink/25"}`}
+                          style={{ width: `${(r.count / maxReason) * 100}%` }}
+                        />
+                      </span>
+                    </span>
+                    <span className="text-right text-13 font-semibold text-ink tabular-nums">{r.count}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-12-5 text-mut">ยังไม่มีรหัสสาเหตุในขอบเขตนี้</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1931,7 +2403,7 @@ function ActiveFilterBar({
   onClearAll: () => void;
 }) {
   return (
-    <div className="flex animate-fade-in flex-wrap items-center gap-2 border-t border-primary/20 bg-soft/45 px-(--sheet-px) py-2">
+    <div className="flex animate-fade-in flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-11-5 font-medium text-primary">
         <ListFilter size={13} strokeWidth={1.9} aria-hidden />
         กรองอยู่
@@ -1945,7 +2417,7 @@ function ActiveFilterBar({
           <span
             key={key}
             style={{ animationDelay: `${i * 40}ms` }}
-            className="flex animate-pop-in items-center gap-1.5 rounded-full border border-primary/40 bg-base-100 py-1 pr-1 pl-2.5 text-12 text-primary"
+            className="flex animate-pop-in items-center gap-1.5 rounded-selector border border-line bg-base-200/60 py-0.5 pr-1 pl-2.5 text-12 text-ink"
           >
             <span className="text-mut">{FILTER_LABELS[key]}:</span>
             <span className="max-w-52 truncate font-medium" title={labels.join(", ")}>
@@ -1955,7 +2427,7 @@ function ActiveFilterBar({
               type="button"
               onClick={() => onClear(key)}
               aria-label={`เลิกกรอง${FILTER_LABELS[key]}`}
-              className="grid size-4.5 cursor-pointer place-items-center rounded-full text-primary/70 transition-colors hover:bg-primary hover:text-primary-content"
+              className="grid size-5 cursor-pointer place-items-center rounded-full text-mut transition-colors hover:bg-ink hover:text-base-100"
             >
               <X size={11} strokeWidth={2.4} aria-hidden />
             </button>
@@ -1966,7 +2438,7 @@ function ActiveFilterBar({
       <button
         type="button"
         onClick={onClearAll}
-        className="ml-auto flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-12 text-mut underline-offset-4 transition-colors hover:text-ink hover:underline"
+        className="flex cursor-pointer items-center px-1 py-1 text-12 text-primary underline underline-offset-4 transition-colors hover:text-ink"
       >
         ล้างทั้งหมด
       </button>
@@ -2007,31 +2479,40 @@ function EmploymentTabButton({
   active,
   onClick,
   tone = "primary",
+  count,
   children,
 }: {
   active: boolean;
   onClick: () => void;
-  /** แท็บ“พ้นสภาพแล้ว”เป็นแดง ตรงกับสีของแถวในตารางที่มันเปิด · “ไม่มีข้อมูลการทำงาน” เป็นส้ม */
-  tone?: "primary" | "alert" | "sla";
+  /** ขีดใต้ของแท็บ — ทำงาน = เขียว · พ้นสภาพ = หมึก */
+  tone?: "primary" | "ink";
+  count?: number;
   children: React.ReactNode;
 }) {
-  const on = tone === "alert" ? "text-alert" : tone === "sla" ? "text-sla" : "text-primary";
-  const bar = tone === "alert" ? "bg-alert" : tone === "sla" ? "bg-sla" : "bg-primary";
-
+  const bar = tone === "ink" ? "bg-ink" : "bg-primary";
   return (
     <button
       type="button"
+      role="tab"
       onClick={onClick}
-      aria-pressed={active}
-      className={`group relative cursor-pointer px-3 pt-2 pb-2.5 text-13 transition-colors ${
-        active ? `font-medium ${on}` : "text-mut hover:text-ink"
+      aria-selected={active}
+      className={`group relative flex h-12 cursor-pointer items-center gap-2 px-0.5 text-14 transition-colors ${
+        active ? "font-semibold text-ink" : "text-mut hover:text-ink"
       }`}
     >
       {children}
-      {/* ขีดใต้แท็บกางออกจากซ้ายไปขวา แทนที่จะสลับสีขอบทันที — บอกทิศว่าย้ายมาจากไหน */}
+      {count !== undefined ? (
+        <span
+          className={`rounded-full px-2 py-px text-12 font-medium tabular-nums ${
+            active ? (tone === "ink" ? "bg-base-300 text-ink" : "bg-soft text-primary") : "bg-base-200 text-mut"
+          }`}
+        >
+          {count.toLocaleString("th-TH")}
+        </span>
+      ) : null}
       <span
         aria-hidden
-        className={`absolute inset-x-0 -bottom-px h-0.5 origin-left rounded-full transition-transform duration-300 ease-out ${
+        className={`absolute inset-x-0 bottom-0 h-0.5 origin-left transition-transform duration-300 ease-out ${
           active ? `scale-x-100 ${bar}` : "scale-x-0 bg-line group-hover:scale-x-100"
         }`}
       />
